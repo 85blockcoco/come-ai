@@ -10,9 +10,12 @@ tests remain offline.
 from __future__ import annotations
 
 import html
+import hashlib
+import heapq
 import json
 import re
 import socket
+import ssl
 import time
 import urllib.error
 import urllib.parse
@@ -24,13 +27,22 @@ from typing import Any, Protocol
 
 from workspace_core import UserFacingError
 
-from .models import clean_text
+from .models import canonical_url, clean_text
+from .scoring import classify_job_family
+from .stage_search import default_brief, score_brief_match, validate_brief
 
 
 GREENHOUSE_HOST = "boards-api.greenhouse.io"
 GREENHOUSE_TIMEOUT_SECONDS = 8
-GREENHOUSE_MAX_RESPONSE_BYTES = 4 * 1024 * 1024
+# A public board with full posting descriptions is heavy: measured on a real
+# board of 722 openings the payload is 5.6 MB, so a 4 MB cap rejected valid
+# boards.  8 MB keeps the memory bound explicit while fitting real boards;
+# larger ones are refused with a clear message instead of exhausting memory.
+GREENHOUSE_MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 GREENHOUSE_MAX_JOBS = 150
+# Refuse pathological feeds rather than silently evaluating a source prefix.
+# Combined with the 8 MiB transport limit, this bounds parsing/scoring work.
+GREENHOUSE_MAX_FEED_ROWS = 20_000
 GREENHOUSE_TOKEN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$")
 
 
@@ -64,6 +76,8 @@ class DiscoveryPayload:
     jobs: tuple[dict[str, Any], ...]
     verified_at: str
     truncated: bool
+    evaluated_count: int = 0
+    invalid_count: int = 0
 
 
 def parse_greenhouse_board_token(value: Any) -> str:
@@ -177,7 +191,21 @@ class UrllibGreenhouseTransport:
     """Small stdlib transport: one fixed host, timeout and body-size cap."""
 
     def __init__(self) -> None:
-        self._opener = urllib.request.build_opener(_NoRedirect())
+        # macOS Python installers often leave the system keychain without the
+        # Mozilla root bundle, which makes a plain default context reject
+        # every public board with CERTIFICATE_VERIFY_FAILED.  ``requests``
+        # solves this with certifi; the same fallback is used here so public
+        # discovery works out of the box, without weakening verification.
+        context = ssl.create_default_context()
+        try:
+            import certifi  # noqa: PLC0415 - optional, keep stdlib-only fallback
+
+            context = ssl.create_default_context(cafile=certifi.where())
+        except ImportError:
+            pass
+        self._opener = urllib.request.build_opener(
+            _NoRedirect(), urllib.request.HTTPSHandler(context=context)
+        )
 
     def get_json(self, endpoint: str, timeout_seconds: int) -> Any:
         parsed = urllib.parse.urlsplit(endpoint)
@@ -241,11 +269,23 @@ class GreenhouseJobBoardConnector:
         self.transport = transport or UrllibGreenhouseTransport()
 
     def discover(self, board: GreenhouseBoard) -> DiscoveryPayload:
+        """Compatibility entry point: deterministic, preference-free selection."""
+        return self.discover_ranked(board)
+
+    def discover_ranked(
+        self, board: GreenhouseBoard, *, selection_brief: dict[str, Any] | None = None
+    ) -> DiscoveryPayload:
+        """Score the whole admissible feed before keeping its best 150 jobs.
+
+        The person's criteria are used locally; the public HTTP request is
+        unchanged and never contains profile or preference data.
+        """
+        brief = validate_brief(selection_brief) if selection_brief is not None else default_brief()
         error: PublicSourceError | None = None
         for attempt in range(2):
             try:
                 payload = self.transport.get_json(board.endpoint, GREENHOUSE_TIMEOUT_SECONDS)
-                return self._normalise(board, payload)
+                return self._normalise(board, payload, selection_brief=brief)
             except PublicSourceError as caught:
                 error = caught
                 if not caught.retryable or attempt:
@@ -257,23 +297,44 @@ class GreenhouseJobBoardConnector:
         raise error
 
     @staticmethod
-    def _normalise(board: GreenhouseBoard, payload: Any) -> DiscoveryPayload:
+    def _normalise(
+        board: GreenhouseBoard, payload: Any, *, selection_brief: dict[str, Any] | None = None
+    ) -> DiscoveryPayload:
         if not isinstance(payload, dict) or not isinstance(payload.get("jobs"), list):
             raise PublicSourceError("Greenhouse a renvoyé un format d’offres inattendu.", code="invalid_payload")
         raw_jobs = payload["jobs"]
-        jobs: list[dict[str, Any]] = []
-        for raw in raw_jobs[:GREENHOUSE_MAX_JOBS]:
-            if not isinstance(raw, dict):
-                continue
-            job_id = clean_text(raw.get("id"), limit=240)
-            title = clean_text(raw.get("title"), limit=300)
-            official_url = clean_text(raw.get("absolute_url"), limit=2_000)
-            if not job_id or not title or not official_url:
-                continue
-            location = raw.get("location") if isinstance(raw.get("location"), dict) else {}
-            city, country = _location_parts(location.get("name"))
-            jobs.append(
-                {
+        if len(raw_jobs) > GREENHOUSE_MAX_FEED_ROWS:
+            raise PublicSourceError(
+                "Le flux Greenhouse contient trop d’entrées pour être entièrement évalué en sécurité. "
+                "Les offres déjà enregistrées sont conservées ; consulte le board officiel.",
+                code="too_many_rows",
+            )
+        brief = validate_brief(selection_brief) if selection_brief is not None else default_brief()
+        evaluated_count = invalid_count = 0
+
+        def candidates():
+            nonlocal evaluated_count, invalid_count
+            for raw in raw_jobs:
+                if not isinstance(raw, dict):
+                    invalid_count += 1
+                    continue
+                job_id = clean_text(raw.get("id"), limit=240)
+                title = clean_text(raw.get("title"), limit=300)
+                official_url = clean_text(raw.get("absolute_url"), limit=2_000)
+                if not job_id or not title or not official_url:
+                    invalid_count += 1
+                    continue
+                # A malformed or credential-bearing URL must not occupy one
+                # of the retained places only to fail later during import.
+                try:
+                    canonical = canonical_url(official_url)
+                except (UserFacingError, ValueError):
+                    invalid_count += 1
+                    continue
+                location = raw.get("location") if isinstance(raw.get("location"), dict) else {}
+                city, country = _location_parts(location.get("name"))
+                description = source_html_to_text(raw.get("content"))
+                job = {
                     "company": board.company,
                     "title": title,
                     "source_name": "greenhouse",
@@ -295,11 +356,27 @@ class GreenhouseJobBoardConnector:
                     "requirements": "",
                     "languages_required": "",
                     "eligibility_requirement": "",
-                    "description_original": source_html_to_text(raw.get("content")),
+                    "description_original": description,
+                    "job_family": classify_job_family(title, description),
                 }
-            )
+                score = score_brief_match(brief, job)["score"]
+                # Source identities, not arrival order or generated database
+                # IDs, break ties. The content digest resolves conflicting
+                # duplicate identities without depending on feed ordering.
+                digest = hashlib.sha256(
+                    json.dumps(job, sort_keys=True, ensure_ascii=False).encode("utf-8")
+                ).hexdigest()
+                key = (-(int(score) if score is not None else 0), job_id, canonical, digest)
+                evaluated_count += 1
+                yield key, job
+
+        # nsmallest retains only a 150-item heap (O(N log 150)), not a second
+        # list containing every normalised posting and its full description.
+        selected = heapq.nsmallest(GREENHOUSE_MAX_JOBS, candidates(), key=lambda item: item[0])
         return DiscoveryPayload(
-            jobs=tuple(jobs),
+            jobs=tuple(job for _, job in selected),
             verified_at=datetime.now(timezone.utc).isoformat(timespec="microseconds"),
-            truncated=len(raw_jobs) > GREENHOUSE_MAX_JOBS,
+            truncated=evaluated_count > GREENHOUSE_MAX_JOBS,
+            evaluated_count=evaluated_count,
+            invalid_count=invalid_count,
         )

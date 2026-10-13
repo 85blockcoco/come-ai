@@ -1,0 +1,607 @@
+"""Deterministic stage-search criteria and explainable matching for Career.
+
+This module is a pure, local logic layer.  It never performs a network
+request, never calls a model, and never invents an offer, a company or a
+date: it only compares facts a person entered (their search brief) with
+facts already stored locally for an offer.  Every score component carries
+the reason that produced it so the ranking stays auditable.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from .models import JOB_FAMILIES, clean_text, normalized_text, parse_date
+from .sources import SEARCH_TERMS
+from workspace_core import UserFacingError
+
+
+# The finance domains a person actually hunts for.  These are finer-grained
+# than ``JOB_FAMILIES`` (which drive preferences) and deliberately lexical:
+# an offer matches only through words its own posting contains.
+STAGE_DOMAINS: dict[str, tuple[str, ...]] = {
+    "M&A": (
+        "m a",
+        "mergers",
+        "acquisitions",
+        "fusion acquisition",
+        "fusions acquisitions",
+        "investment banking",
+        "banque d affaires",
+        "corporate finance advisory",
+    ),
+    "Corporate Finance": (
+        "corporate finance",
+        "finance d entreprise",
+        "financial analysis",
+        "analyse financiere",
+        "valuation",
+        "treasury",
+        "strategic finance",
+    ),
+    "Private Equity": (
+        "private equity",
+        "capital investissement",
+        "capital developpement",
+        "fonds d investissement",
+        "buyout",
+        "growth equity",
+        "lbo",
+    ),
+    "Transaction Services": (
+        "transaction services",
+        "transaction advisory",
+        "deals advisory",
+        "due diligence",
+        "financial due diligence",
+        "fdd",
+    ),
+    "Audit financier": (
+        "audit",
+        "audit financier",
+        "financial audit",
+        "statutory audit",
+        "controle externe",
+        "commissariat aux comptes",
+    ),
+    "Asset Management": (
+        "asset management",
+        "gestion d actifs",
+        "societe de gestion",
+        "gestionnaire de portefeuille",
+        "portfolio management",
+        "investment research",
+        "equity research",
+        "fixed income",
+    ),
+    "FP&A": (
+        "fp a",
+        "financial planning",
+        "planning analytique",
+        "controle de gestion",
+        "business partner",
+        "business partnering",
+    ),
+    # A catch-all the person selects explicitly; it is resolved after the
+    # specific domains so a precise match is always reported first.
+    "Autres métiers financiers": (),
+}
+
+# Source-faithful vocabulary the person can type into a public board search.
+# These are search hints, never offers and never deadlines.
+_DOMAIN_SEARCH_TERMS: dict[str, tuple[str, ...]] = {
+    "M&A": SEARCH_TERMS["M&A / Investment Banking"],
+    "Corporate Finance": SEARCH_TERMS["Corporate Finance"],
+    "Private Equity": SEARCH_TERMS["Private Equity"],
+    "Transaction Services": (
+        "Transaction Services Intern",
+        "Deals Advisory Intern",
+        "Financial Due Diligence Intern",
+        "Stage Transaction Services",
+    ),
+    "Audit financier": (
+        "Audit Intern",
+        "Financial Audit Intern",
+        "Statutory Audit Intern",
+        "Stage Audit Financier",
+    ),
+    "Asset Management": SEARCH_TERMS["Asset Management"],
+    "FP&A": (
+        "FP&A Intern",
+        "Financial Planning Analyst Intern",
+        "Strategic Finance Intern",
+        "Stage FP&A",
+    ),
+    "Autres métiers financiers": SEARCH_TERMS["Sales & Trading"],
+}
+
+RANKING_CRITERIA: dict[str, str] = {
+    "domaine": "Domaine recherché",
+    "metier": "Intitulé du métier",
+    "localisation": "Pays ou ville",
+    "dates": "Date de début",
+    "duree": "Durée du stage",
+    "niveau": "Niveau d’études",
+    "langues": "Langues",
+}
+RANKING_MIN_MULTIPLIER = 0.5
+RANKING_MAX_MULTIPLIER = 2.0
+
+_LANGUAGE_ALIASES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("français", ("francais", "french")),
+    ("anglais", ("anglais", "english")),
+    ("italien", ("italien", "italian", "italiano")),
+    ("allemand", ("allemand", "german", "deutsch")),
+    ("espagnol", ("espagnol", "spanish", "espanol")),
+)
+
+# Ordered from the lowest to the highest common student level.  A requirement
+# is satisfied when the offer asks for no more than the declared level.
+_STUDY_LEVEL_RANKS: tuple[tuple[int, tuple[str, ...]], ...] = (
+    (3, ("bac 3", "bac +3", "bac+3", "licence", "l3", "bachelor", "3rd year")),
+    (4, ("bac 4", "bac +4", "bac+4", "m1", "master 1", "4th year")),
+    (5, ("bac 5", "bac +5", "bac+5", "m2", "master 2", "master s", "5th year", "mastere")),
+    (6, ("bac 6", "bac +6", "bac+6", "m3", "master 3", "6th year")),
+    (8, ("doctorat", "phd", "doctorate")),
+)
+
+# Unambiguous permanent-contract markers only: "temps plein" alone is
+# deliberately excluded because a full-time internship is still an internship.
+_PERMANENT_CONTRACT_PATTERNS: tuple[str, ...] = ("cdi", "permanent", "full time")
+
+MAX_COMPONENTS = 8
+
+
+def default_brief() -> dict[str, Any]:
+    """An empty brief: nothing is presumed about the person's search."""
+    return {
+        "domains": [],
+        "other_domains": [],
+        "roles": [],
+        "countries": [],
+        "cities": [],
+        "start_date": "",
+        "duration_months": None,
+        "study_level": "",
+        "languages": [],
+        "constraints": "",
+        "ranking": {},
+    }
+
+
+def _contains(haystack: str, needle: str) -> bool:
+    return f" {needle} " in f" {haystack} "
+
+
+def _string_list(value: Any, label: str, *, max_items: int, max_length: int) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise UserFacingError(f"{label} doivent être une liste.")
+    if len(value) > max_items:
+        raise UserFacingError(f"{label} contiennent trop d’éléments (maximum {max_items}).")
+    result: list[str] = []
+    for item in value:
+        text = clean_text(item, limit=max_length)
+        if text and text not in result:
+            result.append(text)
+    return result
+
+
+def _ranking_values(value: Any) -> dict[str, float]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise UserFacingError("Les préférences de classement sont invalides.")
+    ranking: dict[str, float] = {}
+    for key, raw in value.items():
+        criterion = clean_text(key, limit=40)
+        if criterion not in RANKING_CRITERIA:
+            raise UserFacingError(f"La pondération « {criterion or 'vide'} » concerne un critère inconnu.")
+        try:
+            multiplier = float(raw)
+        except (TypeError, ValueError) as error:
+            raise UserFacingError("Chaque pondération doit être un nombre entre 0.5 et 2.") from error
+        if not RANKING_MIN_MULTIPLIER <= multiplier <= RANKING_MAX_MULTIPLIER:
+            raise UserFacingError(
+                f"La pondération de « {RANKING_CRITERIA[criterion]} » doit rester entre "
+                f"{RANKING_MIN_MULTIPLIER} et {RANKING_MAX_MULTIPLIER}."
+            )
+        ranking[criterion] = round(multiplier, 2)
+    return ranking
+
+
+def validate_brief(payload: Any) -> dict[str, Any]:
+    """Validate and normalize a stage-search brief once, without presumption."""
+    if payload is None:
+        return default_brief()
+    if not isinstance(payload, dict):
+        raise UserFacingError("Le stage recherché est invalide.")
+    domain_lookup = {normalized_text(label): label for label in STAGE_DOMAINS}
+    domains: list[str] = []
+    for item in _string_list(payload.get("domains"), "Les domaines", max_items=12, max_length=80):
+        canonical = domain_lookup.get(normalized_text(item))
+        if not canonical:
+            raise UserFacingError(
+                f"Le domaine « {item} » n’existe pas. Domaines disponibles : {', '.join(STAGE_DOMAINS)}."
+            )
+        if canonical not in domains:
+            domains.append(canonical)
+    start = payload.get("start_date", "")
+    start_text = clean_text(start, limit=32)
+    if start_text:
+        parse_date(start_text, "La date de début recherchée")
+    duration_raw = payload.get("duration_months")
+    duration: int | None = None
+    if clean_text(duration_raw):
+        try:
+            duration = int(str(duration_raw).strip())
+        except ValueError as error:
+            raise UserFacingError("La durée recherchée doit être un nombre de mois entier.") from error
+        if not 1 <= duration <= 24:
+            raise UserFacingError("La durée recherchée doit être comprise entre 1 et 24 mois.")
+    return {
+        "domains": domains,
+        "other_domains": _string_list(payload.get("other_domains"), "Les autres métiers", max_items=12, max_length=120),
+        "roles": _string_list(payload.get("roles"), "Les métiers", max_items=20, max_length=120),
+        "countries": _string_list(payload.get("countries"), "Les pays", max_items=20, max_length=120),
+        "cities": _string_list(payload.get("cities"), "Les villes", max_items=20, max_length=120),
+        "start_date": start_text,
+        "duration_months": duration,
+        "study_level": clean_text(payload.get("study_level"), limit=120),
+        "languages": _string_list(payload.get("languages"), "Les langues", max_items=10, max_length=60),
+        "constraints": clean_text(payload.get("constraints"), limit=2_000),
+        "ranking": _ranking_values(payload.get("ranking")),
+    }
+
+
+def brief_is_configured(brief: dict[str, Any]) -> bool:
+    """Whether the person asked for at least one concrete criterion."""
+    return any(
+        [
+            brief.get("domains"),
+            brief.get("other_domains"),
+            brief.get("roles"),
+            brief.get("countries"),
+            brief.get("cities"),
+            clean_text(brief.get("start_date"), limit=32),
+            clean_text(brief.get("duration_months")),
+            clean_text(brief.get("study_level"), limit=120),
+            brief.get("languages"),
+        ]
+    )
+
+
+def vocabulary() -> dict[str, Any]:
+    """Everything the interface needs to render the brief form."""
+    return {
+        "domains": list(STAGE_DOMAINS),
+        "ranking_criteria": [
+            {"key": key, "label": label} for key, label in RANKING_CRITERIA.items()
+        ],
+        "ranking_min": RANKING_MIN_MULTIPLIER,
+        "ranking_max": RANKING_MAX_MULTIPLIER,
+    }
+
+
+def search_terms_for(domains: list[str]) -> list[dict[str, Any]]:
+    """Local query vocabulary for the selected domains (no browsing here)."""
+    return [
+        {"domain": domain, "terms": list(_DOMAIN_SEARCH_TERMS.get(domain, ()))}
+        for domain in domains
+        if domain in _DOMAIN_SEARCH_TERMS
+    ]
+
+
+def _component(key: str, points: int, maximum: int, *, status: str, reason: str) -> dict[str, Any]:
+    return {
+        "key": key,
+        "label": RANKING_CRITERIA[key],
+        "points": int(points),
+        "maximum": int(maximum),
+        "status": status,
+        "reason": clean_text(reason, limit=400),
+    }
+
+
+def _matched_domains(text: str, job_family: str, brief: dict[str, Any]) -> list[tuple[str, str]]:
+    matched: list[tuple[str, str]] = []
+    for domain in brief.get("domains", []):
+        if domain == "Autres métiers financiers":
+            continue
+        term = next((pattern for pattern in STAGE_DOMAINS.get(domain, ()) if _contains(text, pattern)), "")
+        if term:
+            matched.append((domain, term))
+    if not matched and "Autres métiers financiers" in brief.get("domains", []):
+        if job_family in JOB_FAMILIES:
+            matched.append(("Autres métiers financiers", job_family))
+    for custom in brief.get("other_domains", []):
+        pattern = normalized_text(custom)
+        if pattern and _contains(text, pattern):
+            matched.append((custom, pattern))
+    return matched
+
+
+def _language_names(value: Any) -> set[str]:
+    text = normalized_text(value)
+    return {
+        canonical
+        for canonical, patterns in _LANGUAGE_ALIASES
+        if any(_contains(text, pattern) for pattern in patterns)
+    }
+
+
+def _study_rank(value: Any) -> int | None:
+    text = normalized_text(value)
+    rank: int | None = None
+    for candidate, patterns in _STUDY_LEVEL_RANKS:
+        if any(_contains(text, pattern) for pattern in patterns):
+            rank = candidate if rank is None else max(rank, candidate)
+    return rank
+
+
+def score_brief_match(brief: dict[str, Any], job: dict[str, Any]) -> dict[str, Any]:
+    """Compare one stored offer with the search brief; every point is explained.
+
+    Only requested criteria take part in the score.  A criterion whose value
+    is unknown on the offer earns no point but stays visible as a review item,
+    which keeps an incomplete posting from looking like a confident match.
+    """
+    components: list[dict[str, Any]] = []
+    reasons: list[str] = []
+    unknowns: list[str] = []
+    warnings: list[str] = []
+
+    text = normalized_text(
+        f"{clean_text(job.get('title'), limit=300)} "
+        f"{clean_text(job.get('description_original'), limit=30_000)} "
+        f"{clean_text(job.get('requirements'), limit=12_000)}"
+    )
+    job_family = clean_text(job.get("job_family"), limit=160)
+
+    if brief.get("domains") or brief.get("other_domains"):
+        matched = _matched_domains(text, job_family, brief)
+        if matched:
+            detail = ", ".join(f"{domain} (« {term} »)" for domain, term in matched[:4])
+            components.append(_component("domaine", 30, 30, status="match", reason=f"Domaines repérés : {detail}."))
+            reasons.append(f"Domaines repérés : {detail}.")
+        elif text:
+            components.append(
+                _component(
+                    "domaine",
+                    0,
+                    30,
+                    status="no_match",
+                    reason="Aucun domaine recherché n’apparaît dans le texte de cette offre.",
+                )
+            )
+        else:
+            components.append(
+                _component("domaine", 0, 30, status="unknown", reason="Le texte de l’offre est insuffisant pour vérifier le domaine.")
+            )
+            unknowns.append("Domaine non vérifiable faute de texte source.")
+
+    if brief.get("roles"):
+        title = normalized_text(job.get("title"))
+        role = next((item for item in brief["roles"] if _contains(title, normalized_text(item))), "")
+        if title and role:
+            components.append(_component("metier", 15, 15, status="match", reason=f"L’intitulé contient « {role} »."))  # noqa: E501 - short reason
+            reasons.append(f"L’intitulé contient « {role} ».")
+        elif title:
+            components.append(
+                _component("metier", 0, 15, status="no_match", reason="L’intitulé ne correspond à aucun métier recherché.")
+            )
+        else:
+            components.append(_component("metier", 0, 15, status="unknown", reason="Intitulé absent."))
+            unknowns.append("Métier non vérifiable faute d’intitulé.")
+
+    if brief.get("cities") or brief.get("countries"):
+        city = normalized_text(job.get("city"))
+        country = normalized_text(job.get("country"))
+        wanted_cities = [normalized_text(item) for item in brief.get("cities", [])]
+        wanted_countries = [normalized_text(item) for item in brief.get("countries", [])]
+        city_match = next(
+            (item for item in wanted_cities if item and (item in city or city in item) and city),
+            "",
+        )
+        country_match = next(
+            (item for item in wanted_countries if item and (item in country or country in item) and country),
+            "",
+        )
+        if city_match:
+            components.append(_component("localisation", 20, 20, status="match", reason=f"Ville correspondante : {job.get('city')}."))
+            reasons.append(f"Ville correspondante : {job.get('city')}.")
+        elif country_match:
+            components.append(
+                _component("localisation", 12, 20, status="match", reason=f"Pays correspondant : {job.get('country')}.")
+            )
+            reasons.append(f"Pays correspondant : {job.get('country')}.")
+        elif city or country:
+            components.append(
+                _component(
+                    "localisation",
+                    0,
+                    20,
+                    status="no_match",
+                    reason="La localisation de l’offre ne correspond à aucun pays ni ville recherché.",
+                )
+            )
+        else:
+            components.append(
+                _component("localisation", 0, 20, status="unknown", reason="Localisation absente de l’offre.")
+            )
+            unknowns.append("Localisation non renseignée par la source.")
+
+    start_text = clean_text(brief.get("start_date"), limit=32)
+    if start_text:
+        wanted_start = parse_date(start_text, "La date de début recherchée")
+        job_start = parse_date(job.get("start_date"), "La date de début de l’offre")
+        job_end = parse_date(job.get("end_date"), "La date de fin de l’offre")
+        if job_start and wanted_start:
+            if job_start >= wanted_start:
+                components.append(
+                    _component("dates", 15, 15, status="match", reason=f"Début annoncé le {job_start.isoformat()}.")
+                )
+                reasons.append(f"Début annoncé le {job_start.isoformat()}.")
+            elif job_end and job_end >= wanted_start:
+                components.append(
+                    _component(
+                        "dates",
+                        8,
+                        15,
+                        status="review",
+                        reason=f"Début annoncé avant ta date ({job_start.isoformat()}) : à vérifier.",
+                    )
+                )
+            else:
+                components.append(
+                    _component("dates", 0, 15, status="no_match", reason="Le stage se termine avant ta date de début.")
+                )
+        elif job_end and wanted_start:
+            status = "review" if job_end >= wanted_start else "no_match"
+            points = 8 if status == "review" else 0
+            components.append(
+                _component(
+                    "dates",
+                    points,
+                    15,
+                    status=status,
+                    reason=f"Seule la fin est connue ({job_end.isoformat()}) : début à vérifier.",
+                )
+            )
+            if status != "review":
+                unknowns.append("La fin annoncée précède ta date de début.")
+        else:
+            components.append(
+                _component("dates", 0, 15, status="unknown", reason="Les dates du stage ne sont pas renseignées.")
+            )
+            unknowns.append("Dates non renseignées par la source.")
+
+    wanted_duration = brief.get("duration_months")
+    if wanted_duration:
+        job_duration = job.get("duration_months")
+        try:
+            job_duration = int(job_duration) if clean_text(job_duration) else None
+        except (TypeError, ValueError):
+            job_duration = None
+        if job_duration:
+            if job_duration >= int(wanted_duration):
+                components.append(
+                    _component("duree", 10, 10, status="match", reason=f"Durée annoncée : {job_duration} mois.")
+                )
+                reasons.append(f"Durée annoncée : {job_duration} mois.")
+            else:
+                components.append(
+                    _component(
+                        "duree",
+                        0,
+                        10,
+                        status="no_match",
+                        reason=f"Durée annoncée ({job_duration} mois) inférieure à {wanted_duration} mois.",
+                    )
+                )
+        else:
+            components.append(_component("duree", 0, 10, status="unknown", reason="Durée non renseignée par la source."))
+            unknowns.append("Durée non renseignée par la source.")
+
+    study_level = clean_text(brief.get("study_level"), limit=120)
+    if study_level:
+        wanted_rank = _study_rank(study_level)
+        offer_text = normalized_text(
+            f"{clean_text(job.get('role_level'), limit=120)} {clean_text(job.get('requirements'), limit=12_000)}"
+        )
+        offer_rank = _study_rank(offer_text)
+        if wanted_rank and offer_rank:
+            if offer_rank <= wanted_rank:
+                components.append(
+                    _component("niveau", 5, 5, status="match", reason="Le niveau demandé est compatible avec ton niveau déclaré.")
+                )
+                reasons.append("Le niveau demandé est compatible avec ton niveau déclaré.")
+            else:
+                components.append(
+                    _component(
+                        "niveau",
+                        0,
+                        5,
+                        status="no_match",
+                        reason="Le niveau demandé est supérieur au niveau déclaré dans tes critères.",
+                    )
+                )
+        elif wanted_rank and not offer_text:
+            components.append(_component("niveau", 0, 5, status="unknown", reason="Le niveau demandé n’est pas indiqué."))
+            unknowns.append("Niveau d’études non renseigné par la source.")
+        else:
+            components.append(
+                _component("niveau", 0, 5, status="unknown", reason="Ton niveau déclaré n’a pu être comparé à aucune exigence explicite.")
+            )
+            unknowns.append("Comparaison de niveau non déterministe : vérifie la page officielle.")
+
+    if brief.get("languages"):
+        wanted_languages = _language_names(" ".join(brief["languages"]))
+        required = _language_names(job.get("languages_required"))
+        if required:
+            if required.issubset(wanted_languages):
+                components.append(
+                    _component("langues", 5, 5, status="match", reason=f"Langues demandées déclarées : {', '.join(sorted(required))}.")
+                )
+                reasons.append(f"Langues demandées déclarées : {', '.join(sorted(required))}.")
+            else:
+                missing = ", ".join(sorted(required - wanted_languages))
+                components.append(
+                    _component("langues", 0, 5, status="no_match", reason=f"Langues demandées non déclarées : {missing}.")
+                )
+        else:
+            components.append(
+                _component("langues", 0, 5, status="unknown", reason="La source ne précise pas les langues requises.")
+            )
+            unknowns.append("Langues non renseignées par la source.")
+
+    ranking = brief.get("ranking", {})
+    weighted_points = 0.0
+    weighted_maximum = 0.0
+    applied: dict[str, float] = {}
+    for component in components[:MAX_COMPONENTS]:
+        multiplier = float(ranking.get(component["key"], 1.0))
+        applied[component["key"]] = multiplier
+        weighted_points += component["points"] * multiplier
+        weighted_maximum += component["maximum"] * multiplier
+
+    score = round(100 * weighted_points / weighted_maximum) if weighted_maximum else None
+    if score is None:
+        label = "Aucun critère renseigné : classement neutre"
+    elif score >= 70:
+        label = "Correspondance forte"
+    elif score >= 45:
+        label = "Correspondance à examiner"
+    else:
+        label = "Correspondance faible ou incomplète"
+
+    source_status = clean_text(job.get("source_status"), limit=40) or "unknown"
+    if source_status != "open":
+        warnings.append(
+            "Le statut de cette annonce n’est pas confirmé ouvert par la source ; elle a peut-être été pourvue."
+        )
+    deadline_status = clean_text(job.get("deadline_status"), limit=40)
+    if deadline_status == "closed":
+        warnings.append("La date limite connue est dépassée ou l’annonce est indiquée fermée.")
+    # Stage Hunter targets internships: a posting that announces a permanent
+    # contract is flagged rather than hidden, so the ranking stays honest.
+    employment = normalized_text(job.get("employment_type"))
+    if employment and any(_contains(employment, pattern) for pattern in _PERMANENT_CONTRACT_PATTERNS):
+        warnings.append(
+            f"Contrat permanent annoncé (« {clean_text(job.get('employment_type'), limit=120)} ») : "
+            "cette offre n’est probablement pas un stage."
+        )
+    if not clean_text(job.get("official_url"), limit=2_000):
+        warnings.append("Aucune URL officielle n’est conservée pour cette offre : vérifie la source avant toute action.")
+
+    return {
+        "score": score,
+        "label": label,
+        "components": components[:MAX_COMPONENTS],
+        "weights_applied": applied,
+        "reasons": reasons[:8],
+        "unknowns": unknowns[:8],
+        "warnings": warnings[:6],
+        "disclaimer": "Comparaison locale déterministe entre tes critères et les faits enregistrés de l’offre ; ce n’est ni une prédiction, ni une vérification du site de l’entreprise.",
+    }

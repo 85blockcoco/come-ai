@@ -38,26 +38,40 @@ PRIMARY_LOCATIONS = (
 JOB_STATES = {"discovered", "shortlisted", "rejected", "archived"}
 AVAILABILITY_STATES = {"open", "closed", "unknown"}
 APPLICATION_STAGES = {
+    "to_review",
     "to_prepare",
     "ready_to_apply",
     "approved_for_manual_submission",
     "deferred",
     "rejected",
+    "refused",
     "withdrawn",
     "receipt_unknown",
+    "submitted",
     "submitted_confirmed",
     "response_received",
     "interview",
+    "offer_received",
 }
+# Stages a person may record directly.  ``approved_for_manual_submission``
+# stays out (it is granted through the explicit approval flow) and
+# ``submitted_confirmed`` stays out (it requires a receipt confirmation
+# reference).  ``submitted`` is a person-declared fact: the person states
+# they completed the manual deposit themselves; it claims nothing about the
+# employer receiving it.
 GENERIC_APPLICATION_STAGES = {
+    "to_review",
     "to_prepare",
     "ready_to_apply",
     "deferred",
     "rejected",
+    "refused",
     "withdrawn",
     "receipt_unknown",
+    "submitted",
     "response_received",
     "interview",
+    "offer_received",
 }
 
 

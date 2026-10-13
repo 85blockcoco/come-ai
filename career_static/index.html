@@ -38,6 +38,7 @@
         <nav class="career-tabs" aria-label="Navigation principale Career">
           <button class="career-tab active" id="tab-dashboard" type="button" aria-current="page" aria-controls="view-dashboard" data-view="dashboard">Tableau de bord</button>
           <button class="career-tab" id="tab-discover" type="button" aria-controls="view-discover" data-product-area="Discover" data-view="discover">Découvrir</button>
+          <button class="career-tab" id="tab-stagehunter" type="button" aria-controls="view-stagehunter" data-view="stagehunter">Stage Hunter</button>
           <button class="career-tab" id="tab-applications" type="button" aria-controls="view-applications" data-product-area="Applications" data-view="applications">Candidatures</button>
           <button class="career-tab" id="tab-interviews" type="button" aria-controls="view-interviews" data-product-area="Interview Coach" data-view="interviews">Coach d’entretien</button>
           <button class="career-tab" id="tab-profile" type="button" aria-controls="view-profile" data-view="profile">Mon profil</button>
@@ -243,7 +244,7 @@
                 </div>
                 <span class="local-tag">Greenhouse sur demande</span>
               </div>
-              <p class="panel-help">Ajoute une fois le board Greenhouse public d’une entreprise. Le bouton lit ensuite uniquement ses annonces publiées, avec un délai, un cache de 10 minutes et aucun accès LinkedIn.</p>
+              <p class="panel-help">Indique l’entreprise et l’adresse de son board public : <strong>https://boards.greenhouse.io/identifiant</strong> ou <strong>https://job-boards.greenhouse.io/identifiant</strong>. Retire une éventuelle fin <strong>/jobs/123</strong> de l’adresse d’une offre. L’identifiant exact du board (ex. <strong>stripe</strong>, pas nécessairement le nom de l’entreprise) fonctionne aussi. Le bouton lit uniquement les annonces de ce board, avec un délai, un cache de 10 minutes et aucun accès LinkedIn. Ni compte, ni clé API.</p>
               <form id="discovery-source-form" class="form-stack discovery-source-form">
                 <div class="form-row two-columns">
                   <label>Entreprise *<input id="discovery-source-company" name="company" required maxlength="240" placeholder="Ex. Banque ou fonds" /></label>
@@ -333,6 +334,106 @@
             </form>
             <div id="jobs-list" class="job-list"></div>
             <p id="jobs-empty" class="empty-state">Aucune offre pour l’instant. Importe une annonce officielle ou une description que tu as obtenue légalement.</p>
+          </section>
+        </section>
+
+        <section id="view-stagehunter" class="career-view" tabindex="-1" hidden aria-labelledby="stagehunter-title">
+          <header class="view-intro">
+            <p class="eyebrow">Parcours de candidature</p>
+            <h2 id="stagehunter-title">Stage Hunter</h2>
+            <p>Définis le stage que tu cherches, retrouve les offres réelles venues des sources officielles que tu as configurées, compare-les avec des explications, prépare chaque candidature uniquement avec des faits, puis suis les statuts. Rien n’est envoyé automatiquement.</p>
+          </header>
+
+          <section class="panel">
+            <p class="eyebrow">Étape A</p>
+            <h3>Définir le stage recherché</h3>
+            <form id="stagehunter-brief-form" class="form-stack">
+              <fieldset>
+                <legend>Domaines de la finance</legend>
+                <div id="stagehunter-domains" class="stagehunter-domains"></div>
+              </fieldset>
+              <label>Autres métiers financiers (facultatif)
+                <input id="stagehunter-other-domains" maxlength="1500" placeholder="Ex. dette privée, fonds de dette…" />
+              </label>
+              <label>Métiers / intitulés visés (facultatif)
+                <input id="stagehunter-roles" maxlength="2500" placeholder="Ex. stagiaire M&A, analyste junior…" />
+              </label>
+              <div class="form-row two-columns">
+                <label>Pays (facultatif)<input id="stagehunter-countries" maxlength="1500" placeholder="Ex. France, Royaume-Uni" /></label>
+                <label>Villes (facultatif)<input id="stagehunter-cities" maxlength="1500" placeholder="Ex. Paris, Londres" /></label>
+              </div>
+              <div class="form-row two-columns">
+                <label>Date de début souhaitée<input id="stagehunter-start" type="date" /></label>
+                <label>Durée minimale (mois)<input id="stagehunter-duration" type="number" min="1" max="24" inputmode="numeric" placeholder="Ex. 4" /></label>
+              </div>
+              <div class="form-row two-columns">
+                <label>Niveau d’études déclaré<input id="stagehunter-level" maxlength="120" placeholder="Ex. Bac+5, Master 2…" /></label>
+                <label>Langues déclarées<input id="stagehunter-languages" maxlength="1000" placeholder="Ex. anglais C1, français natif…" /></label>
+              </div>
+              <label>Contraintes (facultatif)
+                <textarea id="stagehunter-constraints" rows="2" maxlength="2000" placeholder="Ex. mobilité sur Paris uniquement…"></textarea>
+              </label>
+              <fieldset>
+                <legend>Préférences de classement (poids de 0,5 à 2)</legend>
+                <div id="stagehunter-ranking" class="stagehunter-ranking"></div>
+              </fieldset>
+              <button class="primary-button" type="submit">Enregistrer mes critères</button>
+            </form>
+            <p id="stagehunter-brief-note" class="fixed-period-note"></p>
+          </section>
+
+          <section class="panel">
+            <p class="eyebrow">Étape B</p>
+            <h3>Trouver des offres réelles</h3>
+            <p class="fixed-period-note">Career ne lit que des sources que tu as configurées : des boards Greenhouse publics ajoutés par toi et des offres importées manuellement. L’URL, la source et la date de consultation de chaque offre sont conservées telles quelles, et une annonce dont le statut n’est pas confirmé ouverte reste signalée « à vérifier ».</p>
+            <ol class="stagehunter-howto">
+              <li>Récupère l’adresse du board public : <strong>https://boards.greenhouse.io/identifiant</strong> ou <strong>https://job-boards.greenhouse.io/identifiant</strong>. Si l’adresse d’une offre se termine par <strong>/jobs/123</strong>, retire cette fin pour obtenir le board.</li>
+              <li>Clique sur « Configurer mes sources », colle cette adresse ou l’identifiant exact du board (ex. <strong>stripe</strong>, pas nécessairement le nom de l’entreprise), puis donne le nom d’entreprise et ajoute le board. Aucun compte ni clé API n’est nécessaire.</li>
+              <li>Reviens ici et clique sur « Lancer une recherche » : les offres publiées par ce board sont importées avec leur lien officiel réel et l’heure de vérification.</li>
+              <li>Pas de lien sous la main ? Importe une annonce officielle manuellement dans « Découvrir », ou ignore cette étape si des offres sont déjà affichées plus bas.</li>
+            </ol>
+            <div class="job-actions">
+              <button id="stagehunter-search" class="primary-button" type="button">Lancer une recherche sur mes boards</button>
+              <button class="secondary-button" type="button" data-view-action="discover">Configurer mes sources</button>
+            </div>
+            <div id="stagehunter-terms" class="stagehunter-terms"></div>
+          </section>
+
+          <section class="panel">
+            <p class="eyebrow">Étape C</p>
+            <h3>Classement expliqué de mes offres</h3>
+            <div class="job-actions">
+              <button id="stagehunter-refresh" class="secondary-button" type="button">Recalculer le classement</button>
+            </div>
+            <p id="stagehunter-matches-note" class="fixed-period-note"></p>
+            <div id="stagehunter-matches" class="job-list"></div>
+            <p id="stagehunter-matches-empty" class="empty-state">Aucune offre enregistrée pour l’instant. Passe à l’étape B pour en importer.</p>
+          </section>
+
+          <section class="panel">
+            <p class="eyebrow">Étape D</p>
+            <h3>Préparer une candidature sans rien inventer</h3>
+            <p class="fixed-period-note">L’analyse compare les exigences de l’offre à ton profil local. Elle ne crée aucune expérience, aucune compétence et aucun diplôme : chaque élément pertinent cite un extrait réel de ton profil.</p>
+            <div class="form-row two-columns">
+              <label>Offre à préparer
+                <select id="stagehunter-prep-job"><option value="">Choisir une offre…</option></select>
+              </label>
+              <div class="job-actions stagehunter-prep-actions">
+                <button id="stagehunter-prep-submit" class="primary-button" type="button">Analyser cette offre</button>
+              </div>
+            </div>
+            <div id="stagehunter-prep" class="stagehunter-prep" hidden></div>
+          </section>
+
+          <section class="panel">
+            <p class="eyebrow">Étape E</p>
+            <h3>Suivre mes candidatures</h3>
+            <p class="fixed-period-note">Statuts disponibles : À examiner, À préparer, Prête, Envoyée (dépôt manuel que tu as effectué), Entretien, Refusée, Offre reçue. Enregistrer « Envoyée » exige d’abord l’approbation locale pour cette offre précise, et une réception confirmée exige une référence.</p>
+            <div id="stagehunter-applications" class="job-list"></div>
+            <p id="stagehunter-applications-empty" class="empty-state">Aucune candidature suivie pour l’instant. Ajoute une offre à la shortlist puis clique sur « Créer un suivi ».</p>
+            <div class="job-actions">
+              <button class="secondary-button" type="button" data-view-action="applications">Ouvrir le suivi détaillé</button>
+            </div>
           </section>
         </section>
 

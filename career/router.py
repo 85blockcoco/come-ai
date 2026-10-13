@@ -82,6 +82,23 @@ class NotePayload(BaseModel):
     note: str = Field(default="", max_length=4_000)
 
 
+class StageSearchPayload(BaseModel):
+    """The person's own internship-search brief; every field is optional so no
+    preference is presumed before they fill it in."""
+
+    domains: list[str] = Field(default_factory=list, max_length=12)
+    other_domains: list[str] = Field(default_factory=list, max_length=12)
+    roles: list[str] = Field(default_factory=list, max_length=20)
+    countries: list[str] = Field(default_factory=list, max_length=20)
+    cities: list[str] = Field(default_factory=list, max_length=20)
+    start_date: str = Field(default="", max_length=32)
+    duration_months: int | None = Field(default=None, ge=1, le=24)
+    study_level: str = Field(default="", max_length=120)
+    languages: list[str] = Field(default_factory=list, max_length=10)
+    constraints: str = Field(default="", max_length=2_000)
+    ranking: dict[str, float] = Field(default_factory=dict)
+
+
 class ApplicationCreatePayload(BaseModel):
     job_id: str = Field(min_length=8, max_length=80)
 
@@ -200,6 +217,7 @@ def create_career_router(
             "scoring": capabilities["scoring"],
             "interview_coach": capabilities["interview_coach"],
             "calendar_export": capabilities["calendar_export"],
+            "stage_search": capabilities["stage_search"],
         }
 
     @router.get("/api/career/dashboard")
@@ -291,6 +309,18 @@ def create_career_router(
     async def update_preferences(payload: PreferencesPayload) -> Any:
         return await local(lambda: service.update_preferences(payload.model_dump()))
 
+    @router.get("/api/career/stage-search")
+    async def stage_search() -> Any:
+        return await local(service.get_stage_search)
+
+    @router.put("/api/career/stage-search")
+    async def update_stage_search(payload: StageSearchPayload) -> Any:
+        return await local(lambda: service.update_stage_search(payload.model_dump()))
+
+    @router.get("/api/career/stage-search/matches")
+    async def stage_search_matches() -> Any:
+        return await local(service.list_stage_matches)
+
     @router.get("/api/career/discovery-sources")
     async def discovery_sources() -> Any:
         return await local(lambda: {"sources": service.list_discovery_sources()})
@@ -341,6 +371,10 @@ def create_career_router(
     @router.get("/api/career/jobs/{job_id}")
     async def job(job_id: str) -> Any:
         return await local(lambda: service.get_job(job_id))
+
+    @router.get("/api/career/jobs/{job_id}/prep")
+    async def job_prep(job_id: str) -> Any:
+        return await local(lambda: service.get_job_prep(job_id))
 
     @router.post("/api/career/jobs/{job_id}/shortlist")
     async def shortlist(job_id: str, payload: ShortlistPayload) -> Any:

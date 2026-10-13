@@ -36,11 +36,14 @@ MAX_URL_LENGTH = 2_000
 _TERMINAL_JOB_STATES = frozenset({"archived", "rejected", "withdrawn", "closed"})
 _TERMINAL_APPLICATION_STAGES = frozenset(
     {
+        "submitted",
         "submitted_confirmed",
         "confirmed_submitted",
         "response_received",
         "interview",
+        "offer_received",
         "rejected",
+        "refused",
         "withdrawn",
         "archived",
     }

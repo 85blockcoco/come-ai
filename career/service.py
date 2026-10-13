@@ -45,6 +45,15 @@ from .application_studio import (
     render_application_html,
 )
 from .calendar_export import build_deadline_calendar_ics
+from .application_prep import prepare_application
+from .stage_search import (
+    brief_is_configured,
+    default_brief,
+    score_brief_match,
+    search_terms_for,
+    validate_brief,
+    vocabulary as stage_search_vocabulary,
+)
 from .document_export import write_docx, write_pdf
 from .intake import answer_for_step, normalize_answers, serialize_intake
 from .interview import (
@@ -68,6 +77,9 @@ from .profile_import import (
 
 
 SCHEMA_VERSION = 6
+# The Stage Hunter brief lives in career_settings as one JSON value: no
+# schema migration, and it is exported with the rest of the local settings.
+STAGE_SEARCH_SETTING_KEY = "stage_search_brief"
 DISCOVERY_CACHE_SECONDS = 10 * 60
 DELETE_CONFIRMATION = "SUPPRIMER MES DONNÉES CAREER"
 PROFILE_EDITABLE_FIELDS = (
@@ -109,7 +121,16 @@ PROFILE_ACTION_FIELDS: tuple[tuple[str, str], ...] = (
 # policy used only by the computed action plan; it does not change tracker
 # history or application stages.
 POST_SUBMISSION_APPLICATION_STAGES = frozenset(
-    {"submitted_confirmed", "response_received", "interview", "rejected", "withdrawn"}
+    {
+        "submitted",
+        "submitted_confirmed",
+        "response_received",
+        "interview",
+        "offer_received",
+        "rejected",
+        "refused",
+        "withdrawn",
+    }
 )
 
 
@@ -1682,6 +1703,91 @@ class CareerService:
             self._audit(connection, "preferences_updated", "preferences", "search")
         return self.get_preferences()
 
+    # ------------------------------------------------------------------
+    # Stage Hunter: the person's own search brief, explainable matching and
+    # factual application preparation.  Everything below is deterministic,
+    # local and reuses the facts already stored by Career.
+    # ------------------------------------------------------------------
+
+    def _read_stage_search_raw(self, connection: sqlite3.Connection) -> str:
+        row = connection.execute(
+            "SELECT setting_value FROM career_settings WHERE setting_key = ?",
+            (STAGE_SEARCH_SETTING_KEY,),
+        ).fetchone()
+        return str(row["setting_value"]) if row else ""
+
+    def get_stage_search(self) -> dict[str, Any]:
+        with self._lock, self._connection() as connection:
+            raw = self._read_stage_search_raw(connection)
+        brief = default_brief()
+        # A stored brief can become invalid without any action from the person
+        # (a vocabulary entry removed by an update, a manual database edit…).
+        # A read must never fail hard and lock the whole tab: fall back to an
+        # empty brief, say so explicitly, and let the next save re-validate.
+        stored_brief_invalid = False
+        if raw:
+            try:
+                brief = validate_brief(json.loads(raw))
+            except (json.JSONDecodeError, TypeError, ValueError, UserFacingError):
+                brief = default_brief()
+                stored_brief_invalid = True
+        return {
+            "brief": brief,
+            "configured": brief_is_configured(brief),
+            "stored_brief_invalid": stored_brief_invalid,
+            "vocabulary": stage_search_vocabulary(),
+            "search_terms": search_terms_for(brief.get("domains", [])),
+            "disclaimer": (
+                "Critères de recherche stockés uniquement dans tes données locales ; "
+                "aucune préférence n’est supposée tant que tu ne l’as pas renseignée."
+            ),
+        }
+
+    def update_stage_search(self, payload: dict[str, Any]) -> dict[str, Any]:
+        brief = validate_brief(payload)
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO career_settings (setting_key, setting_value) VALUES (?, ?)
+                ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value
+                """,
+                (STAGE_SEARCH_SETTING_KEY, json.dumps(brief, ensure_ascii=False)),
+            )
+            self._audit(connection, "stage_search_updated", "preferences", "stage_search")
+        return self.get_stage_search()
+
+    def list_stage_matches(self) -> dict[str, Any]:
+        """Rank every stored offer against the brief, with the reason for each score."""
+        payload = self.get_stage_search()
+        brief = payload["brief"]
+        jobs = self.list_jobs()
+        matches: list[dict[str, Any]] = []
+        if payload["configured"]:
+            for job in jobs:
+                matches.append({"job": job, "stage_match": score_brief_match(brief, job)})
+            # Break ties by source identity, never a random database ID or
+            # import/update time: the same postings have the same ordering
+            # after a board reorders its feed or the application restarts.
+            matches.sort(key=lambda item: (
+                -(int(item["stage_match"]["score"] or 0)),
+                str(item["job"].get("source_name") or ""),
+                str(item["job"].get("source_id") or ""),
+                str(item["job"].get("canonical_url") or item["job"].get("official_url") or ""),
+                str(item["job"].get("company") or ""),
+                str(item["job"].get("title") or ""),
+            ))
+        else:
+            matches = [{"job": job, "stage_match": None} for job in jobs]
+        payload["matches"] = matches
+        return payload
+
+    def get_job_prep(self, job_id: str) -> dict[str, Any]:
+        """Factual preparation panel for one offer; no model, no invention."""
+        job = self.get_job(job_id)
+        context = self._scoring_context()
+        analysis = prepare_application(context.get("profile") or {}, context.get("intake") or {}, job)
+        return analysis
+
     @staticmethod
     def _serialize_discovery_source(row: sqlite3.Row) -> dict[str, Any]:
         result = dict(row)
@@ -1867,10 +1973,21 @@ class CareerService:
         if not self._discovery_lock.acquire(blocking=False):
             raise UserFacingError("Une recherche d’opportunités est déjà en cours. Attends sa fin avant de relancer.")
         try:
+            brief = self.get_stage_search()["brief"]
+            selection_fingerprint = hashlib.sha256(
+                json.dumps(brief, sort_keys=True, ensure_ascii=False).encode("utf-8")
+            ).hexdigest()
             with self._lock, self._connection() as connection:
                 sources = connection.execute(
                     "SELECT * FROM discovery_sources WHERE enabled = 1 ORDER BY company COLLATE NOCASE ASC"
                 ).fetchall()
+                cached_selections = {
+                    str(row["setting_key"]): str(row["setting_value"])
+                    for row in connection.execute(
+                        "SELECT setting_key, setting_value FROM career_settings "
+                        "WHERE setting_key LIKE 'stage_search_selection:%'"
+                    ).fetchall()
+                }
             if not sources:
                 raise UserFacingError("Ajoute d’abord au moins un board Greenhouse public à suivre.")
 
@@ -1878,8 +1995,13 @@ class CareerService:
             for row in sources:
                 source = dict(row)
                 source_id = str(source["id"])
+                selection_key = f"stage_search_selection:{source_id}"
                 started_at = utc_now()
-                if not force and self._discovery_cache_valid(str(source["last_success_at"])):
+                if (
+                    not force
+                    and self._discovery_cache_valid(str(source["last_success_at"]))
+                    and cached_selections.get(selection_key) == selection_fingerprint
+                ):
                     run_id = self._record_discovery_run(
                         source_id,
                         status="cached",
@@ -1906,13 +2028,19 @@ class CareerService:
                         (started_at, started_at, source_id),
                     )
                 try:
-                    result = self.discovery_connector.discover(
-                        GreenhouseBoard(
-                            id=source_id,
-                            company=str(source["company"]),
-                            board_token=str(source["board_token"]),
-                        )
+                    board = GreenhouseBoard(
+                        id=source_id,
+                        company=str(source["company"]),
+                        board_token=str(source["board_token"]),
                     )
+                    ranked_discovery = getattr(self.discovery_connector, "discover_ranked", None)
+                    if callable(ranked_discovery):
+                        result = ranked_discovery(board, selection_brief=brief)
+                    else:
+                        # Retain the original injectable connector contract.
+                        # Production Greenhouse always uses ranked discovery;
+                        # legacy fixtures/connectors return their own payload.
+                        result = self.discovery_connector.discover(board)
                 except Exception as caught:
                     # A connector is isolated from the rest of the local
                     # tracker.  The public implementation raises
@@ -1959,7 +2087,8 @@ class CareerService:
                     )
                     continue
 
-                imported = updated = skipped = 0
+                imported = updated = 0
+                skipped = result.invalid_count
                 seen_at = result.verified_at
                 availability = self._current_availability_values()
                 for raw_job in result.jobs:
@@ -1993,13 +2122,17 @@ class CareerService:
                     # A successful full feed no longer showing an earlier role
                     # is evidence only that it was not observed now.  It is not
                     # safe to call the role closed automatically.
-                    connection.execute(
-                        """
-                        UPDATE jobs SET source_status = 'unknown', updated_at = ?
-                        WHERE discovery_source_id = ? AND last_seen_at != ? AND source_status = 'open'
-                        """,
-                        (utc_now(), source_id, seen_at),
-                    )
+                    # Exclusion from a ranked top-150 or a malformed source
+                    # row is not evidence that an earlier posting vanished.
+                    # Preserve its last verified state and tracking instead.
+                    if not result.truncated and not result.invalid_count:
+                        connection.execute(
+                            """
+                            UPDATE jobs SET source_status = 'unknown', updated_at = ?
+                            WHERE discovery_source_id = ? AND last_seen_at != ? AND source_status = 'open'
+                            """,
+                            (utc_now(), source_id, seen_at),
+                        )
                     connection.execute(
                         """
                         UPDATE discovery_sources
@@ -2008,13 +2141,28 @@ class CareerService:
                         """,
                         (seen_at, utc_now(), source_id),
                     )
+                    # An additive setting, not a schema replacement. This
+                    # fingerprint also makes an in-flight search using an old
+                    # brief non-cacheable after the person saves new criteria.
+                    connection.execute(
+                        """
+                        INSERT INTO career_settings (setting_key, setting_value) VALUES (?, ?)
+                        ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value
+                        """,
+                        (selection_key, selection_fingerprint),
+                    )
                     self._audit(connection, "discovery_source_refreshed", "discovery_source", source_id)
                 status = "partial" if skipped else "success"
                 message = f"{len(result.jobs)} offre(s) publiée(s) vérifiée(s), {imported} nouvelle(s), {updated} actualisée(s)."
                 if skipped:
                     message += f" {skipped} entrée(s) source ignorée(s) car incomplète(s) ou invalide(s)."
                 if result.truncated:
-                    message += " Le flux dépasse la limite locale de 150 offres ; affine le board ou vérifie son site officiel."
+                    message += (
+                        f" Les 150 offres les plus pertinentes parmi {result.evaluated_count} entrées admissibles "
+                        "ont été conservées après classement local selon tes critères "
+                        "(ordre neutre et déterministe sans critères). "
+                        "Les autres offres déjà suivies restent conservées."
+                    )
                 self._finish_discovery_run(
                     run_id,
                     status=status,
@@ -2386,7 +2534,7 @@ class CareerService:
                 connection.execute(
                     """
                     INSERT INTO applications (id, job_id, stage, receipt_status, approval_granted, confirmation_reference, created_at, updated_at)
-                    VALUES (?, ?, 'to_prepare', 'not_submitted', 0, '', ?, ?)
+                    VALUES (?, ?, 'to_review', 'not_submitted', 0, '', ?, ?)
                     """,
                     (application_id, job_id, now, now),
                 )
@@ -2459,18 +2607,31 @@ class CareerService:
             )
         with self._lock, self._connection() as connection:
             application = connection.execute(
-                "SELECT job_id, stage, receipt_status FROM applications WHERE id = ?", (application_id,)
+                "SELECT job_id, stage, receipt_status, approval_granted FROM applications WHERE id = ?",
+                (application_id,),
             ).fetchone()
             if not application:
                 raise UserFacingError("Cette candidature Career n’existe pas.")
+            # Recording "Envoyée" only states the person's own manual action,
+            # but it must still follow the explicit approval for this offer:
+            # nothing may be presented as deposited without that validation.
+            if normalized_stage == "submitted" and not application["approval_granted"]:
+                raise UserFacingError(
+                    "Approuve d’abord le dépôt manuel pour cette offre avant d’enregistrer son envoi."
+                )
             if (
                 application["receipt_status"] == "confirmed"
-                and normalized_stage not in {"response_received", "interview", "rejected", "withdrawn"}
+                and normalized_stage
+                not in {"response_received", "interview", "offer_received", "rejected", "refused", "withdrawn"}
             ):
                 raise UserFacingError(
                     "Une candidature dont la réception est confirmée ne peut pas revenir à un statut antérieur."
                 )
-            receipt_status = "unknown" if normalized_stage == "receipt_unknown" else None
+            # "Envoyée" is a person-declared deposit: the receipt is unknown
+            # until a confirmation reference is recorded separately.
+            receipt_status = (
+                "unknown" if normalized_stage in {"receipt_unknown", "submitted"} else None
+            )
             if receipt_status:
                 connection.execute(
                     "UPDATE applications SET stage = ?, receipt_status = ?, updated_at = ? WHERE id = ?",
@@ -2806,7 +2967,7 @@ class CareerService:
         applications_to_prepare = [
             application
             for application in applications
-            if application.get("stage") in {"to_prepare", "ready_to_apply"}
+            if application.get("stage") in {"to_review", "to_prepare", "ready_to_apply"}
             and application.get("receipt_status") != "confirmed"
         ]
         if applications_to_prepare:
@@ -2919,6 +3080,12 @@ class CareerService:
                 "format": "ics",
                 "local_only": True,
                 "automatic_sync": False,
+            },
+            "stage_search": {
+                "enabled": True,
+                "ai_required": False,
+                "local_only": True,
+                "invented_facts": False,
             },
         }
 

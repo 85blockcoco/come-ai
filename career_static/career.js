@@ -102,19 +102,36 @@ const elements = {
 };
 
 const stageLabels = {
+  to_review: "À examiner",
   to_prepare: "À préparer",
-  ready_to_apply: "Prête à déposer",
+  ready_to_apply: "Prête",
   approved_for_manual_submission: "Approuvée pour dépôt manuel",
   deferred: "Reportée",
   rejected: "Rejetée par moi",
+  refused: "Refusée",
   withdrawn: "Retirée",
   receipt_unknown: "Réception inconnue",
+  submitted: "Envoyée",
   submitted_confirmed: "Réception confirmée",
   response_received: "Réponse reçue",
   interview: "Entretien",
+  offer_received: "Offre reçue",
 };
-const editableStages = ["to_prepare", "ready_to_apply", "deferred", "rejected", "withdrawn", "receipt_unknown", "response_received", "interview"];
-const stagesAfterConfirmedReceipt = ["response_received", "interview", "rejected", "withdrawn"];
+const editableStages = [
+  "to_review",
+  "to_prepare",
+  "ready_to_apply",
+  "deferred",
+  "rejected",
+  "refused",
+  "withdrawn",
+  "receipt_unknown",
+  "submitted",
+  "response_received",
+  "interview",
+  "offer_received",
+];
+const stagesAfterConfirmedReceipt = ["response_received", "interview", "offer_received", "rejected", "refused", "withdrawn"];
 const calendarClasses = {
   compatible: "good",
   partial: "warning",
@@ -173,6 +190,7 @@ function labelForView(viewName) {
   return {
     dashboard: "Tableau de bord",
     discover: "Découvrir",
+    stagehunter: "Stage Hunter",
     shortlist: "Ma shortlist",
     studio: "Application Studio",
     applications: "Candidatures",
@@ -216,12 +234,13 @@ function organiseViews() {
   }
 }
 
-const careerViews = new Set(["dashboard", "discover", "shortlist", "studio", "applications", "interviews", "profile", "settings"]);
+const careerViews = new Set(["dashboard", "discover", "stagehunter", "shortlist", "studio", "applications", "interviews", "profile", "settings"]);
 let internalHashChange = false;
 
 function refreshView(viewName) {
   const loaders = {
     dashboard: loadDashboard,
+    stagehunter: loadStageHunter,
     shortlist: loadShortlist,
     studio: loadStudio,
     applications: loadApplications,
@@ -647,7 +666,7 @@ async function runDiscovery(force = false) {
     ].filter(Boolean).join(" · ");
     const detail = errors.map((outcome) => `${outcome.company} : ${outcome.message}`).join(" ");
     setMessage(`${summary || "Recherche terminée."}${detail ? ` ${detail}` : ""}`, errors.length > 0 && refreshed.length === 0);
-    await Promise.all([loadDiscoverySources(), loadJobs(), loadShortlist(), loadDashboard(), loadStudio()]);
+    await Promise.all([loadDiscoverySources(), loadJobs(), loadShortlist(), loadDashboard(), loadStudio(), refreshStageHunterIfVisible()]);
   } catch (error) { setMessage(error.message, true); }
   finally {
     trigger.textContent = previousLabel;
@@ -945,8 +964,15 @@ async function toggleShortlist(job) {
       body: JSON.stringify({ shortlisted: !job.shortlisted, note: note ?? job.personal_note ?? "" }),
     });
     setMessage(job.shortlisted ? "Offre retirée de la shortlist." : "Offre ajoutée à la shortlist.");
-    await Promise.all([loadDashboard(), loadJobs(), loadShortlist()]);
+    await Promise.all([loadDashboard(), loadJobs(), loadShortlist(), refreshStageHunterIfVisible()]);
   } catch (error) { setMessage(error.message, true); }
+}
+
+// The Stage Hunter tab refreshes itself only when it is on screen, so other
+// views keep their current cost.
+async function refreshStageHunterIfVisible() {
+  if (window.location.hash !== "#career/stagehunter") return;
+  await loadStageHunter().catch(() => {});
 }
 
 async function updateJobNote(job) {
@@ -964,7 +990,7 @@ async function createOrShowApplication(job) {
     if (!job.application) {
       await api("/api/career/applications", { method: "POST", body: JSON.stringify({ job_id: job.id }) });
       setMessage("Suivi de candidature créé. Aucun envoi n’a été effectué.");
-      await Promise.all([loadDashboard(), loadJobs(), loadShortlist()]);
+      await Promise.all([loadDashboard(), loadJobs(), loadShortlist(), loadApplications(), refreshStageHunterIfVisible()]);
     }
     showView("applications");
   } catch (error) { setMessage(error.message, true); }
@@ -989,34 +1015,51 @@ function applicationCard(application) {
   permittedStages.forEach((stage) => {
     if (stage !== application.stage) select.append(new Option(stageLabels[stage], stage));
   });
+  select.setAttribute("aria-label", `Statut de ${application.title}`);
   actions.append(select);
+  const noteLabel = make("label", "Note de suivi (facultative)");
+  const noteInput = document.createElement("input");
+  noteInput.type = "text";
+  noteInput.maxLength = 1000;
+  noteLabel.append(noteInput);
+  actions.append(noteLabel);
   const save = make("button", "Mettre à jour", "secondary-button");
   save.type = "button";
   save.addEventListener("click", async () => {
     if (!select.value) return;
-    const note = window.prompt("Note de suivi facultative :", "");
     try {
-      await api(`/api/career/applications/${encodeURIComponent(application.id)}`, { method: "PATCH", body: JSON.stringify({ stage: select.value, note: note || "" }) });
+      await api(`/api/career/applications/${encodeURIComponent(application.id)}`, { method: "PATCH", body: JSON.stringify({ stage: select.value, note: noteInput.value || "" }) });
       setMessage("Statut de suivi mis à jour.");
-      await Promise.all([loadApplications(), loadDashboard()]);
+      await Promise.all([loadApplications(), loadDashboard(), refreshStageHunterIfVisible()]);
     } catch (error) { setMessage(error.message, true); }
   });
   actions.append(save);
   if (!application.approval_granted) {
+    const approvalLabel = make("label");
+    const approvalCheck = document.createElement("input");
+    approvalCheck.type = "checkbox";
+    approvalLabel.append(approvalCheck, document.createTextNode("J’approuve le dépôt manuel pour cette offre uniquement. Rien n’est envoyé par Côme AI."));
+    actions.append(approvalLabel);
     const approve = make("button", "Approuver pour dépôt manuel", "quiet-button");
     approve.type = "button";
-    approve.addEventListener("click", () => approveApplication(application));
+    approve.addEventListener("click", () => approveApplication(application, approvalCheck.checked));
     actions.append(approve);
   }
   if (application.approval_granted && application.receipt_status !== "confirmed") {
+    const referenceLabel = make("label", "Référence de réception (preuve reçue après dépôt manuel)");
+    const referenceInput = document.createElement("input");
+    referenceInput.type = "text";
+    referenceInput.maxLength = 1000;
+    referenceLabel.append(referenceInput);
+    actions.append(referenceLabel);
     const confirm = make("button", "Confirmer la réception", "quiet-button");
     confirm.type = "button";
-    confirm.addEventListener("click", () => confirmReceipt(application));
+    confirm.addEventListener("click", () => confirmReceipt(application, referenceInput.value));
     actions.append(confirm);
   }
   const unknown = make("button", "Réception inconnue", "quiet-button");
   unknown.type = "button";
-  unknown.addEventListener("click", () => markReceiptUnknown(application));
+  unknown.addEventListener("click", () => markReceiptUnknown(application, noteInput.value));
   actions.append(unknown);
   if (application.official_url) {
     const link = make("a", "Ouvrir l’offre officielle", "secondary-button external-link");
@@ -1421,31 +1464,36 @@ async function loadStudio() {
   } catch (error) { setMessage(error.message, true); }
 }
 
-async function approveApplication(application) {
-  if (!window.confirm(`Approuver le dépôt manuel pour ${application.company} — ${application.title} ? Cette approbation vaut uniquement pour cette offre.`)) return;
+async function approveApplication(application, explicitlyApproved = false) {
+  if (!explicitlyApproved) {
+    setMessage("Coche d’abord l’approbation explicite pour cette offre uniquement.", true);
+    return;
+  }
   try {
     await api(`/api/career/applications/${encodeURIComponent(application.id)}/approve`, { method: "POST", body: JSON.stringify({ approved: true, note: "Approbation explicite dans l’interface locale" }) });
     setMessage("Dépôt manuel approuvé pour cette offre uniquement. Rien n’a été envoyé.");
-    await loadApplications();
+    await Promise.all([loadApplications(), refreshStageHunterIfVisible()]);
   } catch (error) { setMessage(error.message, true); }
 }
 
-async function confirmReceipt(application) {
-  const confirmationReference = window.prompt("Référence de réception (e-mail, numéro de dossier ou note) :", "");
-  if (!confirmationReference) return;
+async function confirmReceipt(application, reference = "") {
+  const confirmationReference = reference.trim();
+  if (confirmationReference.length < 2 || confirmationReference.length > 1000) {
+    setMessage("Indique une référence de réception réelle (2 à 1 000 caractères).", true);
+    return;
+  }
   try {
     await api(`/api/career/applications/${encodeURIComponent(application.id)}/confirm-receipt`, { method: "POST", body: JSON.stringify({ confirmation_reference: confirmationReference }) });
     setMessage("Réception confirmée dans le suivi local. Aucun envoi n’a été effectué par Côme AI.");
-    await Promise.all([loadApplications(), loadDashboard()]);
+    await Promise.all([loadApplications(), loadDashboard(), refreshStageHunterIfVisible()]);
   } catch (error) { setMessage(error.message, true); }
 }
 
-async function markReceiptUnknown(application) {
-  const note = window.prompt("Explique pourquoi la réception est inconnue (facultatif) :", "") || "";
+async function markReceiptUnknown(application, note = "") {
   try {
     await api(`/api/career/applications/${encodeURIComponent(application.id)}/receipt-unknown`, { method: "POST", body: JSON.stringify({ note }) });
     setMessage("Réception marquée inconnue. Career Agent ne renverra aucune candidature automatiquement.");
-    await Promise.all([loadApplications(), loadDashboard()]);
+    await Promise.all([loadApplications(), loadDashboard(), refreshStageHunterIfVisible()]);
   } catch (error) { setMessage(error.message, true); }
 }
 
@@ -1717,6 +1765,296 @@ $("#delete-career-data").addEventListener("click", async () => {
     setMessage("Les données Career ont été supprimées. Les fichiers d’analyse Côme AI sont restés intacts.");
     await bootstrap();
   } catch (error) { setMessage(error.message, true); }
+});
+
+// ------------------------------------------------------------------
+// Stage Hunter: the person's own search brief, the explainable ranking of
+// stored offers, and the factual preparation panel. All logic stays on the
+// server: this view only displays what the local Career endpoints return.
+// ------------------------------------------------------------------
+
+function stageHunterListValue(selector) {
+  const element = $(selector);
+  return element ? element.value.split(/[,;\n]/).map((item) => item.trim()).filter(Boolean) : [];
+}
+
+function renderStageBrief(payload) {
+  const brief = payload.brief || {};
+  const domainsTarget = $("#stagehunter-domains");
+  const rankingTarget = $("#stagehunter-ranking");
+  if (!domainsTarget || !rankingTarget) return;
+  domainsTarget.replaceChildren();
+  (payload.vocabulary?.domains || []).forEach((domain) => {
+    const label = make("label", "", "stagehunter-domain");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.value = domain;
+    box.checked = (brief.domains || []).includes(domain);
+    label.append(box, document.createTextNode(domain));
+    domainsTarget.append(label);
+  });
+  $("#stagehunter-other-domains").value = (brief.other_domains || []).join(", ");
+  $("#stagehunter-roles").value = (brief.roles || []).join(", ");
+  $("#stagehunter-countries").value = (brief.countries || []).join(", ");
+  $("#stagehunter-cities").value = (brief.cities || []).join(", ");
+  $("#stagehunter-start").value = brief.start_date || "";
+  $("#stagehunter-duration").value = brief.duration_months ?? "";
+  $("#stagehunter-level").value = brief.study_level || "";
+  $("#stagehunter-languages").value = (brief.languages || []).join(", ");
+  $("#stagehunter-constraints").value = brief.constraints || "";
+  rankingTarget.replaceChildren();
+  (payload.vocabulary?.ranking_criteria || []).forEach((criterion) => {
+    const label = make("label", "", "stagehunter-weight");
+    label.append(document.createTextNode(criterion.label));
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = String(payload.vocabulary?.ranking_min ?? 0.5);
+    input.max = String(payload.vocabulary?.ranking_max ?? 2);
+    input.step = "0.1";
+    input.value = String(brief.ranking?.[criterion.key] ?? 1);
+    input.dataset.criterion = criterion.key;
+    label.append(input);
+    rankingTarget.append(label);
+  });
+  $("#stagehunter-brief-note").textContent = payload.stored_brief_invalid
+    ? "Tes critères enregistrés n’ont pas pu être relus (vocabulaire ou format devenu invalide) : le formulaire est reparti vide. Enregistre-les à nouveau pour corriger."
+    : payload.disclaimer || "";
+}
+
+function renderStageTerms(payload) {
+  const target = $("#stagehunter-terms");
+  if (!target) return;
+  target.replaceChildren();
+  const terms = payload.search_terms || [];
+  if (!terms.length) {
+    target.append(make("p", "Sélectionne des domaines à l’étape A pour afficher des termes de recherche suggérés.", "fixed-period-note"));
+    return;
+  }
+  terms.forEach((entry) => {
+    const block = make("div", "", "stagehunter-terms-block");
+    block.append(make("strong", entry.domain));
+    const list = make("ul", "", "job-reasons");
+    (entry.terms || []).forEach((term) => list.append(make("li", term)));
+    block.append(list);
+    target.append(block);
+  });
+  target.append(make("p", "Ces termes sont des repères locaux pour tes recherches manuelles sur les sites officiels : aucune requête n’est envoyée depuis ici.", "fixed-period-note"));
+}
+
+function stageMatchBlock(stageMatch) {
+  const block = make("section", "", "stage-match-block");
+  const header = make("div", "", "stage-match-header");
+  const scoreText = Number.isFinite(stageMatch.score) ? `${stageMatch.score}/100` : "non calculé";
+  const tone = Number.isFinite(stageMatch.score) && stageMatch.score >= 70 ? "good" : "warning";
+  header.append(make("p", `Correspondance stage : ${scoreText}`, "scoring-title"), chip(stageMatch.label || "", tone));
+  block.append(header);
+  if (stageMatch.disclaimer) block.append(make("p", stageMatch.disclaimer, "scoring-disclaimer"));
+  const good = make("ul", "", "scoring-list good-list");
+  const review = make("ul", "", "scoring-list review-list");
+  (stageMatch.components || []).forEach((component) => {
+    const target = component.status === "match" ? good : review;
+    target.append(make("li", `${component.label} : ${component.reason}`));
+  });
+  if (good.children.length) block.append(good);
+  if (review.children.length) block.append(review);
+  if ((stageMatch.warnings || []).length) {
+    const warnings = make("ul", "", "scoring-list blocked-list");
+    stageMatch.warnings.forEach((warning) => warnings.append(make("li", `À vérifier : ${warning}`)));
+    block.append(warnings);
+  }
+  return block;
+}
+
+function renderStageMatches(payload) {
+  const target = $("#stagehunter-matches");
+  const empty = $("#stagehunter-matches-empty");
+  if (!target || !empty) return;
+  target.replaceChildren();
+  const matches = payload.matches || [];
+  empty.hidden = matches.length > 0;
+  matches.forEach((match) => {
+    const wrapper = make("div", "", "stagehunter-match");
+    if (match.stage_match) wrapper.append(stageMatchBlock(match.stage_match));
+    const card = jobCard(match.job, "discover");
+    const actions = card.querySelector(".job-actions");
+    const prep = make("button", "Préparer cette candidature", "secondary-button");
+    prep.type = "button";
+    prep.addEventListener("click", () => loadStagePrep(match.job.id));
+    actions?.append(prep);
+    wrapper.append(card);
+    target.append(wrapper);
+  });
+  $("#stagehunter-matches-note").textContent = payload.configured
+    ? "Classement calculé localement à partir de tes critères ; chaque composante est expliquée ci-dessus."
+    : "Renseigne tes critères à l’étape A pour obtenir un classement expliqué. Aucune préférence n’est supposée.";
+}
+
+function renderStagePrepSelect() {
+  const select = $("#stagehunter-prep-job");
+  if (!select) return;
+  const current = select.value;
+  select.replaceChildren(new Option("Choisir une offre…", ""));
+  (state.jobs || []).forEach((job) => select.append(new Option(`${job.title} — ${job.company}`, job.id)));
+  if (current) select.value = current;
+}
+
+function renderStageApplications() {
+  const target = $("#stagehunter-applications");
+  const empty = $("#stagehunter-applications-empty");
+  if (!target || !empty) return;
+  target.replaceChildren();
+  empty.hidden = state.applications.length > 0;
+  state.applications.forEach((application) => target.append(applicationCard(application)));
+}
+
+function renderStagePrepList(target, title, items, renderItem) {
+  if (!items.length) return;
+  const section = make("section", "", "stagehunter-prep-section");
+  section.append(make("h4", title));
+  const list = make("ul", "", "job-reasons");
+  items.forEach((item) => list.append(renderItem(item)));
+  section.append(list);
+  target.append(section);
+}
+
+function renderStagePrep(prep) {
+  const target = $("#stagehunter-prep");
+  if (!target) return;
+  target.replaceChildren();
+  target.hidden = false;
+  const job = prep.job || {};
+  target.append(make("h4", `${job.title || "Offre"} — ${job.company || "Entreprise"}`));
+  if (job.official_url) {
+    const link = make("a", "Ouvrir l’offre officielle conservée", "secondary-button external-link");
+    link.href = job.official_url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.setAttribute("aria-label", `Ouvrir l’offre officielle « ${job.title || ""} » dans un nouvel onglet`);
+    target.append(link);
+  }
+  target.append(
+    make(
+      "p",
+      `Source : ${job.source_name || "inconnue"} · statut : ${job.source_status === "open" ? "ouverte" : "à vérifier"} · consultation : ${formatVerification(job.last_verified_at)}`,
+      "application-meta",
+    ),
+  );
+  if ((prep.uncertainty || []).length) {
+    const warnings = make("ul", "", "scoring-list blocked-list");
+    prep.uncertainty.forEach((item) => warnings.append(make("li", item)));
+    target.append(warnings);
+  }
+  renderStagePrepList(target, "Exigences de l’offre (texte source conservé)", prep.requirements || [], (item) => make("li", `${item.text}`));
+  if (prep.source_excerpt) {
+    const source = make("details", "", "stagehunter-prep-section");
+    source.append(make("summary", "Relire un extrait de la description source (jusqu’à 4 000 caractères)"));
+    source.append(make("p", prep.source_excerpt));
+    target.append(source);
+  }
+  renderStagePrepList(target, "Éléments pertinents de ton profil", prep.matched_elements || [], (item) => make("li", `« ${item.requirement} » → ton profil (${item.profile_field}) : « ${item.evidence} ».`));
+  renderStagePrepList(target, "Non trouvé dans ton profil", prep.unverified_elements || [], (item) => make("li", `${item.requirement} — ${item.note}`));
+  renderStagePrepList(target, "Améliorations de CV suggérées", prep.cv_improvements || [], (item) => make("li", item.suggestion));
+  renderStagePrepList(target, "Points pour le message de motivation", prep.letter_points || [], (item) => make("li", item.point));
+  renderStagePrepList(target, "Garanties d’honnêteté", prep.checks || [], (item) => make("li", `${item.label} — ${item.detail}`));
+  if (prep.disclaimer) target.append(make("p", prep.disclaimer, "scoring-disclaimer"));
+  const actions = make("div", "", "job-actions");
+  const studio = make("button", "Ouvrir l’Application Studio", "secondary-button");
+  studio.type = "button";
+  studio.addEventListener("click", () => showView("studio"));
+  actions.append(studio);
+  target.append(actions);
+}
+
+async function loadStagePrep(jobId) {
+  const target = $("#stagehunter-prep");
+  if (!target) return;
+  target.hidden = false;
+  target.replaceChildren(make("p", "Analyse locale en cours…"));
+  reveal(target, "start");
+  try {
+    const prep = await api(`/api/career/jobs/${encodeURIComponent(jobId)}/prep`);
+    const select = $("#stagehunter-prep-job");
+    if (select) {
+      if (![...select.options].some((option) => option.value === jobId)) {
+        select.append(new Option(`${prep.job.title} — ${prep.job.company}`, jobId));
+      }
+      select.value = jobId;
+    }
+    renderStagePrep(prep);
+  } catch (error) {
+    target.replaceChildren(make("p", error.message, "scoring-disclaimer"));
+  }
+}
+
+async function loadStageHunter() {
+  const payload = await api("/api/career/stage-search");
+  renderStageBrief(payload);
+  renderStageTerms(payload);
+  const matches = await api("/api/career/stage-search/matches");
+  renderStageMatches(matches);
+  renderStagePrepSelect();
+  const applications = await api("/api/career/applications");
+  state.applications = applications.applications || [];
+  renderStageApplications();
+}
+
+$("#stagehunter-brief-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const ranking = {};
+  document.querySelectorAll("#stagehunter-ranking input").forEach((input) => {
+    const value = Number.parseFloat(input.value);
+    if (Number.isFinite(value)) ranking[input.dataset.criterion] = value;
+  });
+  const payload = {
+    domains: [...document.querySelectorAll("#stagehunter-domains input:checked")].map((box) => box.value),
+    other_domains: stageHunterListValue("#stagehunter-other-domains"),
+    roles: stageHunterListValue("#stagehunter-roles"),
+    countries: stageHunterListValue("#stagehunter-countries"),
+    cities: stageHunterListValue("#stagehunter-cities"),
+    start_date: $("#stagehunter-start").value,
+    duration_months: $("#stagehunter-duration").value ? Number.parseInt($("#stagehunter-duration").value, 10) : null,
+    study_level: $("#stagehunter-level").value.trim(),
+    languages: stageHunterListValue("#stagehunter-languages"),
+    constraints: $("#stagehunter-constraints").value.trim(),
+    ranking,
+  };
+  try {
+    const saved = await api("/api/career/stage-search", { method: "PUT", body: JSON.stringify(payload) });
+    renderStageBrief(saved);
+    renderStageTerms(saved);
+    const matches = await api("/api/career/stage-search/matches");
+    renderStageMatches(matches);
+    setMessage("Critères de stage enregistrés localement ; le classement a été recalculé.");
+  } catch (error) { setMessage(error.message, true); }
+});
+
+$("#stagehunter-search")?.addEventListener("click", async () => {
+  const button = $("#stagehunter-search");
+  button.disabled = true;
+  const previousLabel = button.textContent;
+  button.textContent = "Recherche en cours…";
+  try {
+    // runDiscovery owns the success/partial/error summary and refreshes this
+    // visible view. Never overwrite its source failure with a success label.
+    await runDiscovery(false);
+  } catch (error) { setMessage(error.message, true); }
+  finally {
+    button.disabled = false;
+    button.textContent = previousLabel;
+  }
+});
+
+$("#stagehunter-refresh")?.addEventListener("click", () => {
+  loadStageHunter().catch((error) => setMessage(error.message, true));
+});
+
+$("#stagehunter-prep-submit")?.addEventListener("click", () => {
+  const jobId = $("#stagehunter-prep-job")?.value;
+  if (!jobId) {
+    setMessage("Choisis d’abord une offre à préparer.", true);
+    return;
+  }
+  loadStagePrep(jobId);
 });
 
 document.querySelectorAll(".career-tab").forEach((tab) => tab.addEventListener("click", () => showView(tab.dataset.view)));
