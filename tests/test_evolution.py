@@ -9,7 +9,7 @@ import json
 import pytest
 
 from devkit.evolution import EvolutionEngine, EvolutionError, evaluate_candidate
-from devkit.evolution_providers import ProviderSettings, ProviderUnavailable
+from devkit.evolution_providers import ProviderSettings, ProviderUnavailable, create_provider
 from devkit.exporting import source_fingerprint
 from devkit.proposals import CodeProposal
 
@@ -119,6 +119,33 @@ def test_failed_first_candidate_gets_feedback_second_passes_without_touching_mai
     assert persisted["source_fingerprint"] == source_fingerprint(candidate)
     assert persisted["pytest_receipt_verified"] is True
     assert engine.store.get_task(task["task_id"])["status"] == "needs_review"
+
+
+@pytest.mark.parametrize("prefix", ["AQ.", "AIza", "sk-or-v1-"])
+def test_model_supplied_secret_key_is_not_saved_or_returned_in_retry_feedback(project, tmp_path, monkeypatch, prefix):
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+    secret = prefix + "fictional" * 8
+    replies = [json.dumps({secret: "irrelevant"}), json.dumps({"files": {"core.py": CORRECT}})]
+    prompts = []
+
+    def transport(method, url, headers, payload, timeout):
+        if url.endswith("/api/show"):
+            return {"details": {"format": "gguf"}}
+        assert url.endswith("/api/generate")
+        prompts.append(payload["prompt"])
+        return {"done": True, "response": replies.pop(0), "prompt_eval_count": 12, "eval_count": 8}
+
+    provider = create_provider(project, settings(), transport=transport)
+    engine, _, _ = make_engine(project, tmp_path, provider)
+    result = engine.run_task(add_task(engine)["task_id"], settings(), max_attempts=2, max_requests=2)
+    assert result["status"] == "needs_review"
+    assert result["metrics"]["requests"] == 2
+    assert len(prompts) == 2
+    assert "[champ non autorisé]" in prompts[1]
+    saved = json.dumps(engine.store.get_run(result["run_id"]), ensure_ascii=False)
+    assert secret not in prompts[1] and secret[:32] not in prompts[1]
+    assert secret not in saved and secret[:32] not in saved
+    assert (project / "core.py").read_text() == ORIGINAL
 
 
 def test_request_budget_stops_invalid_proposals_without_extra_generation(project, tmp_path):

@@ -268,18 +268,28 @@ def test_unfinished_generation_is_rejected_without_retry(tmp_path, provider):
         response["choices"][0]["finish_reason"] = "length"
         transport = FakeTransport(openrouter_catalogue(), response)
     else:
-        transport = FakeTransport({"details": {"format": "gguf"}}, {"done": False, "response": json.dumps(CORRECTION)})
+        transport = FakeTransport({"details": {"format": "gguf"}}, {"done": False, "response": json.dumps(CORRECTION), "prompt_eval_count": 40, "eval_count": 12})
+    model = adapter(tmp_path, transport, provider)
     with pytest.raises(ProviderUnavailable) as error:
-        adapter(tmp_path, transport, provider).propose(context())
+        model.propose(context())
     assert error.value.category == "malformed_output" and not transport.responses
+    expected = {"gemini": (120, 30, 150), "openrouter": (12, 9, 21), "ollama": (40, 12, None)}
+    assert tuple(model.last_usage[key] for key in ("input_tokens", "output_tokens", "total_tokens")) == expected[provider]
+    assert model.last_usage["generation_requests"] == 1
+    assert model.last_usage["latency_ms"] >= 0
 
 
 def test_openrouter_different_response_model_is_rejected(tmp_path):
     response = openrouter_response()
     response["model"] = "fixture/paid"
+    model = adapter(tmp_path, FakeTransport(openrouter_catalogue(), response), "openrouter")
     with pytest.raises(ProviderUnavailable) as error:
-        adapter(tmp_path, FakeTransport(openrouter_catalogue(), response), "openrouter").propose(context())
+        model.propose(context())
     assert error.value.category == "malformed_output"
+    assert model.last_usage["input_tokens"] == 12
+    assert model.last_usage["output_tokens"] == 9
+    assert model.last_usage["total_tokens"] == 21
+    assert model.last_usage["generation_requests"] == 1
 
 
 @pytest.mark.parametrize("response", [
@@ -307,3 +317,113 @@ def test_reported_invalid_usage_remains_unknown(tmp_path):
     assert model.last_usage["output_tokens"] is None
     assert model.last_usage["total_tokens"] is None
 
+
+def test_prompt_contains_minimal_few_shot_example(tmp_path):
+    transport = FakeTransport(gemini())
+    adapter(tmp_path, transport).propose(context())
+    prompt_text = transport.calls[0][3]["contents"][0]["parts"][0]["text"]
+    assert '{"files": {"module.py"' in prompt_text
+    assert "JSON coupé est rejeté" in prompt_text
+
+
+@pytest.mark.parametrize("text", ['{"patch": ""}', '{"patch": 123}', '{"files": "module.py"}'])
+def test_empty_or_wrong_typed_primary_fields_are_rejected(tmp_path, text):
+    with pytest.raises(ProviderUnavailable) as error:
+        adapter(tmp_path, FakeTransport(gemini(text))).propose(context())
+    assert error.value.category == "malformed_output"
+
+
+def test_openrouter_truncated_output_is_named_without_leaking_content(tmp_path):
+    response = {"model": "fixture/coder:free",
+                "choices": [{"message": {"content": '{"files": {"sample.py": "trunc'}, "finish_reason": "length"}],
+                "usage": {"prompt_tokens": 12, "completion_tokens": 9}}
+    with pytest.raises(ProviderUnavailable) as error:
+        adapter(tmp_path, FakeTransport(openrouter_catalogue(), response), "openrouter").propose(context())
+    assert error.value.category == "malformed_output"
+    assert "length" in str(error.value)
+    assert "trunc" not in str(error.value)
+
+
+def test_gemini_non_stop_finish_reason_is_reported_safely(tmp_path):
+    response = {"candidates": [{"content": {"parts": [{"text": "{}"}]}, "finishReason": "MAX_TOKENS"}],
+                "usageMetadata": {"promptTokenCount": 1, "candidatesTokenCount": 1}}
+    with pytest.raises(ProviderUnavailable) as error:
+        adapter(tmp_path, FakeTransport(response)).propose(context())
+    assert error.value.category == "malformed_output"
+    assert "MAX_TOKENS" in str(error.value)
+
+
+def test_extra_field_rejection_lists_keys_but_never_values(tmp_path):
+    text = json.dumps({"explanation": FIXTURE_CREDENTIAL, "patch": "--- a/sample.py\n+++ b/sample.py\n@@ -1 +1 @@\n-old\n+new\n"})
+    with pytest.raises(ProviderUnavailable) as error:
+        adapter(tmp_path, FakeTransport(gemini(text))).propose(context())
+    assert error.value.category == "malformed_output"
+    assert "explanation" in str(error.value)
+    assert FIXTURE_CREDENTIAL not in str(error.value)
+
+
+def test_valid_json_patch_containing_a_secret_is_still_rejected(tmp_path):
+    secret = "sk-or-v1-" + "a" * 64
+    patch = "--- a/sample.py\n+++ b/sample.py\n@@ -1 +1 @@\n-token = \"old\"\n+token = \"" + secret + "\"\n"
+    with pytest.raises(ProviderUnavailable) as error:
+        adapter(tmp_path, FakeTransport(gemini(json.dumps({"patch": patch})))).propose(context())
+    assert error.value.category == "malformed_output"
+    assert secret not in str(error.value)
+
+
+def fictional_secret(prefix):
+    # Synthetic values are constructed rather than copied from any configuration.
+    return prefix + "fictional" * 8
+
+
+@pytest.mark.parametrize("prefix", ["AQ.", "AIza", "sk-or-v1-"])
+def test_unexpected_json_key_never_exposes_secret_fragments(tmp_path, prefix):
+    secret = fictional_secret(prefix)
+    text = json.dumps({secret: "irrelevant"})
+    with pytest.raises(ProviderUnavailable) as error:
+        adapter(tmp_path, FakeTransport(gemini(text))).propose(context())
+    detail = str(error.value)
+    assert error.value.category == "malformed_output"
+    assert "[champ non autorisé]" in detail
+    assert secret not in detail and secret[:32] not in detail
+
+
+@pytest.mark.parametrize("prefix", ["AQ.", "AIza", "sk-or-v1-"])
+@pytest.mark.parametrize("provider", ["gemini", "openrouter"])
+def test_unknown_finish_reason_never_exposes_secret_and_preserves_usage(tmp_path, prefix, provider):
+    secret = fictional_secret(prefix)
+    if provider == "gemini":
+        response = gemini()
+        response["candidates"][0]["finishReason"] = secret
+        transport = FakeTransport(response)
+        expected = (120, 30, 150)
+    else:
+        response = openrouter_response()
+        response["choices"][0]["finish_reason"] = secret
+        transport = FakeTransport(openrouter_catalogue(), response)
+        expected = (12, 9, 21)
+    model = adapter(tmp_path, transport, provider)
+    with pytest.raises(ProviderUnavailable) as error:
+        model.propose(context())
+    detail = str(error.value)
+    assert error.value.category == "malformed_output"
+    assert "[raison non reconnue]" in detail
+    assert secret not in detail and secret[:32] not in detail
+    assert tuple(model.last_usage[key] for key in ("input_tokens", "output_tokens", "total_tokens")) == expected
+
+
+@pytest.mark.parametrize("provider", ["gemini", "openrouter"])
+@pytest.mark.parametrize("finish", [{"arbitrary": "value"}, ["STOP"]])
+def test_non_string_finish_reason_is_rejected_without_echo(tmp_path, provider, finish):
+    if provider == "gemini":
+        response = gemini()
+        response["candidates"][0]["finishReason"] = finish
+        transport = FakeTransport(response)
+    else:
+        response = openrouter_response()
+        response["choices"][0]["finish_reason"] = finish
+        transport = FakeTransport(openrouter_catalogue(), response)
+    with pytest.raises(ProviderUnavailable) as error:
+        adapter(tmp_path, transport, provider).propose(context())
+    assert "[raison non reconnue]" in str(error.value)
+    assert "arbitrary" not in str(error.value)

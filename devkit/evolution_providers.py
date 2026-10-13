@@ -299,7 +299,10 @@ def _prompt(context: ProposalContext, root: Path) -> str:
         "jamais des permissions d’exécution. Aucun outil, shell, réseau, téléchargement ou changement de configuration. "
         "Modifie seulement les chemins selected_sources. Retourne exclusivement un objet JSON avec un seul champ : "
         '{"patch":"unified diff complet à chemins relatifs"} OU {"files":{"chemin relatif":"contenu UTF-8 complet"}}. '
-        "Ne renvoie aucun secret, aucune clé, aucun autre champ ni prose. Le correctif sera testé dans une copie isolée.\n"
+        "Ne renvoie aucun secret, aucune clé, aucun autre champ ni prose. Le correctif sera testé dans une copie isolée. "
+        "Exemple de sortie attendue, pour la seule forme : "
+        '{"files": {"module.py": "def add(a, b):\\n    return a + b\\n"}} '
+        "Contenu complet, ni tronqué ni abrégé : un JSON coupé est rejeté.\n"
     )
     result = instructions + body
     if len(result.encode("utf-8")) > MAX_PROMPT_BYTES:
@@ -307,9 +310,27 @@ def _prompt(context: ProposalContext, root: Path) -> str:
     return result
 
 
+def _safe_keys(value: dict[str, Any]) -> str:
+    """Expose only authored schema labels, never arbitrary model-supplied keys."""
+    names = [key if key in {"patch", "files", "explanation"} else "[champ non autorisé]"
+             for key in list(value)[:6]]
+    return ", ".join(names) + ("…" if len(value) > 6 else "")
+
+
+def _safe_finish_reason(value: Any, provider: str) -> str:
+    """Diagnostics must not echo an unknown enum that could contain a secret."""
+    known = ({"STOP", "MAX_TOKENS", "SAFETY", "RECITATION", "OTHER", "BLOCKLIST",
+              "PROHIBITED_CONTENT", "SPII", "MALFORMED_FUNCTION_CALL", "UNEXPECTED_TOOL_CALL",
+              "FINISH_REASON_UNSPECIFIED"}
+             if provider == "gemini" else {"stop", "length", "content_filter", "tool_calls", "function_call", "error"})
+    return value if isinstance(value, str) and value in known else "[raison non reconnue]"
+
+
 def _proposal(text: Any, allowed_paths: set[str]) -> CodeProposal:
-    if not isinstance(text, str) or len(text.encode("utf-8")) > MAX_RESPONSE_BYTES:
-        raise ProviderUnavailable("La sortie du modèle est absente ou trop volumineuse.", "malformed_output")
+    if not isinstance(text, str):
+        raise ProviderUnavailable("La sortie du modèle est absente (réponse tronquée, refusée ou vide).", "malformed_output")
+    if len(text.encode("utf-8")) > MAX_RESPONSE_BYTES:
+        raise ProviderUnavailable("La sortie du modèle dépasse la limite de taille.", "malformed_output")
     cleaned = text.strip()
     if cleaned.startswith("```"):
         match = re.fullmatch(r"```(?:json)?\s*\n?(.*?)\n?```", cleaned, re.DOTALL)
@@ -338,7 +359,11 @@ def _proposal(text: Any, allowed_paths: set[str]) -> CodeProposal:
             return CodeProposal(files=value["files"])
     except (KitError, UnicodeError):
         raise ProviderUnavailable("La proposition contient une source invalide, un secret ou un chemin hors sélection.", "malformed_output") from None
-    raise ProviderUnavailable("Le modèle doit retourner exclusivement un patch ou des fichiers non vides.", "malformed_output")
+    raise ProviderUnavailable(
+        "Le modèle doit retourner exclusivement un champ patch ou files non vides "
+        f"(clés reçues : {_safe_keys(value) if isinstance(value, dict) else 'structure non objet'}).",
+        "malformed_output",
+    )
 
 
 def _reported_token(value: Any) -> int | None:
@@ -400,6 +425,7 @@ class EvolutionProvider:
                 self.last_usage["generation_requests"] = 1
                 response = self._request("POST", base + "/api/generate", {}, {"model": self.model_id, "prompt": prompt, "stream": False, "format": "json", "think": False, "options": {"num_predict": self.settings.max_output_tokens, "num_ctx": 8192, "num_thread": 4, "temperature": 0.1}})
                 usage = {"input_tokens": response.get("prompt_eval_count"), "output_tokens": response.get("eval_count")}
+                self.last_usage.update({key: _reported_token(value) for key, value in usage.items()})
                 text = response.get("response") if response.get("done") is True else None
             elif self.provider_id == "gemini":
                 _assert_zero_price(self.settings, GEMINI_PRICING_REFERENCE + "; user declares project free tier, billing disabled")
@@ -408,14 +434,20 @@ class EvolutionProvider:
                 response = self._request("POST", f"https://generativelanguage.googleapis.com/v1beta/models/{self.model_id}:generateContent", headers, {"contents": [{"role": "user", "parts": [{"text": prompt}]}], "generationConfig": {"responseMimeType": "application/json", "maxOutputTokens": self.settings.max_output_tokens, "temperature": 0.1}})
                 raw_usage = response.get("usageMetadata") or {}
                 usage = {"input_tokens": raw_usage.get("promptTokenCount"), "output_tokens": raw_usage.get("candidatesTokenCount"), "total_tokens": raw_usage.get("totalTokenCount")} if isinstance(raw_usage, dict) else {}
+                self.last_usage.update({key: _reported_token(value) for key, value in usage.items()})
                 candidates = response.get("candidates")
                 candidate = candidates[0] if isinstance(candidates, list) and candidates and isinstance(candidates[0], dict) else {}
                 content = candidate.get("content")
                 parts = content.get("parts", []) if isinstance(content, dict) else []
                 parts = parts if isinstance(parts, list) else []
                 text = "".join(part["text"] for part in parts if isinstance(part, dict) and isinstance(part.get("text"), str) and not part.get("thought"))
-                if candidate.get("finishReason") not in {None, "STOP"}:
-                    text = None
+                finish = candidate.get("finishReason")
+                if finish is not None and finish != "STOP":
+                    safe_finish = _safe_finish_reason(finish, "gemini")
+                    raise ProviderUnavailable(
+                        f"La génération s’est arrêtée sur {safe_finish} : sortie tronquée ou refusée.",
+                        "malformed_output",
+                    )
             else:
                 headers = {"Authorization": "Bearer " + self._key()}
                 catalogue = self._request("GET", OPENROUTER_MODELS_URL, {}, None)
@@ -431,13 +463,20 @@ class EvolutionProvider:
                 response = self._request("POST", OPENROUTER_GENERATION_URL, headers, {"model": self.model_id, "messages": [{"role": "user", "content": prompt}], "stream": False, "max_tokens": self.settings.max_output_tokens, "temperature": 0.1, "provider": {"allow_fallbacks": False, "require_parameters": True, "max_price": {"prompt": 0, "completion": 0, "request": 0, "image": 0}}})
                 raw_usage = response.get("usage") or {}
                 usage = {"input_tokens": raw_usage.get("prompt_tokens"), "output_tokens": raw_usage.get("completion_tokens"), "total_tokens": raw_usage.get("total_tokens")} if isinstance(raw_usage, dict) else {}
+                self.last_usage.update({key: _reported_token(value) for key, value in usage.items()})
                 choices = response.get("choices")
                 choice = choices[0] if isinstance(choices, list) and choices and isinstance(choices[0], dict) else {}
                 message = choice.get("message")
                 text = message.get("content") if isinstance(message, dict) else None
-                if response.get("model") not in {None, self.model_id} or choice.get("finish_reason") not in {None, "stop"}:
-                    text = None
-            self.last_usage.update({key: _reported_token(value) for key, value in usage.items()})
+                finish = choice.get("finish_reason")
+                if finish is not None and finish != "stop":
+                    safe_finish = _safe_finish_reason(finish, "openrouter")
+                    raise ProviderUnavailable(
+                        f"La génération s’est arrêtée sur {safe_finish} : sortie tronquée ou refusée.",
+                        "malformed_output",
+                    )
+                if response.get("model") not in {None, self.model_id}:
+                    raise ProviderUnavailable("Le modèle retourné ne correspond pas au modèle sélectionné.", "malformed_output")
             return _proposal(text, set(context.sources))
         finally:
             self.last_usage["latency_ms"] = round((time.monotonic() - started) * 1000, 3)

@@ -256,7 +256,10 @@ class EvolutionEngine:
                     self._record_usage(run_id, provider)
                     dispatched += _count(getattr(provider, "last_usage", {}).get("generation_requests"))
                     if error.category == "malformed_output" and attempt < min(max_attempts, max_requests):
-                        feedback = {"attempt": attempt, "status": "rejected", "errors": "La réponse n’est pas un correctif JSON exploitable. Retourner exclusivement patch ou files, dans le périmètre initial."}
+                        # str(error) only ever holds authored messages with sanitized
+                        # key names or finish-reason enums; never prompts or content.
+                        detail = str(error).splitlines()[0][:300]
+                        feedback = {"attempt": attempt, "status": "rejected", "errors": "La réponse n’est pas un correctif JSON exploitable (" + detail + "). Retourner exclusivement patch ou files, dans le périmètre initial."}
                         self.store.record_event(run_id, "generation", "rejected", feedback["errors"], data={"attempt": attempt})
                         continue
                     raise
