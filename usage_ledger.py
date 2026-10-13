@@ -134,6 +134,8 @@ class UsageEvent:
     cost_amount: str | None
     cost_currency: str | None
     zero_spend_refused: bool
+    # Only ever set from a provider's own ``Retry-After`` header, never guessed.
+    retry_after_seconds: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-ready event with no prompt or raw error content."""
@@ -462,6 +464,14 @@ class UsageLedger:
             # WAL keeps dashboard reads responsive while an execution finishes.
             connection.execute("PRAGMA journal_mode = WAL")
             connection.execute("PRAGMA synchronous = NORMAL")
+            # Additive migration: a ledger written before retry-after existed
+            # keeps every row and gains the nullable column instead of failing.
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(usage_ledger_events)")}
+            if columns and "retry_after_seconds" not in columns:
+                connection.execute(
+                    "ALTER TABLE usage_ledger_events ADD COLUMN retry_after_seconds INTEGER"
+                    " CHECK (retry_after_seconds IS NULL OR retry_after_seconds BETWEEN 0 AND 86400)"
+                )
             connection.executescript(
                 f"""
                 CREATE TABLE IF NOT EXISTS usage_ledger_events (
@@ -488,6 +498,8 @@ class UsageLedger:
                     cost_currency TEXT,
                     zero_spend_refused INTEGER NOT NULL DEFAULT 0
                         CHECK (zero_spend_refused IN (0, 1)),
+                    retry_after_seconds INTEGER
+                        CHECK (retry_after_seconds IS NULL OR retry_after_seconds BETWEEN 0 AND 86400),
                     CHECK (
                         (cost_state = 'known' AND cost_amount IS NOT NULL AND cost_currency IS NOT NULL)
                         OR
@@ -555,6 +567,8 @@ class UsageLedger:
                 cost_amount=row["cost_amount"],
                 cost_currency=row["cost_currency"],
                 zero_spend_refused=bool(row["zero_spend_refused"]),
+                # Absent only on a ledger written before the column existed.
+                retry_after_seconds=row["retry_after_seconds"] if "retry_after_seconds" in row.keys() else None,
             )
         except (KeyError, TypeError, ValueError) as error:
             raise UsageLedgerError("Le journal local contient un événement illisible.") from error
@@ -594,6 +608,7 @@ class UsageLedger:
         cost: Decimal | int | float | str | None = None,
         cost_currency: str | None = None,
         zero_spend_refused: bool = False,
+        retry_after_seconds: int | None = None,
     ) -> UsageEvent:
         """Persist one actual execution result, never an inferred one.
 
@@ -625,6 +640,9 @@ class UsageLedger:
 
         if not isinstance(zero_spend_refused, bool):
             raise UsageLedgerError("L’indicateur zero-spend doit être booléen.")
+        safe_retry_after = _optional_non_negative_int(retry_after_seconds, label="Le délai de nouvelle tentative")
+        if safe_retry_after is not None and safe_retry_after > 86_400:
+            raise UsageLedgerError("Le délai de nouvelle tentative communiqué est hors de la plage locale autorisée.")
         if zero_spend_refused and event_outcome is not UsageOutcome.REFUSED:
             raise UsageLedgerError("Un refus zero-spend doit avoir le résultat 'refused'.")
 
@@ -671,6 +689,7 @@ class UsageLedger:
             cost_amount=cost_amount,
             cost_currency=currency,
             zero_spend_refused=zero_spend_refused,
+            retry_after_seconds=safe_retry_after,
         )
         self._insert(event)
         return event
@@ -714,8 +733,9 @@ class UsageLedger:
                         occurred_at, recorded_at, latency_ms, input_tokens,
                         output_tokens, total_tokens, cache_state, retry_count,
                         error_category, fallback_state, verification_state,
-                        cost_state, cost_amount, cost_currency, zero_spend_refused
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        cost_state, cost_amount, cost_currency, zero_spend_refused,
+                        retry_after_seconds
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         event.id,
@@ -739,6 +759,7 @@ class UsageLedger:
                         event.cost_amount,
                         event.cost_currency,
                         int(event.zero_spend_refused),
+                        event.retry_after_seconds,
                     ),
                 )
                 # Retention is an explicit bounded-storage policy, not a
@@ -982,6 +1003,7 @@ class UsageLedger:
             "cost_amount",
             "cost_currency",
             "zero_spend_refused",
+            "retry_after_seconds",
         )
         # ``newline=""`` is required by csv on macOS as well as Windows.
         try:

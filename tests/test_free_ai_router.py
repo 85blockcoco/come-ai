@@ -281,14 +281,15 @@ def test_unknown_quota_is_reported_truthfully_without_invented_allowance() -> No
     assert "inconnu" in " ".join(decision.explanations).casefold()
 
 
-def test_exhausted_quota_is_never_used_as_a_hidden_fallback() -> None:
+@pytest.mark.parametrize("remaining_requests", [None, 0])
+def test_exhausted_quota_is_never_used_as_a_hidden_fallback(remaining_requests) -> None:
     app = FreeAIRouter(
         registry(
             model("fixture-exhausted", ProviderKind.GEMINI, {Capability.TEXT}),
             states=(
                 available_state(
                     ProviderKind.GEMINI,
-                    quota=QuotaState(status=QuotaStatus.EXHAUSTED, remaining_requests=0),
+                    quota=QuotaState(status=QuotaStatus.EXHAUSTED, remaining_requests=remaining_requests),
                 ),
             ),
         ),
@@ -299,6 +300,9 @@ def test_exhausted_quota_is_never_used_as_a_hidden_fallback() -> None:
 
     assert decision.status is RouteStatus.DENIED
     assert RejectionCode.QUOTA_EXHAUSTED in decision.evaluations[0].rejection_codes
+    disclosed = app.registry.provider_state(ProviderKind.GEMINI).quota.public_dict()
+    assert disclosed["status"] == "exhausted"
+    assert disclosed["remaining_requests"] == remaining_requests
 
 
 def test_structured_function_call_preparation_and_validation_never_executes_a_tool() -> None:

@@ -584,11 +584,15 @@ class HybridChatService:
                 answer = self._generate(selected_provider, selected_model, messages, config, usage)
             except (ProviderUnavailable, ModelCatalogError) as error:
                 category = error.category if isinstance(error, ProviderUnavailable) else "missing_configuration"
+                # The provider's own Retry-After is a measured fact, so it is
+                # stored as such and never replaced by a local default.
+                retry_after = getattr(error, "retry_after_seconds", None) if isinstance(error, ProviderUnavailable) else None
                 if usage["generation_requests"]:
                     self.ledger.record_execution(provider=selected_provider, model=selected_model, mode=mode, task_kind=task_kind, outcome="failed",
                                                  latency_ms=round((time.monotonic() - call_started) * 1000), error_category=category,
                                                  retry_count=0, fallback_state="used" if position else "not_used",
-                                                 input_tokens=usage["input_tokens"], output_tokens=usage["output_tokens"], total_tokens=usage["total_tokens"])
+                                                 input_tokens=usage["input_tokens"], output_tokens=usage["output_tokens"], total_tokens=usage["total_tokens"],
+                                                 retry_after_seconds=retry_after)
                 failures.append({"provider": selected_provider, "model": selected_model, "category": category,
                                  "generation_requests": usage["generation_requests"]})
                 if selected_provider == "ollama":

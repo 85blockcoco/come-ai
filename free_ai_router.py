@@ -316,7 +316,7 @@ class QuotaState:
             return {
                 "status": self.status.value,
                 "known": True,
-                "remaining_requests": 0,
+                "remaining_requests": self.remaining_requests,
                 "reset_hint": self.reset_hint,
                 "message": "Quota déclaré épuisé.",
             }

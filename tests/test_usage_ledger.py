@@ -265,3 +265,82 @@ def test_csv_export_contains_only_safe_metadata_and_never_a_prompt_column(tmp_pa
             mode="free",
             task_kind="Voici le contenu d’un prompt qui ne doit jamais être journalisé",
         )
+
+
+def test_provider_retry_after_is_stored_only_when_the_provider_reported_it(tmp_path: Path) -> None:
+    ledger = make_ledger(tmp_path)
+    # Nothing declared: the field stays empty instead of guessing a delay.
+    ledger.record_execution(provider="gemini", model="gemini-3.8-flash", mode="automatic",
+                            task_kind="general", outcome="failed", error_category="quota")
+    assert ledger.list_events()[0].retry_after_seconds is None
+
+    ledger.record_execution(provider="gemini", model="gemini-3.8-flash", mode="automatic",
+                            task_kind="general", outcome="failed", error_category="quota",
+                            retry_after_seconds=3600)
+    ledger.record_execution(provider="gemini", model="gemini-3.8-flash", mode="automatic",
+                            task_kind="general", outcome="failed", error_category="quota",
+                            retry_after_seconds=0)
+    stored = [event for event in ledger.list_events() if event.retry_after_seconds is not None]
+    assert {event.to_dict()["retry_after_seconds"] for event in stored} == {0, 3600}
+    assert {event.retry_after_seconds for event in UsageLedger(ledger.database_path).list_events()
+            if event.retry_after_seconds is not None} == {0, 3600}
+
+    # A local invention of a delay is refused, not clamped into the record.
+    with pytest.raises(UsageLedgerError):
+        ledger.record_execution(provider="gemini", model="gemini-3.8-flash", mode="automatic",
+                                task_kind="general", retry_after_seconds=90000)
+    with pytest.raises(UsageLedgerError):
+        ledger.record_execution(provider="gemini", model="gemini-3.8-flash", mode="automatic",
+                                task_kind="general", retry_after_seconds=True)
+
+
+def test_existing_ledger_gains_the_retry_after_column_without_losing_events(tmp_path: Path) -> None:
+    import sqlite3
+
+    legacy = tmp_path / "legacy.sqlite3"
+    connection = sqlite3.connect(legacy)
+    connection.executescript(
+        """
+        CREATE TABLE usage_ledger_events (
+            id TEXT PRIMARY KEY, provider TEXT NOT NULL, model TEXT NOT NULL,
+            mode TEXT NOT NULL, task_kind TEXT NOT NULL, outcome TEXT NOT NULL,
+            occurred_at TEXT NOT NULL, recorded_at TEXT NOT NULL, latency_ms INTEGER,
+            input_tokens INTEGER, output_tokens INTEGER, total_tokens INTEGER,
+            cache_state TEXT NOT NULL, retry_count INTEGER, error_category TEXT,
+            fallback_state TEXT NOT NULL, verification_state TEXT NOT NULL,
+            cost_state TEXT NOT NULL, cost_amount TEXT, cost_currency TEXT,
+            zero_spend_refused INTEGER NOT NULL DEFAULT 0
+        );
+        """
+    )
+    connection.execute(
+        """
+        INSERT INTO usage_ledger_events
+            (id, provider, model, mode, task_kind, outcome, occurred_at, recorded_at,
+             cache_state, fallback_state, verification_state, cost_state)
+        VALUES ('legacy-1', 'gemini', 'gemini-3.8-flash', 'automatic', 'general',
+                'succeeded', '2026-10-01T00:00:00+00:00', '2026-10-01T00:00:00+00:00',
+                'unknown', 'not_used', 'not_verified', 'unknown')
+        """
+    )
+    original_columns = [row[1] for row in connection.execute("PRAGMA table_info(usage_ledger_events)")]
+    original_rows = connection.execute("SELECT * FROM usage_ledger_events").fetchall()
+    connection.commit()
+    connection.close()
+
+    ledger = UsageLedger(legacy)
+    events = ledger.list_events()
+    assert len(events) == 1
+    assert events[0].id == "legacy-1"
+    assert events[0].retry_after_seconds is None
+    # Opening the ledger again must not repeat or replace the migration.
+    assert UsageLedger(legacy).list_events()[0].to_dict() == events[0].to_dict()
+    with sqlite3.connect(legacy) as connection:
+        preserved = connection.execute("SELECT " + ", ".join(original_columns) + " FROM usage_ledger_events").fetchall()
+    assert preserved == original_rows
+    # The migrated database is writable again with the new field.
+    ledger.record_execution(provider="gemini", model="gemini-3.8-flash", mode="automatic",
+                            task_kind="general", outcome="failed", error_category="quota",
+                            retry_after_seconds=0)
+    assert len(ledger.list_events()) == 2
+    assert next(event for event in ledger.list_events() if event.id != "legacy-1").retry_after_seconds == 0

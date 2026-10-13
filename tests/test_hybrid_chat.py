@@ -571,3 +571,26 @@ def test_chat_creates_task_when_write_allowed_and_queue_configured(tmp_path):
     assert len(tasks) == 1
     assert tasks[0].payload["message"] == "Crée une tâche pour ranger mes cours"
 
+
+
+def test_provider_retry_after_reaches_the_ledger_as_a_measured_fact(tmp_path):
+    (tmp_path / ".env").write_text("COME_AI_GEMINI_FREE_PROJECT_CONFIRMED=true\n")
+    def transport(*args):
+        raise ProviderUnavailable("Quota gratuit indisponible.", "quota", http_status=429, retry_after_seconds=1800)
+    service = make_service(tmp_path, transport, catalog=FakeCatalog(), credential_loader=lambda *args: "fictional-key-only")
+    with pytest.raises(UserFacingError, match="Quota"):
+        service.ask("Bonjour", mode="performance", provider="gemini")
+    event = service.ledger.list_events()[0]
+    # The provider's own delay is stored, not a local guess.
+    assert event.error_category == "quota"
+    assert event.retry_after_seconds == 1800
+
+
+def test_quota_failure_without_provider_delay_stays_empty(tmp_path):
+    (tmp_path / ".env").write_text("COME_AI_GEMINI_FREE_PROJECT_CONFIRMED=true\n")
+    def transport(*args):
+        raise ProviderUnavailable("Quota gratuit indisponible.", "quota", http_status=429)
+    service = make_service(tmp_path, transport, catalog=FakeCatalog(), credential_loader=lambda *args: "fictional-key-only")
+    with pytest.raises(UserFacingError, match="Quota"):
+        service.ask("Bonjour", mode="performance", provider="gemini")
+    assert service.ledger.list_events()[0].retry_after_seconds is None
