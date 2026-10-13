@@ -249,7 +249,8 @@ elif action == "pytest":
             self.finished = True
             self.collected = int(session.testscollected)
     plugin = ReceiptPlugin()
-    exitstatus = int(pytest.main(["-q", "--tb=short", "-p", "no:cacheprovider", "tests"], plugins=[plugin]))
+    test_paths = [path for path in ("tests", "evals/tests") if pathlib.Path(path).is_dir()]
+    exitstatus = int(pytest.main(["-q", "--tb=short", "-p", "no:cacheprovider", *test_paths], plugins=[plugin]))
     outcomes = list(plugin.outcomes.values())
     receipt = {
         "schema_version": 1,
@@ -437,7 +438,7 @@ def run_diagnostics(
                 ("python_syntax", ["syntax", json.dumps(python_paths)], "Aucun fichier Python exporté."),
                 ("environment", ["metadata"], ""),
                 ("pip_check", ["pip_check"], ""),
-                ("pytest", ["pytest", str(pytest_receipt)] if (source / "tests").is_dir() else None, "Dossier tests absent ; aucun test exécuté."),
+                ("pytest", ["pytest", str(pytest_receipt)] if any((source / path).is_dir() for path in ("tests", "evals/tests")) else None, "Dossiers de tests absents ; aucun test exécuté."),
                 ("offline_smoke", ["smoke", "test_v3_offline.py"] if (source / "test_v3_offline.py").is_file() else None, "Smoke test V3 absent."),
                 ("javascript_syntax", ["javascript", node, *javascript_paths] if node and javascript_paths else None,
                  "Node absent." if not node else "Aucun fichier JavaScript exporté."),

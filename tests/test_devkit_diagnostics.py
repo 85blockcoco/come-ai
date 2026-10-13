@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -10,6 +12,29 @@ import pytest
 from devkit import diagnostics
 from devkit.diagnostics import CommandResult, run_diagnostics
 from devkit.exporting import source_fingerprint
+
+
+@pytest.mark.parametrize("folders", [("tests",), ("evals/tests",), ("tests", "evals/tests")])
+def test_real_bootstrap_collects_application_and_evaluation_tests(tmp_path: Path, folders) -> None:
+    root = tmp_path / "synthetic-bootstrap"
+    root.mkdir()
+    for index, folder in enumerate(folders):
+        directory = root / folder
+        directory.mkdir(parents=True)
+        (directory / f"test_fixture_{index}.py").write_text(
+            f"def test_fixture_{index}():\n    assert 2 + 2 == 4\n", encoding="utf-8")
+    bootstrap = root / "bootstrap.py"
+    bootstrap.write_text(diagnostics._BOOTSTRAP, encoding="utf-8")
+    receipt = root / "receipt.json"
+    result = subprocess.run([sys.executable, str(bootstrap), "pytest", str(receipt)],
+                            cwd=root, env={"PATH": "/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1",
+                                           "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"},
+                            capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    counts = json.loads(receipt.read_text(encoding="utf-8"))
+    assert counts["completed"] is True
+    assert counts["tests_collected"] == counts["tests_passed"] == len(folders)
+    assert counts["tests_failed"] == 0
 
 
 def project(tmp_path: Path, *, tests: bool = True) -> tuple[Path, Path]:
