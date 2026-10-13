@@ -477,6 +477,9 @@ class BridgeFacts:
     declared: tuple[DeclaredModel, ...] = ()
     quality: dict[tuple[str, str], QualityObservation] = field(default_factory=dict)
     quotas: dict[str, QuotaObservation] = field(default_factory=dict)
+    # Models the host forbids outright. They are kept out of the registry so
+    # the router cannot name them, rather than being filtered after the fact.
+    excluded_models: frozenset[str] = frozenset()
 
 
 class IntelligenceBridge:
@@ -488,15 +491,21 @@ class IntelligenceBridge:
         *,
         allowed_providers: Iterable[str],
         max_fallbacks: int = 2,
+        excluded_models: Iterable[str] = (),
     ) -> None:
         self.facts = facts
+        self.excluded_models = frozenset(name.strip() for name in excluded_models if str(name).strip())
         self.allowed_providers = frozenset(_provider_kind(name) for name in allowed_providers)
         if not self.allowed_providers:
             raise IntelligenceBridgeError("Un pont de routage sans fournisseur autorisé refuserait tout.")
         if isinstance(max_fallbacks, bool) or not isinstance(max_fallbacks, int) or not 0 <= max_fallbacks <= 16:
             raise IntelligenceBridgeError("Le nombre de replis doit être un entier entre 0 et 16.")
         self.policy = RouterPolicy.zero_spend(self.allowed_providers, max_fallbacks=max_fallbacks)
-        self._registry = build_model_registry(facts.declared, quality=facts.quality, quotas=facts.quotas)
+        self._registry = build_model_registry(
+            [model for model in facts.declared if model.model_id not in self.excluded_models],
+            quality=facts.quality,
+            quotas=facts.quotas,
+        )
         from free_ai_router import FreeAIRouter
 
         self.router = FreeAIRouter(self._registry, self.policy)
@@ -532,6 +541,13 @@ class IntelligenceBridge:
 
         planned = (decision.primary, *decision.fallbacks)
         return tuple(model.provider.value for model in planned if model is not None)
+
+    def ordered_models(self, decision: RoutingDecision) -> tuple[tuple[str, str], ...]:
+        """(provider, model) pairs in the router's order, for a host that lets
+        the router pick the model and still asks its catalogue to confirm it."""
+
+        planned = (decision.primary, *decision.fallbacks)
+        return tuple((model.provider.value, model.model_id) for model in planned if model is not None)
 
     def public_state(self) -> dict[str, Any]:
         """Inert, secret-free description of what is routable right now."""

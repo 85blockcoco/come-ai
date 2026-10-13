@@ -12,8 +12,15 @@ import pytest
 import hybrid_chat
 from hybrid_chat import HybridChatService, calculate_expression, hybrid_json_transport
 from devkit.evolution_providers import ProviderUnavailable, _NoRedirect
+from devkit.model_catalog import ModelCatalogError
+from free_ai_router import classify_task
 from personal_memory import PersonalMemoryStore
 from workspace_core import AppConfig, LocalTools, UserFacingError, Workspace
+
+
+def catalogue_record(model_id):
+    return {"model_id": model_id, "price_status": "zero_confirmed",
+            "price_evidence": "synthetic_explicit_zero_price", "capabilities": ["code", "text"]}
 
 
 class FakeCatalog:
@@ -27,7 +34,7 @@ class FakeCatalog:
 
     def eligible(self, provider, capability="text"):
         self.calls.append(("eligible", provider, capability))
-        return [{"model_id": self.model}]
+        return [catalogue_record(self.model)]
 
     def refresh(self, provider, **kwargs):
         self.calls.append(("refresh", provider))
@@ -594,3 +601,409 @@ def test_quota_failure_without_provider_delay_stays_empty(tmp_path):
     with pytest.raises(UserFacingError, match="Quota"):
         service.ask("Bonjour", mode="performance", provider="gemini")
     assert service.ledger.list_events()[0].retry_after_seconds is None
+
+
+class ProviderCatalog:
+    """Catalogue that answers per provider, as the real one does."""
+
+    def __init__(self, models):
+        self.models = dict(models)
+        self.calls = []
+
+    def snapshot(self):
+        self.calls.append("snapshot")
+        return {"status": "synthetic", "providers": {}, "network_used": False}
+
+    def eligible(self, provider, capability="text"):
+        self.calls.append(("eligible", provider, capability))
+        return [catalogue_record(model_id) for model_id in self.models.get(provider, [])]
+
+    def refresh(self, provider, **kwargs):
+        self.calls.append(("refresh", provider))
+
+    def choose_model(self, provider, requested="auto", exclude_models=()):
+        self.calls.append(("choose", provider, requested, exclude_models))
+        candidates = [m for m in self.models.get(provider, []) if m not in set(exclude_models)]
+        if requested != "auto":
+            return requested if requested in candidates else "gemini-2.5-flash"
+        return candidates[0] if candidates else "gemini-2.5-flash"
+
+
+def plan(service, message="Bonjour", *, mode="performance", benchmark=None):
+    config = service._config()
+    return service._route_plan(message, mode=mode, provider="auto", config=config,
+                               benchmark=benchmark or {}, task_kind="general",
+                               needs_cloud_capabilities=False)
+
+
+def resolved_models(service, routes):
+    config = service._config()
+    return [(provider, config["local_model"]) if provider == "ollama"
+            else (provider, service._cloud_model(provider, hint, config)) for provider, hint in routes]
+
+
+def routed_service(tmp_path, monkeypatch, models):
+    """Both cloud keys present: the router has a real choice to make."""
+    (tmp_path / ".env").write_text("COME_AI_GEMINI_FREE_PROJECT_CONFIRMED=true\n")
+    monkeypatch.setattr(hybrid_chat, "_configured_key", lambda root, name: True)
+    return make_service(tmp_path, catalog=ProviderCatalog(models), credential_loader=lambda *args: "fictional-key-only")
+
+
+def test_router_confirms_its_own_model_through_the_catalogue_with_auto_exclusions(tmp_path, monkeypatch):
+    service = routed_service(tmp_path, monkeypatch, {"gemini": ["gemini-3.8-flash"], "openrouter": ["synthetic/model:free"]})
+
+    routes, reason = plan(service)
+    # No measured quality yet: the local model keeps the lead, and the router
+    # says so instead of claiming the cloud is better.
+    assert [provider for provider, _ in routes] == ["ollama", "gemini"]
+    assert "aucune supériorité qualité présumée" in reason
+    assert resolved_models(service, routes) == [
+        ("ollama", "qwen3.5:2b-q4_K_M"),
+        ("gemini", "gemini-3.8-flash"),
+    ]
+    # The model the router picked is re-confirmed by the catalogue, and the
+    # auto-selection exclusion still applies to it.
+    assert service.catalog.calls[-1][-1] == ("gemini-2.5-flash",)
+    assert service._cloud_model("gemini", "gemini-3.8-flash", service._config()) == "gemini-3.8-flash"
+
+
+def test_measured_reliability_moves_the_routes(tmp_path, monkeypatch):
+    service = routed_service(tmp_path, monkeypatch, {"gemini": ["gemini-3.8-flash"], "openrouter": ["synthetic/model:free"]})
+    for _ in range(4):
+        service.ledger.record_execution(provider="gemini", model="gemini-3.8-flash", mode="performance",
+                                        task_kind="general", outcome="succeeded", latency_ms=90)
+        service.ledger.record_execution(provider="ollama", model="qwen3.5:2b-q4_K_M", mode="performance",
+                                        task_kind="general", outcome="failed", latency_ms=900)
+    routes, reason = plan(service)
+    # Measured reliability, not a claimed benchmark: the reliable model leads.
+    assert [provider for provider, _ in routes][0] == "gemini"
+    assert "sans supériorité mesurée" in reason
+
+
+def test_an_observed_quota_cooldown_removes_the_provider_from_the_routes(tmp_path, monkeypatch):
+    service = routed_service(tmp_path, monkeypatch, {"gemini": ["gemini-3.8-flash"], "openrouter": ["synthetic/model:free"]})
+    assert [provider for provider, _ in plan(service)[0]] == ["ollama", "gemini"]
+
+    # Gemini has just been refused for quota: the provider itself said so.
+    service.ledger.record_execution(provider="gemini", model="gemini-3.8-flash", mode="performance",
+                                    task_kind="general", outcome="failed", error_category="quota")
+    routes, reason = plan(service)
+    assert "gemini" not in [provider for provider, _ in routes]
+    assert routes[0][0] == "ollama"
+    assert "quota" in reason.casefold()
+
+
+def test_a_model_the_host_excluded_is_never_named_by_the_router(tmp_path, monkeypatch):
+    service = routed_service(tmp_path, monkeypatch, {"gemini": ["gemini-2.5-flash"], "openrouter": ["synthetic/model:free"]})
+    routes, reason = plan(service)
+    assert "gemini" not in [provider for provider, _ in routes]
+    assert routes[0][0] == "ollama"
+    # OpenRouter is still routable, so nothing has to raise an alarm either.
+    assert any(provider == "openrouter" for provider, _ in routes)
+
+
+def test_measured_routing_failure_revalidates_a_local_route_and_says_why(tmp_path, monkeypatch):
+    (tmp_path / ".env").write_text("COME_AI_GEMINI_FREE_PROJECT_CONFIRMED=true\n")
+    monkeypatch.setattr(hybrid_chat, "_configured_key", lambda root, name: True)
+
+    class BrokenCatalogue(ProviderCatalog):
+        def eligible(self, provider, capability="text"):
+            raise ModelCatalogError("catalogue indisponible")
+
+    service = make_service(tmp_path, catalog=BrokenCatalogue({"gemini": ["gemini-3.8-flash"]}),
+                           credential_loader=lambda *args: "fictional-key-only")
+    routes, reason = plan(service)
+    assert routes == [("ollama", "qwen3.5:2b-q4_K_M")]
+    assert "Routage mesuré indisponible" in reason
+    assert "sélection locale revalidée" in reason
+
+
+def test_router_reads_the_capabilities_the_catalogue_proved(tmp_path, monkeypatch):
+    service = routed_service(tmp_path, monkeypatch, {"gemini": ["gemini-3.8-flash"]})
+    message = "Analyse ce tableau excel en profondeur"
+    assert classify_task(message).kind.value == "spreadsheet_analysis"
+    routes, reason = plan(service, message=message)
+    # A cloud-only capability keeps a cloud provider in the ordered routes.
+    assert "gemini" in [provider for provider, _ in routes]
+    assert routes[0][0] == "ollama"
+
+
+def test_benchmark_measured_local_gap_takes_the_local_model_out_of_that_task(tmp_path, monkeypatch):
+    service = routed_service(tmp_path, monkeypatch, {"gemini": ["gemini-3.8-flash"], "openrouter": ["synthetic/model:free"]})
+    benchmark = {"model": "qwen3.5:2b-q4_K_M", "cases": [{"name": "summary", "passed": False}]}
+    routes, reason = plan(service, message="Résume ce cours", benchmark=benchmark)
+    # The local model is measured as failing summaries, so it is not proposed
+    # for this task at all rather than being merely ranked lower.
+    assert routes[0][0] == "gemini"
+    assert "benchmark local" in reason
+
+
+def test_quota_status_is_the_observed_one_not_a_fixed_unknown(tmp_path):
+    (tmp_path / ".env").write_text("COME_AI_GEMINI_FREE_PROJECT_CONFIRMED=true\n")
+    service = make_service(tmp_path, catalog=ProviderCatalog({"gemini": ["gemini-3.8-flash"]}),
+                           credential_loader=lambda *args: "fictional-key-only")
+
+    def transport(method, url, headers, payload, timeout):
+        if url.endswith("/api/show"):
+            return {"details": {"format": "gguf"}}
+        return {"message": {"content": "Réponse locale."}, "prompt_eval_count": 5, "eval_count": 3}
+
+    result = service.ask("Bonjour", mode="automatic")
+    # Nobody reported anything about the quota, so the answer says unknown.
+    assert result["quota_status"] == "unknown"
+    assert result["provider"] == "ollama"
+
+    service.ledger.record_execution(provider="ollama", model="qwen3.5:2b-q4_K_M", mode="automatic",
+                                    task_kind="general", outcome="failed", error_category="quota")
+    service.transport = lambda *args: pytest.fail("An exhausted local provider must not generate again")
+    with pytest.raises(UserFacingError, match="quotas"):
+        service.ask("Bonjour", mode="automatic")
+    assert service.routing_state()["observed_quota"]["ollama"] == "exhausted"
+
+
+@pytest.mark.parametrize("provider,model", [("auto", "auto"), ("gemini", "auto"), ("gemini", "gemini-3.6-flash")])
+def test_the_measured_second_gemini_model_is_sent_to_the_generation_endpoint(tmp_path, monkeypatch, provider, model):
+    service = routed_service(tmp_path, monkeypatch, {"gemini": ["gemini-3.8-flash", "gemini-3.6-flash"]})
+    for _ in range(3):
+        service.ledger.record_execution(provider="gemini", model="gemini-3.6-flash", mode="performance",
+                                        task_kind="general", outcome="succeeded", latency_ms=2)
+    calls = []
+
+    def transport(method, url, headers, payload, timeout):
+        calls.append((method, url, payload))
+        assert url.endswith("models/gemini-3.6-flash:generateContent")
+        assert payload["contents"][-1]["parts"][0]["text"].startswith("Bonjour\n")
+        return {"candidates": [{"content": {"parts": [{"text": "Réponse du modèle retenu."}]}}]}
+
+    service.transport = transport
+    result = service.ask("Bonjour", mode="performance", provider=provider, model=model)
+    assert (result["provider"], result["model"]) == ("gemini", "gemini-3.6-flash")
+    assert len(calls) == 1
+    assert ("choose", "gemini", "gemini-3.6-flash", ("gemini-2.5-flash",)) in service.catalog.calls
+
+
+class UnavailableCatalog(FakeCatalog):
+    def eligible(self, provider, capability="text"):
+        self.calls.append(("eligible", provider, capability))
+        return []
+
+    def refresh(self, provider, **kwargs):
+        raise ProviderUnavailable("Catalogue temporairement indisponible.", "transient", http_status=503)
+
+
+@pytest.mark.parametrize("mode", ["automatic", "performance"])
+def test_a_catalogue_503_falls_back_only_to_a_local_route_the_router_approves(tmp_path, monkeypatch, mode):
+    monkeypatch.setattr(hybrid_chat, "_configured_key", lambda *args: True)
+    calls = []
+
+    def transport(*args):
+        calls.append(args)
+        return local_transport(*args)
+
+    service = make_service(tmp_path, transport, catalog=UnavailableCatalog(), credential_loader=no_credentials)
+    monkeypatch.setattr(service, "_config", lambda: {"local_model": "qwen3.5:2b-q4_K_M",
+                                                     "local_url": "http://127.0.0.1:11434", "gemini_free_confirmed": True})
+    result = service.ask("Bonjour", mode=mode)
+    assert result["provider"] == "ollama"
+    assert "ProviderUnavailable" in result["route_reason"]
+    assert "sélection locale revalidée" in result["route_reason"]
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize("refusal", ["vision", "ollama", "ollama_local"])
+def test_a_catalogue_503_cannot_bypass_local_capability_or_quota_refusals(tmp_path, monkeypatch, refusal):
+    monkeypatch.setattr(hybrid_chat, "_configured_key", lambda *args: True)
+    service = make_service(tmp_path, lambda *args: pytest.fail("Refused routes cannot call a model"),
+                           catalog=UnavailableCatalog(), credential_loader=no_credentials)
+    monkeypatch.setattr(service, "_config", lambda: {"local_model": "qwen3.5:2b-q4_K_M",
+                                                     "local_url": "http://127.0.0.1:11434", "gemini_free_confirmed": True})
+    message = "Décris cette image" if refusal == "vision" else "Bonjour"
+    if refusal != "vision":
+        service.ledger.record_execution(provider=refusal, model="qwen3.5:2b-q4_K_M", mode="performance",
+                                        task_kind="general", outcome="failed", error_category="quota")
+    before = [event.id for event in service.ledger.list_events()]
+    with pytest.raises(UserFacingError, match="refusé"):
+        service.ask(message, mode="performance")
+    assert [event.id for event in service.ledger.list_events()] == before
+
+
+@pytest.mark.parametrize("mode,provider", [("offline", "auto"), ("offline", "ollama"),
+                                          ("automatic", "auto"), ("performance", "auto"),
+                                          ("performance", "gemini"), ("automatic", "ollama"),
+                                          ("performance", "openrouter")])
+def test_vision_refusal_is_enforced_for_offline_manual_and_automatic_routes(tmp_path, monkeypatch, mode, provider):
+    service = routed_service(tmp_path, monkeypatch, {"gemini": ["gemini-3.8-flash"], "openrouter": ["vendor/model:free"]})
+    service.transport = lambda *args: pytest.fail("No refused route may reach a model transport")
+    service.credential_loader = no_credentials
+    with pytest.raises(UserFacingError, match="refusé"):
+        service.ask("Décris cette image", mode=mode, provider=provider)
+    assert not service.ledger.list_events()
+    if mode == "offline" or provider == "ollama":
+        assert service.catalog.calls == []
+
+
+def test_when_every_provider_has_an_observed_cooldown_no_model_is_generated(tmp_path, monkeypatch):
+    service = routed_service(tmp_path, monkeypatch, {"gemini": ["gemini-3.8-flash", "gemini-3.6-flash"],
+                                                   "openrouter": ["vendor/model:free"]})
+    service.transport = lambda *args: pytest.fail("An exhausted provider cannot generate")
+    for provider, model in [("ollama", "qwen3.5:2b-q4_K_M"), ("gemini", "gemini-3.8-flash"),
+                            ("openrouter", "vendor/model:free")]:
+        service.ledger.record_execution(provider=provider, model=model, mode="performance", task_kind="general",
+                                        outcome="failed", error_category="quota")
+    with pytest.raises(UserFacingError, match="refusé"):
+        service.ask("Bonjour", mode="performance")
+    assert len(service.ledger.list_events()) == 3
+
+
+def test_local_alias_measurements_change_chat_routes_and_quota_display(tmp_path, monkeypatch):
+    service = routed_service(tmp_path, monkeypatch, {"gemini": ["gemini-3.8-flash"]})
+    assert plan(service)[0][0][0] == "ollama"
+    for provider in ("ollama", "ollama_local", "ollama"):
+        service.ledger.record_execution(provider=provider, model="qwen3.5:2b-q4_K_M", mode="performance",
+                                        task_kind="general", outcome="failed", error_category="transient")
+    assert plan(service)[0][0] == ("gemini", "gemini-3.8-flash")
+    state = service.routing_state()
+    assert state["measured_reliability"]["ollama_local/qwen3.5:2b-q4_K_M"]["quality_rank"] == 0
+    service.ledger.record_execution(provider="ollama", model="qwen3.5:2b-q4_K_M", mode="performance",
+                                    task_kind="general", outcome="failed", error_category="quota")
+    assert service.routing_state()["observed_quota"]["ollama"] == "exhausted"
+    assert "ollama" not in [provider for provider, _ in plan(service)[0]]
+
+
+@pytest.mark.parametrize("field,value", [("price_status", "non_zero"), ("price_status", None),
+                                         ("price_evidence", None), ("capabilities", None)])
+@pytest.mark.parametrize("provider", ["auto", "gemini"])
+def test_incomplete_or_paid_catalogue_records_never_reach_cloud_generation(tmp_path, monkeypatch, field, value, provider):
+    class IncompleteCatalog(FakeCatalog):
+        def eligible(self, *args, **kwargs):
+            entry = catalogue_record(self.model)
+            entry[field] = value
+            return [entry]
+
+    service = routed_service(tmp_path, monkeypatch, {})
+    service.catalog = IncompleteCatalog()
+    service.transport = local_transport if provider == "auto" else lambda *args: pytest.fail("A manual refusal cannot fall back")
+    service.credential_loader = no_credentials
+    if provider == "auto":
+        result = service.ask("Bonjour", mode="performance")
+        assert result["provider"] == "ollama"
+    else:
+        with pytest.raises(UserFacingError):
+            service.ask("Bonjour", mode="performance", provider=provider)
+        assert not service.ledger.list_events()
+
+
+def test_a_catalogue_cannot_substitute_a_manually_selected_model(tmp_path, monkeypatch):
+    class SubstitutingCatalog(ProviderCatalog):
+        def choose_model(self, *args, **kwargs):
+            return "gemini-3.8-flash"
+
+    service = routed_service(tmp_path, monkeypatch, {})
+    service.catalog = SubstitutingCatalog({"gemini": ["gemini-3.8-flash", "gemini-3.6-flash"]})
+    service.transport = lambda *args: pytest.fail("Substitution must be refused before generation")
+    with pytest.raises(UserFacingError, match="substitué"):
+        service.ask("Bonjour", mode="performance", provider="gemini", model="gemini-3.6-flash")
+    assert not service.ledger.list_events()
+
+
+@pytest.mark.parametrize("category,status", [("quota", 429), ("authentication", 401), ("authentication", 403)])
+def test_a_new_provider_refusal_does_not_rotate_to_another_model_of_the_same_provider(tmp_path, monkeypatch, category, status):
+    service = routed_service(tmp_path, monkeypatch, {"gemini": ["gemini-3.8-flash", "gemini-3.6-flash"]})
+    for model in ("gemini-3.8-flash", "gemini-3.6-flash"):
+        for _ in range(3):
+            service.ledger.record_execution(provider="gemini", model=model, mode="performance", task_kind="general",
+                                            outcome="succeeded", latency_ms=1)
+    assert [provider for provider, _ in plan(service)[0]] == ["gemini", "gemini"]
+    calls = []
+
+    def transport(*args):
+        calls.append(args)
+        message = "Quota fournisseur épuisé." if category == "quota" else "Authentification fournisseur refusée."
+        raise ProviderUnavailable(message, category, http_status=status)
+
+    service.transport = transport
+    with pytest.raises(UserFacingError, match="Quota|Authentification"):
+        service.ask("Bonjour", mode="performance")
+    assert len(calls) == 1
+    assert sum(event.outcome.value == "failed" for event in service.ledger.list_events()) == 1
+
+
+@pytest.mark.parametrize("provider", ["ollama_local", "local", " OLLAMA_LOCAL "])
+def test_public_local_aliases_are_normalized_before_provider_validation(tmp_path, provider):
+    service = make_service(tmp_path, catalog=FakeCatalog(), credential_loader=no_credentials)
+    result = service.ask("Bonjour", mode="offline", provider=provider)
+    assert (result["provider"], result["model"]) == ("ollama", "qwen3.5:2b-q4_K_M")
+    assert service.catalog.calls == []
+    service.transport = lambda *args: pytest.fail("An alias cannot bypass a capability refusal")
+    with pytest.raises(UserFacingError, match="refusé"):
+        service.ask("Décris cette image", mode="offline", provider=provider)
+
+
+def test_the_measured_second_openrouter_model_is_the_generation_payload_model(tmp_path, monkeypatch):
+    selected = "vendor/second:free"
+    service = routed_service(tmp_path, monkeypatch, {"openrouter": ["vendor/first:free", selected]})
+    for _ in range(3):
+        service.ledger.record_execution(provider="openrouter", model=selected, mode="performance", task_kind="general",
+                                        outcome="succeeded", latency_ms=1)
+    calls = []
+
+    def transport(method, url, headers, payload, timeout):
+        calls.append((method, url, payload))
+        if method == "GET":
+            assert url == hybrid_chat.OPENROUTER_MODELS_URL
+            return {"data": [{"id": identifier, "pricing": {"prompt": "0", "completion": "0", "request": "0"}}
+                             for identifier in ("vendor/first:free", selected)]}
+        assert url == hybrid_chat.OPENROUTER_GENERATION_URL
+        assert payload["model"] == selected
+        return {"model": selected, "choices": [{"message": {"content": "Réponse du modèle retenu."}}]}
+
+    service.transport = transport
+    result = service.ask("Bonjour", mode="performance", provider="openrouter")
+    assert (result["provider"], result["model"]) == ("openrouter", selected)
+    assert [method for method, _, _ in calls] == ["GET", "POST"]
+    assert ("choose", "openrouter", selected, ("gemini-2.5-flash",)) in service.catalog.calls
+
+
+@pytest.mark.parametrize("identifier,pricing,provider", [("gemini-3.1-pro-preview", "non_zero", "gemini"),
+                                                       ("vendor/model:paid", "non_zero", "openrouter"),
+                                                       ("vendor/model:free", "unknown", "openrouter")])
+def test_paid_pro_paid_suffix_and_unknown_prices_are_refused_before_any_generation_post(tmp_path, monkeypatch, identifier, pricing, provider):
+    class NonFreeCatalog(FakeCatalog):
+        def eligible(self, *args, **kwargs):
+            entry = catalogue_record(identifier)
+            entry["price_status"] = pricing
+            return [entry]
+
+    service = routed_service(tmp_path, monkeypatch, {})
+    service.catalog = NonFreeCatalog()
+    service.transport = lambda *args: pytest.fail("A nonzero or unknown price cannot reach a generation POST")
+    service.credential_loader = no_credentials
+    with pytest.raises(UserFacingError, match="prix"):
+        service.ask("Bonjour", mode="performance", provider=provider)
+    assert not service.ledger.list_events()
+
+
+def test_routing_state_reports_measurements_and_never_touches_a_provider(tmp_path, monkeypatch):
+    (tmp_path / ".env").write_text("COME_AI_GEMINI_FREE_PROJECT_CONFIRMED=true\n")
+    monkeypatch.setattr(hybrid_chat, "_configured_key", lambda root, name: True)
+
+    def forbidden(*args):
+        raise AssertionError("The routing state must not call any provider")
+
+    service = make_service(tmp_path, forbidden, catalog=ProviderCatalog({"gemini": ["gemini-3.8-flash"]}),
+                           credential_loader=lambda *args: "fictional-key-only")
+    for _ in range(3):
+        service.ledger.record_execution(provider="gemini", model="gemini-3.8-flash", mode="performance",
+                                        task_kind="general", outcome="succeeded", latency_ms=80)
+    state = service.routing_state()
+    assert state["network_used"] is False
+    assert state["observed_quota"]["gemini"] == "unknown"
+    measured = state["measured_reliability"]["gemini/gemini-3.8-flash"]
+    assert measured["attempts"] == 3 and measured["succeeded"] == 3
+    assert measured["quality_rank"] == 100
+    assert "not_a_claimed_reasoning_benchmark" in state["quality_measurement"]
+
+    # The UI snapshot exposes it, still without any provider call.
+    overview = service.overview()
+    assert overview["routing"] == state
+    assert overview["network_used"] is False

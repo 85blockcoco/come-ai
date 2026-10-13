@@ -34,8 +34,21 @@ from devkit.evolution_providers import (
     _error_for_status, _json_object, bounded_json_transport,
 )
 from devkit.model_catalog import ModelCatalog, ModelCatalogError, _zero_prices
-from free_ai_router import Capability, classify_task
-from usage_ledger import UsageLedger
+from free_ai_router import Capability, QuotaStatus, RoutingMode, classify_task
+from intelligence_bridge import (
+    MAX_OBSERVED_EVENTS,
+    BridgeFacts,
+    DeclaredModel,
+    IntelligenceBridge,
+    IntelligenceBridgeError,
+    QuotaObservation,
+    QualityObservation,
+    declared_from_eligible,
+    declared_local_model,
+    observe_quality,
+    observe_quotas,
+)
+from usage_ledger import UsageLedger, UsageLedgerError
 from workspace_core import LocalTools, UserFacingError, Workspace, read_dotenv, to_jsonable
 
 
@@ -46,6 +59,7 @@ MAX_MESSAGE_CHARS = 12_000
 MAX_HISTORY_MESSAGES = 10
 MAX_CONTEXT_CHARS = 6_000
 MAX_LOCAL_PROMPT_CHARS = 14_000
+MAX_ROUTABLE_MODELS = 200
 DEFAULT_LOCAL_MODEL = "qwen3.5:2b-q4_K_M"
 MODEL_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}\Z")
 SECRET_PATTERN = re.compile(
@@ -201,6 +215,41 @@ class HybridChatService:
         host = "[::1]" if parts.hostname == "::1" else "127.0.0.1"
         return f"http://{host}:{port}"
 
+    def _observations(self) -> tuple[dict[tuple[str, str], QualityObservation], dict[str, QuotaObservation]]:
+        """Read only what the local ledger already measured.
+
+        No provider is contacted and no value is completed: a provider nobody
+        reported anything about comes back unknown, and stays unknown.
+        """
+
+        try:
+            events = self.ledger.list_events(limit=MAX_OBSERVED_EVENTS)
+        except UsageLedgerError:
+            return {}, {}
+        return observe_quality(events), observe_quotas(events)
+
+    def _quota_status(self, provider: str, quotas: Mapping[str, QuotaObservation]) -> str:
+        """The observed quota state for one provider, never a guess."""
+
+        canonical = "ollama_local" if provider in {"ollama", "local"} else provider
+        observation = quotas.get(canonical) or quotas.get(provider)
+        return observation.status.value if observation is not None else QuotaStatus.UNKNOWN.value
+
+    def routing_state(self) -> dict[str, Any]:
+        """Inert routing measurements for the UI: never a provider call."""
+
+        quality, quotas = self._observations()
+        measured = {provider: self._quota_status(provider, quotas) for provider in ("gemini", "openrouter", "ollama")}
+        return {
+            "measured_reliability": {
+                f"{provider}/{model}": observation.public_dict()
+                for (provider, model), observation in sorted(quality.items())
+            },
+            "observed_quota": measured,
+            "quality_measurement": "observed_operational_reliability_not_a_claimed_reasoning_benchmark",
+            "network_used": False,
+        }
+
     def overview(self) -> dict[str, Any]:
         """Local snapshot only: opening the UI never invokes any provider."""
         config = self._config()
@@ -221,6 +270,7 @@ class HybridChatService:
                                "availability": "unknown", "condition": "explicit :free model and all live price fields zero"},
             },
             "usage": self.ledger.dashboard_summary(), "catalogue": catalogue,
+            "routing": self.routing_state(),
             "local_benchmark": self._benchmark_summary(),
             "last_execution": self.last_execution, "network_used": False,
             "tool_execution": "server_deterministic", "arbitrary_python": False,
@@ -378,7 +428,11 @@ class HybridChatService:
             raise ProviderUnavailable("Gemini exige un projet déclaré gratuit, sans facturation activée.", "price_unknown")
         if not self.catalog.eligible(provider, capability="text"):
             self.catalog.refresh(provider, gemini_free_project_confirmed=config["gemini_free_confirmed"])
-        selected = self.catalog.choose_model(provider, requested, exclude_models=("gemini-2.5-flash",) if requested == "auto" else ())
+        # The exclusion stays active for an explicitly requested model too: a
+        # model the router picked is confirmed here, never silently swapped.
+        selected = self.catalog.choose_model(provider, requested, exclude_models=("gemini-2.5-flash",))
+        if requested != "auto" and selected != requested:
+            raise ProviderUnavailable("Le catalogue a substitué le modèle retenu : génération refusée.", "missing_configuration")
         if not isinstance(selected, str) or not MODEL_PATTERN.fullmatch(selected) or SECRET_PATTERN.search(selected):
             raise ProviderUnavailable("Le catalogue a retourné un identifiant de modèle invalide.", "missing_configuration")
         if provider == "gemini" and selected not in GEMINI_FREE_TEXT_MODELS:
@@ -386,6 +440,121 @@ class HybridChatService:
         if provider == "openrouter" and not selected.endswith(":free"):
             raise ProviderUnavailable("OpenRouter exige un modèle explicitement gratuit.", "price_unknown")
         return selected
+
+    def _routable_models(self, clouds: list[str], config: dict[str, Any]) -> list[DeclaredModel]:
+        """Models the catalogue already proved free, ready for the router."""
+
+        declared: list[DeclaredModel] = []
+        for provider in clouds:
+            eligible = self.catalog.eligible(provider, capability="text")
+            if not eligible:
+                self.catalog.refresh(provider, gemini_free_project_confirmed=config["gemini_free_confirmed"])
+                eligible = self.catalog.eligible(provider, capability="text")
+            for entry in eligible[:MAX_ROUTABLE_MODELS]:
+                declared.append(declared_from_eligible(entry, provider))
+        return declared
+
+    def _route_plan(
+        self, message: str, *, mode: str, provider: str, config: dict[str, Any],
+        benchmark: dict[str, Any], task_kind: str, needs_cloud_capabilities: bool,
+        quotas: Mapping[str, QuotaObservation] | None = None,
+        model: str = "auto",
+    ) -> tuple[list[tuple[str, str]], str]:
+        """Order the (provider, model) pairs the router approved.
+
+        The zero-spend router decides who may answer, from the task, the
+        capabilities the catalogue proved, the reliability already measured and
+        the quota still available. The catalogue confirms the model it named.
+        Metadata can be refreshed here; generation starts only after an
+        approved route.
+        """
+
+        local_only = mode == "offline" or provider == "ollama"
+        if provider == "gemini" and not config["gemini_free_confirmed"]:
+            raise UserFacingError("Gemini exige un projet déclaré gratuit, sans facturation activée.")
+        if local_only:
+            clouds = []
+        elif provider != "auto":
+            clouds = [provider]
+        else:
+            free_gemini = config["gemini_free_confirmed"] and _configured_key(self.project_root, "GEMINI_API_KEY")
+            free_openrouter = _configured_key(self.project_root, "OPENROUTER_API_KEY")
+            clouds = (["gemini"] if free_gemini else []) + (["openrouter"] if free_openrouter else [])
+        local_model = model if model != "auto" and local_only else config["local_model"]
+        folded = _fold(message)
+        failed_cases = {item["name"] for item in benchmark.get("cases", []) if not item["passed"]}
+        complex_task = (
+            needs_cloud_capabilities
+            or any(term in folded for term in ("en profondeur", "complexe", "contre-verif", "raisonnement", "valuation", "valorisation"))
+        )
+        local_summary_gap = False
+        if benchmark.get("model") == local_model:
+            local_summary_gap = "summary" in failed_cases and any(term in folded for term in ("resume", "summar", "synthese"))
+            complex_task = complex_task or local_summary_gap
+        local_declared = [] if local_summary_gap or provider not in {"auto", "ollama"} else [declared_local_model(local_model)]
+        if quotas is None:
+            quotas = self._observations()[1]
+        routing_mode = (RoutingMode.OFFLINE if mode == "offline" else
+                        RoutingMode.PERFORMANCE if mode == "performance" or complex_task else RoutingMode.AUTOMATIC)
+        max_fallbacks = 1 if provider == "auto" and model == "auto" and mode != "offline" else 0
+        quality = {}
+        routing_error = None
+        try:
+            quality = observe_quality(self.ledger.list_events(limit=MAX_OBSERVED_EVENTS))
+            declared = local_declared + self._routable_models(clouds, config)
+        except (ProviderUnavailable, IntelligenceBridgeError, ModelCatalogError, UsageLedgerError) as error:
+            if provider != "auto":
+                raise UserFacingError(str(error)) from None
+            # A catalogue or measurement failure can only narrow the candidates
+            # to local execution, which still passes capability and quota gates.
+            declared = local_declared
+            clouds = []
+            routing_error = type(error).__name__
+        if model != "auto":
+            declared = [entry for entry in declared if entry.model_id == model]
+        if not declared:
+            raise UserFacingError("Aucun modèle gratuit vérifié ne satisfait cette sélection.")
+        try:
+            bridge = IntelligenceBridge(
+                BridgeFacts(
+                    declared=tuple(declared),
+                    quality=quality,
+                    quotas=quotas,
+                ),
+                allowed_providers=["ollama", *clouds],
+                max_fallbacks=max_fallbacks,
+                excluded_models=("gemini-2.5-flash",),
+            )
+            decision = bridge.decide(message, mode=routing_mode)
+        except IntelligenceBridgeError as error:
+            raise UserFacingError(str(error)) from None
+
+        pairs = [("ollama" if name == "ollama_local" else name, selected_model)
+                 for name, selected_model in bridge.ordered_models(decision)]
+        if not pairs:
+            raise UserFacingError("Le routeur a refusé cette demande : aucun modèle gratuit vérifié ne satisfait ses capacités et quotas.")
+        reason = (
+            "Hors ligne : modèle local uniquement ; aucun fournisseur cloud ni catalogue distant consulté."
+            if mode == "offline" else
+            "Fournisseur choisi manuellement, sous réserve des gardes de gratuité, capacités et quota."
+            if provider != "auto" else
+            "Préférence technique pour un fournisseur cloud gratuit éligible, sans supériorité mesurée prétendue."
+            if pairs[0][0] != "ollama"
+            else "Préférence locale pour économiser les quotas ; aucune supériorité qualité présumée."
+        )
+        if local_summary_gap:
+            reason += " Le benchmark local mesure un échec de résumé sur ce modèle : il est écarté pour cette tâche."
+        if routing_error:
+            reason += f" Routage mesuré indisponible ({routing_error}) ; sélection locale revalidée pour les capacités et quotas."
+        quota_cooldowns = [
+            row for row in decision.quota_disclosures
+            if row.quota.status is not QuotaStatus.UNKNOWN and row.quota.public_dict()["known"]
+        ]
+        if quota_cooldowns:
+            reason += " Quota observé : " + ", ".join(
+                f"{row.provider.value} {row.quota.public_dict()['status']}" for row in quota_cooldowns
+            ) + "."
+        return pairs, reason
 
     def _generate(self, provider: str, model: str, messages: list[dict[str, str]], config: dict[str, Any], usage: dict[str, Any]) -> str:
         if provider == "ollama":
@@ -464,6 +633,10 @@ class HybridChatService:
             memory_project_id: str | None = None) -> dict[str, Any]:
         if not isinstance(message, str) or not message.strip() or len(message) > MAX_MESSAGE_CHARS:
             raise UserFacingError("Écris une demande de moins de 12 000 caractères.")
+        if isinstance(provider, str):
+            provider = provider.strip().casefold()
+            if provider in {"ollama_local", "local"}:
+                provider = "ollama"
         if mode not in {"offline", "automatic", "performance"} or provider not in {"auto", "ollama", "gemini", "openrouter"}:
             raise UserFacingError("Le mode ou le fournisseur demandé est invalide.")
         if not isinstance(model, str) or not MODEL_PATTERN.fullmatch(model) or SECRET_PATTERN.search(model) or not isinstance(allow_write, bool):
@@ -552,30 +725,13 @@ class HybridChatService:
         classified = classify_task(message)
         task_kind = classified.kind.value
         needs_cloud_capabilities = bool(classified.required_capabilities & {Capability.CODE, Capability.ANALYSIS, Capability.SPREADSHEETS, Capability.VISION})
-        if mode == "offline":
-            routes = ["ollama"]
-            reason = "Hors ligne : modèle local uniquement ; aucun fournisseur cloud ni catalogue distant consulté."
-        elif provider != "auto":
-            routes = [provider]
-            reason = "Fournisseur choisi manuellement, sous réserve des gardes de gratuité."
-        else:
-            free_gemini = config["gemini_free_confirmed"] and _configured_key(self.project_root, "GEMINI_API_KEY")
-            free_openrouter = _configured_key(self.project_root, "OPENROUTER_API_KEY")
-            folded = _fold(message)
-            complex_task = (
-                needs_cloud_capabilities
-                or any(term in folded for term in ("en profondeur", "complexe", "contre-verif", "raisonnement", "valuation", "valorisation"))
-            )
-            if benchmark.get("model") == config["local_model"]:
-                complex_task = complex_task or ("summary" in failed_cases and any(term in folded for term in ("resume", "summar", "synthese")))
-            clouds = (["gemini"] if free_gemini else []) + (["openrouter"] if free_openrouter else [])
-            routes = (clouds + ["ollama"] if mode == "performance" or complex_task else ["ollama"] + clouds)[:2]
-            reason = ("Préférence technique pour un fournisseur cloud gratuit éligible, sans supériorité mesurée prétendue."
-                      if routes[0] != "ollama" else "Préférence locale pour économiser les quotas ; aucune supériorité qualité présumée.")
+        _, quotas = self._observations()
+        routes, reason = self._route_plan(message, mode=mode, provider=provider, config=config, benchmark=benchmark,
+                                           task_kind=task_kind, needs_cloud_capabilities=needs_cloud_capabilities,
+                                           quotas=quotas, model=model)
         messages = self._messages(message, history, context, mode)
         failures: list[dict] = []
-        for position, selected_provider in enumerate(routes):
-            selected_model = model if model != "auto" else config["local_model"] if selected_provider == "ollama" else "auto"
+        for position, (selected_provider, selected_model) in enumerate(routes):
             usage: dict[str, Any] = {"generation_requests": 0, "input_tokens": None, "output_tokens": None, "total_tokens": None}
             call_started = time.monotonic()
             try:
@@ -597,6 +753,11 @@ class HybridChatService:
                                  "generation_requests": usage["generation_requests"]})
                 if selected_provider == "ollama":
                     self.local_status = {"availability": "unavailable", "model": selected_model, "error_category": category}
+                if category in {"quota", "authentication"}:
+                    # A provider-wide refusal also blocks a different model
+                    # from that provider in the remaining approved routes.
+                    routes[position + 1:] = [(name, identifier) for name, identifier in routes[position + 1:]
+                                             if name != selected_provider]
                 # No retry, including auth/quota. An explicitly selected provider
                 # never switches. Offline contains exactly one local route.
                 if position + 1 == len(routes):
@@ -626,7 +787,8 @@ class HybridChatService:
             result = {"answer": answer, "provider": selected_provider, "model": selected_model, "mode": mode,
                       "route_reason": actual_reason, "tool_events": events, "citations": citations, "usage": usage,
                       "latency_seconds": round(time.monotonic() - started, 3), "remote_model_used": selected_provider != "ollama",
-                      "fallbacks": failures, "quota_status": "unknown", "verification": "not_independently_verified",
+                      "fallbacks": failures, "quota_status": self._quota_status(selected_provider, quotas),
+                      "verification": "not_independently_verified",
                       "tool_execution": "server_deterministic", "quality_comparison": "not_benchmarked", "limitations": limitations}
             self.last_execution = {key: result[key] for key in ("provider", "model", "mode", "route_reason", "usage", "latency_seconds", "remote_model_used", "fallbacks")}
             return result
