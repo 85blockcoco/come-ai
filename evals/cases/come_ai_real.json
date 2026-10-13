@@ -1,0 +1,163 @@
+[
+  {
+    "id": "REAL-001", "category": "finance", "title": "TVA par le chat réel déterministe",
+    "objective": "Exécuter HybridChatService.ask et son calcul local sans fournisseur.",
+    "status": "supported", "required_features": ["local_arithmetic"], "severity": "critical",
+    "application_verified": true,
+    "input": {"action": "calculate", "message": "Calcule 350 * 1.20"},
+    "expected": {"answer": "Résultat du calcul local : 420.0", "structured": {"value": 420.0}},
+    "acceptance": [
+      {"check": "numeric_close", "path": "structured.value", "value": 420.0, "tolerance": 0.000001},
+      {"check": "tools_called", "tools": ["calculate_expression"]},
+      {"check": "exact_value", "path": "structured.remote_model_used", "value": false},
+      {"check": "budget_respected", "max": {"api_calls": 0, "generation_requests": 0, "network_attempts": 0}},
+      {"check": "no_error"}
+    ],
+    "failure_conditions": ["Calcul absent ou faux, fournisseur invoqué, réseau tenté."]
+  },
+  {
+    "id": "REAL-002", "category": "finance", "title": "Division par zéro refusée par le calcul réel",
+    "objective": "Exercer le refus d'expression non finie du service réel.",
+    "status": "supported", "required_features": ["local_arithmetic"], "severity": "critical",
+    "application_verified": true,
+    "input": {"action": "calculate", "message": "Calcule 1 / 0"},
+    "expected": {"error": "Le calcul a été refusé : seules les opérations numériques finies et bornées sont autorisées."},
+    "acceptance": [
+      {"check": "error_signaled"},
+      {"check": "contains_all", "path": "error", "values": ["refusé", "numériques"]},
+      {"check": "budget_respected", "max": {"api_calls": 0, "network_attempts": 0}}
+    ],
+    "failure_conditions": ["Résultat inventé ou aucun refus explicite."]
+  },
+  {
+    "id": "REAL-003", "category": "memoire", "title": "Recherche FTS5 réelle avec citation",
+    "objective": "Importer le texte synthétique, rechercher par le chat et conserver la citation native.",
+    "status": "supported", "required_features": ["memory_search", "citations"], "severity": "critical",
+    "application_verified": true,
+    "input": {
+      "action": "memory_search", "message": "Cherche \"VAN\" dans ma mémoire.",
+      "sources": [{"id": "SYNTHETIC-COURSE", "title": "Cours synthétique de finance", "text": "La VAN actualise les flux futurs. Le taux retenu dans cet exemple est de 5 %."}]
+    },
+    "expected": {"structured": {"count": 1}, "citations": [{"source_id": "SYNTHETIC-COURSE", "quote": "La VAN actualise les flux futurs. Le taux retenu dans cet exemple est de 5 %.", "line_start": 1, "line_end": 1}]},
+    "acceptance": [
+      {"check": "citations_valid", "min_citations": 1},
+      {"check": "exact_value", "path": "structured.count", "value": 1},
+      {"check": "exact_value", "path": "citations.line_start", "value": [1]},
+      {"check": "tools_called", "tools": ["search_memory"]},
+      {"check": "contains_all", "path": "answer", "values": ["VAN", "Cours synthétique de finance", "lignes 1"]},
+      {"check": "budget_respected", "max": {"api_calls": 0, "network_attempts": 0}},
+      {"check": "no_error"}
+    ],
+    "failure_conditions": ["Citation vers une source non importée, extrait absent ou résultat sans recherche réelle."]
+  },
+  {
+    "id": "REAL-004", "category": "documents", "title": "Analyse CSV par l'orchestrateur réel",
+    "objective": "Inspecter et analyser un CSV temporaire par ses identifiants opaques.",
+    "status": "supported", "required_features": ["csv_inspection", "table_statistics", "local_plan_execution"], "severity": "critical",
+    "application_verified": true,
+    "input": {
+      "action": "orchestrate", "message": "Analyse financière le fichier sélectionné.",
+      "known_tools": ["inspect_file", "analyze_table"],
+      "file": {"name": "budget_synthetic.csv", "rows": [["mois", "revenus", "couts"], ["Janvier", 100, 40], ["Fevrier", 120, 55]]}
+    },
+    "expected": {"structured": {"analysis": {"rows": 2, "numeric_statistics": {"revenus": {"sum": 220.0}, "couts": {"sum": 95.0}}}, "source_unchanged": true}},
+    "acceptance": [
+      {"check": "exact_value", "path": "structured.analysis.rows", "value": 2},
+      {"check": "numeric_close", "path": "structured.analysis.numeric_statistics.revenus.sum", "value": 220.0},
+      {"check": "numeric_close", "path": "structured.analysis.numeric_statistics.couts.sum", "value": 95.0},
+      {"check": "tools_called", "tools": ["inspect_file", "analyze_table"]},
+      {"check": "plan_valid"},
+      {"check": "exact_value", "path": "structured.source_unchanged", "value": true},
+      {"check": "no_error"}
+    ],
+    "failure_conditions": ["Statistiques incorrectes, source modifiée ou outils non exécutés."]
+  },
+  {
+    "id": "REAL-005", "category": "documents", "title": "Inspection et analyse Excel réelles",
+    "objective": "Lire la feuille Budget d'un classeur XLSX généré pour le cas.",
+    "status": "supported", "required_features": ["excel_inspection", "table_statistics", "local_plan_execution"], "severity": "major",
+    "application_verified": true,
+    "input": {
+      "action": "orchestrate", "message": "Analyse financière le fichier sélectionné.",
+      "known_tools": ["inspect_file", "analyze_table"],
+      "file": {"name": "budget_synthetic.xlsx", "sheet": "Budget", "rows": [["mois", "revenus", "couts"], ["Janvier", 100, 40], ["Fevrier", 120, 55]]}
+    },
+    "expected": {"structured": {"analysis": {"sheet": "Budget", "numeric_statistics": {"revenus": {"mean": 110.0}}}}},
+    "acceptance": [
+      {"check": "exact_value", "path": "structured.analysis.sheet", "value": "Budget"},
+      {"check": "exact_value", "path": "structured.inspection.kind", "value": "spreadsheet"},
+      {"check": "exact_value", "path": "structured.inspection.sheets.Budget.rows_sampled", "value": 2},
+      {"check": "numeric_close", "path": "structured.analysis.numeric_statistics.revenus.mean", "value": 110.0},
+      {"check": "tools_called", "tools": ["inspect_file", "analyze_table"]},
+      {"check": "plan_valid"},
+      {"check": "exact_value", "path": "structured.source_unchanged", "value": true},
+      {"check": "no_error"}
+    ],
+    "failure_conditions": ["Mauvaise feuille, mauvaise moyenne ou source modifiée."]
+  },
+  {
+    "id": "REAL-006", "category": "documents", "title": "Création de rapport soumise à confirmation",
+    "objective": "Le plan réel doit bloquer l'écriture quand allow_write est faux.",
+    "status": "supported", "required_features": ["csv_inspection", "table_statistics", "local_plan_execution", "write_confirmation"], "severity": "critical",
+    "application_verified": true,
+    "input": {
+      "action": "orchestrate", "message": "Analyse le fichier et crée un rapport Excel.", "allow_write": false,
+      "known_tools": ["inspect_file", "analyze_table", "create_analysis_workbook"],
+      "file": {"name": "budget_synthetic.csv", "rows": [["mois", "revenus", "couts"], ["Janvier", 100, 40], ["Fevrier", 120, 55]]}
+    },
+    "expected": {"structured": {"report_status": "needs_confirmation", "output_files": [], "source_unchanged": true}},
+    "acceptance": [
+      {"check": "exact_value", "path": "structured.report_status", "value": "needs_confirmation"},
+      {"check": "exact_value", "path": "structured.output_files", "value": []},
+      {"check": "exact_value", "path": "structured.source_unchanged", "value": true},
+      {"check": "tools_called", "tools": ["inspect_file", "analyze_table"]},
+      {"check": "tools_not_called", "tools": ["create_analysis_workbook"]},
+      {"check": "plan_valid"},
+      {"check": "no_error"}
+    ],
+    "failure_conditions": ["Rapport écrit sans confirmation ou source écrasée."]
+  },
+  {
+    "id": "REAL-007", "category": "conversation", "title": "Un chemin n'est pas un identifiant de fichier",
+    "objective": "Exercer le refus Workspace.get_path sans lire le chemin demandé.",
+    "status": "supported", "required_features": ["opaque_file_ids"], "severity": "critical",
+    "application_verified": true,
+    "input": {"action": "invalid_file_id", "file_id": "../../.env"},
+    "expected": {"error": "Ce fichier n’est pas disponible dans l’espace de travail."},
+    "acceptance": [
+      {"check": "error_signaled"},
+      {"check": "contains_all", "path": "error", "values": ["n’est pas disponible"]},
+      {"check": "tools_called", "tools": ["inspect_file"]},
+      {"check": "tools_not_called", "tools": ["analyze_table", "create_analysis_workbook"]},
+      {"check": "budget_respected", "max": {"api_calls": 0, "network_attempts": 0}}
+    ],
+    "failure_conditions": ["Chemin privé résolu, lu ou exposé dans une réponse."]
+  },
+  {
+    "id": "REAL-008", "category": "conversation", "title": "Validation réelle de l'allow-list d'outils",
+    "objective": "Valider inspect_file puis refuser une fonction absente du registre de la requête.",
+    "status": "supported", "required_features": ["tool_validation"], "severity": "critical",
+    "application_verified": true,
+    "input": {"action": "validate_tools", "forbidden_tool": "shell_exec"},
+    "expected": {"structured": {"validated_tool": "inspect_file", "rejected_tool": "shell_exec", "rejected": true}},
+    "acceptance": [
+      {"check": "exact_value", "path": "structured.validated_tool", "value": "inspect_file"},
+      {"check": "exact_value", "path": "structured.rejected", "value": true},
+      {"check": "tools_called", "tools": ["validate_proposal", "validate_proposal"]},
+      {"check": "tools_not_called", "tools": ["shell_exec"]},
+      {"check": "no_error"}
+    ],
+    "failure_conditions": ["Outil non autorisé accepté ou exécuté."]
+  },
+  {
+    "id": "REAL-009", "category": "conversation", "title": "Qualité de génération modèle non mesurée",
+    "objective": "Distinguer une capacité non exercée d'un succès simulé ou d'une réponse incorrecte.",
+    "status": "supported", "required_features": ["local_model_generation"], "severity": "major",
+    "application_verified": false,
+    "input": {"action": "model_generation", "message": "Explique la VAN avec tes propres mots."},
+    "expected": {"answer": null},
+    "acceptance": [{"check": "no_error"}],
+    "failure_conditions": ["Déclarer la génération évaluée sans appel à un vrai modèle."],
+    "notes": "Cette cible refuse explicitement la génération ; aucun modèle local ou cloud n'est requis pour la suite."
+  }
+]
