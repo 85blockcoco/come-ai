@@ -1,0 +1,371 @@
+[
+  {
+    "id": "FIN-001",
+    "category": "finance",
+    "title": "Somme d'un tableau de flux",
+    "objective": "Additionner quatre montants sans erreur d'arrondi ni de signe.",
+    "status": "supported",
+    "required_features": ["local_arithmetic"],
+    "severity": "critical",
+    "input": {"amounts": [1240.50, 875.25, 99.99, 1784.26]},
+    "expected": {
+      "answer": "Total : 4 000,00 €.",
+      "structured": {"total": 4000.00, "currency": "EUR", "count": 4},
+      "tools_called": ["calculate_expression"],
+      "facts": [], "citations": [], "usage": null, "error": null
+    },
+    "acceptance": [
+      {"check": "numeric_close", "path": "structured.total", "value": 4000.0, "tolerance": 0.005},
+      {"check": "exact_value", "path": "structured.count", "value": 4}
+    ],
+    "failure_conditions": [
+      "Le total diffère de plus d'un centime (1240.50+875.25+99.99+1784.26 = 4000.00)."
+    ],
+    "notes": "1240.50 + 875.25 + 99.99 + 1784.26 = 4000.00 exactement."
+  },
+  {
+    "id": "FIN-002",
+    "category": "finance",
+    "title": "TVA : HT → TTC",
+    "objective": "Appliquer un taux de TVA de 20 % à un montant HT.",
+    "status": "supported",
+    "required_features": ["local_arithmetic"],
+    "severity": "critical",
+    "input": {"amount_ht": 350.0, "vat_rate": 0.20},
+    "expected": {
+      "answer": "TTC : 420,00 € (TVA 70,00 €).",
+      "structured": {"ttc": 420.00, "vat": 70.00},
+      "tools_called": ["calculate_expression"],
+      "facts": [], "citations": [], "usage": null, "error": null
+    },
+    "acceptance": [
+      {"check": "numeric_close", "path": "structured.ttc", "value": 420.0, "tolerance": 0.005},
+      {"check": "numeric_close", "path": "structured.vat", "value": 70.0, "tolerance": 0.005}
+    ],
+    "failure_conditions": [
+      "Le taux est appliqué en sens inverse ou sur le TTC."
+    ],
+    "notes": "350 * 1.20 = 420 ; TVA = 70."
+  },
+  {
+    "id": "FIN-003",
+    "category": "finance",
+    "title": "Taux de croissance entre deux périodes",
+    "objective": "Calculer le taux de croissance de 820 à 1025.",
+    "status": "supported",
+    "required_features": ["local_arithmetic"],
+    "severity": "critical",
+    "input": {"previous": 820.0, "current": 1025.0},
+    "expected": {
+      "answer": "Croissance : +25 %.",
+      "structured": {"growth_rate": 0.25, "growth_pct": 25.0},
+      "tools_called": ["calculate_expression"],
+      "facts": [], "citations": [], "usage": null, "error": null
+    },
+    "acceptance": [
+      {"check": "numeric_close", "path": "structured.growth_pct", "value": 25.0, "tolerance": 0.01}
+    ],
+    "failure_conditions": [
+      "Le taux est inversé ((a-b)/b au lieu de (b-a)/a)."
+    ],
+    "notes": "(1025-820)/820 = 0.25 exactement."
+  },
+  {
+    "id": "FIN-004",
+    "category": "finance",
+    "title": "Marge brute et taux de marge",
+    "objective": "Distinguer marge absolue et taux de marge sur coût d'achat.",
+    "status": "supported",
+    "required_features": ["local_arithmetic"],
+    "severity": "critical",
+    "input": {"sale": 250.0, "cost": 160.0},
+    "expected": {
+      "answer": "Marge : 90 € ; taux de marge : 56,25 %.",
+      "structured": {"margin": 90.0, "margin_rate_pct": 56.25},
+      "tools_called": ["calculate_expression"],
+      "facts": [], "citations": [], "usage": null, "error": null
+    },
+    "acceptance": [
+      {"check": "numeric_close", "path": "structured.margin", "value": 90.0, "tolerance": 0.005},
+      {"check": "numeric_close", "path": "structured.margin_rate_pct", "value": 56.25, "tolerance": 0.01}
+    ],
+    "failure_conditions": [
+      "Le taux de marge est calculé sur le prix de vente (ce serait le taux de marque, 36 %)."
+    ],
+    "notes": "Marge = 90 ; taux de marge = 90/160 = 56.25 %. Confusion marge/marque = erreur classique."
+  },
+  {
+    "id": "FIN-005",
+    "category": "finance",
+    "title": "Moyenne pondérée",
+    "objective": "Moyenne pondérée de trois valeurs avec pondérations inégales.",
+    "status": "supported",
+    "required_features": ["local_arithmetic"],
+    "severity": "major",
+    "input": {"values": [14.0, 16.0, 10.0], "weights": [0.5, 0.3, 0.2]},
+    "expected": {
+      "answer": "Moyenne pondérée : 13,8.",
+      "structured": {"weighted_mean": 13.8},
+      "tools_called": ["calculate_expression"],
+      "facts": [], "citations": [], "usage": null, "error": null
+    },
+    "acceptance": [
+      {"check": "numeric_close", "path": "structured.weighted_mean", "value": 13.8, "tolerance": 0.005}
+    ],
+    "failure_conditions": [
+      "La pondération est ignorée (moyenne simple = 13.33)."
+    ],
+    "notes": "14*0.5 + 16*0.3 + 10*0.2 = 7 + 4.8 + 2 = 13.8. La moyenne simple (13.33) est l'erreur détectée."
+  },
+  {
+    "id": "FIN-006",
+    "category": "finance",
+    "title": "Intérêts simples sur 2 ans",
+    "objective": "Calculer des intérêts simples à 3,5 % sur 8 000 €.",
+    "status": "supported",
+    "required_features": ["local_arithmetic"],
+    "severity": "major",
+    "input": {"principal": 8000.0, "rate": 0.035, "years": 2},
+    "expected": {
+      "answer": "Intérêts : 560 € ; capital final : 8 560 €.",
+      "structured": {"interest": 560.0, "final": 8560.0},
+      "tools_called": ["calculate_expression"],
+      "facts": [], "citations": [], "usage": null, "error": null
+    },
+    "acceptance": [
+      {"check": "numeric_close", "path": "structured.interest", "value": 560.0, "tolerance": 0.01},
+      {"check": "numeric_close", "path": "structured.final", "value": 8560.0, "tolerance": 0.01}
+    ],
+    "failure_conditions": [
+      "Des intérêts compos sont calculés à la place (8564.90)."
+    ],
+    "notes": "8000*0.035*2 = 560 (simple). Le compos donnerait 8564.90 : le mode doit être explicite."
+  },
+  {
+    "id": "FIN-007",
+    "category": "finance",
+    "title": "Division par zéro : refus explicite",
+    "objective": "Un ratio sur base nulle doit produire une erreur, jamais NaN ou infini.",
+    "status": "supported",
+    "required_features": ["local_arithmetic"],
+    "severity": "critical",
+    "input": {"numerator": 500.0, "denominator": 0.0},
+    "expected": {
+      "answer": null,
+      "structured": null,
+      "citations": [],
+      "facts": [],
+      "tools_called": ["calculate_expression"],
+      "usage": null,
+      "error": "Ratio impossible : base nulle."
+    },
+    "acceptance": [
+      {"check": "error_signaled"}
+    ],
+    "failure_conditions": [
+      "Un résultat NaN, infini ou zéro est présenté comme une réponse.",
+      "L'erreur reste silencieuse."
+    ],
+    "notes": "calculate_expression refuse déjà la division par zéro : vérification d'absence de contournement."
+  },
+  {
+    "id": "FIN-008",
+    "category": "finance",
+    "title": "Incohérence total ↔ lignes",
+    "objective": "Le total annoncé doit être exactement la somme des lignes.",
+    "status": "supported",
+    "required_features": ["excel_analyze"],
+    "severity": "critical",
+    "input": {"lines": [450.0, 320.50, 129.50], "stated_total": 900.0},
+    "expected": {
+      "answer": "Total vérifié : 900,00 € (somme des 3 lignes).",
+      "structured": {"computed_total": 900.00, "stated_total": 900.00, "consistent": true},
+      "tools_called": ["analyze_table"],
+      "facts": [], "citations": [], "usage": null, "error": null
+    },
+    "acceptance": [
+      {"check": "numeric_close", "path": "structured.computed_total", "value": 900.0, "tolerance": 0.005},
+      {"check": "exact_value", "path": "structured.consistent", "value": true}
+    ],
+    "failure_conditions": [
+      "Le total du fichier est accepté sans vérification de la somme des lignes."
+    ],
+    "notes": "450 + 320.50 + 129.50 = 900.00. Un total faux du fichier doit être signalé."
+  },
+  {
+    "id": "FIN-009",
+    "category": "finance",
+    "title": "Budget prévisionnel vs réalisé",
+    "objective": "Calculer l'écart en euros et en pourcentage.",
+    "status": "supported",
+    "required_features": ["local_arithmetic"],
+    "severity": "major",
+    "input": {"budget": 12000.0, "actual": 13450.0},
+    "expected": {
+      "answer": "Écart : +1 450 € (+12,08 %).",
+      "structured": {"variance": 1450.0, "variance_pct": 12.08},
+      "tools_called": ["calculate_expression"],
+      "facts": [], "citations": [], "usage": null, "error": null
+    },
+    "acceptance": [
+      {"check": "numeric_close", "path": "structured.variance", "value": 1450.0, "tolerance": 0.005},
+      {"check": "numeric_close", "path": "structured.variance_pct", "value": 12.08, "tolerance": 0.01}
+    ],
+    "failure_conditions": [
+      "Le signe de l'écart est inversé (dépassement présenté comme économie)."
+    ],
+    "notes": "13450-12000 = 1450 ; 1450/12000 = 12.0833 % → 12.08 %."
+  },
+  {
+    "id": "FIN-010",
+    "category": "finance",
+    "title": "Conversion de devise avec taux explicite",
+    "objective": "Convertir en appliquant un taux fourni, jamais un taux inventé.",
+    "status": "supported",
+    "required_features": ["local_arithmetic"],
+    "severity": "critical",
+    "input": {"amount": 500.0, "from": "EUR", "to": "USD", "rate": 1.08},
+    "expected": {
+      "answer": "500 EUR = 540 USD (taux 1,08 appliqué).",
+      "structured": {"converted": 540.0, "rate_used": 1.08, "from": "EUR", "to": "USD"},
+      "tools_called": ["calculate_expression"],
+      "facts": [], "citations": [], "usage": null, "error": null
+    },
+    "acceptance": [
+      {"check": "numeric_close", "path": "structured.converted", "value": 540.0, "tolerance": 0.005},
+      {"check": "exact_value", "path": "structured.rate_used", "value": 1.08}
+    ],
+    "failure_conditions": [
+      "Un taux différent de celui fourni est utilisé ou affiché."
+    ],
+    "notes": "500*1.08 = 540. Le taux doit être celui du contexte, tracé dans la structure."
+  },
+  {
+    "id": "FIN-011",
+    "category": "finance",
+    "title": "Ordre de grandeur et unité",
+    "objective": "Un montant en milliers ne doit pas être confondu avec des unités.",
+    "status": "supported",
+    "required_features": ["local_arithmetic"],
+    "severity": "critical",
+    "input": {"value_k€": 42.5, "expected_unit": "kEUR"},
+    "expected": {
+      "answer": "42,5 k€ = 42 500 €.",
+      "structured": {"value": 42500.0, "unit": "EUR", "source_unit": "kEUR"},
+      "tools_called": ["calculate_expression"],
+      "facts": [], "citations": [], "usage": null, "error": null
+    },
+    "acceptance": [
+      {"check": "numeric_close", "path": "structured.value", "value": 42500.0, "tolerance": 0.5},
+      {"check": "exact_value", "path": "structured.source_unit", "value": "kEUR"}
+    ],
+    "failure_conditions": [
+      "Erreur de facteur 1000 (42.5 € au lieu de 42 500 €)."
+    ],
+    "notes": "Erreur d'unité = erreur d'ordre de grandeur, famille distincte des arrondis."
+  },
+  {
+    "id": "FIN-012",
+    "category": "finance",
+    "title": "Hypothèse non fournie : refus d'en inventer",
+    "objective": "Sans taux fourni, un calcul dépendant d'un taux doit être refusé ou paramétré explicitement.",
+    "status": "supported",
+    "required_features": ["local_arithmetic"],
+    "severity": "critical",
+    "input": {"principal": 10000.0, "question": "Combien dans 5 ans ?"},
+    "expected": {
+      "answer": null,
+      "structured": null,
+      "citations": [],
+      "facts": [],
+      "tools_called": ["calculate_expression"],
+      "usage": null,
+      "error": "Taux non fourni : calcul impossible sans hypothèse explicite."
+    },
+    "acceptance": [
+      {"check": "error_signaled"}
+    ],
+    "failure_conditions": [
+      "Un taux est inventé de façon silencieuse."
+    ],
+    "notes": "Information inventée = hypothèse non déclarée présentée comme donnée."
+  },
+  {
+    "id": "FIN-013",
+    "category": "finance",
+    "title": "Cohérence interne d'un tableau (parts ↔ total)",
+    "objective": "Vérifier que la somme des parts égale le total déclaré, sinon signaler.",
+    "status": "supported",
+    "required_features": ["excel_analyze"],
+    "severity": "critical",
+    "input": {"parts": {"salaires": 60000.0, "achats": 25000.0, "divers": 5000.0}, "declared_total": 95000.0},
+    "expected": {
+      "answer": "Somme des parts : 90 000 € contre total déclaré 95 000 € : écart de 5 000 €.",
+      "structured": {"sum_parts": 90000.0, "declared_total": 95000.0, "consistent": false, "gap": 5000.0},
+      "tools_called": ["analyze_table"],
+      "facts": [], "citations": [], "usage": null, "error": null
+    },
+    "acceptance": [
+      {"check": "numeric_close", "path": "structured.sum_parts", "value": 90000.0, "tolerance": 0.01},
+      {"check": "exact_value", "path": "structured.consistent", "value": false},
+      {"check": "numeric_close", "path": "structured.gap", "value": 5000.0, "tolerance": 0.01}
+    ],
+    "failure_conditions": [
+      "L'incohérence est ignorée ou lissée silencieusement."
+    ],
+    "notes": "60000+25000+5000 = 90000 ≠ 95000 : détection obligatoire."
+  },
+  {
+    "id": "FIN-014",
+    "category": "finance",
+    "title": "Interprétation de seuil de rentabilité",
+    "objective": "Calcul du point mort à partir de prix, coût variable et charges fixes.",
+    "status": "future",
+    "required_features": ["finance.breakeven"],
+    "severity": "major",
+    "input": {"price": 50.0, "variable_cost": 30.0, "fixed_costs": 40000.0},
+    "expected": {
+      "answer": "Seuil de rentabilité : 2 000 unités (CA 100 000 €).",
+      "structured": {"units": 2000.0, "revenue": 100000.0},
+      "tools_called": ["calculate_expression"],
+      "facts": [], "citations": [], "usage": null, "error": null
+    },
+    "acceptance": [
+      {"check": "numeric_close", "path": "structured.units", "value": 2000.0, "tolerance": 0.5}
+    ],
+    "failure_conditions": [
+      "La marge sur coût variable n'est pas calculée (50-30=20)."
+    ],
+    "notes": "40000/(50-30) = 2000. Fonctionnalité 'breakeven' absente : cas futur tant que le moteur ne l'expose pas."
+  },
+  {
+    "id": "FIN-015",
+    "category": "finance",
+    "title": "Tri de dépenses par catégorie",
+    "objective": "Agréger des lignes de dépenses par catégorie sans perte de ligne.",
+    "status": "future",
+    "required_features": ["finance.categorize"],
+    "severity": "minor",
+    "input": {
+      "lines": [
+        {"label": "café", "amount": 12.0, "cat": "repas"},
+        {"label": "train", "amount": 88.0, "cat": "transport"},
+        {"label": "déjeuner", "amount": 24.0, "cat": "repas"}
+      ]
+    },
+    "expected": {
+      "answer": "repas : 36 € ; transport : 88 €.",
+      "structured": {"by_category": {"repas": 36.0, "transport": 88.0}, "lines_count": 3},
+      "tools_called": ["categorize_expenses"],
+      "facts": [], "citations": [], "usage": null, "error": null
+    },
+    "acceptance": [
+      {"check": "numeric_close", "path": "structured.by_category.repas", "value": 36.0, "tolerance": 0.005},
+      {"check": "exact_value", "path": "structured.lines_count", "value": 3}
+    ],
+    "failure_conditions": [
+      "Une ligne est perdue lors de l'agrégation (12+24=36)."
+    ],
+    "notes": "Agrégation catégorielle non exposée : cas futur."
+  }
+]

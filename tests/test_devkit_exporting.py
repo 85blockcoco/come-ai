@@ -92,6 +92,28 @@ def test_source_snapshot_and_materialization_match_with_no_overwrite(tmp_path: P
     assert destination.read_bytes() == original
 
 
+def test_evaluation_sources_and_synthetic_cases_are_exported_without_run_data(tmp_path: Path) -> None:
+    root = _project(tmp_path / "project")
+    for directory in ("evals/cases", "evals/tests", "evals/runs/nested"):
+        (root / directory).mkdir(parents=True)
+    (root / "evals/runner.py").write_text("def run():\n    return 1\n", encoding="utf-8")
+    (root / "evals/tests/test_lab.py").write_text("def test_lab():\n    assert True\n", encoding="utf-8")
+    (root / "evals/cases/synthetic.json").write_text('[{"input": "fictional"}]', encoding="utf-8")
+    secret = "sk-or-v1-" + "X" * 40
+    for name in ("evals/runs/private.json", "evals/runs/nested/private.py", "evals/runs/README.md", "evals/config.json"):
+        (root / name).write_text(secret, encoding="utf-8")
+        assert not source_path_allowed(name)
+    assert not source_path_allowed("tests/private.json")
+    inventory = source_inventory(root)
+    paths = {item["path"] for item in inventory}
+    assert {"evals/runner.py", "evals/tests/test_lab.py", "evals/cases/synthetic.json"} <= paths
+    assert not any(path.startswith("evals/runs/") for path in paths)
+    candidate = tmp_path / "candidate"
+    assert materialize_source(root, candidate) == inventory
+    assert (candidate / "evals/cases/synthetic.json").is_file()
+    assert not (candidate / "evals/runs").exists()
+
+
 @pytest.mark.parametrize("path", ["../workspace_core.py", "/workspace_core.py", "tests/../.env",
                                   "tests//example.py", "tests/./example.py", "tests\\example.py",
                                   "C:/example.py", ".env", "agent.py", "unknown/example.py",

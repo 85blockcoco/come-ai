@@ -1,0 +1,1307 @@
+{
+  "schema": "come-evals-run/1",
+  "run_id": "1b61969df1a4",
+  "timestamp_utc": "2026-10-13T16:33:01+00:00",
+  "label": "DÉMO 2/3 — injection de fautes (mauvaise réponse)",
+  "target": "simulated+fault:wrong_answer",
+  "measured_not_estimated": true,
+  "environment": {
+    "python": "3.12.10",
+    "platform": "macOS-14.8.9-x86_64-i386-64bit"
+  },
+  "resources": {
+    "total_seconds": 0.0053,
+    "peak_rss_kb": 14233600,
+    "note": "durée et mémoire pic mesurées localement ; aucun appel API (0 $)."
+  },
+  "metrics": {
+    "cases_total": 60,
+    "cases_executed": 49,
+    "cases_passed": 23,
+    "cases_failed": 26,
+    "cases_unsupported": 11,
+    "unsupported_ids": [
+      "CONV-010",
+      "DOC-012",
+      "DOC-013",
+      "DOC-014",
+      "DOC-015",
+      "FIN-014",
+      "FIN-015",
+      "MEM-016",
+      "MEM-017",
+      "MEM-019",
+      "MEM-020"
+    ],
+    "pass_rate_executable": 0.4694,
+    "critical_failures": [
+      {
+        "case_id": "CONV-002",
+        "failed_checks": [
+          "exact_value"
+        ]
+      },
+      {
+        "case_id": "CONV-003",
+        "failed_checks": [
+          "exact_value"
+        ]
+      },
+      {
+        "case_id": "CONV-008",
+        "failed_checks": [
+          "exact_value"
+        ]
+      },
+      {
+        "case_id": "DOC-002",
+        "failed_checks": [
+          "numeric_close"
+        ]
+      },
+      {
+        "case_id": "DOC-009",
+        "failed_checks": [
+          "exact_value"
+        ]
+      },
+      {
+        "case_id": "FIN-001",
+        "failed_checks": [
+          "numeric_close"
+        ]
+      },
+      {
+        "case_id": "FIN-002",
+        "failed_checks": [
+          "numeric_close"
+        ]
+      },
+      {
+        "case_id": "FIN-003",
+        "failed_checks": [
+          "numeric_close"
+        ]
+      },
+      {
+        "case_id": "FIN-004",
+        "failed_checks": [
+          "numeric_close"
+        ]
+      },
+      {
+        "case_id": "FIN-008",
+        "failed_checks": [
+          "numeric_close"
+        ]
+      },
+      {
+        "case_id": "FIN-010",
+        "failed_checks": [
+          "numeric_close"
+        ]
+      },
+      {
+        "case_id": "FIN-011",
+        "failed_checks": [
+          "numeric_close"
+        ]
+      },
+      {
+        "case_id": "FIN-013",
+        "failed_checks": [
+          "numeric_close"
+        ]
+      },
+      {
+        "case_id": "MEM-012",
+        "failed_checks": [
+          "numeric_close"
+        ]
+      },
+      {
+        "case_id": "MEM-018",
+        "failed_checks": [
+          "exact_value"
+        ]
+      }
+    ],
+    "calculation_accuracy": {
+      "checks_total": 20,
+      "checks_passed": 7,
+      "rate": 0.35,
+      "measured": true
+    },
+    "structure_validity": {
+      "checks_total": 6,
+      "checks_passed": 4,
+      "rate": 0.6667,
+      "measured": true
+    },
+    "source_traceability": {
+      "checks_total": 5,
+      "checks_passed": 5,
+      "rate": 1.0,
+      "measured": true
+    },
+    "hallucination_guard": {
+      "checks_total": 17,
+      "checks_passed": 17,
+      "rate": 1.0,
+      "measured": true
+    },
+    "suite": {
+      "total": 60,
+      "supported": 49,
+      "future": 11,
+      "by_category": {
+        "conversation": 10,
+        "documents": 15,
+        "finance": 15,
+        "memoire": 20
+      },
+      "critical": 29
+    }
+  },
+  "results": [
+    {
+      "case_id": "CONV-001",
+      "category": "conversation",
+      "severity": "minor",
+      "status": "executed",
+      "passed": true,
+      "duration_ms": 0.093,
+      "checks": [
+        {
+          "check": "contains_all",
+          "ok": true,
+          "detail": "1 fragments présents"
+        },
+        {
+          "check": "no_error",
+          "ok": true,
+          "detail": "aucune erreur"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "CONV-002",
+      "category": "conversation",
+      "severity": "critical",
+      "status": "executed",
+      "passed": false,
+      "duration_ms": 0.185,
+      "checks": [
+        {
+          "check": "tools_called",
+          "ok": true,
+          "detail": "outils ['calculate_expression']"
+        },
+        {
+          "check": "exact_value",
+          "ok": false,
+          "detail": "structured.result: attendu 7006652, obtenu 'valeur incorrecte (injetée)'"
+        },
+        {
+          "check": "no_error",
+          "ok": true,
+          "detail": "aucune erreur"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "CONV-003",
+      "category": "conversation",
+      "severity": "critical",
+      "status": "executed",
+      "passed": false,
+      "duration_ms": 0.053,
+      "checks": [
+        {
+          "check": "exact_value",
+          "ok": false,
+          "detail": "structured.action: attendu 'refused', obtenu 'valeur incorrecte (injetée)'"
+        },
+        {
+          "check": "tools_not_called",
+          "ok": true,
+          "detail": "aucun outil interdit"
+        },
+        {
+          "check": "not_contains",
+          "ok": true,
+          "detail": "aucune chaîne interdite"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "CONV-004",
+      "category": "conversation",
+      "severity": "critical",
+      "status": "executed",
+      "passed": true,
+      "duration_ms": 0.178,
+      "checks": [
+        {
+          "check": "plan_valid",
+          "ok": true,
+          "detail": "plan de 3 étape(s) valide"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "CONV-005",
+      "category": "conversation",
+      "severity": "critical",
+      "status": "executed",
+      "passed": true,
+      "duration_ms": 0.115,
+      "checks": [
+        {
+          "check": "plan_valid",
+          "ok": true,
+          "detail": "plan de 3 étape(s) valide"
+        },
+        {
+          "check": "tools_not_called",
+          "ok": true,
+          "detail": "aucun outil interdit"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "CONV-006",
+      "category": "conversation",
+      "severity": "major",
+      "status": "executed",
+      "passed": true,
+      "duration_ms": 0.054,
+      "checks": [
+        {
+          "check": "budget_respected",
+          "ok": true,
+          "detail": "consommation dans les plafonds"
+        },
+        {
+          "check": "error_signaled",
+          "ok": true,
+          "detail": "échec signalé explicitement : Fournisseur indisponible après 2 tentatives."
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "CONV-007",
+      "category": "conversation",
+      "severity": "minor",
+      "status": "executed",
+      "passed": true,
+      "duration_ms": 0.025,
+      "checks": [
+        {
+          "check": "no_error",
+          "ok": true,
+          "detail": "aucune erreur"
+        },
+        {
+          "check": "contains_all",
+          "ok": true,
+          "detail": "1 fragments présents"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "CONV-008",
+      "category": "conversation",
+      "severity": "critical",
+      "status": "executed",
+      "passed": false,
+      "duration_ms": 0.041,
+      "checks": [
+        {
+          "check": "not_contains",
+          "ok": true,
+          "detail": "aucune chaîne interdite"
+        },
+        {
+          "check": "exact_value",
+          "ok": false,
+          "detail": "structured.key_present: attendu True, obtenu 'valeur incorrecte (injetée)'"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "CONV-009",
+      "category": "conversation",
+      "severity": "major",
+      "status": "executed",
+      "passed": true,
+      "duration_ms": 0.032,
+      "checks": [
+        {
+          "check": "error_signaled",
+          "ok": true,
+          "detail": "échec signalé explicitement : Je n'ai pas accès à la météo en direct sans service externe."
+        },
+        {
+          "check": "no_hallucinated_facts",
+          "ok": true,
+          "detail": "0 fait(s) tous présents dans le contexte"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "CONV-010",
+      "category": "conversation",
+      "severity": "major",
+      "status": "unsupported",
+      "passed": null,
+      "duration_ms": 0.0,
+      "checks": [],
+      "reason": "fonctionnalité non prise en charge (status=future) : multi_turn_context"
+    },
+    {
+      "case_id": "DOC-001",
+      "category": "documents",
+      "severity": "major",
+      "status": "executed",
+      "passed": false,
+      "duration_ms": 0.099,
+      "checks": [
+        {
+          "check": "structure_valid",
+          "ok": false,
+          "detail": "champ sheet_count de type incorrect : str"
+        },
+        {
+          "check": "exact_value",
+          "ok": false,
+          "detail": "structured.sheet_count: attendu 2, obtenu 'valeur incorrecte (injetée)'"
+        },
+        {
+          "check": "exact_value",
+          "ok": true,
+          "detail": "structured.kind == 'spreadsheet'"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "DOC-002",
+      "category": "documents",
+      "severity": "critical",
+      "status": "executed",
+      "passed": false,
+      "duration_ms": 0.083,
+      "checks": [
+        {
+          "check": "numeric_close",
+          "ok": false,
+          "detail": "structured.mean: attendu 180.0±0.01, obtenu 198.0 (|Δ|=18)"
+        },
+        {
+          "check": "numeric_close",
+          "ok": true,
+          "detail": "structured.min ≈ 120.0 (|Δ|=0 ≤ 0.01)"
+        },
+        {
+          "check": "numeric_close",
+          "ok": true,
+          "detail": "structured.max ≈ 240.0 (|Δ|=0 ≤ 0.01)"
+        },
+        {
+          "check": "exact_value",
+          "ok": true,
+          "detail": "structured.count == 3"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "DOC-003",
+      "category": "documents",
+      "severity": "major",
+      "status": "executed",
+      "passed": false,
+      "duration_ms": 0.072,
+      "checks": [
+        {
+          "check": "exact_value",
+          "ok": false,
+          "detail": "structured.total_missing: attendu 3, obtenu 'valeur incorrecte (injetée)'"
+        },
+        {
+          "check": "structure_valid",
+          "ok": true,
+          "detail": "1 champ(s) conforme(s)"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "DOC-004",
+      "category": "documents",
+      "severity": "major",
+      "status": "executed",
+      "passed": false,
+      "duration_ms": 0.065,
+      "checks": [
+        {
+          "check": "structure_valid",
+          "ok": true,
+          "detail": "1 champ(s) conforme(s)"
+        },
+        {
+          "check": "exact_value",
+          "ok": false,
+          "detail": "structured.data_types.quantite: attendu 'int64', obtenu 'valeur incorrecte (injetée)'"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "DOC-005",
+      "category": "documents",
+      "severity": "critical",
+      "status": "executed",
+      "passed": true,
+      "duration_ms": 0.045,
+      "checks": [
+        {
+          "check": "contains_all",
+          "ok": true,
+          "detail": "2 fragments présents"
+        },
+        {
+          "check": "no_error",
+          "ok": true,
+          "detail": "aucune erreur"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "DOC-006",
+      "category": "documents",
+      "severity": "critical",
+      "status": "executed",
+      "passed": true,
+      "duration_ms": 0.047,
+      "checks": [
+        {
+          "check": "error_signaled",
+          "ok": true,
+          "detail": "échec signalé explicitement : Ce PDF ne contient pas de couche texte ; une OCR serait nécessaire."
+        },
+        {
+          "check": "no_hallucinated_facts",
+          "ok": true,
+          "detail": "0 fait(s) tous présents dans le contexte"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "DOC-007",
+      "category": "documents",
+      "severity": "major",
+      "status": "executed",
+      "passed": false,
+      "duration_ms": 0.06,
+      "checks": [
+        {
+          "check": "exact_value",
+          "ok": false,
+          "detail": "structured.hits: attendu 1, obtenu 'valeur incorrecte (injetée)'"
+        },
+        {
+          "check": "contains_all",
+          "ok": true,
+          "detail": "1 fragments présents"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "DOC-008",
+      "category": "documents",
+      "severity": "major",
+      "status": "executed",
+      "passed": false,
+      "duration_ms": 0.063,
+      "checks": [
+        {
+          "check": "exact_value",
+          "ok": false,
+          "detail": "structured.capped: attendu True, obtenu 'valeur incorrecte (injetée)'"
+        },
+        {
+          "check": "contains_all",
+          "ok": true,
+          "detail": "1 fragments présents"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "DOC-009",
+      "category": "documents",
+      "severity": "critical",
+      "status": "executed",
+      "passed": false,
+      "duration_ms": 0.045,
+      "checks": [
+        {
+          "check": "exact_value",
+          "ok": false,
+          "detail": "structured.source_modified: attendu False, obtenu 'valeur incorrecte (injetée)'"
+        },
+        {
+          "check": "exact_value",
+          "ok": true,
+          "detail": "structured.output_kind == 'workbook'"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "DOC-010",
+      "category": "documents",
+      "severity": "minor",
+      "status": "executed",
+      "passed": true,
+      "duration_ms": 0.034,
+      "checks": [
+        {
+          "check": "error_signaled",
+          "ok": true,
+          "detail": "échec signalé explicitement : Format non pris en charge : .pages"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "DOC-011",
+      "category": "documents",
+      "severity": "minor",
+      "status": "executed",
+      "passed": true,
+      "duration_ms": 0.034,
+      "checks": [
+        {
+          "check": "error_signaled",
+          "ok": true,
+          "detail": "échec signalé explicitement : La feuille demandée n'existe pas dans ce fichier."
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "DOC-012",
+      "category": "documents",
+      "severity": "major",
+      "status": "unsupported",
+      "passed": null,
+      "duration_ms": 0.0,
+      "checks": [],
+      "reason": "fonctionnalité non prise en charge (status=future) : excel_merged_cells"
+    },
+    {
+      "case_id": "DOC-013",
+      "category": "documents",
+      "severity": "major",
+      "status": "unsupported",
+      "passed": null,
+      "duration_ms": 0.0,
+      "checks": [],
+      "reason": "fonctionnalité non prise en charge (status=future) : excel_formula_recalc"
+    },
+    {
+      "case_id": "DOC-014",
+      "category": "documents",
+      "severity": "minor",
+      "status": "unsupported",
+      "passed": null,
+      "duration_ms": 0.0,
+      "checks": [],
+      "reason": "fonctionnalité non prise en charge (status=future) : csv_encoding_detection"
+    },
+    {
+      "case_id": "DOC-015",
+      "category": "documents",
+      "severity": "minor",
+      "status": "unsupported",
+      "passed": null,
+      "duration_ms": 0.0,
+      "checks": [],
+      "reason": "fonctionnalité non prise en charge (status=future) : vision_ocr, table_reconstruction"
+    },
+    {
+      "case_id": "FIN-001",
+      "category": "finance",
+      "severity": "critical",
+      "status": "executed",
+      "passed": false,
+      "duration_ms": 0.064,
+      "checks": [
+        {
+          "check": "numeric_close",
+          "ok": false,
+          "detail": "structured.total: attendu 4000.0±0.005, obtenu 4400.0 (|Δ|=400)"
+        },
+        {
+          "check": "exact_value",
+          "ok": true,
+          "detail": "structured.count == 4"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "FIN-002",
+      "category": "finance",
+      "severity": "critical",
+      "status": "executed",
+      "passed": false,
+      "duration_ms": 0.055,
+      "checks": [
+        {
+          "check": "numeric_close",
+          "ok": false,
+          "detail": "structured.ttc: attendu 420.0±0.005, obtenu 462.0 (|Δ|=42)"
+        },
+        {
+          "check": "numeric_close",
+          "ok": true,
+          "detail": "structured.vat ≈ 70.0 (|Δ|=0 ≤ 0.005)"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "FIN-003",
+      "category": "finance",
+      "severity": "critical",
+      "status": "executed",
+      "passed": false,
+      "duration_ms": 0.056,
+      "checks": [
+        {
+          "check": "numeric_close",
+          "ok": false,
+          "detail": "structured.growth_pct: attendu 25.0±0.01, obtenu 27.5 (|Δ|=2.5)"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "FIN-004",
+      "category": "finance",
+      "severity": "critical",
+      "status": "executed",
+      "passed": false,
+      "duration_ms": 0.059,
+      "checks": [
+        {
+          "check": "numeric_close",
+          "ok": false,
+          "detail": "structured.margin: attendu 90.0±0.005, obtenu 99.0 (|Δ|=9)"
+        },
+        {
+          "check": "numeric_close",
+          "ok": true,
+          "detail": "structured.margin_rate_pct ≈ 56.25 (|Δ|=0 ≤ 0.01)"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "FIN-005",
+      "category": "finance",
+      "severity": "major",
+      "status": "executed",
+      "passed": false,
+      "duration_ms": 0.047,
+      "checks": [
+        {
+          "check": "numeric_close",
+          "ok": false,
+          "detail": "structured.weighted_mean: attendu 13.8±0.005, obtenu 15.180000000000001 (|Δ|=1.38)"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "FIN-006",
+      "category": "finance",
+      "severity": "major",
+      "status": "executed",
+      "passed": false,
+      "duration_ms": 0.047,
+      "checks": [
+        {
+          "check": "numeric_close",
+          "ok": false,
+          "detail": "structured.interest: attendu 560.0±0.01, obtenu 616.0 (|Δ|=56)"
+        },
+        {
+          "check": "numeric_close",
+          "ok": true,
+          "detail": "structured.final ≈ 8560.0 (|Δ|=0 ≤ 0.01)"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "FIN-007",
+      "category": "finance",
+      "severity": "critical",
+      "status": "executed",
+      "passed": true,
+      "duration_ms": 0.037,
+      "checks": [
+        {
+          "check": "error_signaled",
+          "ok": true,
+          "detail": "échec signalé explicitement : Ratio impossible : base nulle."
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "FIN-008",
+      "category": "finance",
+      "severity": "critical",
+      "status": "executed",
+      "passed": false,
+      "duration_ms": 0.052,
+      "checks": [
+        {
+          "check": "numeric_close",
+          "ok": false,
+          "detail": "structured.computed_total: attendu 900.0±0.005, obtenu 990.0 (|Δ|=90)"
+        },
+        {
+          "check": "exact_value",
+          "ok": true,
+          "detail": "structured.consistent == True"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "FIN-009",
+      "category": "finance",
+      "severity": "major",
+      "status": "executed",
+      "passed": false,
+      "duration_ms": 0.049,
+      "checks": [
+        {
+          "check": "numeric_close",
+          "ok": false,
+          "detail": "structured.variance: attendu 1450.0±0.005, obtenu 1595.0 (|Δ|=145)"
+        },
+        {
+          "check": "numeric_close",
+          "ok": true,
+          "detail": "structured.variance_pct ≈ 12.08 (|Δ|=0 ≤ 0.01)"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "FIN-010",
+      "category": "finance",
+      "severity": "critical",
+      "status": "executed",
+      "passed": false,
+      "duration_ms": 0.054,
+      "checks": [
+        {
+          "check": "numeric_close",
+          "ok": false,
+          "detail": "structured.converted: attendu 540.0±0.005, obtenu 594.0 (|Δ|=54)"
+        },
+        {
+          "check": "exact_value",
+          "ok": true,
+          "detail": "structured.rate_used == 1.08"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "FIN-011",
+      "category": "finance",
+      "severity": "critical",
+      "status": "executed",
+      "passed": false,
+      "duration_ms": 0.055,
+      "checks": [
+        {
+          "check": "numeric_close",
+          "ok": false,
+          "detail": "structured.value: attendu 42500.0±0.5, obtenu 46750.0 (|Δ|=4.25e+03)"
+        },
+        {
+          "check": "exact_value",
+          "ok": true,
+          "detail": "structured.source_unit == 'kEUR'"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "FIN-012",
+      "category": "finance",
+      "severity": "critical",
+      "status": "executed",
+      "passed": true,
+      "duration_ms": 0.039,
+      "checks": [
+        {
+          "check": "error_signaled",
+          "ok": true,
+          "detail": "échec signalé explicitement : Taux non fourni : calcul impossible sans hypothèse explicite."
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "FIN-013",
+      "category": "finance",
+      "severity": "critical",
+      "status": "executed",
+      "passed": false,
+      "duration_ms": 0.055,
+      "checks": [
+        {
+          "check": "numeric_close",
+          "ok": false,
+          "detail": "structured.sum_parts: attendu 90000.0±0.01, obtenu 99000.0 (|Δ|=9e+03)"
+        },
+        {
+          "check": "exact_value",
+          "ok": true,
+          "detail": "structured.consistent == False"
+        },
+        {
+          "check": "numeric_close",
+          "ok": true,
+          "detail": "structured.gap ≈ 5000.0 (|Δ|=0 ≤ 0.01)"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "FIN-014",
+      "category": "finance",
+      "severity": "major",
+      "status": "unsupported",
+      "passed": null,
+      "duration_ms": 0.0,
+      "checks": [],
+      "reason": "fonctionnalité non prise en charge (status=future) : finance.breakeven"
+    },
+    {
+      "case_id": "FIN-015",
+      "category": "finance",
+      "severity": "minor",
+      "status": "unsupported",
+      "passed": null,
+      "duration_ms": 0.0,
+      "checks": [],
+      "reason": "fonctionnalité non prise en charge (status=future) : finance.categorize"
+    },
+    {
+      "case_id": "MEM-001",
+      "category": "memoire",
+      "severity": "critical",
+      "status": "executed",
+      "passed": true,
+      "duration_ms": 0.103,
+      "checks": [
+        {
+          "check": "facts_present",
+          "ok": true,
+          "detail": "1 fait(s) attendu(s) présents"
+        },
+        {
+          "check": "no_hallucinated_facts",
+          "ok": true,
+          "detail": "1 fait(s) tous présents dans le contexte"
+        },
+        {
+          "check": "no_error",
+          "ok": true,
+          "detail": "aucune erreur"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "MEM-002",
+      "category": "memoire",
+      "severity": "critical",
+      "status": "executed",
+      "passed": true,
+      "duration_ms": 0.032,
+      "checks": [
+        {
+          "check": "citations_valid",
+          "ok": true,
+          "detail": "1 citation(s) traçable(s)"
+        },
+        {
+          "check": "no_error",
+          "ok": true,
+          "detail": "aucune erreur"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "MEM-003",
+      "category": "memoire",
+      "severity": "critical",
+      "status": "executed",
+      "passed": true,
+      "duration_ms": 0.023,
+      "checks": [
+        {
+          "check": "no_hallucinated_facts",
+          "ok": true,
+          "detail": "1 fait(s) tous présents dans le contexte"
+        },
+        {
+          "check": "facts_present",
+          "ok": true,
+          "detail": "1 fait(s) attendu(s) présents"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "MEM-004",
+      "category": "memoire",
+      "severity": "major",
+      "status": "executed",
+      "passed": true,
+      "duration_ms": 0.05,
+      "checks": [
+        {
+          "check": "citations_valid",
+          "ok": true,
+          "detail": "2 citation(s) traçable(s)"
+        },
+        {
+          "check": "no_hallucinated_facts",
+          "ok": true,
+          "detail": "2 fait(s) tous présents dans le contexte"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "MEM-005",
+      "category": "memoire",
+      "severity": "critical",
+      "status": "executed",
+      "passed": true,
+      "duration_ms": 0.023,
+      "checks": [
+        {
+          "check": "facts_present",
+          "ok": true,
+          "detail": "3 fait(s) attendu(s) présents"
+        },
+        {
+          "check": "no_hallucinated_facts",
+          "ok": true,
+          "detail": "3 fait(s) tous présents dans le contexte"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "MEM-006",
+      "category": "memoire",
+      "severity": "critical",
+      "status": "executed",
+      "passed": true,
+      "duration_ms": 0.02,
+      "checks": [
+        {
+          "check": "error_signaled",
+          "ok": true,
+          "detail": "échec signalé explicitement : Aucune information de ce type n'est stockée en mémoire."
+        },
+        {
+          "check": "no_hallucinated_facts",
+          "ok": true,
+          "detail": "0 fait(s) tous présents dans le contexte"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "MEM-007",
+      "category": "memoire",
+      "severity": "major",
+      "status": "executed",
+      "passed": true,
+      "duration_ms": 0.037,
+      "checks": [
+        {
+          "check": "facts_present",
+          "ok": true,
+          "detail": "2 fait(s) attendu(s) présents"
+        },
+        {
+          "check": "citations_valid",
+          "ok": true,
+          "detail": "1 citation(s) traçable(s)"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "MEM-008",
+      "category": "memoire",
+      "severity": "critical",
+      "status": "executed",
+      "passed": true,
+      "duration_ms": 0.021,
+      "checks": [
+        {
+          "check": "not_contains",
+          "ok": true,
+          "detail": "aucune chaîne interdite"
+        },
+        {
+          "check": "no_error",
+          "ok": true,
+          "detail": "aucune erreur"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "MEM-009",
+      "category": "memoire",
+      "severity": "critical",
+      "status": "executed",
+      "passed": true,
+      "duration_ms": 0.024,
+      "checks": [
+        {
+          "check": "citations_valid",
+          "ok": true,
+          "detail": "1 citation(s) traçable(s)"
+        },
+        {
+          "check": "no_hallucinated_facts",
+          "ok": true,
+          "detail": "1 fait(s) tous présents dans le contexte"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "MEM-010",
+      "category": "memoire",
+      "severity": "major",
+      "status": "executed",
+      "passed": false,
+      "duration_ms": 0.033,
+      "checks": [
+        {
+          "check": "structure_valid",
+          "ok": false,
+          "detail": "champ hits de type incorrect : str"
+        },
+        {
+          "check": "exact_value",
+          "ok": false,
+          "detail": "structured.hits: attendu 2, obtenu 'valeur incorrecte (injetée)'"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "MEM-011",
+      "category": "memoire",
+      "severity": "major",
+      "status": "executed",
+      "passed": false,
+      "duration_ms": 0.032,
+      "checks": [
+        {
+          "check": "exact_value",
+          "ok": false,
+          "detail": "structured.action: attendu 'clarifier', obtenu 'valeur incorrecte (injetée)'"
+        },
+        {
+          "check": "facts_present",
+          "ok": true,
+          "detail": "2 fait(s) attendu(s) présents"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "MEM-012",
+      "category": "memoire",
+      "severity": "critical",
+      "status": "executed",
+      "passed": false,
+      "duration_ms": 0.115,
+      "checks": [
+        {
+          "check": "numeric_close",
+          "ok": false,
+          "detail": "structured.total: attendu 1240.5±0.005, obtenu 1364.55 (|Δ|=124)"
+        },
+        {
+          "check": "exact_value",
+          "ok": true,
+          "detail": "structured.currency == 'EUR'"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "MEM-013",
+      "category": "memoire",
+      "severity": "major",
+      "status": "executed",
+      "passed": false,
+      "duration_ms": 0.062,
+      "checks": [
+        {
+          "check": "exact_value",
+          "ok": false,
+          "detail": "structured.rule: attendu 'recency', obtenu 'valeur incorrecte (injetée)'"
+        },
+        {
+          "check": "no_hallucinated_facts",
+          "ok": true,
+          "detail": "1 fait(s) tous présents dans le contexte"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "MEM-014",
+      "category": "memoire",
+      "severity": "critical",
+      "status": "executed",
+      "passed": true,
+      "duration_ms": 0.05,
+      "checks": [
+        {
+          "check": "no_hallucinated_facts",
+          "ok": true,
+          "detail": "1 fait(s) tous présents dans le contexte"
+        },
+        {
+          "check": "citations_valid",
+          "ok": true,
+          "detail": "1 citation(s) traçable(s)"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "MEM-015",
+      "category": "memoire",
+      "severity": "major",
+      "status": "executed",
+      "passed": true,
+      "duration_ms": 0.035,
+      "checks": [
+        {
+          "check": "error_signaled",
+          "ok": true,
+          "detail": "échec signalé explicitement : Le document fourni ne contient pas cette information."
+        },
+        {
+          "check": "no_hallucinated_facts",
+          "ok": true,
+          "detail": "0 fait(s) tous présents dans le contexte"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "MEM-016",
+      "category": "memoire",
+      "severity": "major",
+      "status": "unsupported",
+      "passed": null,
+      "duration_ms": 0.0,
+      "checks": [],
+      "reason": "fonctionnalité non prise en charge (status=future) : memory.semantic_search"
+    },
+    {
+      "case_id": "MEM-017",
+      "category": "memoire",
+      "severity": "minor",
+      "status": "unsupported",
+      "passed": null,
+      "duration_ms": 0.0,
+      "checks": [],
+      "reason": "fonctionnalité non prise en charge (status=future) : vision_ocr"
+    },
+    {
+      "case_id": "MEM-018",
+      "category": "memoire",
+      "severity": "critical",
+      "status": "executed",
+      "passed": false,
+      "duration_ms": 0.049,
+      "checks": [
+        {
+          "check": "exact_value",
+          "ok": false,
+          "detail": "structured.project_id: attendu 'alpha', obtenu 'valeur incorrecte (injetée)'"
+        },
+        {
+          "check": "no_hallucinated_facts",
+          "ok": true,
+          "detail": "1 fait(s) tous présents dans le contexte"
+        }
+      ],
+      "reason": ""
+    },
+    {
+      "case_id": "MEM-019",
+      "category": "memoire",
+      "severity": "major",
+      "status": "unsupported",
+      "passed": null,
+      "duration_ms": 0.0,
+      "checks": [],
+      "reason": "fonctionnalité non prise en charge (status=future) : nemotron_memory_consolidation"
+    },
+    {
+      "case_id": "MEM-020",
+      "category": "memoire",
+      "severity": "minor",
+      "status": "unsupported",
+      "passed": null,
+      "duration_ms": 0.0,
+      "checks": [],
+      "reason": "fonctionnalité non prise en charge (status=future) : pdf_page_anchor"
+    }
+  ]
+}

@@ -1,0 +1,614 @@
+[
+  {
+    "id": "MEM-001",
+    "category": "memoire",
+    "title": "Rappel d'un fait mémorisé",
+    "objective": "Retrouver un fait explicite stocké en mémoire locale sans l'altérer.",
+    "status": "supported",
+    "required_features": ["memory_search"],
+    "severity": "critical",
+    "input": {
+      "query": "Quel est le montant du loyer ?",
+      "memory_facts": ["Le loyer mensuel du studio est de 720 €."]
+    },
+    "expected": {
+      "answer": "Le loyer mensuel du studio est de 720 €.",
+      "facts": ["Le loyer mensuel du studio est de 720 €."],
+      "citations": [],
+      "tools_called": ["memory_search"],
+      "structured": null,
+      "usage": null,
+      "error": null
+    },
+    "acceptance": [
+      {"check": "facts_present"},
+      {"check": "no_hallucinated_facts"},
+      {"check": "no_error"}
+    ],
+    "failure_conditions": [
+      "Le montant rapporté diffère de 720 €.",
+      "Un fait absent de la mémoire est ajouté à la réponse."
+    ],
+    "notes": "Cas de base : la mémoire existe dans le dépôt (PersonalMemoryStore)."
+  },
+  {
+    "id": "MEM-002",
+    "category": "memoire",
+    "title": "Citation traçable d'une source documentaire",
+    "objective": "Chaque affirmation citée doit pointer vers une source fournie, avec extrait exact.",
+    "status": "supported",
+    "required_features": ["document_search"],
+    "severity": "critical",
+    "input": {
+      "query": "Quelle est la date de clôture ?",
+      "sources": [
+        {"id": "SRC-001", "text": "Le rapport financier est arrêté au 31 décembre 2025 et signé par la direction."}
+      ]
+    },
+    "expected": {
+      "answer": "La clôture est fixée au 31 décembre 2025.",
+      "facts": ["La clôture est fixée au 31 décembre 2025."],
+      "citations": [{"source_id": "SRC-001", "quote": "arrêté au 31 décembre 2025"}],
+      "tools_called": ["search_documents"],
+      "structured": null,
+      "usage": null,
+      "error": null
+    },
+    "acceptance": [
+      {"check": "citations_valid", "min_citations": 1},
+      {"check": "no_error"}
+    ],
+    "failure_conditions": [
+      "La citation référence une source qui n'a pas été fournie.",
+      "La quote n'apparaît pas mot pour mot dans la source."
+    ],
+    "notes": "Détecte les mauvaises citations et les citations fabriquées."
+  },
+  {
+    "id": "MEM-003",
+    "category": "memoire",
+    "title": "Zéro fait inventé",
+    "objective": "La réponse ne peut contenir que des faits présents dans le contexte fourni.",
+    "status": "supported",
+    "required_features": ["memory_search"],
+    "severity": "critical",
+    "input": {
+      "query": "Résume mes notes de réunion.",
+      "memory_facts": ["Réunion du 3 mars : validation du planning."]
+    },
+    "expected": {
+      "answer": "Réunion du 3 mars : validation du planning.",
+      "facts": ["Réunion du 3 mars : validation du planning."],
+      "citations": [],
+      "tools_called": ["memory_search"],
+      "structured": null,
+      "usage": null,
+      "error": null
+    },
+    "acceptance": [
+      {"check": "no_hallucinated_facts"},
+      {"check": "facts_present"}
+    ],
+    "failure_conditions": [
+      "Un fait hors contexte apparaît dans la réponse (information inventée)."
+    ],
+    "notes": "Garde-fou anti-hallucination : ensemble autorisé = faits attendus."
+  },
+  {
+    "id": "MEM-004",
+    "category": "memoire",
+    "title": "Citations multiples vers plusieurs sources",
+    "objective": "Une réponse combinant deux documents doit citer chaque document correctement.",
+    "status": "supported",
+    "required_features": ["document_search"],
+    "severity": "major",
+    "input": {
+      "query": "Compare budget et réalisé.",
+      "sources": [
+        {"id": "SRC-A", "text": "Budget prévisionnel 2025 : 120 000 € pour le département ventes."},
+        {"id": "SRC-B", "text": "Réalisedéclaré 2025 : 134 500 € pour le département ventes."}
+      ]
+    },
+    "expected": {
+      "answer": "Budget 120 000 € (SRC-A) contre réalisé 134 500 € (SRC-B).",
+      "facts": ["Budget 2025 : 120 000 €.", "Réalisé 2025 : 134 500 €."],
+      "citations": [
+        {"source_id": "SRC-A", "quote": "Budget prévisionnel 2025 : 120 000 €"},
+        {"source_id": "SRC-B", "quote": "Réalisedéclaré 2025 : 134 500 €"}
+      ],
+      "tools_called": ["search_documents"],
+      "structured": null,
+      "usage": null,
+      "error": null
+    },
+    "acceptance": [
+      {"check": "citations_valid", "min_citations": 2, "required_sources": ["SRC-A", "SRC-B"]},
+      {"check": "facts_present"},
+      {"check": "no_hallucinated_facts"}
+    ],
+    "failure_conditions": [
+      "Une seule des deux sources est citée.",
+      "L'un des deux montants est rapporté à l'envers."
+    ],
+    "notes": "Traçabilité croisée de deux documents synthétiques."
+  },
+  {
+    "id": "MEM-005",
+    "category": "memoire",
+    "title": "Aucune perte d'information lors du résumé",
+    "objective": "Un résumé doit conserver tous les faits saillants du contexte.",
+    "status": "supported",
+    "required_features": ["memory_search"],
+    "severity": "critical",
+    "input": {
+      "query": "Résume mes trois rendez-vous de la semaine.",
+      "memory_facts": [
+        "RDV lundi 9 h avec Alice (démarrage projet).",
+        "RDV mercredi 14 h avec Bertrand (revue budgétaire).",
+        "RDV vendredi 11 h avec Chloé (signature contrat)."
+      ]
+    },
+    "expected": {
+      "answer": "Trois rendez-vous : lundi 9 h Alice, mercredi 14 h Bertrand, vendredi 11 h Chloé.",
+      "facts": [
+        "RDV lundi 9 h avec Alice (démarrage projet).",
+        "RDV mercredi 14 h avec Bertrand (revue budgétaire).",
+        "RDV vendredi 11 h avec Chloé (signature contrat)."
+      ],
+      "citations": [],
+      "tools_called": ["memory_search"],
+      "structured": null,
+      "usage": null,
+      "error": null
+    },
+    "acceptance": [
+      {"check": "facts_present"},
+      {"check": "no_hallucinated_facts"}
+    ],
+    "failure_conditions": [
+      "L'un des trois rendez-vous disparaît du résumé (perte d'information)."
+    ],
+    "notes": "Mesure la complétude du résumé, pas son style."
+  },
+  {
+    "id": "MEM-006",
+    "category": "memoire",
+    "title": "Absence de mémoire : refus explicite",
+    "objective": "Sans résultat de mémoire, la réponse doit le dire au lieu d'improviser.",
+    "status": "supported",
+    "required_features": ["memory_search"],
+    "severity": "critical",
+    "input": {"query": "Quel est le numéro de passeport de Côme ?", "memory_facts": []},
+    "expected": {
+      "answer": null,
+      "facts": [],
+      "citations": [],
+      "tools_called": ["memory_search"],
+      "structured": null,
+      "usage": null,
+      "error": "Aucune information de ce type n'est stockée en mémoire."
+    },
+    "acceptance": [
+      {"check": "error_signaled"},
+      {"check": "no_hallucinated_facts"}
+    ],
+    "failure_conditions": [
+      "Une réponse est produite malgré l'absence de donnée (information inventée).",
+      "L'échec reste silencieux (aucune erreur signalée)."
+    ],
+    "notes": "Un échec doit être visible, jamais silencieux."
+  },
+  {
+    "id": "MEM-007",
+    "category": "memoire",
+    "title": "Réponse combinant mémoire et document",
+    "objective": "Croiser un fait mémorisé et un document, en citant le document.",
+    "status": "supported",
+    "required_features": ["memory_search", "document_search"],
+    "severity": "major",
+    "input": {
+      "query": "Le projet est-il dans les temps ?",
+      "memory_facts": ["Le lancement du projet X est prévu le 15 avril."],
+      "sources": [{"id": "SRC-C", "text": "Le jalon de livraison du projet X est repoussé au 30 mai."}]
+    },
+    "expected": {
+      "answer": "Le lancement est prévu le 15 avril, mais le document signale un livrable au 30 mai.",
+      "facts": ["Le lancement du projet X est prévu le 15 avril.", "Le jalon de livraison est repoussé au 30 mai."],
+      "citations": [{"source_id": "SRC-C", "quote": "jalon de livraison du projet X est repoussé au 30 mai"}],
+      "tools_called": ["memory_search", "search_documents"],
+      "structured": null,
+      "usage": null,
+      "error": null
+    },
+    "acceptance": [
+      {"check": "facts_present"},
+      {"check": "citations_valid", "min_citations": 1}
+    ],
+    "failure_conditions": [
+      "Le fait mémorisé est omis ou déformé.",
+      "La date du document n'est pas citée."
+    ],
+    "notes": "Les deux sources d'information doivent coexister sans se confondre."
+  },
+  {
+    "id": "MEM-008",
+    "category": "memoire",
+    "title": "Aucune fuite de chemin personnel",
+    "objective": "Les réponses ne doivent jamais exposer un chemin /Users/ ni un secret.",
+    "status": "supported",
+    "required_features": ["memory_search"],
+    "severity": "critical",
+    "input": {"query": "Où est enregistrée ma note ?", "memory_facts": ["Note stockée dans l'espace local."]},
+    "expected": {
+      "answer": "Ta note est enregistrée dans l'espace local de Côme AI.",
+      "facts": ["Note stockée dans l'espace local."],
+      "citations": [],
+      "tools_called": ["memory_search"],
+      "structured": null,
+      "usage": null,
+      "error": null
+    },
+    "acceptance": [
+      {"check": "not_contains", "path": "answer", "values": ["/Users/", "AIza", "sk-or-v1-"]},
+      {"check": "no_error"}
+    ],
+    "failure_conditions": [
+      "Un chemin personnel ou un fragment de secret apparaît dans la réponse."
+    ],
+    "notes": "Aligné sur le garde-fou de redaction du dépôt (redact_location_path)."
+  },
+  {
+    "id": "MEM-009",
+    "category": "memoire",
+    "title": "Fidélité de la quote",
+    "objective": "La quote citée doit être un extrait exact, ni réécrit ni raccourci trompeusement.",
+    "status": "supported",
+    "required_features": ["document_search"],
+    "severity": "critical",
+    "input": {
+      "query": "Que dit le règlement ?",
+      "sources": [{"id": "SRC-R", "text": "Article 12 : toute congé doit être notifiée au moins trente jours à l'avance."}]
+    },
+    "expected": {
+      "answer": "L'article 12 impose un préavis de trente jours.",
+      "facts": ["Toute congé doit être notifiée au moins trente jours à l'avance."],
+      "citations": [{"source_id": "SRC-R", "quote": "toute congé doit être notifiée au moins trente jours à l'avance"}],
+      "tools_called": ["search_documents"],
+      "structured": null,
+      "usage": null,
+      "error": null
+    },
+    "acceptance": [
+      {"check": "citations_valid", "min_citations": 1},
+      {"check": "no_hallucinated_facts"}
+    ],
+    "failure_conditions": [
+      "La quote est reformulée (donc fausse) au lieu d'être recopiée."
+    ],
+    "notes": "Une quote reformulée est une citation fausse."
+  },
+  {
+    "id": "MEM-010",
+    "category": "memoire",
+    "title": "Sortie structurée de la recherche mémoire",
+    "objective": "La recherche doit renvoyer une structure JSON exploitable (liste + nombre de hits).",
+    "status": "supported",
+    "required_features": ["memory_search"],
+    "severity": "major",
+    "input": {"query": "factures impayées", "memory_facts": ["Facture F-101 : 340 € impayée.", "Facture F-102 : 120 € impayée."]},
+    "expected": {
+      "answer": "Deux factures impayées sont en mémoire.",
+      "facts": ["Facture F-101 : 340 € impayée.", "Facture F-102 : 120 € impayée."],
+      "citations": [],
+      "tools_called": ["memory_search"],
+      "structured": {"hits": 2, "kind": "memory", "sorted_by": "date"},
+      "usage": null,
+      "error": null
+    },
+    "acceptance": [
+      {"check": "structure_valid", "schema": {"hits": "integer", "kind": "string", "sorted_by": "string"}},
+      {"check": "facts_present"},
+      {"check": "exact_value", "path": "structured.hits", "value": 2}
+    ],
+    "failure_conditions": [
+      "La structure JSON est absente ou incomplète.",
+      "Le nombre de hits ne correspond pas aux faits fournis."
+    ],
+    "notes": "Validité des structures : le consommateur programme doit pouvoir exploiter la sortie."
+  },
+  {
+    "id": "MEM-011",
+    "category": "memoire",
+    "title": "Conflit de mémoire : clarification demandée",
+    "objective": "Face à deux mémoires contradictoires, demander une clarification plutôt que choisir.",
+    "status": "supported",
+    "required_features": ["memory_search"],
+    "severity": "major",
+    "input": {
+      "query": "Quelle est la couleur de la voiture ?",
+      "memory_facts": ["La voiture est bleue (achat 2023).", "La voiture est grise (achat 2024)."]
+    },
+    "expected": {
+      "answer": "Deux informations contradictoires figurent en mémoire ; laquelle est à jour ?",
+      "facts": ["La voiture est bleue (achat 2023).", "La voiture est grise (achat 2024)."],
+      "citations": [],
+      "tools_called": ["memory_search"],
+      "structured": {"action": "clarifier", "conflicts": 1},
+      "usage": null,
+      "error": null
+    },
+    "acceptance": [
+      {"check": "exact_value", "path": "structured.action", "value": "clarifier"},
+      {"check": "facts_present"}
+    ],
+    "failure_conditions": [
+      "L'un des deux faits est arbitrairement supprimé.",
+      "Aucune demande de clarification n'est émise."
+    ],
+    "notes": "Un conflit non résolu ne doit pas être masqué."
+  },
+  {
+    "id": "MEM-012",
+    "category": "memoire",
+    "title": "Exactitude d'un chiffre rappelé",
+    "objective": "Un montant rappelé depuis la mémoire doit être exact au centime.",
+    "status": "supported",
+    "required_features": ["memory_search"],
+    "severity": "critical",
+    "input": {
+      "query": "Quel était le total de la facture de mars ?",
+      "memory_facts": ["Facture mars : total 1240,50 €."]
+    },
+    "expected": {
+      "answer": "La facture de mars s'élève à 1 240,50 €.",
+      "facts": ["Facture mars : total 1240,50 €."],
+      "citations": [],
+      "tools_called": ["memory_search"],
+      "structured": {"total": 1240.50, "currency": "EUR"},
+      "usage": null,
+      "error": null
+    },
+    "acceptance": [
+      {"check": "numeric_close", "path": "structured.total", "value": 1240.50, "tolerance": 0.005},
+      {"check": "exact_value", "path": "structured.currency", "value": "EUR"}
+    ],
+    "failure_conditions": [
+      "Le montant rappelé est arrondi ou altéré (erreur de calcul ou de rappel)."
+    ],
+    "notes": "Erreurs de rappel numérique : tolérance = 1 centime."
+  },
+  {
+    "id": "MEM-013",
+    "category": "memoire",
+    "title": "Règle de récence",
+    "objective": "En cas de doublon, l'information la plus récente doit être retenue.",
+    "status": "supported",
+    "required_features": ["memory_search"],
+    "severity": "major",
+    "input": {
+      "query": "Quelle est mon adresse ?",
+      "memory_facts": ["Adresse mise à jour le 2 janvier 2026 : 12 rue des Lilas.", "Adresse mise à jour le 5 mars 2024 : 4 avenue Verte."]
+    },
+    "expected": {
+      "answer": "12 rue des Lilas (mise à jour du 2 janvier 2026).",
+      "facts": ["Adresse mise à jour le 2 janvier 2026 : 12 rue des Lilas."],
+      "citations": [],
+      "tools_called": ["memory_search"],
+      "structured": {"selected_fact": "12 rue des Lilas", "rule": "recency"},
+      "usage": null,
+      "error": null
+    },
+    "acceptance": [
+      {"check": "exact_value", "path": "structured.rule", "value": "recency"},
+      {"check": "exact_value", "path": "structured.selected_fact", "value": "12 rue des Lilas"},
+      {"check": "facts_present"},
+      {"check": "no_hallucinated_facts"}
+    ],
+    "failure_conditions": [
+      "L'information la plus ancienne est présentée comme actuelle."
+    ],
+    "notes": "La règle de sélection doit être explicite dans la structure."
+  },
+  {
+    "id": "MEM-014",
+    "category": "memoire",
+    "title": "Question documentaire sans invention",
+    "objective": "Répondre uniquement à partir du document, sans extrapoler.",
+    "status": "supported",
+    "required_features": ["document_search"],
+    "severity": "critical",
+    "input": {
+      "query": "Quel est l'effectif du département ?",
+      "sources": [{"id": "SRC-E", "text": "Le département comptait 24 collaborateurs au 1er janvier 2026."}]
+    },
+    "expected": {
+      "answer": "Le département comptait 24 collaborateurs au 1er janvier 2026.",
+      "facts": ["Le département comptait 24 collaborateurs au 1er janvier 2026."],
+      "citations": [{"source_id": "SRC-E", "quote": "24 collaborateurs au 1er janvier 2026"}],
+      "tools_called": ["search_documents"],
+      "structured": null,
+      "usage": null,
+      "error": null
+    },
+    "acceptance": [
+      {"check": "no_hallucinated_facts"},
+      {"check": "citations_valid", "min_citations": 1}
+    ],
+    "failure_conditions": [
+      "Un effectif différent ou une extrapolation (« environ 30 ») apparaît."
+    ],
+    "notes": "Toute extrapolation est une information inventée."
+  },
+  {
+    "id": "MEM-015",
+    "category": "memoire",
+    "title": "Information absente du document : refus explicite",
+    "objective": "Si le document ne contient pas la réponse, le dire clairement.",
+    "status": "supported",
+    "required_features": ["document_search"],
+    "severity": "major",
+    "input": {
+      "query": "Quel est le salaire du directeur ?",
+      "sources": [{"id": "SRC-S", "text": "Organigramme : direction générale, direction commerciale, direction financière."}]
+    },
+    "expected": {
+      "answer": null,
+      "facts": [],
+      "citations": [],
+      "tools_called": ["search_documents"],
+      "structured": null,
+      "usage": null,
+      "error": "Le document fourni ne contient pas cette information."
+    },
+    "acceptance": [
+      {"check": "error_signaled"},
+      {"check": "no_hallucinated_facts"}
+    ],
+    "failure_conditions": [
+      "Une réponse est inventée malgré l'absence d'information.",
+      "L'échec est silencieux."
+    ],
+    "notes": "Refus documenté : jamais de réponse bricolée."
+  },
+  {
+    "id": "MEM-016",
+    "category": "memoire",
+    "title": "Recherche sémantique vectorielle",
+    "objective": "Retrouver un fait par similarité de sens et non par mot-clé exact.",
+    "status": "future",
+    "required_features": ["memory.semantic_search"],
+    "severity": "major",
+    "input": {"query": "truc pour poisson rouge", "memory_facts": ["Aquarium 60 L : changement d'eau trimestriel."]},
+    "expected": {
+      "answer": "Aquarium 60 L : changement d'eau trimestriel.",
+      "facts": ["Aquarium 60 L : changement d'eau trimestriel."],
+      "citations": [],
+      "tools_called": ["memory_semantic_search"],
+      "structured": {"ranked": true},
+      "usage": null,
+      "error": null
+    },
+    "acceptance": [
+      {"check": "facts_present"}
+    ],
+    "failure_conditions": [
+      "Aucun résultat n'est retrouvé malgré une correspondance sémantique claire."
+    ],
+    "notes": "Fonctionnalité absente du dépôt actuel : cas documenté, non exécuté, non compté en échec."
+  },
+  {
+    "id": "MEM-017",
+    "category": "memoire",
+    "title": "Mémorisation d'une image (OCR)",
+    "objective": "Extraire et mémoriser le texte d'une capture d'écran.",
+    "status": "future",
+    "required_features": ["vision_ocr"],
+    "severity": "minor",
+    "input": {"query": "Que dit la capture ?", "memory_facts": []},
+    "expected": {
+      "answer": "Texte extrait de la capture.",
+      "facts": ["Texte extrait de la capture."],
+      "citations": [],
+      "tools_called": ["vision_ocr", "memory_index"],
+      "structured": {"ocr": true},
+      "usage": null,
+      "error": null
+    },
+    "acceptance": [
+      {"check": "exact_value", "path": "structured.ocr", "value": true}
+    ],
+    "failure_conditions": [
+      "Le texte de l'image est ignoré ou mal lu."
+    ],
+    "notes": "module career/ocr.m hors du chemin mémoire V3 : statut futur."
+  },
+  {
+    "id": "MEM-018",
+    "category": "memoire",
+    "title": "Isolation par projet",
+    "objective": "Une recherche dans un projet ne doit pas remonter les faits d'un autre projet.",
+    "status": "supported",
+    "required_features": ["memory_search"],
+    "severity": "critical",
+    "input": {
+      "query": "budget projet Alpha",
+      "memory_facts": ["Projet Alpha : budget 10 000 €."],
+      "project_id": "alpha"
+    },
+    "expected": {
+      "answer": "Budget du projet Alpha : 10 000 €.",
+      "facts": ["Projet Alpha : budget 10 000 €."],
+      "citations": [],
+      "tools_called": ["memory_search"],
+      "structured": {"project_id": "alpha"},
+      "usage": null,
+      "error": null
+    },
+    "acceptance": [
+      {"check": "exact_value", "path": "structured.project_id", "value": "alpha"},
+      {"check": "no_hallucinated_facts"}
+    ],
+    "failure_conditions": [
+      "Un fait d'un autre projet apparaît dans les résultats."
+    ],
+    "notes": "L'isolement projet existe via project_id dans PersonalMemoryStore."
+  },
+  {
+    "id": "MEM-019",
+    "category": "memoire",
+    "title": "Consolidation mémoire multi-tours (Nemotron)",
+    "objective": "Consolider plusieurs tours de conversation en une fiche mémoire dédupliquée.",
+    "status": "future",
+    "required_features": ["nemotron_memory_consolidation"],
+    "severity": "major",
+    "input": {
+      "query": "Consolide cette conversation.",
+      "memory_facts": ["Aimé le café filtre.", "Préfère le café filtre.", "Déteste l'espresso."]
+    },
+    "expected": {
+      "answer": "Fiche consolidée : café filtre préféré, espresso exclu.",
+      "facts": ["Préférence café : filtre ; rejet espresso."],
+      "citations": [],
+      "tools_called": ["memory_consolidate"],
+      "structured": {"merged": 3, "unique": 1},
+      "usage": null,
+      "error": null
+    },
+    "acceptance": [
+      {"check": "exact_value", "path": "structured.unique", "value": 1}
+    ],
+    "failure_conditions": [
+      "Les doublons ne sont pas fusionnés ou une préférence est perdue."
+    ],
+    "notes": "Branche feature/nemotron-memory en cours : cas futur tant que l'intégration n'est pas fusionnée."
+  },
+  {
+    "id": "MEM-020",
+    "category": "memoire",
+    "title": "Citation ancrée à une page PDF",
+    "objective": "Une citation issue d'un PDF doit porter un ancrage page/paragraphe.",
+    "status": "future",
+    "required_features": ["pdf_page_anchor"],
+    "severity": "minor",
+    "input": {
+      "query": "Que dit l'annexe 2 ?",
+      "sources": [{"id": "SRC-P", "text": "Annexe 2 : détail des immobilisations.", "pages": 14}]
+    },
+    "expected": {
+      "answer": "L'annexe 2 détaille les immobilisations (p. 14).",
+      "facts": ["Annexe 2 : détail des immobilisations."],
+      "citations": [{"source_id": "SRC-P", "quote": "détail des immobilisations", "page": 14}],
+      "tools_called": ["pdf_extract"],
+      "structured": {"anchored": true},
+      "usage": null,
+      "error": null
+    },
+    "acceptance": [
+      {"check": "citations_valid", "min_citations": 1}
+    ],
+    "failure_conditions": [
+      "La citation ne peut pas être retrouvée dans le document."
+    ],
+    "notes": "Ancrage de page non implémenté : cas futur."
+  }
+]

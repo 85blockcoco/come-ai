@@ -1,0 +1,389 @@
+[
+  {
+    "id": "DOC-001",
+    "category": "documents",
+    "title": "Inventaire d'un classeur Excel",
+    "objective": "Lister les feuilles et leurs dimensions sans ouvrir Excel.",
+    "status": "supported",
+    "required_features": ["excel_inspect"],
+    "severity": "major",
+    "input": {"file": "ventes_2026.xlsx", "sheets": ["Ventes", "Retours"]},
+    "expected": {
+      "answer": "Le classeur contient 2 feuilles.",
+      "structured": {"sheet_count": 2, "sheets": ["Ventes", "Retours"], "kind": "spreadsheet"},
+      "tools_called": ["inspect_file"],
+      "facts": [], "citations": [], "usage": null, "error": null
+    },
+    "acceptance": [
+      {"check": "structure_valid", "schema": {"sheet_count": "integer", "sheets": "array", "kind": "string"}},
+      {"check": "exact_value", "path": "structured.sheet_count", "value": 2},
+      {"check": "exact_value", "path": "structured.sheets", "value": ["Ventes", "Retours"]},
+      {"check": "exact_value", "path": "structured.kind", "value": "spreadsheet"}
+    ],
+    "failure_conditions": [
+      "Le nombre de feuilles est faux.",
+      "La structure renvoyée n'est pas exploitable."
+    ],
+    "notes": "inspect_file existe dans workspace_core (kind=spreadsheet)."
+  },
+  {
+    "id": "DOC-002",
+    "category": "documents",
+    "title": "Statistiques d'une colonne numérique",
+    "objective": "Moyenne, min et max d'une colonne calculés localement.",
+    "status": "supported",
+    "required_features": ["excel_analyze"],
+    "severity": "critical",
+    "input": {"column": "montant", "values": [120.0, 180.0, 240.0]},
+    "expected": {
+      "answer": "Moyenne 180,0 ; min 120,0 ; max 240,0.",
+      "structured": {"mean": 180.0, "min": 120.0, "max": 240.0, "count": 3},
+      "tools_called": ["analyze_table"],
+      "facts": [], "citations": [], "usage": null, "error": null
+    },
+    "acceptance": [
+      {"check": "numeric_close", "path": "structured.mean", "value": 180.0, "tolerance": 0.01},
+      {"check": "numeric_close", "path": "structured.min", "value": 120.0, "tolerance": 0.01},
+      {"check": "numeric_close", "path": "structured.max", "value": 240.0, "tolerance": 0.01},
+      {"check": "exact_value", "path": "structured.count", "value": 3}
+    ],
+    "failure_conditions": [
+      "L'une des trois statistiques est fausse de plus de 0,01.",
+      "Les valeurs manquantes sont comptées comme des zéros."
+    ],
+    "notes": "Erreur de calcul détectée par tolérance explicite."
+  },
+  {
+    "id": "DOC-003",
+    "category": "documents",
+    "title": "Décompte des valeurs manquantes",
+    "objective": "Compter les cellules vides par colonne sans les confondre avec des zéros.",
+    "status": "supported",
+    "required_features": ["excel_inspect"],
+    "severity": "major",
+    "input": {"file": "clients.csv", "missing": {"email": 3, "telephone": 0}},
+    "expected": {
+      "answer": "3 emails manquants, 0 téléphone manquant.",
+      "structured": {"missing": {"email": 3, "telephone": 0}, "total_missing": 3},
+      "tools_called": ["inspect_file"],
+      "facts": [], "citations": [], "usage": null, "error": null
+    },
+    "acceptance": [
+      {"check": "exact_value", "path": "structured.total_missing", "value": 3},
+      {"check": "exact_value", "path": "structured.missing", "value": {"email": 3, "telephone": 0}},
+      {"check": "structure_valid", "schema": {"missing": "object"}}
+    ],
+    "failure_conditions": [
+      "Un vide est transformé en 0 (perte d'information).",
+      "Le total est incohérent avec le détail."
+    ],
+    "notes": "Le dépôt calcule déjà missing_values via pandas : vérification de non-altération."
+  },
+  {
+    "id": "DOC-004",
+    "category": "documents",
+    "title": "Types de colonnes préservés",
+    "objective": "Les types détectés (texte vs nombre) doivent correspondre au fichier.",
+    "status": "supported",
+    "required_features": ["excel_analyze"],
+    "severity": "major",
+    "input": {"file": "stocks.xlsx", "columns": {"reference": "object", "quantite": "int64"}},
+    "expected": {
+      "answer": "2 colonnes : reference (texte), quantite (entier).",
+      "structured": {"data_types": {"reference": "object", "quantite": "int64"}},
+      "tools_called": ["analyze_table"],
+      "facts": [], "citations": [], "usage": null, "error": null
+    },
+    "acceptance": [
+      {"check": "structure_valid", "schema": {"data_types": "object"}},
+      {"check": "exact_value", "path": "structured.data_types.reference", "value": "object"},
+      {"check": "exact_value", "path": "structured.data_types.quantite", "value": "int64"}
+    ],
+    "failure_conditions": [
+      "Un type numérique est reclassé en texte (altération silencieuse)."
+    ],
+    "notes": "Détecte les conversions de type destructives."
+  },
+  {
+    "id": "DOC-005",
+    "category": "documents",
+    "title": "Extraction de texte PDF",
+    "objective": "Extraire le texte d'un PDF contenant une couche texte.",
+    "status": "supported",
+    "required_features": ["pdf_extract"],
+    "severity": "critical",
+    "input": {
+      "file": "facture_42.pdf",
+      "pdf_text": "Facture n° 42 du 5 février 2026. Total TTC : 599,00 €."
+    },
+    "expected": {
+      "answer": "Facture n° 42 du 5 février 2026. Total TTC : 599,00 €.",
+      "facts": ["Facture n° 42 du 5 février 2026. Total TTC : 599,00 €."],
+      "citations": [],
+      "tools_called": ["pdf_extract"],
+      "structured": {"characters": 58},
+      "usage": null, "error": null
+    },
+    "acceptance": [
+      {"check": "contains_all", "path": "answer", "values": ["Facture n° 42", "599,00 €"]},
+      {"check": "no_error"}
+    ],
+    "failure_conditions": [
+      "Le montant ou le numéro de facture est perdu à l'extraction.",
+      "Le PDF est déclaré lisible alors qu'il n'a pas été lu."
+    ],
+    "notes": "Perte d'information à l'extraction documentaire."
+  },
+  {
+    "id": "DOC-006",
+    "category": "documents",
+    "title": "PDF sans couche texte : refus explicite",
+    "objective": "Un PDF scanné sans OCR ne doit pas produire de texte inventé.",
+    "status": "supported",
+    "required_features": ["pdf_extract"],
+    "severity": "critical",
+    "input": {"file": "scan_1998.pdf", "pdf_text": ""},
+    "expected": {
+      "answer": null,
+      "facts": [],
+      "citations": [],
+      "tools_called": ["pdf_extract"],
+      "structured": null,
+      "usage": null,
+      "error": "Ce PDF ne contient pas de couche texte ; une OCR serait nécessaire."
+    },
+    "acceptance": [
+      {"check": "error_signaled"},
+      {"check": "no_hallucinated_facts"}
+    ],
+    "failure_conditions": [
+      "Un texte est produit à partir d'un PDF sans texte (contenu inventé).",
+      "L'absence de texte n'est pas signalée."
+    ],
+    "notes": "Échec silencieux = faux texte. Doit être explicite."
+  },
+  {
+    "id": "DOC-007",
+    "category": "documents",
+    "title": "Recherche plein texte dans un document",
+    "objective": "Retrouver un extrait contenant le mot-clé avec son contexte.",
+    "status": "supported",
+    "required_features": ["document_search"],
+    "severity": "major",
+    "input": {
+      "query": "clause de résiliation",
+      "document": "Le contrat contient une clause de résiliation avec un préavis de trois mois."
+    },
+    "expected": {
+      "answer": "Une clause de résiliation avec un préavis de trois mois figure au contrat.",
+      "facts": ["Clause de résiliation avec un préavis de trois mois."],
+      "citations": [{"source_id": "SRC-DOC", "quote": "clause de résiliation avec un préavis de trois mois"}],
+      "tools_called": ["search_documents"],
+      "structured": {"hits": 1},
+      "usage": null, "error": null
+    },
+    "acceptance": [
+      {"check": "exact_value", "path": "structured.hits", "value": 1},
+      {"check": "contains_all", "path": "answer", "values": ["trois mois"]}
+    ],
+    "failure_conditions": [
+      "Le préavis rapporté est différent de trois mois."
+    ],
+    "notes": "search_documents extrait un extrait autour du match."
+  },
+  {
+    "id": "DOC-008",
+    "category": "documents",
+    "title": "Troncature annoncée honnêtement",
+    "objective": "Si l'analyse est plafonnée, la limite doit être déclarée dans la réponse.",
+    "status": "supported",
+    "required_features": ["excel_analyze"],
+    "severity": "major",
+    "input": {"file": "gros_export.csv", "rows_total": 250000, "rows_analyzed": 100000},
+    "expected": {
+      "answer": "Analyse limitée aux 100 000 premières lignes.",
+      "structured": {"rows": 100000, "capped": true, "cap": 100000},
+      "tools_called": ["analyze_table"],
+      "facts": [], "citations": [], "usage": null, "error": null
+    },
+    "acceptance": [
+      {"check": "exact_value", "path": "structured.capped", "value": true},
+      {"check": "exact_value", "path": "structured.rows", "value": 100000},
+      {"check": "exact_value", "path": "structured.cap", "value": 100000},
+      {"check": "contains_all", "path": "answer", "values": ["100 000"]}
+    ],
+    "failure_conditions": [
+      "La troncature est masquée (résultat présenté comme complet)."
+    ],
+    "notes": "Le dépôt applique déjà MAX_ANALYSIS_ROWS : vérification d'annonce."
+  },
+  {
+    "id": "DOC-009",
+    "category": "documents",
+    "title": "Source inchangée après analyse",
+    "objective": "L'analyse crée une copie de sortie et ne modifie jamais le fichier source.",
+    "status": "supported",
+    "required_features": ["excel_report"],
+    "severity": "critical",
+    "input": {"file": "budget.xlsx"},
+    "expected": {
+      "answer": "Rapport créé dans le dossier de sortie ; le fichier source est inchangé.",
+      "structured": {"source_modified": false, "output_kind": "workbook"},
+      "tools_called": ["create_analysis_workbook"],
+      "facts": [], "citations": [], "usage": null, "error": null
+    },
+    "acceptance": [
+      {"check": "exact_value", "path": "structured.source_modified", "value": false},
+      {"check": "exact_value", "path": "structured.output_kind", "value": "workbook"}
+    ],
+    "failure_conditions": [
+      "Le fichier source est écrit ou réécrit (test destructeur détecté)."
+    ],
+    "notes": "create_analysis_workbook écrit uniquement dans output/."
+  },
+  {
+    "id": "DOC-010",
+    "category": "documents",
+    "title": "Format non supporté : refus clair",
+    "objective": "Un format hors périmètre (ex. .pages) doit être refusé explicitement.",
+    "status": "supported",
+    "required_features": ["workspace_import"],
+    "severity": "minor",
+    "input": {"file": "rapport.pages"},
+    "expected": {
+      "answer": null,
+      "structured": null,
+      "citations": [],
+      "facts": [],
+      "tools_called": ["import_files"],
+      "usage": null,
+      "error": "Format non pris en charge : .pages"
+    },
+    "acceptance": [
+      {"check": "error_signaled"}
+    ],
+    "failure_conditions": [
+      "Le fichier est importé en silence ou génère un message d'erreur incompréhensible."
+    ],
+    "notes": "SUPPORTED_SUFFIXES exclut .pages."
+  },
+  {
+    "id": "DOC-011",
+    "category": "documents",
+    "title": "Feuille inexistante : erreur explicite",
+    "objective": "Demander une feuille absente du classeur doit produire une erreur claire.",
+    "status": "supported",
+    "required_features": ["excel_analyze"],
+    "severity": "minor",
+    "input": {"file": "ventes_2026.xlsx", "sheet": "Inexistante"},
+    "expected": {
+      "answer": null,
+      "structured": null,
+      "citations": [],
+      "facts": [],
+      "tools_called": ["analyze_table"],
+      "usage": null,
+      "error": "La feuille demandée n'existe pas dans ce fichier."
+    },
+    "acceptance": [
+      {"check": "error_signaled"}
+    ],
+    "failure_conditions": [
+      "Une feuille par défaut est analysée à la place (résultat trompeur)."
+    ],
+    "notes": "analyze_table lève déjà UserFacingError dans ce cas."
+  },
+  {
+    "id": "DOC-012",
+    "category": "documents",
+    "title": "Cellules fusionnées : structure honnête",
+    "objective": "Signaler la présence de cellules fusionnées plutôt que d'aligner en silence.",
+    "status": "future",
+    "required_features": ["excel_merged_cells"],
+    "severity": "major",
+    "input": {"file": "tableau_fusionne.xlsx", "merged_ranges": 4},
+    "expected": {
+      "answer": "4 plages fusionnées détectées ; l'alignement des colonnes peut être dégradé.",
+      "structured": {"merged_ranges": 4, "alignment_warning": true},
+      "tools_called": ["inspect_file"],
+      "facts": [], "citations": [], "usage": null, "error": null
+    },
+    "acceptance": [
+      {"check": "exact_value", "path": "structured.alignment_warning", "value": true}
+    ],
+    "failure_conditions": [
+      "Les données fusionnées sont redistribuées sans avertissement."
+    ],
+    "notes": "Aucun traitement fusionné n'existe dans le dépôt : cas futur."
+  },
+  {
+    "id": "DOC-013",
+    "category": "documents",
+    "title": "Recalcul des formules Excel",
+    "objective": "Les formules non calculées (valeurs de cache absentes) doivent être signalées.",
+    "status": "future",
+    "required_features": ["excel_formula_recalc"],
+    "severity": "major",
+    "input": {"file": "modeles.xlsx", "formula_cells": 12, "cached_values": 0},
+    "expected": {
+      "answer": "12 cellules de formule sans valeur calculée ; ouverture Excel requise.",
+      "structured": {"formula_cells": 12, "recalculated": false},
+      "tools_called": ["inspect_file"],
+      "facts": [], "citations": [], "usage": null, "error": null
+    },
+    "acceptance": [
+      {"check": "exact_value", "path": "structured.recalculated", "value": false}
+    ],
+    "failure_conditions": [
+      "Les cellules de formule sont rapportées comme vides ou comme zéros."
+    ],
+    "notes": "Lecture sans moteur de calcul : cas futur."
+  },
+  {
+    "id": "DOC-014",
+    "category": "documents",
+    "title": "Détection d'encodage d'un CSV",
+    "objective": "Un CSV accentué (UTF-8 ou Latin-9) doit être lu sans mojibake.",
+    "status": "future",
+    "required_features": ["csv_encoding_detection"],
+    "severity": "minor",
+    "input": {"file": "export_clients.csv", "declared_encoding": "UTF-8", "actual_encoding": "windows-1252"},
+    "expected": {
+      "answer": "Encodage réel : windows-1252 (non déclaré). Accents restitués correctement.",
+      "structured": {"detected_encoding": "windows-1252", "mojibake": false},
+      "tools_called": ["inspect_file"],
+      "facts": [], "citations": [], "usage": null, "error": null
+    },
+    "acceptance": [
+      {"check": "exact_value", "path": "structured.detected_encoding", "value": "windows-1252"}
+    ],
+    "failure_conditions": [
+      "Les accents sont corrompus sans avertissement."
+    ],
+    "notes": "Détection d'encodage non implémentée : cas futur."
+  },
+  {
+    "id": "DOC-015",
+    "category": "documents",
+    "title": "OCRen table scannée → tableau structuré",
+    "objective": "Transformer une table photographiée en structure JSON exploitable.",
+    "status": "future",
+    "required_features": ["vision_ocr", "table_reconstruction"],
+    "severity": "minor",
+    "input": {"file": "photo_table.png", "expected_rows": 6, "expected_columns": 4},
+    "expected": {
+      "answer": "Table reconstituée : 6 lignes, 4 colonnes.",
+      "structured": {"rows": 6, "columns": 4, "confidence": 0.9},
+      "tools_called": ["vision_ocr", "table_reconstruct"],
+      "facts": [], "citations": [], "usage": null, "error": null
+    },
+    "acceptance": [
+      {"check": "exact_value", "path": "structured.rows", "value": 6},
+      {"check": "exact_value", "path": "structured.columns", "value": 4}
+    ],
+    "failure_conditions": [
+      "Des lignes ou colonnes disparaissent silencieusement."
+    ],
+    "notes": "OCR de tableau inexistant : cas futur."
+  }
+]
