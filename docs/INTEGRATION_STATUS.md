@@ -8,6 +8,9 @@ Ce document décrit les livraisons acceptées et celles encore séparées. Il ne
 
 - Base de départ : `1b570ddf4734f5f8698c49c3972586e3c6685754`.
 - Lot 1 accepté : `c64d4da7d7844fab4a9fa06467c7170a5265a696`.
+- Laboratoire accepté : `c3652af`, adaptateur réel : `f9b8163`, collecte DevKit corrigée : `4e203a8`.
+- Lot 2 accepté sur la base consolidée : `7def9859100437b28240b2151abebe7a4bc7805f`.
+- Lot 3 accepté : `13fe634346322fae1073bc7597663ff03dc1da5e` (préparation `6937bc2`, source `41224d8`).
 - Contribution MiMo source : `4b55f013cf1484f8fc36fd722a7a839627c80fb8`, branche `feature/moteur-format-fiabilisation`.
 - Intégration préparée, corrigée et testée sur `integration/lot1-mimo`, puis avancée de `main` par `git merge --ff-only`.
 - Ce document est versionné séparément. Le commit de documentation ne change pas le code validé.
@@ -18,26 +21,51 @@ Ce document décrit les livraisons acceptées et celles encore séparées. Il ne
 | Lot / module | État réel | Responsable / provenance | Branche et commit | Preuves et prochaine action |
 | --- | --- | --- | --- | --- |
 | 1 — génération de correctifs et diagnostics (`devkit/evolution*.py`) | Intégré : diagnostic de format précis mais sans fragments arbitraires ; consommation conservée avant rejet de troncation ou substitution | MiMo pour la contribution initiale ; Codex pour le durcissement et l’acceptation | `main`, `c64d4da` ; source `4b55f01` | 96 tests ciblés ; 416 + 2 dans DevKit ; les 2 scénarios ignorés réussis séparément ; revue indépendante sans blocage |
-| 2 — faits observés, quotas, `Retry-After`, bridge | Commits identifiés, pas encore intégrés ; ne pas fusionner tant que Step 5 travaille | Step 5 propriétaire du worktree ; Codex intégrateur | `feature/step5-intelligence-centrale` : `7e3fafb`, `22255c8` | Vérifier la migration additive, la sémantique des quotas et les tests après gel |
-| 3 — raccordement du chat au décideur | Non accepté : les quatre blocages sont présents dans la révision examinée | Step 5 ; Codex valide après livraison stabilisée | `41224d8` sur la branche Step 5 | Conserver le couple fournisseur/modèle ; repli local admissible en panne catalogue ; refus de capacité sans contournement ; normaliser `ollama` / `ollama_local` |
-| Cycle de correction supplémentaire Step 5 | Commit récent identifié, non revu et non accepté | Step 5 | `8c5c2129ed58c84316882c58fd4123f81f72d4a1` | Contribution apparue pendant l’intégration ; ne pas confondre son message de commit avec une preuve de cycle réel |
+| 2 — faits observés, quotas, `Retry-After`, bridge | Intégré : données factuelles, aliases normalisés et migrations additives | Step 5 source ; Codex et sous-agent pour le durcissement ; revue indépendante | `main`, `7def985` ; sources `7e3fafb`, `22255c8` ; préparation `b6ffadf` | 81 tests ciblés ; 460 sur copie Lot 2 ; 561 sur base consolidée, chaque fois 2 scénarios OS ignorés |
+| 3 — raccordement du chat au décideur | Intégré : les quatre blocages sont corrigés, y compris les modes manuel et hors ligne | Step 5 source ; Codex et sous-agent pour le durcissement | `main`, `13fe634` ; préparation `6937bc2` ; source `41224d8` | 181 tests ciblés ; 606 réussis et 2 ignorés en DevKit ; 2 scénarios OS réussis séparément ; requêtes cloud simulées seulement |
+| Cycle de correction supplémentaire Step 5 | Revu et testé sur sa branche ; conservé, non intégré dans les lots faits/chat | Step 5 | `8c5c212`, branche gelée à `b535b6c` | Pipeline, sandbox, validation et rollback réels sur projet temporaire ; génération par `ScriptedModel`, donc fictive |
 | 4 — parcours utilisateur Excel + notes + rapport + suivi | Pas exécuté ; pas annoncé opérationnel | Codex après acceptation des lots 2 et 3 | Aucun commit de livraison | Exécuter de vrais outils sur des données synthétiques, vérifier les sources et la confirmation avant écriture |
-| Laboratoire qualité `evals/` | Travail indépendant, nouveaux fichiers non suivis préservés ; non intégré | Auteur à confirmer, ne pas l’attribuer sur le seul nom d’un modèle/session | `feature/evals-qualite`, base `1b570dd` au point de reprise | Ne bloque pas les lots 1 à 3 ; accepter plus tard avec son contrat et ses tests |
-| Mémoire Nemotron | Travail indépendant ; aucune nouvelle livraison intégrée ici | Nemotron | `feature/nemotron-memory`, base `1b570dd` au point de reprise | Ne bloque pas l’intégration ; rechercher une livraison stabilisée avant tout raccordement |
+| Laboratoire qualité `evals/` | Intégré et durci ; 60 contrats historiques, séparés des 9 scénarios de services réels | OpenCode source ; Codex et sous-agents pour l’acceptation et l’adaptateur | Source `5216ff3`, main `c3652af`, `f9b8163`, `4e203a8` | 29 tests source ; 78 tests labo + 19 adaptateur ; 8 réussites réelles, 1 capacité non prise en charge, 0 simulation dans le score réel |
+| Mémoire Nemotron | API profil partielle : deux fichiers modifiés, non commités, préservés ; pas intégrés | Nemotron | `feature/nemotron-memory`, base `1b570dd` | `come_ai_web.py`, `personal_memory.py` : 597 ajouts / 3 retraits ; endpoints spécifiques et frontend à qualifier ; ne pas créer un second store personnel |
 
-La dernière tête Step 5 observée est `8c5c212`. L’utilisateur a demandé son gel ; cette demande n’est pas encore une confirmation de fin. Une copie propre à un instant donné ne prouve pas qu’un agent a cessé ses modifications.
+La tête Step 5 vérifiée est `b535b6c562ad7586d53e762b19490cd3ba194623`, arbre propre. L’utilisateur a confirmé le gel ; les métadonnées locales indiquaient aussi `idle_outcome=succeeded`. Les 141 tests ciblés exécutés sur cette révision ont réussi, mais reproduisaient encore les quatre blocages : un grand nombre de tests verts ne les résout pas. L’intégration utilise les corrections relues, pas un merge aveugle de cette branche.
 
 ## Périmètre fonctionnel conservé
 
 | Module | Responsabilité conservée | Niveau de preuve dans cette livraison |
 | --- | --- | --- |
 | `come_ai_web.py`, `app_v3.py`, `v5_static/` | Interface/API V5 et application locale | Non-régression automatisée ; aucun nouveau parcours navigateur complet |
-| `hybrid_chat.py`, `free_ai_router.py`, catalogue et routeurs | Chat et appels hybrides soumis aux règles de gratuité | Comportements couverts par les tests existants ; nouveau raccordement Step 5 non accepté ; pas de benchmark de qualité cloud |
+| `hybrid_chat.py`, `free_ai_router.py`, catalogue et routeurs | Chat et appels hybrides soumis aux règles de gratuité | Faits/cooldowns et raccordement intégrés ; modèle exact testé jusqu’au payload avec transports fictifs ; pas de benchmark de qualité cloud |
 | `workspace_core.py`, outils locaux | Import, inspection, calculs et rapports contrôlés | Smoke test réel hors IA : CSV, inspection, analyse, rapport Excel réussis |
 | `personal_memory.py` et modules mémoire existants | Mémoire locale et contexte documentaire | Tests existants ; ne pas annoncer une recherche sémantique Nemotron intégrée |
 | `task_queue.py` et orchestrateur existant | Persistance et exécution de types de plans pris en charge | Une ligne SQLite ne démontre pas l’exécution d’une tâche utilisateur quelconque |
 | Career, Study, Finance et autres espaces existants | Espaces conservés sans refonte | Non-régression de la suite, pas de nouvelle qualification exhaustive de chaque parcours |
 | `devkit/` | Export sécurisé, diagnostic, staging isolé, validation, historique et retour arrière | Suite hors réseau + scénarios réels de sandbox sur fixtures ; génération IA simulée dans ces validations |
+| `evals/come_ai_target.py` | Adaptateur borné aux services existants sur workspaces temporaires | Calcul par le chat, FTS5/citation, CSV/XLSX, orchestrateur, refus d’écriture et d’outils exécutés réellement ; aucun modèle interrogé |
+
+## Évaluations et validation de la consolidation
+
+- Les 49 cas `supported` historiques décrivent des contrats, pas 49 parcours Côme AI vérifiés. Leur compteur `application_verified` reste à zéro. Une cible réelle doit déclarer ses capacités et son handler, sinon le cas est `unsupported`.
+- `ComeAITarget` ne lit pas `expected` pour produire sa sortie. Il appelle les services réels, dans un nouveau workspace synthétique par cas, sans `AppConfig.load`, `.env`, documents privés ou génération de modèle.
+- Les sockets TCP/DNS/UDP et le transport cloud sont bloqués ; les tests démontrent ce blocage. Les refus applicatifs attendus sont distincts des erreurs d’exécution imprévues.
+- `real`, `simulated`, `unsupported`, `execution_error` et `incorrect` sont distingués. Le taux réel exclut les simulations ; consommation déclarée et RSS du processus ne sont pas des mesures de tokens/coût ni de RAM propre au modèle.
+- Les comparaisons refusent les provenances incompatibles et les contrats modifiés sous un même ID. Les empreintes de cas/suite sont enregistrées ; une perte de couverture fait échouer le mode strict.
+- `evals/tests` est inclus dans le bootstrap DevKit et la collecte pytest. Code et JSON synthétiques de `evals/cases/` sont exportables ; `evals/runs/` et `.devkit/` ne le sont pas. Les démonstrations de version 1 restent archivées et explicitement simulées.
+- Laboratoire consolidé : **517 réussis, 2 ignorés**, rapport `.devkit/integration/evals-qualite/.devkit/diagnostics/2026-10-13T16-57-51.655489Z.md`.
+- Avec lot 2 : **561 réussis, 2 ignorés**, rapport `.devkit/integration/evals-qualite/.devkit/diagnostics/2026-10-13T17-01-11.480567Z.md`.
+- Avec lot 3 : **606 réussis, 2 ignorés**, rapport `.devkit/integration/evals-qualite/.devkit/diagnostics/2026-10-13T17-09-32.803059Z.md`. Les deux scénarios de sandbox ont été exécutés hors runner imbriqué : **2 réussis en 5,58 s**.
+- Premier run réel avec empreintes : **8 réussis, 1 unsupported, aucune simulation**, JSON `.devkit/integration/evals-qualite/.devkit/evals/runs/fb0ae918436f.json`, rapport `real-services-validated.md` dans ce même dossier. Ce run précède le nouveau raccordement du chat ; le revalider sur l’état final.
+- Revalidation sur lot 3 : **8 réussis réels, 1 unsupported, 0 simulation**, JSON `f57e74d6eef7.json`, rapport `final-real-services.md` dans le même dossier. Comparaison stricte : **aucune régression, aucune perte de couverture**, rapport `consolidation-comparison.md`.
+- Empreinte source finale : `69f6b2982495c82bae696a3f4ae340963c89ac4fa331e68c6c69bc3d712aed03`.
+- La revue indépendante supplémentaire du chat n’a pas abouti, faute de quota du sous-agent. Ne pas la compter comme une validation ; la revue principale, les 181 tests et la non-régression 606 ont abouti.
+
+Commandes reproductibles, depuis la racine du projet :
+
+```bash
+.venv/bin/python -m pytest -q evals/tests
+.venv/bin/python -m evals run --target come-ai --strict
+.venv/bin/python -m devkit --python /Users/comedelavenne/AI-Excel-Agent/.venv/bin/python check --timeout 300
+```
 
 ## Preuves du lot 1 et commandes exécutées
 
@@ -93,13 +121,33 @@ git bundle verify .devkit/integration/20261013T161928Z/repository.bundle
 
 La copie d’intégration et les worktrees des contributeurs sont conservés. Ce document dans `docs/` est versionné par Git ; il n’appartient pas actuellement à la liste de sources exportées par le DevKit. Les preuves locales et le bundle sont privés et exclus de Git.
 
+## Inventaire du nouveau briefing général — 13 octobre 2026
+
+Contrôle en lecture seule avant toute nouvelle intégration : `main` propre à `7def985` ; nouveau lot 3 alors indexé dans la copie consolidée, et son commit de préparation `6937bc2` conservé. Aucun merge global des nouvelles branches.
+
+| Contribution | Révision et état constatés | Validation effectuée / manquante | Décision et prochaine action |
+| --- | --- | --- | --- |
+| Career Stage Hunter / MiMo | `feature/career-stage-hunter`, `a14676950b58d6833d396175949dffa69a44d9aa`, propre ; quatre commits propres au métier depuis `4e203a8` | 92 tests `tests/test_career*.py` réussis en 8,28 s ; SSL `CERT_REQUIRED` et vérification hostname actifs. Les 136 rapportés incluent d’autres fichiers : ne pas les assimiler à cette commande | P0 produit suivant, pas encore dans main. `_normalise()` tranche les 150 premières offres avant classement : corriger la sélection et les cas hors cap avant acceptation ; navigation/browser et vrai parcours final encore à vérifier |
+| Personal Context Engine / Step 5 | `feature/personal-context-engine`, `8864b47`, dirty : review/store/README/contrat/test isolation + nouveaux tests confidentialité/suppression, handoff et modèle Space Bunny | 195 dédiés / 758 globaux / 21 démo annoncés, non rejoués ici sur cet état encore modifié | P1 : attendre livraison figée, auditer contrat et suppression ; candidat à la source de vérité des faits personnels approuvés |
+| API profil Nemotron | Base `1b570dd`, deux fichiers non commités ; état décrit ci-dessus | 394 historiques annoncés, pas de suite d’endpoints spécifique vérifiée dans cette mission | P1 : adapter l’API à l’unique moteur personnel retenu ; ne pas fusionner le nouveau store en parallèle |
+| Control Center | `feature/workspace-control-center`, base `7def985`, `Lanceurs/`, `workspace_control/` et trois fichiers de tests non suivis | Code présent, pas de nouveau commit ni tests rejoués ici | P1 après gel : intégrer lancement/état serveur/repères fiables, sans modifier les environnements ou tuer des processus arbitraires |
+| Noveria Career Intelligence | `feature/noveria-career-integration`, base `7def985`, `career_intelligence/` et `tests/test_job_quality.py` non suivis | Existence vérifiée, fonctionnement non qualifié | P2 : réutiliser comme extension de Career, pas comme moteur concurrent ; aucun code privé de Noveria reçu/présumé |
+| Profil Space Bunny | Export final non fourni/validé dans cette mission ; modèle de fichier candidat présent dans le worktree profil | Aucun souvenir personnel réel lu, approuvé ou importé par l’intégrateur | Validation individuelle par l’utilisateur ; aucun contenu intime implicitement envoyé aux clouds |
+| Auto-amélioration Nemotron/OpenRouter | Appel `poolside/laguna-s-2.1:free` et candidat `7fd61db38202430b8f920ae2b7649fbb` rapportés par le briefing | Traces non authentifiées ici ; ne pas confondre avec le `ScriptedModel` de `8c5c212` | P2 : vérifier métadonnées/prix/sandbox/hashes sans lire de clé ; pas de nouveau cloud ni déploiement automatique |
+
+Protection supplémentaire : `.devkit/integration/20261013T205420Z` contient le bundle complet vérifié et **32 fichiers source/texte/lanceurs non commités** provenant des 13 worktrees recensés. Les modes de fichiers sont dans le manifeste. Les JSON de données/modèles de profil et autres fichiers exclus restent intacts dans leur worktree : ce n’est pas un archivage des données privées. Refaire un checkpoint source avant de toucher à une livraison qui évolue.
+
+Architecture mémoire proposée, **pas encore implémentée ni acceptée** : interface Mon profil → API V5 adaptée de Nemotron → Personal Context Engine comme source unique des faits approuvés → Chat/Career/Finance avec consentements explicites. La mémoire documentaire FTS5 et les données métier de candidatures conservent leur rôle ; ne pas dupliquer les faits personnels dans une deuxième base centrale. Contrats, statuts, révisions, historique, suppression réelle et exclusions cloud sont des portes d’acceptation, pas des présomptions.
+
+L’application déjà en cours n’a pas été redémarrée ni testée dans un navigateur pendant cette consolidation. Le code serveur doit être rechargé pour utiliser le nouveau routage. Le parcours Career enrichi, les nouveaux endpoints profil et Control Center ne doivent pas être annoncés disponibles avant leur intégration et test de navigation.
+
 ## Blocages à lever, par priorité
 
-1. **Gel Step 5 confirmé** : commit final communiqué, worktree propre, agent non actif. Aucun merge de sa branche mouvante.
-2. **Lot 2** : préserver les anciennes lignes SQLite avec migration additive ; ne pas inventer `remaining_requests=0` depuis une erreur quota ; distinguer cooldown observé/calculé ; respecter `Retry-After=0` ; dédupliquer les noms de tests ledger qui écrasent des définitions antérieures.
-3. **Lot 3** : corriger les quatre refus d’acceptation du tableau et ajouter les régressions correspondantes. Rejeter un tarif, une preuve de gratuité ou des capacités manquants ; pas de métadonnées réputées gratuites par défaut.
-4. **Lot 4** : distinguer une tâche personnelle à accomplir et un plan logiciel exécutable. Ne pas présenter un texte libre enregistré comme un workflow déjà exécuté. Prouver le worker, les résultats, la confirmation, le rapport généré, les citations et le suivi.
-5. **Après consolidation** : évaluer les contributions `evals` et Nemotron indépendamment. Garder l’auto-amélioration expérimentale en copie isolée, sans déploiement critique automatique.
+1. **P0 Career** : appliquer uniquement les quatre commits métier dans une copie partant du main consolidé ; corriger la coupe 150 avant pertinence ; tests et parcours synthétique/browser. Réutiliser classement, déduplication, préparation et suivi existants. Aucun envoi réel de candidature.
+2. **P1 mémoire** : figer le moteur personnel, vérifier confidentialité/suppression, adapter l’API Nemotron et frontend. Une source de vérité, permissions explicites, aucune donnée réelle dans Git.
+3. **P1 Control Center** : valider les lanceurs et diagnostics serveur, puis intégrer les composants utiles par lot autonome.
+4. **P2 Noveria et auto-amélioration** : qualifier les fichiers existants et la trace du candidat signalé ; élargir sans second moteur Career ni déploiement critique automatique.
+5. **Parcours utilisateur complet** : distinguer tâche personnelle et plan logiciel ; rapport après confirmation et worker réellement exécuté. Toujours non démontré par les seuls enregistrements SQLite ou les huit scénarios limités du labo.
 
 ## Critères d’acceptation pour les prochaines sessions
 
@@ -111,4 +159,4 @@ La copie d’intégration et les worktrees des contributeurs sont conservés. Ce
 - Chaque lot accepté dans un commit indépendant. Aucun test réel de fournisseur sans confirmation des règles de gratuité et budget borné.
 - Mise à jour de ce document : état réel, agent, branche/commit, commandes, tests, blocages et prochaine action.
 
-Prochaine action : recevoir le commit final gelé de Step 5, préparer une nouvelle copie d’intégration et accepter le lot 2 seul avant de traiter le raccordement du chat.
+Prochaine action : intégration contrôlée de Career Stage Hunter, avec la correction de sélection bornée et sa non-régression avant disponibilité utilisateur.
