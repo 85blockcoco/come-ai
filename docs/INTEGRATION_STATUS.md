@@ -127,7 +127,7 @@ Contrôle en lecture seule avant toute nouvelle intégration : `main` propre à 
 
 | Contribution | Révision et état constatés | Validation effectuée / manquante | Décision et prochaine action |
 | --- | --- | --- | --- |
-| Career Stage Hunter / MiMo | `feature/career-stage-hunter`, `a14676950b58d6833d396175949dffa69a44d9aa`, propre ; quatre commits propres au métier depuis `4e203a8` | 92 tests `tests/test_career*.py` réussis en 8,28 s ; SSL `CERT_REQUIRED` et vérification hostname actifs. Les 136 rapportés incluent d’autres fichiers : ne pas les assimiler à cette commande | P0 produit suivant, pas encore dans main. `_normalise()` tranche les 150 premières offres avant classement : corriger la sélection et les cas hors cap avant acceptation ; navigation/browser et vrai parcours final encore à vérifier |
+| Career Stage Hunter / MiMo | `feature/career-stage-hunter`, `a14676950b58d6833d396175949dffa69a44d9aa`, propre ; quatre commits propres au métier depuis `4e203a8` | 92 tests source réussis en 8,28 s ; **136 tests de la commande du handoff réussis en 18,02 s sur la copie issue du main consolidé** ; SSL `CERT_REQUIRED` et vérification hostname actifs | Copie `integration/career-stage-hunter` préparée, treize fichiers indexés et non intégrés à main. `_normalise()` tranche les 150 premières offres avant classement : corriger la sélection et les cas hors cap avant acceptation ; navigation/browser et vrai parcours final encore à vérifier |
 | Personal Context Engine / Step 5 | `feature/personal-context-engine`, `8864b47`, dirty : review/store/README/contrat/test isolation + nouveaux tests confidentialité/suppression, handoff et modèle Space Bunny | 195 dédiés / 758 globaux / 21 démo annoncés, non rejoués ici sur cet état encore modifié | P1 : attendre livraison figée, auditer contrat et suppression ; candidat à la source de vérité des faits personnels approuvés |
 | API profil Nemotron | Base `1b570dd`, deux fichiers non commités ; état décrit ci-dessus | 394 historiques annoncés, pas de suite d’endpoints spécifique vérifiée dans cette mission | P1 : adapter l’API à l’unique moteur personnel retenu ; ne pas fusionner le nouveau store en parallèle |
 | Control Center | `feature/workspace-control-center`, base `7def985`, `Lanceurs/`, `workspace_control/` et trois fichiers de tests non suivis | Code présent, pas de nouveau commit ni tests rejoués ici | P1 après gel : intégrer lancement/état serveur/repères fiables, sans modifier les environnements ou tuer des processus arbitraires |
@@ -160,3 +160,21 @@ L’application déjà en cours n’a pas été redémarrée ni testée dans un 
 - Mise à jour de ce document : état réel, agent, branche/commit, commandes, tests, blocages et prochaine action.
 
 Prochaine action : intégration contrôlée de Career Stage Hunter, avec la correction de sélection bornée et sa non-régression avant disponibilité utilisateur.
+
+### Reprise exacte du lot Career préparé
+
+Copie : `/Users/comedelavenne/AI-Excel-Agent/.devkit/integration/career-stage-hunter`, branche `integration/career-stage-hunter`, base `28323d4`. Les quatre contributions `98a5815`, `089ea83`, `6368817`, `a146769` ont été appliquées **sans commit**. Ne pas recommencer ce cherry-pick et ne pas fusionner le worktree tant qu’il est modifié. Aucun fichier des worktrees sources n’a été changé.
+
+Commande réussie, depuis cette copie :
+
+```bash
+env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin PYTHONDONTWRITEBYTECODE=1 /Users/comedelavenne/AI-Excel-Agent/.venv/bin/python -m pytest -q -p no:cacheprovider tests/test_career_stage_hunter.py tests/test_career_agent.py tests/test_career_action_plan.py tests/test_calendar_export.py tests/test_come_ai_v3.py tests/test_hybrid_web.py tests/test_evolution_web.py tests/test_v5_web.py
+```
+
+Gates restantes avant commit et intégration :
+
+1. Une annonce répondant aux critères mais située après l’index 150 doit pouvoir être retenue. Évaluer les candidats avant la coupe, avec classement déterministe réutilisant le module existant, critères explicites et limite conservée ; ne pas envoyer les critères ou le profil au board public.
+2. Des entrées malformées en début de flux ne doivent pas éliminer des offres valides plus loin. La troncature et les limites de taille doivent rester visibles et bornées.
+3. Préserver TLS obligatoire et interdiction des redirections arbitraires ; ne jamais résoudre un problème SSL avec un contexte non vérifié.
+4. Rejouer les 136 tests, puis non-régression consolidée ; tester les vrais écrans sur un serveur isolé et un profil/offres fictifs. Un TestClient en processus ne prouve pas la navigation d’un navigateur.
+5. Préparation et suivi oui, candidature externe jamais envoyée automatiquement. L’essai public Stripe annoncé par l’auteur (722/150) n’a pas été refait ni authentifié ici.
