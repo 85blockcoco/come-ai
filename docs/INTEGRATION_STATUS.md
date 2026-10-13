@@ -6,6 +6,10 @@ Ce document décrit les livraisons acceptées et celles encore séparées. Il ne
 
 ## État accepté de main
 
+- **Career Stage Hunter livré** : commit métier `fe798858d51dfa4facccdad325b8b87ec62744a9`, intégré par avance rapide de `main` à `fb9dbba9fc8dce2c89407d8c91ba348fce84e40c`. Les sections plus bas décrivant la copie Career « préparée » sont historiques et remplacées par cette acceptation.
+- Career accessible sur `http://127.0.0.1:8765/career#career/stagehunter`. Serveur principal démarré après contrôle du port libre ; aucun serveur préexistant arrêté ou redémarré. Port 8877 réservé à la fixture navigateur, pas aux données utilisateur.
+- Après fusion : **161 tests ciblés réussis**, comprenant les 159 tests du parcours / non-régression ciblée et les 2 scénarios de sandbox réelle. Détails et limites : `docs/CAREER_STAGE_HUNTER_ACCEPTANCE.md`.
+- Non-régression **rejouée dans main après fusion** : **681 réussis, 2 ignorés en 44,45 s** ; les deux ignorés réussissent dans la commande ciblée ci-dessus. Syntaxe Python / JavaScript, dépendances et smoke CSV → rapport Excel réussis. Rapport `.devkit/diagnostics/2026-10-13T21-46-46.599913Z.md`, empreinte identique à la copie `d7098a354143d36c18e1dd044db7edf628c0647c69aea88c315a843f520c0a6a`.
 - Base de départ : `1b570ddf4734f5f8698c49c3972586e3c6685754`.
 - Lot 1 accepté : `c64d4da7d7844fab4a9fa06467c7170a5265a696`.
 - Laboratoire accepté : `c3652af`, adaptateur réel : `f9b8163`, collecte DevKit corrigée : `4e203a8`.
@@ -20,6 +24,7 @@ Ce document décrit les livraisons acceptées et celles encore séparées. Il ne
 
 | Lot / module | État réel | Responsable / provenance | Branche et commit | Preuves et prochaine action |
 | --- | --- | --- | --- | --- |
+| Career Stage Hunter | **Intégré et disponible** : critères explicites, découverte classée avant limite 150, préparation factuelle et suivi utilisable dans le navigateur intégré | MiMo / Career pour la contribution ; Codex et sous-agents pour sélection, corrections du parcours et acceptation | `main`, métier `fe79885`, intégration `fb9dbba` ; source conservée `a146769` | 159 ciblés sur copie ; 161 ciblés et 681 réussis / 2 ignorés post-fusion ; vrai navigateur sur données fictives ; un GET public Greenhouse réel. Pas de candidature externe envoyée |
 | 1 — génération de correctifs et diagnostics (`devkit/evolution*.py`) | Intégré : diagnostic de format précis mais sans fragments arbitraires ; consommation conservée avant rejet de troncation ou substitution | MiMo pour la contribution initiale ; Codex pour le durcissement et l’acceptation | `main`, `c64d4da` ; source `4b55f01` | 96 tests ciblés ; 416 + 2 dans DevKit ; les 2 scénarios ignorés réussis séparément ; revue indépendante sans blocage |
 | 2 — faits observés, quotas, `Retry-After`, bridge | Intégré : données factuelles, aliases normalisés et migrations additives | Step 5 source ; Codex et sous-agent pour le durcissement ; revue indépendante | `main`, `7def985` ; sources `7e3fafb`, `22255c8` ; préparation `b6ffadf` | 81 tests ciblés ; 460 sur copie Lot 2 ; 561 sur base consolidée, chaque fois 2 scénarios OS ignorés |
 | 3 — raccordement du chat au décideur | Intégré : les quatre blocages sont corrigés, y compris les modes manuel et hors ligne | Step 5 source ; Codex et sous-agent pour le durcissement | `main`, `13fe634` ; préparation `6937bc2` ; source `41224d8` | 181 tests ciblés ; 606 réussis et 2 ignorés en DevKit ; 2 scénarios OS réussis séparément ; requêtes cloud simulées seulement |
@@ -143,7 +148,7 @@ L’application déjà en cours n’a pas été redémarrée ni testée dans un 
 
 ## Blocages à lever, par priorité
 
-1. **P0 Career** : appliquer uniquement les quatre commits métier dans une copie partant du main consolidé ; corriger la coupe 150 avant pertinence ; tests et parcours synthétique/browser. Réutiliser classement, déduplication, préparation et suivi existants. Aucun envoi réel de candidature.
+1. **Career livré** : utiliser Stage Hunter pour les premières offres et candidatures manuelles. Le classement avant la coupe, la non-régression et le parcours navigateur ont été validés ; voir le rapport d’acceptation. Aucun dépôt automatique.
 2. **P1 mémoire** : figer le moteur personnel, vérifier confidentialité/suppression, adapter l’API Nemotron et frontend. Une source de vérité, permissions explicites, aucune donnée réelle dans Git.
 3. **P1 Control Center** : valider les lanceurs et diagnostics serveur, puis intégrer les composants utiles par lot autonome.
 4. **P2 Noveria et auto-amélioration** : qualifier les fichiers existants et la trace du candidat signalé ; élargir sans second moteur Career ni déploiement critique automatique.
@@ -159,7 +164,7 @@ L’application déjà en cours n’a pas été redémarrée ni testée dans un 
 - Chaque lot accepté dans un commit indépendant. Aucun test réel de fournisseur sans confirmation des règles de gratuité et budget borné.
 - Mise à jour de ce document : état réel, agent, branche/commit, commandes, tests, blocages et prochaine action.
 
-Prochaine action : intégration contrôlée de Career Stage Hunter, avec la correction de sélection bornée et sa non-régression avant disponibilité utilisateur.
+Prochaine action utilisateur : renseigner les critères dans Stage Hunter, configurer un board public exact ou importer une annonce, préparer et suivre une candidature. Les lots mémoire / Control Center / Noveria restent séparés ; aucune intégration supplémentaire dans cette livraison.
 
 ### Reprise exacte du lot Career préparé
 
