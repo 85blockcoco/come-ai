@@ -1,0 +1,130 @@
+"""Offline metadata tests; no model, project credentials or private data involved."""
+
+import json
+
+import pytest
+
+from devkit.evolution_store import EvolutionStore, EvolutionStoreError
+
+
+@pytest.fixture
+def store(tmp_path):
+    return EvolutionStore(tmp_path / "workshop")
+
+
+def task(store, title="Repair fictional core", priority=50):
+    return store.add_task(title, "Correct the fictional return value.", ["core.py"], "Keep all existing tests.", priority)
+
+
+def run(store, item=None):
+    item = item or task(store)
+    store.claim_task(item["task_id"])
+    return store.begin_run(item["task_id"], "ollama", "fixture-local", 2, 2)
+
+
+def test_tasks_persist_deduplicate_and_use_priority_order(store):
+    normal = task(store)
+    duplicate = store.add_task("  Repair fictional core  ", "Correct the fictional return value.",
+                               ["core.py", "core.py"], "Keep all existing tests.", 99)
+    urgent = task(store, "Repair urgent fictional bug", 90)
+    assert duplicate["task_id"] == normal["task_id"]
+    assert len(store.list_tasks()) == 2
+    restarted = EvolutionStore(store.storage_root)
+    assert restarted.next_task()["task_id"] == urgent["task_id"]
+    assert restarted.get_task(normal["task_id"])["selected_files"] == ["core.py"]
+    assert "fingerprint" not in restarted.get_task(normal["task_id"])
+
+
+def test_claim_is_exclusive_and_never_replays_a_running_task(store):
+    first = task(store)
+    second = task(store, "Second fictional task")
+    assert store.claim_next_task()["task_id"] == first["task_id"]
+    assert store.claim_next_task() is None
+    with pytest.raises(EvolutionStoreError, match="déjà en cours"):
+        store.claim_task(second["task_id"])
+    assert store.get_task(second["task_id"])["status"] == "queued"
+    with pytest.raises(EvolutionStoreError):
+        store.begin_run(second["task_id"], "ollama", "fixture-local", 2, 2)
+
+
+def test_interruption_recovery_is_explicit_and_requires_requeue(store):
+    execution = run(store)
+    restarted = EvolutionStore(store.storage_root)
+    assert restarted.get_run(execution["run_id"])["status"] == "running"
+    assert restarted.recover_interrupted() == {"recovered_runs": 1, "recovered_tasks": 1, "remote_requests_replayed": 0}
+    assert restarted.next_task() is None
+    assert restarted.get_run(execution["run_id"])["status"] == "waiting_provider"
+    assert restarted.recover_interrupted()["recovered_runs"] == 0
+    restarted.update_task(execution["task_id"], "queued")
+    assert restarted.claim_next_task()["task_id"] == execution["task_id"]
+
+
+def test_metrics_count_only_reported_values_and_survive_restart(store):
+    execution = run(store)
+    identifier = execution["run_id"]
+    store.record_event(identifier, "generation", "running", "Attempt one", data={"attempt": 1, "requests": 1})
+    store.record_event(identifier, "usage", "measured", "Reported usage", data={"input_tokens": 31, "output_tokens": 7,
+                                                                               "total_tokens": 38, "duration_seconds": 0.25})
+    store.record_event(identifier, "generation", "running", "Attempt two", data={"attempt": 2, "requests": 1})
+    store.record_event(identifier, "validation", "failed", "Actual diagnostic counters", data={"tests_passed": 2, "tests_failed": 1})
+    result = store.finish_run(identifier, "failed", reason="Tests failed.")
+    assert result["metrics"]["attempts"] == 2
+    assert result["metrics"]["requests"] == 2
+    assert result["metrics"]["total_tokens"] == 38
+    assert result["metrics"]["measured_usage_events"] == 1
+    assert result["metrics"]["duration_seconds"] == 0.25
+    restarted = EvolutionStore(store.storage_root)
+    assert restarted.get_run(identifier)["metrics"] == result["metrics"]
+    dashboard = restarted.dashboard()
+    assert dashboard["metrics"] == result["metrics"]
+    assert dashboard["unknown_usage_is_not_estimated"] is True
+    assert dashboard["automatic_application"] is False
+
+
+def test_finished_run_cannot_gain_events_and_cancellation_persists(store):
+    execution = run(store)
+    store.update_task(execution["task_id"], "cancelled")
+    result = store.finish_run(execution["run_id"], "needs_review", candidate_id="a" * 32)
+    assert result["status"] == "needs_review"
+    assert store.get_task(execution["task_id"])["status"] == "cancelled"
+    with pytest.raises(EvolutionStoreError, match="déjà terminée"):
+        store.record_event(execution["run_id"], "usage", "measured", "Late event")
+    with pytest.raises(EvolutionStoreError):
+        store.finish_run(execution["run_id"], "failed")
+
+
+def test_event_payload_excludes_prompts_credentials_and_unapproved_fields(store):
+    execution = run(store)
+    fictional_secret = "fixture-" + "credential-value"
+    event = store.record_event(execution["run_id"], "usage", "measured", "api_key=" + fictional_secret,
+                               data={"input_tokens": 11, "prompt": "private fictional prompt", "api_key": fictional_secret})
+    assert event["data"] == {"input_tokens": 11}
+    assert fictional_secret not in json.dumps(event)
+    item = store.add_task("Redacted task", "authorization=" + fictional_secret, ["core.py"])
+    assert fictional_secret not in item["description"]
+
+
+@pytest.mark.parametrize("path", [".env", "data/private.txt", "../core.py", "/tmp/core.py"])
+def test_private_and_traversal_task_paths_refused(store, path):
+    with pytest.raises(EvolutionStoreError):
+        store.add_task("Bad selection", "Fictional request", [path])
+    assert store.list_tasks() == []
+
+
+@pytest.mark.parametrize("data", [{"requests": True}, {"input_tokens": -1}, {"duration_seconds": float("nan")},
+                                   {"duration_seconds": float("inf")}, {"candidate_id": "../invalid"}])
+def test_invalid_measured_counters_are_not_stored(store, data):
+    execution = run(store)
+    with pytest.raises(EvolutionStoreError):
+        store.record_event(execution["run_id"], "usage", "measured", "Invalid fixture", data=data)
+    assert store.get_run(execution["run_id"])["events"] == []
+
+
+def test_symlinked_store_does_not_touch_target(tmp_path):
+    target = tmp_path / "untouched"
+    target.mkdir()
+    linked = tmp_path / "linked"
+    linked.symlink_to(target, target_is_directory=True)
+    with pytest.raises(EvolutionStoreError, match="liens symboliques"):
+        EvolutionStore(linked)
+    assert list(target.iterdir()) == []

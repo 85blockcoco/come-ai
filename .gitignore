@@ -1,0 +1,20 @@
+# Secrets et données privées de l'espace de travail
+.env
+data/
+output/
+logs/
+career_data/
+memory_data/
+state/
+.devkit/
+.local-ai/
+
+# Fichiers Python et macOS
+__pycache__/
+*.py[cod]
+.DS_Store
+.pytest_cache/
+*.part
+
+# Environnement virtuel local
+.venv/

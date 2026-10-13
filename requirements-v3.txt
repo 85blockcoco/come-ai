@@ -1,0 +1,25 @@
+# Côme AI V3 — environnement reproductible sur Python 3.12 / macOS Intel.
+# Une installation avec ce fichier conserve les versions compatibles déjà
+# présentes dans le venv ; elle ne contient aucune clé ni modèle local.
+
+# Noyau IA et données
+google-genai>=2.27,<3
+certifi>=2024.2
+pandas>=3.0,<4
+numpy>=2.0,<3
+openpyxl>=3.1,<4
+XlsxWriter>=3.2,<4
+
+# Documents et anciens classeurs
+pypdf>=5.0,<7
+xlrd>=2.0.1,<3
+
+# Interface web locale et tests hors ligne
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+python-multipart>=0.0.12,<1
+pytest>=8,<10
+
+# Exports Career locaux, sans Word, Pages, navigateur ou service distant
+python-docx>=1.1,<2
+reportlab>=4,<5

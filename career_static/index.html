@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>Côme AI Career — espace local</title>
+    <link rel="stylesheet" href="/career-static/career.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#career-main">Aller au contenu Career</a>
+    <div class="career-shell">
+      <header class="career-topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">C</div>
+          <div>
+            <p class="eyebrow">Côme AI</p>
+            <h1>Côme AI <span>Career</span></h1>
+            <p class="subtitle">Ton espace local pour organiser des offres, préparer des candidatures factuelles et t’entraîner. Aucune candidature n’est envoyée automatiquement.</p>
+          </div>
+        </div>
+        <div class="top-actions">
+          <span class="privacy-badge"><span aria-hidden="true">●</span> Données locales</span>
+          <a class="back-link" href="/">← Analyse &amp; documents</a>
+        </div>
+      </header>
+
+      <main id="career-main" tabindex="-1" aria-busy="true">
+        <section class="career-intro panel">
+          <div>
+            <p class="eyebrow">Recherche ciblée</p>
+            <h2>Stages européens · janvier–juin 2027</h2>
+            <p>Importe et suis des offres vérifiées à la source. Les dates inconnues restent à vérifier, les candidatures restent manuelles.</p>
+          </div>
+          <div id="career-health" class="status-badge" aria-live="polite">Vérification du module local…</div>
+        </section>
+
+        <nav class="career-tabs" aria-label="Navigation principale Career">
+          <button class="career-tab active" id="tab-dashboard" type="button" aria-current="page" aria-controls="view-dashboard" data-view="dashboard">Tableau de bord</button>
+          <button class="career-tab" id="tab-discover" type="button" aria-controls="view-discover" data-product-area="Discover" data-view="discover">Découvrir</button>
+          <button class="career-tab" id="tab-applications" type="button" aria-controls="view-applications" data-product-area="Applications" data-view="applications">Candidatures</button>
+          <button class="career-tab" id="tab-interviews" type="button" aria-controls="view-interviews" data-product-area="Interview Coach" data-view="interviews">Coach d’entretien</button>
+          <button class="career-tab" id="tab-profile" type="button" aria-controls="view-profile" data-view="profile">Mon profil</button>
+          <button class="career-tab" id="tab-settings" type="button" aria-controls="view-settings" data-view="settings">Réglages</button>
+        </nav>
+
+        <p id="career-loading" class="career-loading" role="status" aria-live="polite" aria-atomic="true">Chargement de ton espace Career local…</p>
+        <p id="career-message" class="career-message career-global-message" role="status" aria-live="polite" aria-atomic="true"></p>
+
+        <section id="view-dashboard" class="career-view" tabindex="-1" aria-labelledby="dashboard-title">
+          <section class="panel dashboard-hero">
+            <div>
+              <p class="eyebrow">Vue d’ensemble</p>
+              <h2 id="dashboard-title">Ce qui mérite ton attention</h2>
+              <p>Les recommandations sont calculées localement à partir des informations connues. Elles ne sont jamais une estimation de tes chances d’être recruté.</p>
+            </div>
+            <div class="inline-actions">
+              <button class="primary-button" type="button" data-view-action="discover">Trouver des opportunités</button>
+              <button class="secondary-button" type="button" data-view-action="interviews">Lancer un entraînement</button>
+            </div>
+          </section>
+          <div id="dashboard-content" class="dashboard-content"></div>
+          <section id="dashboard-action-plan-panel" class="panel action-plan-panel" aria-labelledby="dashboard-action-plan-title" aria-busy="true">
+            <div class="panel-heading action-plan-heading">
+              <div>
+                <p class="eyebrow">Prochaine étape</p>
+                <h3 id="dashboard-action-plan-title">Ton plan d’action</h3>
+              </div>
+              <span class="local-tag">Calculé localement</span>
+            </div>
+            <p id="dashboard-action-plan-help" class="panel-help">Les étapes sont ordonnées à partir de tes offres, brouillons, suivis et entraînements enregistrés. Elles ne déclenchent aucune action externe.</p>
+            <p id="dashboard-action-plan-loading" class="dashboard-plan-loading" role="status" aria-live="polite" aria-atomic="true">Mise à jour de ton plan d’action…</p>
+            <p id="dashboard-action-plan-error" class="dashboard-plan-error" role="alert" hidden></p>
+            <ol id="dashboard-action-plan" class="action-plan-list" aria-describedby="dashboard-action-plan-help" aria-live="polite"></ol>
+            <p id="dashboard-action-plan-empty" class="empty-state action-plan-empty" hidden>Ton suivi est à jour pour le moment. Tu peux continuer à explorer des offres ou lancer un entraînement.</p>
+            <p id="dashboard-action-plan-status" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></p>
+          </section>
+          <div class="dashboard-grid">
+            <section class="panel dashboard-panel">
+              <div class="panel-heading compact-heading"><div><p class="eyebrow">Priorités</p><h3>Offres recommandées</h3></div><button class="quiet-button" type="button" data-view-action="discover">Voir les offres</button></div>
+              <div id="dashboard-recommendations" class="dashboard-list"></div>
+              <p id="dashboard-recommendations-empty" class="empty-state compact-empty">Ajoute une offre officielle ou configure un board Greenhouse pour commencer.</p>
+            </section>
+            <section class="panel dashboard-panel">
+              <div class="panel-heading compact-heading"><div><p class="eyebrow">Échéances</p><h3>À vérifier prochainement</h3></div><button class="quiet-button" type="button" data-view-action="applications">Voir le suivi</button></div>
+              <div id="dashboard-deadlines" class="dashboard-list"></div>
+              <p id="dashboard-deadlines-empty" class="empty-state compact-empty">Aucune date limite connue à afficher.</p>
+            </section>
+          </div>
+        </section>
+
+        <section id="view-discover" class="career-view" tabindex="-1" hidden aria-labelledby="discover-title">
+          <div id="dashboard-metrics" class="metrics" aria-live="polite"></div>
+
+          <div class="discover-grid">
+            <section class="panel profile-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Profil local</p>
+                  <h3>Critères candidat</h3>
+                </div>
+                <button id="toggle-profile" class="quiet-button" type="button" aria-expanded="true">Réduire</button>
+              </div>
+              <form id="profile-form" class="form-stack">
+                <div class="form-row two-columns">
+                  <label>Nom d’affichage<input id="profile-display-name" name="display_name" maxlength="160" autocomplete="name" /></label>
+                  <label>Éligibilité déclarée
+                    <select id="profile-eligibility" name="eligibility">
+                      <option value="unknown">Inconnue / à vérifier</option>
+                      <option value="compatible">Compatible selon mes informations</option>
+                      <option value="incompatible">Incompatible selon mes informations</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="form-row two-columns">
+                  <label>E-mail de contact (facultatif)<input id="profile-contact-email" name="contact_email" type="email" maxlength="320" autocomplete="email" /></label>
+                  <label>Téléphone (facultatif)<input id="profile-contact-phone" name="contact_phone" type="tel" maxlength="80" autocomplete="tel" /></label>
+                </div>
+                <label>Profil LinkedIn public (référence uniquement)<input id="profile-linkedin-url" name="linkedin_url" type="url" maxlength="2000" placeholder="https://www.linkedin.com/in/…" inputmode="url" /></label>
+                <label>Formation / niveau d’étude<textarea id="profile-education" name="education" rows="2" maxlength="1000" placeholder="Ex. Master 1, formation, année…"></textarea></label>
+                <label>Expériences factuelles<textarea id="profile-experience" name="experience" rows="3" maxlength="6000" placeholder="Ex. stage, poste, projet, dates si tu souhaites les conserver."></textarea></label>
+                <label>Compétences factuelles<textarea id="profile-skills" name="skills" rows="3" maxlength="4000" placeholder="N’écris que ce qui est réel. Aucune compétence n’est déduite automatiquement."></textarea></label>
+                <label>Langues déclarées<textarea id="profile-languages" name="languages" rows="2" maxlength="2000" placeholder="Ex. français natif, anglais C1…"></textarea></label>
+                <label>Entreprises préférées (facultatif)<input id="profile-companies" name="target_companies" maxlength="2000" placeholder="Liste personnelle, séparée par des virgules" /></label>
+                <label>Notes personnelles<textarea id="profile-notes" name="notes" rows="2" maxlength="4000"></textarea></label>
+                <button class="primary-button" type="submit">Enregistrer le profil</button>
+              </form>
+
+              <details class="profile-import-details" id="profile-import-details">
+                <summary>Importer mon CV ou un export LinkedIn</summary>
+                <div class="form-stack top-gap">
+                  <p class="fixed-period-note">Lecture locale uniquement. Le document reste dans l’espace Career privé, hors du chat Côme AI : il n’est envoyé ni à Gemini, ni à Ollama, ni à LinkedIn. Pour un PDF scanné sans texte, l’OCR macOS Vision est déclenché localement (jusqu’à 8 pages). L’application ne se connecte pas à LinkedIn et ne lit ni cookie, ni mot de passe ; importe un PDF/export que tu as téléchargé toi-même, ou colle ton propre texte.</p>
+                  <form id="profile-document-form" class="form-stack" enctype="multipart/form-data">
+                    <div class="form-row two-columns">
+                      <label>Type de document
+                        <select id="profile-document-kind" name="source_kind">
+                          <option value="cv">CV personnel</option>
+                          <option value="linkedin_export">PDF ou document LinkedIn que j’ai exporté</option>
+                          <option value="profile_document">Autre document de profil</option>
+                        </select>
+                      </label>
+                      <label>Document local (PDF, DOCX, TXT, MD)
+                        <input id="profile-document-file" name="document" type="file" accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown" required />
+                      </label>
+                    </div>
+                    <button id="profile-document-submit" class="secondary-button" type="submit">Lire localement et préparer la relecture</button>
+                  </form>
+                  <form id="profile-text-form" class="form-stack">
+                    <label>Texte copié depuis LinkedIn ou un profil
+                      <textarea id="profile-text-value" name="text" rows="5" maxlength="100000" placeholder="Colle ici un texte que tu as le droit d’utiliser. Rien ne modifie ton profil avant ta validation."></textarea>
+                    </label>
+                    <input name="source_kind" type="hidden" value="linkedin_text" />
+                    <input name="original_name" type="hidden" value="texte-profil-linkedin" />
+                    <button id="profile-text-submit" class="secondary-button" type="submit">Préparer la relecture du texte</button>
+                  </form>
+                </div>
+              </details>
+
+              <section id="profile-import-review" class="profile-import-review" hidden aria-live="polite" aria-label="Relecture d’un import de profil">
+                <div class="panel-heading compact-heading">
+                  <div>
+                    <p class="eyebrow">Brouillon à vérifier</p>
+                    <h3 id="profile-import-review-title">Document importé</h3>
+                  </div>
+                  <button id="close-profile-import-review" class="quiet-button" type="button">Fermer la relecture</button>
+                </div>
+                <p id="profile-import-review-help" class="panel-help">Aucun champ n’est enregistré automatiquement. Choisis et modifie seulement les propositions que tu souhaites appliquer.</p>
+                <div id="profile-import-warnings" class="profile-import-warnings"></div>
+                <form id="profile-import-apply-form" class="form-stack"></form>
+                <details class="profile-import-preview-details">
+                  <summary>Voir un extrait du texte lu localement</summary>
+                  <pre id="profile-import-preview" class="profile-import-preview"></pre>
+                </details>
+              </section>
+
+              <section class="profile-import-history" aria-label="Sources de profil locales">
+                <div class="panel-heading compact-heading">
+                  <div>
+                    <p class="eyebrow">Sources privées</p>
+                    <h3>Imports de profil</h3>
+                  </div>
+                </div>
+                <p class="panel-help">Tu peux rouvrir un brouillon ou supprimer une source locale. Aucun fichier n’est accessible depuis le chat général.</p>
+                <div id="profile-import-history-list" class="profile-import-history-list"></div>
+                <p id="profile-import-history-empty" class="empty-state compact-empty">Aucun CV ou export de profil importé.</p>
+              </section>
+
+              <section class="career-intake-details" aria-label="Mini-entretien Career">
+                <div class="panel-heading compact-heading">
+                  <div>
+                    <p class="eyebrow">Recherche guidée</p>
+                    <h3>Mon mini-entretien Career</h3>
+                  </div>
+                  <button id="reset-career-intake" class="quiet-button" type="button">Recommencer</button>
+                </div>
+                <p class="panel-help">Réponds à six courtes questions : Côme AI sauvegarde tes réponses localement et les utilise pour cibler les brouillons de candidature. Rien n’est déduit à ton sujet.</p>
+                <div id="career-intake-chat" class="career-intake-chat" aria-live="polite"></div>
+                <form id="career-intake-form" class="career-intake-form">
+                  <label class="visually-hidden" for="career-intake-answer">Ta réponse</label>
+                  <textarea id="career-intake-answer" maxlength="1500" rows="3" placeholder="Ta réponse…"></textarea>
+                  <button id="career-intake-submit" class="secondary-button" type="submit">Continuer</button>
+                </form>
+              </section>
+
+              <details class="preferences-details">
+                <summary>Préférences métier, villes et disponibilité</summary>
+                <form id="preferences-form" class="form-stack top-gap">
+                  <p class="fixed-period-note">Ces critères sont locaux et modifiables. Les offres déjà enregistrées sont requalifiées lorsque tu les changes ; les dates absentes restent à vérifier.</p>
+                  <div class="form-row two-columns">
+                    <label>Disponible à partir du<input id="availability-start" type="date" /></label>
+                    <label>Disponible jusqu’au<input id="availability-end" type="date" /></label>
+                    <label>Durée minimale (mois)<input id="duration-min" type="number" min="1" max="24" /></label>
+                    <label>Durée maximale (mois)<input id="duration-max" type="number" min="1" max="24" /></label>
+                  </div>
+                  <div>
+                    <p class="field-label">Familles professionnelles <span>Décoche pour désactiver, règle la priorité pour réordonner.</span></p>
+                    <div id="family-preferences" class="preference-list"></div>
+                  </div>
+                  <div>
+                    <p class="field-label">Zones géographiques</p>
+                    <div id="location-preferences" class="preference-list"></div>
+                  </div>
+                  <button class="secondary-button" type="submit">Enregistrer les préférences</button>
+                </form>
+              </details>
+
+              <details class="privacy-details">
+                <summary>Mes données Career</summary>
+                <p>Tu peux télécharger une copie locale de tes données ou un calendrier d’échéances. Le calendrier contient seulement les dates connues d’offres encore actionnables ; il ne synchronise rien et n’envoie aucune candidature.</p>
+                <div class="inline-actions">
+                  <a class="secondary-button link-button" href="/api/career/privacy-export">Exporter mes données</a>
+                  <a class="secondary-button link-button" href="/api/career/deadlines.ics" download>Télécharger les échéances (.ics)</a>
+                  <button id="delete-career-data" class="danger-button" type="button">Supprimer mes données Career</button>
+                </div>
+              </details>
+            </section>
+
+            <section class="panel import-panel">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">Recherche officielle</p>
+                  <h2 id="discover-title">Découvrir des opportunités</h2>
+                </div>
+                <span class="local-tag">Greenhouse sur demande</span>
+              </div>
+              <p class="panel-help">Ajoute une fois le board Greenhouse public d’une entreprise. Le bouton lit ensuite uniquement ses annonces publiées, avec un délai, un cache de 10 minutes et aucun accès LinkedIn.</p>
+              <form id="discovery-source-form" class="form-stack discovery-source-form">
+                <div class="form-row two-columns">
+                  <label>Entreprise *<input id="discovery-source-company" name="company" required maxlength="240" placeholder="Ex. Banque ou fonds" /></label>
+                  <label>Board Greenhouse public *<input id="discovery-source-reference" name="board_reference" required maxlength="2000" placeholder="https://boards.greenhouse.io/entreprise" /></label>
+                </div>
+                <button id="discovery-source-submit" class="secondary-button" type="submit">Ajouter ce board officiel</button>
+              </form>
+              <div id="discovery-sources" class="discovery-sources" aria-live="polite"></div>
+              <p id="discovery-sources-empty" class="panel-help discovery-empty">Aucun board configuré. Cette étape ne demande ni compte ni clé API.</p>
+              <div class="discovery-actions">
+                <button id="discovery-search" class="primary-button" type="button">Rechercher des opportunités</button>
+                <button id="discovery-force-search" class="quiet-button" type="button" title="Ignore le cache de 10 minutes pour tous les boards actifs">Actualiser malgré le cache</button>
+              </div>
+              <p class="fixed-period-note">Les résultats sont des offres publiées par les boards configurés et affichent l’heure de vérification. Une date, une langue ou une condition absente reste « à vérifier ».</p>
+
+              <div class="manual-import-divider"><span>ou</span></div>
+              <div class="panel-heading compact-heading">
+                <div>
+                  <p class="eyebrow">Source manuelle</p>
+                  <h3>Importer une offre</h3>
+                </div>
+              </div>
+              <p class="panel-help">Colle les informations d’une page officielle. Career Agent les conserve localement et détecte les doublons forts.</p>
+              <form id="job-form" class="form-stack">
+                <div class="form-row two-columns">
+                  <label>Entreprise *<input name="company" required maxlength="240" /></label>
+                  <label>Intitulé *<input name="title" required maxlength="300" /></label>
+                </div>
+                <div class="form-row two-columns">
+                  <label>Famille
+                    <select id="job-family" name="job_family"></select>
+                  </label>
+                  <label>Statut de l’annonce
+                    <select name="source_status">
+                      <option value="unknown">Inconnu</option>
+                      <option value="open">Ouverte</option>
+                      <option value="closed">Fermée</option>
+                    </select>
+                  </label>
+                  <label>Ville<input name="city" maxlength="160" placeholder="Ex. Paris" /></label>
+                  <label>Pays<input name="country" maxlength="120" placeholder="Ex. France" /></label>
+                </div>
+                <label>URL officielle<input name="official_url" type="url" maxlength="2000" placeholder="https://…" /></label>
+                <div class="form-row three-columns">
+                  <label>Date de publication<input name="posted_date" type="date" /></label>
+                  <label>Date limite<input name="deadline_date" type="date" /></label>
+                  <label>Identifiant ATS<input name="source_id" maxlength="240" /></label>
+                </div>
+                <div class="form-row three-columns">
+                  <label>Début du stage<input name="start_date" type="date" /></label>
+                  <label>Fin du stage<input name="end_date" type="date" /></label>
+                  <label>Durée annoncée (mois)<input name="duration_months" type="number" min="1" max="24" /></label>
+                </div>
+                <details>
+                  <summary>Détails de l’annonce (facultatif)</summary>
+                  <div class="form-stack top-gap">
+                    <label>Type de poste<input name="employment_type" maxlength="120" placeholder="Ex. internship, off-cycle…" /></label>
+                    <label>Niveau / expérience<input name="role_level" maxlength="120" placeholder="Ex. étudiant, junior, senior…" /></label>
+                    <label>Exigences<textarea name="requirements" rows="3" maxlength="12000"></textarea></label>
+                    <label>Langues demandées<textarea name="languages_required" rows="2" maxlength="2000"></textarea></label>
+                    <label>Éligibilité indiquée<textarea name="eligibility_requirement" rows="2" maxlength="2000"></textarea></label>
+                    <label>Description originale<textarea name="description_original" rows="5" maxlength="30000"></textarea></label>
+                  </div>
+                </details>
+                <button class="primary-button" type="submit">Enregistrer l’offre localement</button>
+              </form>
+            </section>
+          </div>
+
+          <section class="panel jobs-panel">
+            <div class="panel-heading jobs-heading">
+              <div>
+                <p class="eyebrow">Offres vérifiées ou importées</p>
+                <h2>Offres enregistrées</h2>
+              </div>
+              <div class="inline-actions">
+                <a class="secondary-button link-button" href="/api/career/export/csv">Exporter CSV</a>
+                <a class="secondary-button link-button" href="/api/career/export/xlsx">Exporter XLSX</a>
+              </div>
+            </div>
+            <form id="job-filters" class="filter-row">
+              <label class="filter-search"><span class="visually-hidden">Rechercher</span><input id="filter-query" type="search" placeholder="Entreprise, poste ou ville" /></label>
+              <select id="filter-family"><option value="">Tous les métiers</option></select>
+              <select id="filter-status"><option value="">Tous les statuts</option><option value="open">Ouvertes</option><option value="closed">Fermées</option><option value="unknown">À vérifier</option></select>
+              <button class="secondary-button" type="submit">Filtrer</button>
+              <button id="clear-job-filters" class="quiet-button" type="button">Réinitialiser</button>
+            </form>
+            <div id="jobs-list" class="job-list"></div>
+            <p id="jobs-empty" class="empty-state">Aucune offre pour l’instant. Importe une annonce officielle ou une description que tu as obtenue légalement.</p>
+          </section>
+        </section>
+
+        <section id="view-profile" class="career-view" tabindex="-1" hidden aria-labelledby="profile-title">
+          <header class="view-intro">
+            <p class="eyebrow">Identité professionnelle</p>
+            <h2 id="profile-title">Mon profil</h2>
+            <p>Garde ici les informations que tu veux réutiliser dans tes recherches et brouillons. Tout reste local tant que tu ne choisis pas explicitement un mode IA.</p>
+          </header>
+          <div id="profile-content" class="single-view-content"></div>
+        </section>
+
+        <section id="view-settings" class="career-view" tabindex="-1" hidden aria-labelledby="settings-title">
+          <section class="panel settings-panel">
+            <div class="panel-heading"><div><p class="eyebrow">Préférences et confidentialité</p><h2 id="settings-title">Réglages</h2></div><span class="local-tag">Données locales</span></div>
+            <p class="panel-help">Règle tes priorités et ta disponibilité, exporte tes données ou supprime uniquement l’espace Career. Tes fichiers d’analyse Côme AI restent séparés.</p>
+            <div id="settings-content" class="settings-content"></div>
+          </section>
+        </section>
+
+        <section id="view-shortlist" class="career-view" tabindex="-1" hidden aria-labelledby="shortlist-title" data-product-area="Shortlist">
+          <section class="panel jobs-panel">
+            <div class="panel-heading"><div><p class="eyebrow">Sélection manuelle</p><h2 id="shortlist-title">Ma shortlist</h2></div></div>
+            <p class="panel-help">La shortlist reste une décision manuelle. Le score local explique seulement l’adéquation des faits connus ; il ne représente jamais une probabilité de recrutement.</p>
+            <div id="shortlist-list" class="job-list"></div>
+            <p id="shortlist-empty" class="empty-state">Aucune offre n’est encore sélectionnée.</p>
+          </section>
+        </section>
+
+        <section id="view-studio" class="career-view" tabindex="-1" hidden aria-labelledby="studio-title">
+          <section class="panel studio-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Dossier adapté à une offre</p>
+                <h2 id="studio-title">Application Studio</h2>
+              </div>
+              <span class="local-tag">Local par défaut</span>
+            </div>
+            <p class="panel-help">Choisis une offre déjà enregistrée, la langue du dossier, puis crée un CV et une lettre modifiables. Le gabarit local n’invente aucun fait. Le mode IA est facultatif, clairement signalé et n’envoie le profil et l’offre qu’après ta confirmation.</p>
+            <form id="application-draft-form" class="form-stack">
+              <div class="form-row three-columns">
+                <label>Offre enregistrée
+                  <select id="application-draft-job" required><option value="">Choisir une offre…</option></select>
+                </label>
+                <label>Langue du dossier
+                  <select id="application-draft-language">
+                    <option value="fr">Français</option>
+                    <option value="en">English</option>
+                    <option value="it">Italiano</option>
+                    <option value="de">Deutsch</option>
+                  </select>
+                </label>
+                <label>Mode de préparation
+                  <select id="application-draft-mode">
+                    <option value="local">Gabarit local factuel</option>
+                    <option value="ai">Amélioration par IA configurée</option>
+                  </select>
+                </label>
+              </div>
+              <label id="application-draft-consent-row" class="studio-consent" hidden>
+                <input id="application-draft-consent" type="checkbox" />
+                <span>Je confirme que Côme AI peut transmettre uniquement mon profil Career, mes réponses au mini-entretien et cette offre au fournisseur IA configuré pour ce brouillon. Cette action peut consommer mon quota.</span>
+              </label>
+              <button id="application-draft-submit" class="primary-button" type="submit">Créer le dossier de candidature</button>
+            </form>
+          </section>
+
+          <section id="application-draft-preview" class="panel application-draft-preview" hidden aria-live="polite">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Brouillon à relire</p>
+                <h3 id="application-draft-preview-title">Dossier de candidature</h3>
+              </div>
+              <button id="delete-application-draft" class="danger-button" type="button">Supprimer ce brouillon</button>
+            </div>
+            <p id="application-draft-meta" class="panel-help"></p>
+            <div id="application-draft-checks" class="draft-checks"></div>
+            <div class="application-draft-documents">
+              <article class="draft-document"><h3>CV</h3><pre id="application-draft-cv" class="draft-preview-text"></pre><div id="application-draft-cv-downloads" class="inline-actions"></div></article>
+              <article class="draft-document"><h3>Lettre de motivation</h3><pre id="application-draft-letter" class="draft-preview-text"></pre><div id="application-draft-letter-downloads" class="inline-actions"></div></article>
+            </div>
+          </section>
+
+          <section class="panel studio-history-panel">
+            <div class="panel-heading compact-heading"><div><p class="eyebrow">Versions locales</p><h3>Brouillons précédents</h3></div></div>
+            <div id="application-draft-history" class="application-draft-history"></div>
+            <p id="application-draft-history-empty" class="empty-state compact-empty">Aucun dossier de candidature n’est encore enregistré.</p>
+          </section>
+        </section>
+
+        <section id="view-applications" class="career-view" tabindex="-1" hidden aria-labelledby="applications-title">
+          <section class="panel jobs-panel">
+            <div class="panel-heading"><div><p class="eyebrow">Suivre mes démarches</p><h2 id="applications-title">Candidatures</h2></div><button class="primary-button" type="button" data-view-action="studio">Préparer un dossier</button></div>
+            <p class="panel-help">Career Agent ne soumet rien au site d’une entreprise. « Réception confirmée » est réservé à une preuve que tu as reçue après un dépôt manuel.</p>
+            <div id="applications-list" class="application-list"></div>
+            <p id="applications-empty" class="empty-state">Crée un suivi depuis une offre enregistrée ou depuis ta shortlist.</p>
+          </section>
+        </section>
+
+        <section id="view-interviews" class="career-view" tabindex="-1" hidden aria-labelledby="interviews-title">
+          <section class="panel coach-panel">
+            <div class="panel-heading">
+              <div><p class="eyebrow">Préparer un entretien</p><h2 id="interviews-title">Coach d’entretien</h2></div>
+              <span class="local-tag">Texte local · aucune IA requise</span>
+            </div>
+            <p class="panel-help">Entraîne-toi question par question. Le coach évalue la couverture, la structure, la clarté et la précision par rapport à un exercice connu ; son score ne prédit jamais un recrutement.</p>
+            <form id="coach-session-form" class="form-stack">
+              <div class="form-row three-columns">
+                <label>Mode
+                  <select id="coach-mode"><option value="technical">Technique</option><option value="behavioral">Comportement / motivation</option><option value="case">Étude de cas</option><option value="company">Offre ou entreprise</option></select>
+                </label>
+                <label>Niveau
+                  <select id="coach-difficulty"><option value="beginner">Débutant</option><option value="intermediate" selected>Intermédiaire</option><option value="advanced">Avancé</option><option value="investment_banking">Entretien Investment Banking</option><option value="private_equity">Entretien Private Equity</option><option value="highly_competitive">Très sélectif</option></select>
+                </label>
+                <label>Langue
+                  <select id="coach-language"><option value="fr">Français</option><option value="en">English</option><option value="it">Italiano</option><option value="de">Deutsch</option></select>
+                </label>
+              </div>
+              <label>Offre associée (facultatif)
+                <select id="coach-job"><option value="">Entraînement général</option></select>
+              </label>
+              <button id="coach-session-start" class="primary-button" type="submit">Commencer une séance</button>
+            </form>
+          </section>
+
+          <section id="coach-session" class="panel coach-session" hidden aria-live="polite">
+            <div class="panel-heading"><div><p class="eyebrow">Séance active</p><h3 id="coach-session-title">Question</h3></div><button id="coach-session-complete" class="quiet-button" type="button">Terminer la séance</button></div>
+            <div id="coach-progress" class="coach-progress"></div>
+            <div id="coach-progress-detail" class="coach-progress-detail" aria-live="polite"></div>
+            <article class="coach-question"><p id="coach-question-topic" class="eyebrow"></p><p id="coach-question-prompt" class="coach-question-prompt"></p></article>
+            <form id="coach-answer-form" class="form-stack">
+              <label>Ta réponse<textarea id="coach-answer" rows="8" maxlength="6000" placeholder="Réponds comme en entretien : structure, mécanisme, conclusion…" required></textarea></label>
+              <button id="coach-answer-submit" class="primary-button" type="submit">Obtenir un retour structuré</button>
+            </form>
+            <section id="coach-feedback" class="coach-feedback" hidden></section>
+          </section>
+
+          <section class="panel coach-history-panel">
+            <div class="panel-heading compact-heading"><div><p class="eyebrow">Progression locale</p><h3>Séances précédentes</h3></div></div>
+            <div id="coach-history" class="coach-history"></div>
+            <p id="coach-history-empty" class="empty-state compact-empty">Aucune séance sauvegardée. Commence par une question technique, fit, case ou liée à une offre.</p>
+          </section>
+        </section>
+      </main>
+
+      <footer>
+        <span>Côme AI Career fonctionne localement par défaut : OCR macOS, profil, pertinence, candidatures et coach textuel. Les boards publics ne sont lus qu’après ton clic ; aucun dépôt de candidature n’est automatisé.</span>
+      </footer>
+    </div>
+    <script src="/career-static/career.js" defer></script>
+  </body>
+</html>

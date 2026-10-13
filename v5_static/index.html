@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta name="description" content="Côme AI 5.0 — assistant personnel local, mémoire et analyses contrôlées.">
+    <title>Côme AI 5.0 — Espace personnel</title>
+    <link rel="stylesheet" href="/v5-static/v5.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Aller au contenu</a>
+    <div class="ambient ambient-one" aria-hidden="true"></div>
+    <div class="ambient ambient-two" aria-hidden="true"></div>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="/v5" aria-label="Côme AI 5.0, accueil">
+          <span class="brand-mark" aria-hidden="true">C</span>
+          <span><strong>Côme AI</strong><small>5.0 · espace personnel</small></span>
+        </a>
+        <nav class="main-nav" aria-label="Espaces de travail">
+          <button class="nav-item active" type="button" data-view-target="assistantView" aria-current="page">Assistant</button>
+          <button class="nav-item" type="button" data-view-target="documentsView">Documents &amp; Finance</button>
+          <button class="nav-item" type="button" data-view-target="memoryView">Mémoire &amp; stockage</button>
+          <a class="nav-item nav-link" href="/career">Career</a>
+          <button class="nav-item" type="button" data-view-target="settingsView">Réglages</button>
+          <button class="nav-item" type="button" data-view-target="developerView">Atelier Développeur</button>
+        </nav>
+        <div class="topbar-status" aria-live="polite">
+          <span id="localStatus" class="status-pill neutral">Initialisation locale…</span>
+          <a class="subtle-link" href="/" title="Ouvrir l’interface V3 historique">V3</a>
+        </div>
+      </header>
+
+      <main id="main-content">
+        <section id="assistantView" class="view active" aria-labelledby="assistantTitle">
+          <div class="hero-row">
+            <div>
+              <p class="eyebrow">INTELLIGENCE HYBRIDE · OUTILS CONTRÔLÉS</p>
+              <h1 id="assistantTitle">Ton assistant, sur ton Mac.</h1>
+              <p class="lead">Discute naturellement, travaille sur tes documents et retrouve tes cours. Choisis le mode hors ligne ou les fournisseurs gratuits configurés, sans modifier tes originaux.</p>
+            </div>
+            <div class="hero-metrics" aria-label="Résumé de l’espace">
+              <div><span id="metricFiles">—</span><small>documents</small></div>
+              <div><span id="metricMemory">—</span><small>sources mémoire</small></div>
+              <div><span id="metricTasks">0</span><small>tâche active</small></div>
+            </div>
+          </div>
+
+          <div class="workspace-grid">
+            <aside class="panel documents-panel" aria-labelledby="workspaceFilesTitle">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">ESPACE CONTRÔLÉ</p>
+                  <h2 id="workspaceFilesTitle">Tes documents</h2>
+                </div>
+                <button id="refreshFiles" class="icon-button" type="button" title="Actualiser les documents" aria-label="Actualiser les documents">↻</button>
+              </div>
+              <label id="dropZone" class="drop-zone" for="fileInput">
+                <input id="fileInput" type="file" multiple accept=".xlsx,.xlsm,.xls,.csv,.tsv,.pdf,.docx,.txt,.md">
+                <span class="drop-icon" aria-hidden="true">↓</span>
+                <strong>Importer des fichiers</strong>
+                <small>Excel, CSV, PDF, Word, texte · 50 Mo/fichier</small>
+              </label>
+              <p id="uploadStatus" class="quiet-status" aria-live="polite">Les originaux restent inchangés.</p>
+              <div id="fileList" class="file-list" role="list" aria-label="Documents importés"></div>
+              <p id="emptyFiles" class="empty-state">Ajoute un cours, une offre, un relevé ou un tableau pour commencer.</p>
+            </aside>
+
+            <section class="panel conversation-panel" aria-labelledby="conversationTitle">
+              <div class="panel-heading conversation-heading">
+                <div>
+                  <p class="eyebrow">ASSISTANT</p>
+                  <h2 id="conversationTitle">Que veux-tu avancer&nbsp;?</h2>
+                </div>
+                <span id="selectedFileBadge" class="selected-badge" hidden></span>
+              </div>
+              <div id="chatLog" class="chat-log" role="log" aria-live="polite" aria-relevant="additions">
+                <article class="message assistant-message welcome-message">
+                  <p class="message-label">Côme AI</p>
+                  <p>Parlons de ce que tu veux avancer. Je peux m’appuyer sur tes documents, rechercher dans ta mémoire et utiliser des outils locaux contrôlés. Le mode Hors ligne est sélectionné par défaut.</p>
+                  <div class="suggestion-row">
+                    <button class="suggestion" type="button" data-prompt="Analyse financière en profondeur le fichier sélectionné.">Analyser un tableau</button>
+                    <button class="suggestion" type="button" data-prompt="Indexe ce document dans la mémoire.">Mémoriser un document</button>
+                    <button class="suggestion" type="button" data-prompt="Cherche &quot;VAN&quot; dans ma mémoire.">Rechercher dans mes cours</button>
+                  </div>
+                </article>
+              </div>
+              <form id="orchestratorForm" class="composer">
+                <div class="chat-mode-row" role="group" aria-label="Mode de l’assistant">
+                  <button class="chat-mode" type="button" data-chat-mode="automatic" aria-pressed="false">Automatique</button>
+                  <button class="chat-mode active" type="button" data-chat-mode="offline" aria-pressed="true">Hors ligne</button>
+                  <button class="chat-mode" type="button" data-chat-mode="performance" aria-pressed="false">Performance</button>
+                </div>
+                <p id="chatModeDescription" class="quiet-status">Qwen et outils locaux uniquement. Aucun fournisseur cloud en mode Hors ligne.</p>
+                <details class="chat-advanced">
+                  <summary>Choisir un modèle manuellement</summary>
+                  <div class="chat-advanced-fields">
+                    <label>Fournisseur<select id="chatProvider"><option value="auto">Choix automatique</option><option value="ollama">Ollama local</option><option value="gemini">Gemini gratuit</option><option value="openrouter">OpenRouter gratuit</option></select></label>
+                    <label>Modèle<input id="chatModel" maxlength="128" placeholder="auto" value="auto" autocomplete="off" spellcheck="false"></label>
+                  </div>
+                  <p class="quiet-status">Le serveur vérifie le fournisseur et la gratuité. Une sélection manuelle ne permet pas de contourner le mode Hors ligne.</p>
+                </details>
+                <label class="sr-only" for="messageInput">Ta demande</label>
+                <textarea id="messageInput" rows="3" maxlength="12000" placeholder="Parle-moi de ton objectif, ou demande un résumé du document sélectionné…"></textarea>
+                <div class="composer-footer">
+                  <label class="consent-control">
+                    <input id="allowWrite" type="checkbox">
+                    <span>J’autorise la création d’un nouveau rapport pour cette demande</span>
+                  </label>
+                  <button id="sendButton" class="primary-button" type="submit">Envoyer <span aria-hidden="true">→</span></button>
+                </div>
+                <p id="requestStatus" class="quiet-status">L’historique de cette conversation reste dans cet onglet. Les créations de rapports nécessitent ton accord.</p>
+              </form>
+            </section>
+
+            <aside class="panel activity-panel" aria-labelledby="activityTitle">
+              <div class="panel-heading">
+                <div>
+                  <p class="eyebrow">EXÉCUTION</p>
+                  <h2 id="activityTitle">Modèle &amp; résultats</h2>
+                </div>
+                <button id="cancelTask" class="text-button danger" type="button" hidden>Annuler</button>
+              </div>
+              <div id="taskState" class="task-state empty-state">Aucune tâche lancée pour le moment.</div>
+              <dl id="chatMetrics" class="chat-metrics" hidden>
+                <div><dt>Modèle</dt><dd id="chatModelUsed">—</dd></div>
+                <div><dt>Fournisseur</dt><dd id="chatProviderUsed">—</dd></div>
+                <div><dt>Temps de réponse</dt><dd id="chatLatency">—</dd></div>
+                <div><dt>Tokens déclarés</dt><dd id="chatTokens">Inconnus</dd></div>
+                <div class="chat-route-detail"><dt>Motif du choix</dt><dd id="chatRouteReason">—</dd></div>
+              </dl>
+              <ol id="planList" class="plan-list" aria-label="Étapes du plan"></ol>
+              <section id="citationsSection" class="citations" hidden aria-labelledby="citationsTitle">
+                <h3 id="citationsTitle">Passages retrouvés</h3>
+                <div id="citationList"></div>
+              </section>
+              <section class="output-section" aria-labelledby="outputsTitle">
+                <div class="section-line"><h3 id="outputsTitle">Rapports créés</h3><button id="refreshOutputs" class="text-button" type="button">Actualiser</button></div>
+                <div id="outputList" class="output-list"></div>
+                <p id="emptyOutputs" class="empty-state compact">Les rapports Excel apparaîtront ici.</p>
+              </section>
+            </aside>
+          </div>
+        </section>
+
+        <section id="documentsView" class="view" aria-labelledby="documentsTitle" hidden>
+          <div class="section-intro">
+            <p class="eyebrow">CALCUL LOCAL</p>
+            <h1 id="documentsTitle">Documents &amp; analyses financières</h1>
+            <p>Les outils existants lisent les Excel/CSV dans l’espace local, calculent statistiques et valeurs manquantes, puis créent un nouveau classeur sans écraser la source.</p>
+          </div>
+          <div class="tool-cards">
+            <article class="panel tool-card"><span class="tool-number">01</span><h2>Inspecter</h2><p>Structure, feuilles, colonnes, aperçu et informations sur le document sélectionné.</p><button class="secondary-button doc-action" type="button" data-action="inspect">Inspecter le fichier</button></article>
+            <article class="panel tool-card"><span class="tool-number">02</span><h2>Analyser</h2><p>Statistiques descriptives, valeurs manquantes et observations financières calculées localement.</p><button class="secondary-button doc-action" type="button" data-action="analyze">Analyser le tableau</button></article>
+            <article class="panel tool-card"><span class="tool-number">03</span><h2>Exporter</h2><p>Créer un rapport Excel distinct, seulement après confirmation explicite.</p><button class="secondary-button doc-action" type="button" data-action="report">Préparer un rapport</button></article>
+          </div>
+          <section class="panel selected-document-card">
+            <p class="eyebrow">DOCUMENT SÉLECTIONNÉ</p>
+            <h2 id="documentsSelectedName">Aucun document sélectionné</h2>
+            <p id="documentsSelectedMeta">Retourne dans Assistant pour importer ou sélectionner un fichier.</p>
+          </section>
+        </section>
+
+        <section id="memoryView" class="view" aria-labelledby="memoryTitle" hidden>
+          <div class="section-intro split-intro">
+            <div><p class="eyebrow">SQLITE + FTS5 · SUR CE MAC</p><h1 id="memoryTitle">Mémoire &amp; stockage, avec tes sources.</h1><p>Chaque extrait conserve son document et une référence. Les documents volumineux sont indexés dans la file locale, sans modèle externe.</p></div>
+            <div class="memory-health" id="memoryHealth">Chargement de la mémoire…</div>
+          </div>
+          <section class="storage-metrics" aria-label="État réel du stockage local">
+            <article class="storage-metric"><span id="storageLibrarySize">—</span><small>bibliothèque locale</small></article>
+            <article class="storage-metric"><span id="storageFiles">—</span><small>fichiers indexés</small></article>
+            <article class="storage-metric"><span id="storageFreeSpace">—</span><small>espace disponible</small></article>
+            <article class="storage-metric"><span id="storageIndexing">—</span><small>indexation en cours</small></article>
+          </section>
+          <div class="memory-grid">
+            <section class="panel memory-panel" aria-labelledby="projectsTitle">
+              <div class="panel-heading"><div><p class="eyebrow">ORGANISATION</p><h2 id="projectsTitle">Projets</h2></div></div>
+              <form id="projectForm" class="inline-form">
+                <label class="sr-only" for="projectName">Nom du projet</label>
+                <input id="projectName" maxlength="120" placeholder="Ex. Révisions finance">
+                <button class="secondary-button" type="submit">Créer</button>
+              </form>
+              <div id="projectList" class="project-list" role="list"></div>
+              <p class="quiet-status">Choisis un projet pour y ranger les prochains documents.</p>
+            </section>
+            <section class="panel memory-panel" aria-labelledby="memoryActionsTitle">
+              <div class="panel-heading"><div><p class="eyebrow">INDEXATION CONTRÔLÉE</p><h2 id="memoryActionsTitle">Ajouter &amp; retrouver</h2></div></div>
+              <div class="memory-selected"><strong id="memorySelectedFile">Aucun document sélectionné</strong><span class="memory-action-buttons"><button id="indexSelected" class="secondary-button" type="button">Indexer dans la mémoire</button><button id="cancelMemoryIndex" class="text-button danger" type="button" hidden>Annuler</button></span></div>
+              <form id="memorySearchForm" class="search-form">
+                <label for="memorySearchInput">Rechercher dans tes sources</label>
+                <div><input id="memorySearchInput" maxlength="240" placeholder="Ex. formule de la VAN"><button class="primary-button" type="submit">Rechercher</button></div>
+              </form>
+              <p id="memoryActionStatus" class="quiet-status" aria-live="polite">Sélectionne d’abord un document depuis l’espace de travail.</p>
+              <div id="memoryResults" class="memory-results" aria-live="polite"></div>
+            </section>
+          </div>
+          <section class="panel sources-panel" aria-labelledby="sourcesTitle">
+            <div class="panel-heading"><div><p class="eyebrow">PERSISTANCE LOCALE</p><h2 id="sourcesTitle">Sources indexées</h2></div><button id="refreshMemory" class="text-button" type="button">Actualiser</button></div>
+            <div id="sourceList" class="source-list"></div>
+            <p id="emptySources" class="empty-state compact">Aucun document n’est encore indexé.</p>
+          </section>
+          <section class="panel storage-panel" aria-labelledby="storageTitle">
+            <div class="panel-heading"><div><p class="eyebrow">STOCKAGE LOCAL</p><h2 id="storageTitle">État de la bibliothèque</h2></div><button id="refreshStorage" class="text-button" type="button">Actualiser</button></div>
+            <p id="storageLocation" class="storage-location">Chargement de l’emplacement de mémoire…</p>
+            <div class="storage-details">
+              <div><span>Index de recherche</span><strong id="storageIndexSize">—</strong></div>
+              <div><span>Sauvegardes détectées</span><strong id="storageBackupStatus">—</strong></div>
+              <div><span>Traitement</span><strong id="storageQueueStatus">—</strong></div>
+            </div>
+            <div class="large-files-section">
+              <h3>Fichiers les plus volumineux de la bibliothèque</h3>
+              <div id="storageLargestFiles" class="large-files-list"></div>
+              <p id="emptyLargestFiles" class="empty-state compact">Aucun fichier de données n’est encore présent.</p>
+            </div>
+            <p class="quiet-status">L’emplacement peut être défini dans tes réglages locaux. Aucun chemin ou document n’est transmis à un fournisseur par cette page.</p>
+          </section>
+        </section>
+
+        <section id="settingsView" class="view" aria-labelledby="settingsTitle" hidden>
+          <div class="section-intro"><p class="eyebrow">CONFIGURATION TRANSPARENTE</p><h1 id="settingsTitle">Réglages &amp; limites</h1><p>Les modes externes restent séparés du noyau local. Côme AI n’envoie rien au cloud automatiquement.</p></div>
+          <div class="settings-grid">
+            <article class="panel setting-card"><h2>Mode actuel</h2><p id="providerDetails">Chargement…</p><p class="quiet-status">Le mode V5 présenté ici n’appelle aucun fournisseur IA.</p></article>
+            <article class="panel setting-card"><h2>Sécurité du workspace</h2><ul><li>Fichiers identifiés par ID, pas par chemin exposé</li><li>Rapports créés seulement avec confirmation</li><li>Serveur limité à 127.0.0.1</li></ul></article>
+            <article class="panel setting-card"><h2>Modules disponibles</h2><ul><li>Documents &amp; Finance : analyses locales</li><li>Mémoire : indexation/recherche persistantes</li><li><a href="/career">Career 4.1 : profil, offres, candidatures, entretien</a></li></ul></article>
+          </div>
+        </section>
+        <section id="developerView" class="view" aria-labelledby="developerTitle" hidden>
+          <div class="section-intro">
+            <p class="eyebrow">MAINTENANCE LOCALE · SANS APPEL IA</p>
+            <h1 id="developerTitle">Atelier Développeur</h1>
+            <p>Teste Côme AI, prépare une demande à transmettre à l’IA de ton choix et vérifie son correctif dans une copie isolée.</p>
+          </div>
+          <p id="developerStatus" class="quiet-status" role="status" aria-live="polite">Ouvre l’atelier pour consulter les diagnostics.</p>
+          <section class="panel developer-card evolution-panel" aria-labelledby="evolutionTitle">
+            <div class="panel-heading"><div><p class="eyebrow">INTELLIGENCE &amp; RESSOURCES</p><h2 id="evolutionTitle">Développement autonome, dans une copie.</h2></div><span id="evolutionState" class="status-pill neutral">Chargement…</span></div>
+            <p id="evolutionProvider">Aucun appel lancé à l’ouverture de l’atelier.</p>
+            <div class="storage-details"><div><span>Appels de génération</span><strong id="evolutionRequests">—</strong></div><div><span>Tokens déclarés</span><strong id="evolutionTokens">—</strong></div><div><span>Candidats à relire</span><strong id="evolutionPending">—</strong></div></div>
+            <div class="developer-actions"><button id="evolutionRun" class="primary-button" type="button">Lancer un cycle autonome</button><button id="evolutionDemo" class="secondary-button" type="button">Démontrer sur un cas isolé</button><button id="evolutionStop" class="text-button danger" type="button">Arrêter les nouveaux appels</button></div>
+            <p id="evolutionMessage" class="quiet-status" aria-live="polite">Maximum 2 générations par cycle. Déploiement automatique et travail nocturne non activés.</p>
+            <div id="evolutionActivity"></div>
+            <details class="evolution-advanced"><summary>Modèles, backlog et historique détaillé</summary>
+              <div class="developer-grid">
+                <form id="evolutionSettings" class="developer-form">
+                  <h3>Fournisseur de développement</h3>
+                  <label for="evolutionMode">Mode</label><select id="evolutionMode"><option value="automatic">Automatique</option><option value="offline">Hors ligne</option><option value="performance">Performance</option></select>
+                  <label for="evolutionProviderChoice">Fournisseur</label><select id="evolutionProviderChoice"><option value="gemini">Gemini gratuit</option><option value="openrouter">OpenRouter gratuit</option><option value="ollama">Qwen local via Ollama</option></select>
+                  <label for="evolutionModel">Modèle</label><input id="evolutionModel" value="auto" maxlength="192" placeholder="auto, identifiant gratuit ou qwen3.5:2b">
+                  <label class="consent-control"><input id="evolutionRemote" type="checkbox"><span>Autoriser les appels au fournisseur cloud choisi</span></label>
+                  <label class="consent-control"><input id="evolutionFree" type="checkbox"><span>Mon projet Gemini est gratuit, sans facturation activée</span></label>
+                  <div class="developer-actions"><button class="secondary-button" type="submit">Enregistrer</button><button id="evolutionRefreshModels" class="text-button" type="button">Actualiser les modèles</button></div>
+                  <p class="quiet-status">Les clés restent dans .env. « auto » choisit un modèle accessible au prix confirmé nul ; ce choix n’est pas présenté comme un classement de qualité mesurée.</p>
+                </form>
+                <form id="evolutionTaskForm" class="developer-form">
+                  <h3>Prochaine amélioration</h3><label for="evolutionTaskTitle">Problème</label><input id="evolutionTaskTitle" required maxlength="160">
+                  <label for="evolutionTaskDescription">Ce qui doit changer</label><textarea id="evolutionTaskDescription" rows="3" required maxlength="6000"></textarea>
+                  <label for="evolutionAcceptance">Critères de réussite</label><textarea id="evolutionAcceptance" rows="2" maxlength="4000"></textarea>
+                  <label for="evolutionFiles">Fichiers concernés</label><select id="evolutionFiles" multiple size="4" required></select><button class="secondary-button" type="submit">Ajouter au backlog</button>
+                </form>
+              </div>
+              <div id="evolutionBacklog"></div><div id="evolutionHistory"></div><pre id="evolutionDetails" class="developer-diff" hidden></pre>
+              <details><summary>Mesures et catalogue</summary><pre id="evolutionResources" class="developer-diff"></pre></details>
+            </details>
+          </section>
+          <div class="developer-grid">
+            <section class="panel developer-card" aria-labelledby="diagnosticsTitle">
+              <div class="panel-heading"><div><p class="eyebrow">01 · COMPRENDRE</p><h2 id="diagnosticsTitle">Tests &amp; diagnostics</h2></div></div>
+              <p>La suite existante, les dépendances et la syntaxe sont vérifiées sur une copie du code. Le rapport conserve les erreurs utiles.</p>
+              <div class="developer-actions"><button id="developerCheck" type="button" class="primary-button">Lancer les diagnostics</button><button id="developerExport" type="button" class="secondary-button">Exporter le projet</button></div>
+              <div id="developerReport" class="developer-report" aria-live="polite"></div>
+              <div id="developerDownloads" class="output-list"></div>
+            </section>
+            <section class="panel developer-card" aria-labelledby="issueTitle">
+              <div class="panel-heading"><div><p class="eyebrow">02 · TRANSMETTRE</p><h2 id="issueTitle">Demande de correction</h2></div></div>
+              <form id="developerIssueForm" class="developer-form">
+                <label for="developerIssueTitle">Problème à résoudre</label><input id="developerIssueTitle" maxlength="200" required placeholder="Ex. L’export ne contient pas le dernier rapport">
+                <label for="developerIssueDescription">Comportement attendu et étapes pour reproduire</label><textarea id="developerIssueDescription" rows="3" maxlength="12000" required></textarea>
+                <label for="developerIssueErrors">Erreur technique à joindre, si nécessaire</label><textarea id="developerIssueErrors" rows="3" maxlength="32000" placeholder="Colle uniquement l’erreur utile, sans données personnelles."></textarea>
+                <label for="developerIssueFiles">Fichiers concernés</label><select id="developerIssueFiles" multiple size="5" required aria-describedby="developerFilesHint"></select><p id="developerFilesHint" class="quiet-status">Choisis au moins un fichier. ⌘ + clic pour plusieurs fichiers. Seul le code sélectionné est joint à la demande.</p>
+                <button type="submit" class="primary-button">Exporter la demande</button>
+              </form>
+              <p class="quiet-status">L’archive peut être jointe à ChatGPT Chat, Work, Gemini ou Codex. Aucun envoi automatique. Les données de l’application, clés, bases et environnements sont exclus.</p>
+            </section>
+            <section class="panel developer-card developer-patch-card" aria-labelledby="patchTitle">
+              <div class="panel-heading"><div><p class="eyebrow">03 · VÉRIFIER ET APPLIQUER</p><h2 id="patchTitle">Correctif proposé</h2></div></div>
+              <form id="developerPatchForm" class="developer-form">
+                <label for="developerPatchFormat">Format reçu</label><select id="developerPatchFormat"><option value="patch">Patch unified diff (.patch / .diff)</option><option value="files">Fichiers corrigés — objet JSON chemin/contenu</option></select>
+                <label for="developerPatchUpload">Charger le correctif</label><input id="developerPatchUpload" type="file" accept=".patch,.diff,.txt,.json">
+                <label for="developerPatchText">Ou coller son contenu</label><textarea id="developerPatchText" rows="6" maxlength="500000" required spellcheck="false" placeholder="--- a/module.py&#10;+++ b/module.py&#10;@@ …"></textarea>
+                <button type="submit" class="secondary-button">Préparer une copie &amp; afficher l’aperçu</button>
+              </form>
+              <pre id="developerDiff" class="developer-diff" tabindex="0" aria-label="Aperçu des modifications" hidden></pre>
+              <div class="developer-actions"><button id="developerValidate" type="button" class="primary-button" disabled>Tester le correctif isolé</button><button id="developerApply" type="button" class="secondary-button" disabled>Appliquer le correctif testé</button><button id="developerRollback" type="button" class="text-button danger" hidden>Restaurer les originaux</button></div>
+              <p id="developerPatchStatus" class="quiet-status" aria-live="polite">Le code principal est modifié seulement après tes tests et ta confirmation. La sauvegarde permet un retour arrière.</p>
+              <div class="developer-history"><h3>Correctifs &amp; sauvegardes conservés</h3><div id="developerHistory"></div></div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="/v5-static/v5.js" defer></script>
+    <script src="/v5-static/devkit.js" defer></script>
+    <script src="/v5-static/evolution.js" defer></script>
+  </body>
+</html>

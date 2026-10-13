@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>Côme AI V3 — espace d’analyse local</title>
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#assistant">Aller à l’assistant</a>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">C</div>
+          <div>
+            <h1>Côme AI <span>V3</span></h1>
+            <p>Analyse de fichiers locale, avec IA seulement quand tu la sollicites.</p>
+          </div>
+        </div>
+        <div class="topbar-actions">
+          <a class="career-link" href="/career">Career Agent</a>
+          <div class="privacy-badge" title="Le serveur écoute uniquement sur ce Mac.">
+            <span aria-hidden="true">●</span> Local · 127.0.0.1
+          </div>
+        </div>
+      </header>
+
+      <main class="workspace-layout">
+        <aside class="sidebar" aria-label="Espace de travail">
+          <section class="panel upload-panel">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Espace de travail</p>
+                <h2>Mes fichiers</h2>
+              </div>
+              <button id="refresh-files" class="icon-button" type="button" aria-label="Actualiser les fichiers" title="Actualiser">↻</button>
+            </div>
+            <label id="drop-zone" class="drop-zone" for="file-input">
+              <input id="file-input" type="file" multiple accept=".xlsx,.xlsm,.xls,.csv,.tsv,.pdf,.docx,.txt,.md" />
+              <span class="drop-icon" aria-hidden="true">↑</span>
+              <strong>Ajouter des fichiers</strong>
+              <small>Excel, CSV, PDF, Word ou texte · 50 Mo/fichier · 100 Mo/import</small>
+            </label>
+            <p id="upload-status" class="microcopy" aria-live="polite"></p>
+            <div id="file-list" class="file-list" role="list" aria-label="Fichiers importés"></div>
+            <p id="empty-files" class="empty-state">Aucun fichier pour le moment.<br />Importe un document pour commencer.</p>
+          </section>
+
+          <section class="panel quick-actions" aria-labelledby="local-actions-title">
+            <div class="section-heading compact">
+              <div>
+                <p class="eyebrow">Sans IA</p>
+                <h2 id="local-actions-title">Actions locales</h2>
+              </div>
+            </div>
+            <p id="selected-file-label" class="selection-label">Sélectionne un fichier</p>
+            <label class="select-label" for="sheet-select">Feuille <span>(facultatif)</span></label>
+            <select id="sheet-select" disabled>
+              <option value="">Première feuille / tableau</option>
+            </select>
+            <div class="action-grid">
+              <button id="inspect-button" class="secondary-button" type="button" disabled>Inspecter</button>
+              <button id="analyze-button" class="secondary-button" type="button" disabled>Analyser</button>
+              <button id="report-button" class="secondary-button" type="button" disabled>Créer un rapport</button>
+            </div>
+            <p class="microcopy">Inspecter et analyser ne transmettent rien à une IA. Le rapport est créé dans <code>output</code>.</p>
+          </section>
+
+          <section class="panel output-panel" aria-labelledby="outputs-title">
+            <div class="section-heading compact">
+              <div>
+                <p class="eyebrow">Résultats</p>
+                <h2 id="outputs-title">Rapports créés</h2>
+              </div>
+            </div>
+            <div id="output-list" class="output-list"></div>
+            <p id="empty-outputs" class="empty-state compact-empty">Les futurs rapports apparaîtront ici.</p>
+          </section>
+        </aside>
+
+        <section id="assistant" class="assistant-panel panel" aria-labelledby="assistant-title">
+          <div class="assistant-header">
+            <div>
+              <p class="eyebrow">Assistant multi-modèles</p>
+              <h2 id="assistant-title">Demande ce dont tu as besoin</h2>
+            </div>
+            <div id="provider-status" class="provider-status" aria-live="polite">Vérification de la configuration…</div>
+          </div>
+
+          <div id="chat-log" class="chat-log" role="log" aria-live="polite" aria-relevant="additions">
+            <article class="message assistant-message">
+              <div class="message-label">Côme AI</div>
+              <p>Bonjour. Importe un fichier puis pose une demande précise.</p>
+              <ul>
+                <li>« Inspecte le classeur et explique ses feuilles. »</li>
+                <li>« Analyse les revenus, les valeurs manquantes et les anomalies. »</li>
+                <li>« Cherche “échéance” dans mes PDF et documents Word. »</li>
+                <li>« Crée un rapport Excel pour la feuille Budget. »</li>
+              </ul>
+              <p class="message-meta">Les faits chiffrés sont calculés localement ; l’IA les explique ensuite.</p>
+            </article>
+          </div>
+
+          <section class="composer" aria-label="Nouvelle demande">
+            <div id="selected-context" class="selected-context" hidden>
+              <span>Fichier ciblé :</span> <strong></strong>
+              <button id="clear-selection" type="button" aria-label="Retirer le fichier sélectionné">×</button>
+            </div>
+            <label class="visually-hidden" for="message-input">Votre demande</label>
+            <textarea id="message-input" rows="4" maxlength="12000" placeholder="Ex. Analyse les rendements mensuels et signale les données manquantes…"></textarea>
+            <div class="composer-footer">
+              <label class="write-consent" title="L’assistant ne peut créer de fichier que pour cette demande et seulement si cette case est cochée.">
+                <input id="allow-write" type="checkbox" />
+                <span>Autoriser la création d’un rapport pour cette demande</span>
+              </label>
+              <button id="send-button" class="primary-button" type="button">Envoyer <span aria-hidden="true">↗</span></button>
+            </div>
+            <p id="request-status" class="request-status" aria-live="polite">⌘↩ ou Ctrl↩ pour envoyer · Une demande IA est traitée à la fois pour protéger les quotas.</p>
+          </section>
+        </section>
+      </main>
+
+      <footer>
+        <span>Les fichiers restent dans <code>data</code> ; les documents créés vont dans <code>output</code>.</span>
+        <span>Les PDF scannés sans texte nécessitent encore un OCR externe.</span>
+      </footer>
+    </div>
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>
