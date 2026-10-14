@@ -1,0 +1,105 @@
+{
+  "contract": "come-consent-guard-integration/1",
+  "audience": "Codex (intégration noyau IA, hybrid_chat, routeurs cloud)",
+  "owner": "consent_guard — lot isolé feature/v3-consent-guard",
+  "base": "integration/profile-study @ c32b284",
+  "purpose": "Autoriser une seule transmission de donnée personnelle, liée au fournisseur, au modèle, à l'objectif et au contenu sérialisé exact.",
+  "envelope": {
+    "contract": "come-consent-guard-envelope/1",
+    "single_use": 1,
+    "uses_allowed_is_configurable": false,
+    "binding_fields": ["provider", "model", "purpose", "payload_digest"],
+    "default_ttl_seconds": 900,
+    "max_ttl_seconds": 86400,
+    "max_payload_bytes": 262144,
+    "expiry_is_inclusive": true,
+    "storage": "SQLite locale, dossier 0700, base et journaux 0600, mode WAL, fichier consent_guard.sqlite3"
+  },
+  "guarantees": [
+    "Un accord couvre exactement une transmission : fournisseur, modèle, objectif et contenu sérialisé.",
+    "Toute modification du contenu, du modèle, du fournisseur ou de l'objectif invalide l'accord (envelope_mismatch).",
+    "L'accord est à usage unique : une deuxième transmission est refusée (consent_exhausted).",
+    "L'accord expire : aucune réanimation, un nouvel accord est nécessaire (consent_expired).",
+    "L'accord se révoque explicitement, et une révocation est définitive (consent_revoked).",
+    "Tout refus est décidé avant tout contact avec un fournisseur : aucun socket, aucune clé, aucun catalogue de modèles.",
+    "Le contenu personnel n'est jamais stocké, journalisé, affiché ni renvoyé dans une erreur ou un repr().",
+    "La consommation est atomique au niveau de la base : deux threads ou deux processus ne peuvent pas consommer le même accord.",
+    "Le paquet n'embarque aucun transport : l'expéditeur est fourni par l'intégrateur et appelé après consommation seulement.",
+    "Aucun appel réseau : le paquet n'ouvre aucun socket et ne lit aucun fichier de configuration."
+  ],
+  "methods": {
+    "grant": {
+      "signature": "guard.grant(payload, *, provider, model, purpose, actor='', note='', ttl_seconds=None, expires_at=None, consent_id=None) -> ConsentEnvelope",
+      "raises": "ConsentGuardError (EnvelopeError) pour une demande mal formée, vide, trop grosse ou déjà expirée",
+      "note": "Mémorise l'empreinte du contenu, jamais le contenu. uses_allowed vaut toujours 1."
+    },
+    "check": {
+      "signature": "guard.check(consent_id, *, provider, model, purpose, payload, request=None, now=None) -> ConsentDecision",
+      "returns": "ConsentDecision(allowed, code, message, fallback, consent_id, fields)",
+      "note": "Ne lève jamais pour un refus : c'est le point d'entrée du repli local."
+    },
+    "consume": {
+      "signature": "guard.consume(consent_id, *, provider, model, purpose, payload, request=None) -> TransmissionReceipt",
+      "raises": "ConsentRefusal (UnknownConsentError | RevokedConsentError | EnvelopeMismatchError | ExpiredConsentError | ConsumedConsentError | InvalidRequestError)",
+      "note": "Consommation atomique ; le reçu prouve l'usage sans révéler le contenu."
+    },
+    "transmit": {
+      "signature": "transmit(guard, consent_id, *, provider, model, purpose, payload, sender) -> Any",
+      "note": "Vérifie, consomme, puis appelle sender.send(payload_bytes, receipt). sender n'est jamais appelé après un refus."
+    },
+    "revoke": {
+      "signature": "guard.revoke(consent_id, *, actor='', note='') -> ConsentEnvelope",
+      "raises": "UnknownConsentError si l'accord est inconnu, StoreError s'il est clos",
+      "note": "Un accord consommé ne se révoque pas : il est déjà clos."
+    },
+    "state": {
+      "signature": "guard.get(consent_id) | guard.active() | guard.journal(limit=200) | guard.stats() | guard.forget_everything() | guard.close()",
+      "returns": "ConsentEnvelope | tuple[ConsentEnvelope, ...] | tuple[RefusalRecord, ...] | dict | bool | None"
+    }
+  },
+  "refusal_codes": [
+    "consent_unknown",
+    "consent_revoked",
+    "envelope_mismatch",
+    "consent_expired",
+    "consent_exhausted",
+    "invalid_request",
+    "payload_empty",
+    "payload_too_large",
+    "payload_type",
+    "payload_unserialisable"
+  ],
+  "refusal_order": [
+    "consent_unknown",
+    "consent_revoked",
+    "envelope_mismatch",
+    "consent_expired",
+    "consent_exhausted"
+  ],
+  "fallbacks": {
+    "local_engine": "Traiter la demande en local, sans transmission, et l'annoncer à l'utilisateur.",
+    "none": "Aucun repli nécessaire : la transmission peut partir."
+  },
+  "serialisation": {
+    "text": "octets UTF-8 exacts de la chaîne",
+    "bytes": "octets exacts",
+    "json": "JSON canonique (sort_keys, séparateurs compacts, ensure_ascii=False) encodé en UTF-8",
+    "note": "L'ordre des clés d'un objet ne change pas l'empreinte ; l'ordre des éléments d'une liste la change.",
+    "digest": "SHA-256 hexadécimal du contenu sérialisé"
+  },
+  "integration_notes_for_codex": [
+    "Le paquet est autonome : il n'importe aucun module possédé par Codex (hybrid_chat, intelligence_bridge, come_ai_web, free_ai_router, v5_orchestrator, workspace_core, personal_memory, memory_storage, task_queue, usage_ledger, career, devkit, evals, personal_profile, study_coach).",
+    "Aucun fichier possédé par un autre lot n'est modifié : ce lot ajoute uniquement consent_guard/, ses tests tests/test_consent_guard_*.py, docs/CONSENT_GUARD_CONTRACT.md et HANDOFF_consent_guard.md.",
+    "hybrid_chat.ask(...) garde son paramètre allow_personal_cloud : ce lot ne le remplace pas, il le rend vérifiable octet par octet.",
+    "Raccordement attendu : construire le contenu personnel, demander l'accord (UI), appeler guard.grant, puis transmit(..., sender=votre transport) une seule fois.",
+    "Le garde-fou ne route rien : le choix du fournisseur et du modèle reste à l'appelant, et fait partie de l'accord.",
+    "Mode local uniquement par défaut : aucun transfert cloud implicite. Toute transmission passe par un accord explicite et unique."
+  ],
+  "not_covered": [
+    "Interface utilisateur de demande d'accord (l'intégrateur la construit).",
+    "Transport réel vers un fournisseur cloud.",
+    "Routage, catalogue de modèles, quotas et facturation.",
+    "Chiffrement du contenu en transit (relevant du transport, pas de l'accord).",
+    "Persistance distribuée ou synchronisation entre appareils."
+  ]
+}

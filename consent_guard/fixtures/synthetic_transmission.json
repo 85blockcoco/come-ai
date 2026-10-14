@@ -1,0 +1,30 @@
+{
+  "schema": "come-consent-guard-request/1",
+  "note": "Demande de transmission intégralement synthétique. Aucune donnée personnelle réelle n'est utilisée, lue ou écrite par ce fichier.",
+  "provider": "gemini",
+  "model": "gemini-3.8-flash",
+  "purpose": "exam_revision",
+  "payload": {
+    "kind": "personal_context",
+    "subject_label": "synthetic-subject",
+    "mission": "exam_revision",
+    "items": [
+      {
+        "id": "synthetic-education-diploma",
+        "statement": "Master fictif en finance obtenu en 2026.",
+        "domain": "education"
+      },
+      {
+        "id": "synthetic-experience-internship",
+        "statement": "Stage fictif de six mois dans une équipe d'analyse financière.",
+        "domain": "experience"
+      },
+      {
+        "id": "synthetic-goal-certification",
+        "statement": "Objectif fictif : obtenir une certification professionnelle en 2027.",
+        "domain": "education"
+      }
+    ],
+    "marker": "MARQUEUR-SYNTHETIQUE-AUCUNE-DONNEE-REELLE"
+  }
+}
