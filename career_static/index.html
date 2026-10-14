@@ -385,7 +385,20 @@
           <section class="panel">
             <p class="eyebrow">Étape B</p>
             <h3>Trouver des offres réelles</h3>
-            <p class="fixed-period-note">Career ne lit que des sources que tu as configurées : des boards Greenhouse publics ajoutés par toi et des offres importées manuellement. L’URL, la source et la date de consultation de chaque offre sont conservées telles quelles, et une annonce dont le statut n’est pas confirmé ouverte reste signalée « à vérifier ».</p>
+            <p class="fixed-period-note">Explore les sources publiques vérifiées du registre sans ajouter d’entreprise. Seules les annonces contenant une indication explicite de stage sont proposées comme stages ; les contrats incertains et les emplois permanents ne remplissent pas artificiellement les résultats. Tes critères et ton profil restent sur ton Mac.</p>
+            <div class="job-actions" role="group" aria-label="Mode de recherche de stages">
+              <button id="stagehunter-explore" class="primary-button" type="button">Explorer les stages</button>
+              <button id="stagehunter-my-companies" class="secondary-button" type="button">Mes entreprises</button>
+            </div>
+            <p id="stagehunter-explore-status" class="fixed-period-note" aria-live="polite">Aucune entreprise à configurer pour explorer. Enregistre tes critères, puis lance la recherche.</p>
+            <details id="stagehunter-explore-report" hidden>
+              <summary>Sources, résultats et limites de cette exploration</summary>
+              <div id="stagehunter-explore-sources" class="form-stack"></div>
+              <p id="stagehunter-explore-coverage" class="fixed-period-note"></p>
+            </details>
+            <details id="stagehunter-personal-boards">
+              <summary>Mes entreprises : suivre les boards choisis par moi</summary>
+              <p class="fixed-period-note">Ce mode conserve tes sources personnelles et les imports manuels. Il peut contenir d’autres types de contrats. Les offres et les candidatures suivies ne sont jamais supprimées par une exploration.</p>
             <ol class="stagehunter-howto">
               <li>Récupère l’adresse du board public : <strong>https://boards.greenhouse.io/identifiant</strong> ou <strong>https://job-boards.greenhouse.io/identifiant</strong>. Si l’adresse d’une offre se termine par <strong>/jobs/123</strong>, retire cette fin pour obtenir le board.</li>
               <li>Clique sur « Configurer mes sources », colle cette adresse ou l’identifiant exact du board (ex. <strong>stripe</strong>, pas nécessairement le nom de l’entreprise), puis donne le nom d’entreprise et ajoute le board. Aucun compte ni clé API n’est nécessaire.</li>
@@ -396,12 +409,14 @@
               <button id="stagehunter-search" class="primary-button" type="button">Lancer une recherche sur mes boards</button>
               <button class="secondary-button" type="button" data-view-action="discover">Configurer mes sources</button>
             </div>
+            </details>
             <div id="stagehunter-terms" class="stagehunter-terms"></div>
           </section>
 
           <section class="panel">
             <p class="eyebrow">Étape C</p>
             <h3>Classement expliqué de mes offres</h3>
+            <p id="stagehunter-result-mode" class="fixed-period-note">Mes offres enregistrées. Lance une exploration pour afficher uniquement ses résultats de stages.</p>
             <div class="job-actions">
               <button id="stagehunter-refresh" class="secondary-button" type="button">Recalculer le classement</button>
             </div>

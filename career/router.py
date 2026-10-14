@@ -321,6 +321,15 @@ def create_career_router(
     async def stage_search_matches() -> Any:
         return await local(service.list_stage_matches)
 
+    @router.get("/api/career/stage-search/explore")
+    async def last_stage_exploration() -> Any:
+        # Opening Career reads the last local report; it never fetches boards.
+        return await local(service.get_exploration)
+
+    @router.post("/api/career/stage-search/explore")
+    async def explore_stages(payload: DiscoverySearchPayload) -> Any:
+        return await local(lambda: service.explore_internships(force=payload.force))
+
     @router.get("/api/career/discovery-sources")
     async def discovery_sources() -> Any:
         return await local(lambda: {"sources": service.list_discovery_sources()})

@@ -111,7 +111,7 @@ def test_stage_hunter_search_preserves_actual_discovery_result(scenario: str) ->
         "\nfunction dashboardActionPriority", 1
     )[0]
     handler = source.split('$("#stagehunter-search")?.addEventListener("click", async () => {', 1)[1].split(
-        '\n$("#stagehunter-refresh")', 1
+        '\n$("#stagehunter-explore")', 1
     )[0]
     # These are the application's actual functions. Only browser elements,
     # APIs and unrelated refresh loaders are controlled fixtures.
@@ -119,6 +119,7 @@ def test_stage_hunter_search_preserves_actual_discovery_result(scenario: str) ->
 const assert = require("assert");
 const scenario = SCENARIO;
 let click, lastMessage;
+let stageHunterResultMode = "auto";
 const button = {disabled:false, textContent:"Lancer une recherche"};
 const trigger = {disabled:false, textContent:"Rechercher"};
 const sibling = {disabled:false, textContent:"Actualiser"};

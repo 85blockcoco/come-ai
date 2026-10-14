@@ -1898,6 +1898,61 @@ function renderStagePrepSelect() {
   if (current) select.value = current;
 }
 
+let stageHunterResultMode = "auto";
+
+function renderStageExploration(payload) {
+  const status = $("#stagehunter-explore-status");
+  const sources = $("#stagehunter-explore-sources");
+  const details = $("#stagehunter-explore-report");
+  const coverage = $("#stagehunter-explore-coverage");
+  if (!status || !sources || !details || !coverage) return;
+  const summary = payload.summary || {};
+  const outcomes = payload.outcomes || [];
+  sources.replaceChildren();
+  details.hidden = outcomes.length === 0;
+  const number = (key) => typeof summary[key] === "number" && Number.isFinite(summary[key]) ? summary[key] : "non communiqué";
+  if (!outcomes.length) {
+    status.textContent = "Aucune entreprise à configurer. Enregistre tes critères et clique sur Explorer les stages ; seules les sources vérifiées du registre seront lues.";
+  } else {
+    status.textContent = `${number("sources_attempted")} sources consultées sur le réseau · ${number("sources_cached")} en cache · ${number("sources_failed")} en erreur · ${number("raw_count")} annonces dans les flux (cache compris) · ${number("retained_count")} stages retenus lors de la recherche · ${number("displayed_count")} affichés avec tes critères actuels. ${summary.partial ? "Recherche partielle : consulte les limites et les sources ci-dessous." : "Couverture limitée au registre, pas à tout Internet."}`;
+    if (payload.criteria_changed) status.textContent += " Critères modifiés depuis cette recherche : relance Explorer pour sélectionner à nouveau les stages.";
+  }
+  outcomes.forEach((outcome) => {
+    const entry = make("section", "", "stagehunter-source-report");
+    const labels = {success:"consultée", partial:"partielle", cached:"cache local", error:"échec", skipped:"non consultée", not_queried:"non consultée"};
+    entry.append(make("strong", `${outcome.company || "Source"} · ${outcome.provider || "Greenhouse"} · ${labels[outcome.status] || outcome.status || "état inconnu"}`));
+    if (outcome.message) entry.append(make("p", outcome.message));
+    if (outcome.verified_at) entry.append(make("p", `Dernière lecture réussie : ${formatVerification(outcome.verified_at)}`));
+    const specification = (payload.registry || []).find((source) => source.id === outcome.source_id);
+    if (specification?.provenance_url) {
+      const link = make("a", "Page carrières officielle utilisée pour qualifier cette source", "external-link");
+      link.href = specification.provenance_url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      entry.append(link);
+      entry.append(make("p", `Qualification du registre : ${formatVerification(specification.verified_at)}`));
+    }
+    sources.append(entry);
+  });
+  coverage.textContent = `Stages identifiés dans les flux : ${number("confirmed_count")} · contrats incertains non présentés comme stages : ${number("uncertain_count")} · emplois non admissibles : ${number("excluded_count")} · entrées invalides : ${number("invalid_count")}. ${number("sources_not_queried")} sources non consultées. Limite : ${payload.limits?.max_sources ?? "non communiquée"} sources et ${payload.limits?.max_results ?? "non communiqué"} résultats classés. Les dates, la durée et les conditions absentes restent à vérifier. Aucun CV, profil ou critère personnel n’est transmis aux sites. La présence dans un flux public ne garantit pas que le recruteur accepte encore les candidatures.`;
+}
+
+function renderExplorationMatches(payload) {
+  renderStageMatches({configured: payload.configured, matches: payload.matches || []});
+  $("#stagehunter-result-mode").textContent = "Explorer les stages — résultats de cette exploration uniquement. Les autres offres et candidatures restent conservées dans Mes entreprises / Découvrir.";
+  const empty = $("#stagehunter-matches-empty");
+  empty.textContent = "Aucun stage retenu par cette exploration. Vérifie les sources et tes critères : aucun résultat fictif ni CDI n’est ajouté pour remplir la liste.";
+  (payload.matches || []).forEach((match, index) => {
+    const wrapper = $("#stagehunter-matches").children[index];
+    if (wrapper && match.internship) {
+      wrapper.prepend(make("p", `Stage repéré dans l’annonce : ${match.internship.reason || "indication explicite dans le texte source"}`, "fixed-period-note"));
+      (match.internship.evidence || []).slice(0, 3).forEach((evidence) => {
+        wrapper.prepend(make("p", `Preuve source (${evidence.field || "annonce"}) : « ${evidence.quote || ""} »`, "scoring-disclaimer"));
+      });
+    }
+  });
+}
+
 function renderStageApplications() {
   const target = $("#stagehunter-applications");
   const empty = $("#stagehunter-applications-empty");
@@ -1990,8 +2045,17 @@ async function loadStageHunter() {
   const payload = await api("/api/career/stage-search");
   renderStageBrief(payload);
   renderStageTerms(payload);
-  const matches = await api("/api/career/stage-search/matches");
-  renderStageMatches(matches);
+  const exploration = await api("/api/career/stage-search/explore");
+  renderStageExploration(exploration);
+  if (stageHunterResultMode === "auto") stageHunterResultMode = (exploration.outcomes || []).length ? "explore" : "saved";
+  if (stageHunterResultMode === "explore") {
+    renderExplorationMatches({...exploration, configured:payload.configured});
+  } else {
+    const matches = await api("/api/career/stage-search/matches");
+    renderStageMatches(matches);
+    $("#stagehunter-result-mode").textContent = "Mes offres enregistrées — tous les types de contrats, avec classement et avertissements. Aucune offre suivie n’a été supprimée.";
+    $("#stagehunter-matches-empty").textContent = "Aucune offre enregistrée. Clique sur Explorer les stages pour chercher sans configurer d’entreprise.";
+  }
   renderStagePrepSelect();
   const applications = await api("/api/career/applications");
   state.applications = applications.applications || [];
@@ -2022,8 +2086,7 @@ $("#stagehunter-brief-form")?.addEventListener("submit", async (event) => {
     const saved = await api("/api/career/stage-search", { method: "PUT", body: JSON.stringify(payload) });
     renderStageBrief(saved);
     renderStageTerms(saved);
-    const matches = await api("/api/career/stage-search/matches");
-    renderStageMatches(matches);
+    await loadStageHunter();
     setMessage("Critères de stage enregistrés localement ; le classement a été recalculé.");
   } catch (error) { setMessage(error.message, true); }
 });
@@ -2034,6 +2097,7 @@ $("#stagehunter-search")?.addEventListener("click", async () => {
   const previousLabel = button.textContent;
   button.textContent = "Recherche en cours…";
   try {
+    stageHunterResultMode = "saved";
     // runDiscovery owns the success/partial/error summary and refreshes this
     // visible view. Never overwrite its source failure with a success label.
     await runDiscovery(false);
@@ -2042,6 +2106,35 @@ $("#stagehunter-search")?.addEventListener("click", async () => {
     button.disabled = false;
     button.textContent = previousLabel;
   }
+});
+
+$("#stagehunter-explore")?.addEventListener("click", async () => {
+  const button = $("#stagehunter-explore");
+  button.disabled = true;
+  button.textContent = "Exploration en cours…";
+  try {
+    const result = await api("/api/career/stage-search/explore", {method:"POST", body:JSON.stringify({force:false})});
+    stageHunterResultMode = "explore";
+    renderStageExploration(result);
+    renderExplorationMatches(result);
+    await Promise.all([loadJobs(), loadApplications(), loadDashboard()]);
+    renderStagePrepSelect();
+    const failed = result.summary?.sources_failed || 0;
+    const succeeded = (result.summary?.sources_succeeded || 0) + (result.summary?.sources_cached || 0);
+    setMessage(failed && !succeeded ? "Les sources n’ont pas pu être lues. Aucun résultat n’a été inventé ; consulte le rapport de recherche." : result.summary?.partial ? "Exploration partielle terminée. Consulte les sources et les limites avant de choisir une offre." : "Exploration terminée sur les sources du registre. Aucun dépôt de candidature n’a été effectué.", Boolean(failed && !succeeded));
+  } catch (error) {
+    setMessage(error.message, true);
+    $("#stagehunter-explore-status").textContent = "L’exploration a échoué. Tes offres et candidatures déjà enregistrées sont conservées.";
+  } finally {
+    button.disabled = false;
+    button.textContent = "Explorer les stages";
+  }
+});
+
+$("#stagehunter-my-companies")?.addEventListener("click", () => {
+  stageHunterResultMode = "saved";
+  $("#stagehunter-personal-boards").open = true;
+  loadStageHunter().catch((error) => setMessage(error.message, true));
 });
 
 $("#stagehunter-refresh")?.addEventListener("click", () => {

@@ -27,9 +27,10 @@ from typing import Any, Protocol
 
 from workspace_core import UserFacingError
 
-from .models import canonical_url, clean_text
+from .models import canonical_url, clean_text, normalized_text
 from .scoring import classify_job_family
 from .stage_search import default_brief, score_brief_match, validate_brief
+from .exploration import classify_internship, criteria_admit
 
 
 GREENHOUSE_HOST = "boards-api.greenhouse.io"
@@ -78,6 +79,12 @@ class DiscoveryPayload:
     truncated: bool
     evaluated_count: int = 0
     invalid_count: int = 0
+    raw_count: int = 0
+    confirmed_count: int = 0
+    uncertain_count: int = 0
+    excluded_count: int = 0
+    relevant_count: int = 0
+    filtered_criteria_count: int = 0
 
 
 def parse_greenhouse_board_token(value: Any) -> str:
@@ -252,14 +259,61 @@ class UrllibGreenhouseTransport:
             raise PublicSourceError("Greenhouse n’a pas renvoyé un flux JSON lisible.", code="invalid_json") from error
 
 
-def _location_parts(value: Any) -> tuple[str, str]:
+def _location_parts(value: Any, *, preserve_multi_locations: bool = False) -> tuple[str, str]:
     location = clean_text(value, limit=300)
     if not location:
         return "", ""
     pieces = [piece.strip() for piece in re.split(r"\s*[,|/]\s*", location) if piece.strip()]
+    if preserve_multi_locations and ("/" in location or "|" in location):
+        # Public boards can offer one posting in several cities (for example
+        # London/Paris/HK/Tokyo). Do not drop middle locations or declare the
+        # last city a country; the source wording remains visible as-is.
+        return clean_text(location, limit=160), ""
+    if preserve_multi_locations and len(pieces) >= 2:
+        # ATSs also publish city, region, country. Keep an explicit country,
+        # rather than calling a known mismatch "unknown". This is recognition
+        # of source wording, never a city-to-country geographical inference.
+        explicit_countries = {
+            "france", "united kingdom", "uk", "united states", "united states of america", "usa",
+            "netherlands", "germany", "belgium", "switzerland", "ireland", "italy", "spain",
+            "portugal", "luxembourg", "austria", "poland", "sweden", "denmark", "norway",
+            "finland", "canada", "australia", "singapore", "hong kong", "china", "india", "japan",
+        }
+        if normalized_text(pieces[-1]) in explicit_countries:
+            return clean_text(", ".join(pieces[:-1]), limit=160), clean_text(pieces[-1], limit=120)
+        return clean_text(location, limit=160), ""
     if len(pieces) >= 2:
         return clean_text(pieces[0], limit=160), clean_text(pieces[-1], limit=120)
     return clean_text(location, limit=160), ""
+
+
+def _explicit_employment_type(raw: dict[str, Any]) -> str:
+    """Read only named ATS contract metadata and explicitly recognized values.
+
+    Time Type=Full Time is not a contract type: many genuine internships are
+    full-time. Unknown/custom metadata never establishes stage admission.
+    """
+    entries = raw.get("metadata")
+    if not isinstance(entries, list):
+        return ""
+    recognized: set[str] = set()
+    values = {"intern": "internship", "internship": "internship", "internships": "internship",
+              "stage": "internship", "stagiaire": "internship", "summer internship": "internship",
+              "permanent": "permanent", "cdi": "CDI", "graduate": "graduate"}
+    for entry in entries[:100]:
+        if not isinstance(entry, dict) or normalized_text(entry.get("name")) not in {
+            "employment type", "requisition type", "candidate type"}:
+            continue
+        raw_value = entry.get("value")
+        candidates = raw_value[:10] if isinstance(raw_value, list) else [raw_value]
+        for value in candidates:
+            if isinstance(value, str):
+                mapped = values.get(normalized_text(value))
+                if mapped:
+                    # Preserve the actual source wording in evidence quotes;
+                    # the mapping above recognizes it, never rewrites it.
+                    recognized.add(clean_text(value, limit=80))
+    return clean_text(" / ".join(sorted(recognized, key=str.casefold)), limit=120)
 
 
 class GreenhouseJobBoardConnector:
@@ -273,7 +327,8 @@ class GreenhouseJobBoardConnector:
         return self.discover_ranked(board)
 
     def discover_ranked(
-        self, board: GreenhouseBoard, *, selection_brief: dict[str, Any] | None = None
+        self, board: GreenhouseBoard, *, selection_brief: dict[str, Any] | None = None,
+        internships_only: bool = False, deadline: float | None = None,
     ) -> DiscoveryPayload:
         """Score the whole admissible feed before keeping its best 150 jobs.
 
@@ -284,8 +339,11 @@ class GreenhouseJobBoardConnector:
         error: PublicSourceError | None = None
         for attempt in range(2):
             try:
-                payload = self.transport.get_json(board.endpoint, GREENHOUSE_TIMEOUT_SECONDS)
-                return self._normalise(board, payload, selection_brief=brief)
+                remaining = deadline - time.monotonic() if deadline is not None else GREENHOUSE_TIMEOUT_SECONDS
+                if remaining <= 0:
+                    raise PublicSourceError("Le budget de recherche est atteint ; cette source n’a pas été relancée.", code="budget")
+                payload = self.transport.get_json(board.endpoint, min(GREENHOUSE_TIMEOUT_SECONDS, remaining))
+                return self._normalise(board, payload, selection_brief=brief, internships_only=internships_only)
             except PublicSourceError as caught:
                 error = caught
                 if not caught.retryable or attempt:
@@ -296,9 +354,17 @@ class GreenhouseJobBoardConnector:
         assert error is not None
         raise error
 
+    def discover_internships(
+        self, board: GreenhouseBoard, *, selection_brief: dict[str, Any], deadline: float | None = None
+    ) -> DiscoveryPayload:
+        """Explorer entry point: classify and admit before the per-source cap."""
+        return self.discover_ranked(board, selection_brief=selection_brief,
+                                    internships_only=True, deadline=deadline)
+
     @staticmethod
     def _normalise(
-        board: GreenhouseBoard, payload: Any, *, selection_brief: dict[str, Any] | None = None
+        board: GreenhouseBoard, payload: Any, *, selection_brief: dict[str, Any] | None = None,
+        internships_only: bool = False,
     ) -> DiscoveryPayload:
         if not isinstance(payload, dict) or not isinstance(payload.get("jobs"), list):
             raise PublicSourceError("Greenhouse a renvoyé un format d’offres inattendu.", code="invalid_payload")
@@ -311,9 +377,11 @@ class GreenhouseJobBoardConnector:
             )
         brief = validate_brief(selection_brief) if selection_brief is not None else default_brief()
         evaluated_count = invalid_count = 0
+        confirmed_count = uncertain_count = excluded_count = relevant_count = filtered_criteria_count = 0
 
         def candidates():
-            nonlocal evaluated_count, invalid_count
+            nonlocal evaluated_count, invalid_count, confirmed_count, uncertain_count, excluded_count
+            nonlocal relevant_count, filtered_criteria_count
             for raw in raw_jobs:
                 if not isinstance(raw, dict):
                     invalid_count += 1
@@ -332,7 +400,7 @@ class GreenhouseJobBoardConnector:
                     invalid_count += 1
                     continue
                 location = raw.get("location") if isinstance(raw.get("location"), dict) else {}
-                city, country = _location_parts(location.get("name"))
+                city, country = _location_parts(location.get("name"), preserve_multi_locations=internships_only)
                 description = source_html_to_text(raw.get("content"))
                 job = {
                     "company": board.company,
@@ -351,7 +419,7 @@ class GreenhouseJobBoardConnector:
                     "end_date": "",
                     "duration_months": None,
                     "source_status": "open",
-                    "employment_type": "",
+                    "employment_type": _explicit_employment_type(raw) if internships_only else "",
                     "role_level": "",
                     "requirements": "",
                     "languages_required": "",
@@ -359,7 +427,22 @@ class GreenhouseJobBoardConnector:
                     "description_original": description,
                     "job_family": classify_job_family(title, description),
                 }
-                score = score_brief_match(brief, job)["score"]
+                evaluated_count += 1
+                match = score_brief_match(brief, job)
+                if internships_only:
+                    classification = classify_internship(job)
+                    status = classification["status"]
+                    confirmed_count += int(status == "confirmed")
+                    uncertain_count += int(status == "uncertain")
+                    excluded_count += int(status == "excluded")
+                    if status != "confirmed":
+                        continue
+                    if not criteria_admit(match, job, brief):
+                        filtered_criteria_count += 1
+                        continue
+                    job["internship_classification"] = classification
+                relevant_count += 1
+                score = match["score"]
                 # Source identities, not arrival order or generated database
                 # IDs, break ties. The content digest resolves conflicting
                 # duplicate identities without depending on feed ordering.
@@ -367,7 +450,6 @@ class GreenhouseJobBoardConnector:
                     json.dumps(job, sort_keys=True, ensure_ascii=False).encode("utf-8")
                 ).hexdigest()
                 key = (-(int(score) if score is not None else 0), job_id, canonical, digest)
-                evaluated_count += 1
                 yield key, job
 
         # nsmallest retains only a 150-item heap (O(N log 150)), not a second
@@ -376,7 +458,13 @@ class GreenhouseJobBoardConnector:
         return DiscoveryPayload(
             jobs=tuple(job for _, job in selected),
             verified_at=datetime.now(timezone.utc).isoformat(timespec="microseconds"),
-            truncated=evaluated_count > GREENHOUSE_MAX_JOBS,
+            truncated=relevant_count > GREENHOUSE_MAX_JOBS,
             evaluated_count=evaluated_count,
             invalid_count=invalid_count,
+            raw_count=len(raw_jobs),
+            confirmed_count=confirmed_count,
+            uncertain_count=uncertain_count,
+            excluded_count=excluded_count,
+            relevant_count=relevant_count,
+            filtered_criteria_count=filtered_criteria_count,
         )

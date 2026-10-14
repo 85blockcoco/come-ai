@@ -14,6 +14,7 @@ import os
 import re
 import sqlite3
 import threading
+import time
 import urllib.parse
 import uuid
 from contextlib import contextmanager
@@ -65,7 +66,16 @@ from .interview import (
     select_question,
 )
 from .ocr import LocalVisionOCR, OCRResult
-from .discovery import GreenhouseBoard, GreenhouseJobBoardConnector, PublicSourceError, parse_greenhouse_board_token
+from .discovery import DiscoveryPayload, GreenhouseBoard, GreenhouseJobBoardConnector, PublicSourceError, parse_greenhouse_board_token
+from .exploration import (
+    EXPLORATION_LAST_SETTING,
+    EXPLORATION_MAX_RESULTS,
+    EXPLORATION_MAX_SOURCES,
+    EXPLORATION_NETWORK_BUDGET_SECONDS,
+    classify_internship,
+    criteria_admit,
+    ranking_key,
+)
 from .scoring import classify_job_family, score_job
 from workspace_core import UserFacingError, extract_text
 from .profile_import import (
@@ -149,6 +159,8 @@ class CareerService:
         *,
         ocr: LocalVisionOCR | None = None,
         discovery_connector: GreenhouseJobBoardConnector | None = None,
+        curated_sources: tuple[dict[str, Any], ...] | None = None,
+        exploration_connectors: dict[str, Any] | None = None,
     ):
         self.base_dir = base_dir.resolve()
         self.data_dir = self.base_dir / "career_data"
@@ -167,6 +179,12 @@ class CareerService:
         # server has one process, and it prevents double-clicks from issuing
         # parallel requests to the same public board.
         self.discovery_connector = discovery_connector or GreenhouseJobBoardConnector()
+        self._curated_sources = curated_sources
+        self._exploration_connectors = exploration_connectors or {"greenhouse": self.discovery_connector}
+        # Bounded in-memory cache, separate from personal boards and private
+        # profile settings. Restarting drops HTTP cache but keeps the last
+        # result's job references and tracking in SQLite.
+        self._exploration_cache: dict[str, tuple[str, Any]] = {}
         self._discovery_lock = threading.Lock()
         self._lock = threading.RLock()
         self._ensure_storage()
@@ -1788,6 +1806,224 @@ class CareerService:
         analysis = prepare_application(context.get("profile") or {}, context.get("intake") or {}, job)
         return analysis
 
+    def _exploration_registry(self) -> tuple[dict[str, Any], ...]:
+        if self._curated_sources is not None:
+            return tuple(dict(source) for source in self._curated_sources)
+        from .source_registry import CURATED_SOURCES
+
+        return tuple(dict(source) for source in CURATED_SOURCES)
+
+    @staticmethod
+    def _exploration_limits() -> dict[str, Any]:
+        return {"max_sources": EXPLORATION_MAX_SOURCES, "max_results": EXPLORATION_MAX_RESULTS,
+                "network_budget_seconds": EXPLORATION_NETWORK_BUDGET_SECONDS,
+                "request_timeout_seconds": 8, "max_response_bytes_per_source": 8 * 1024 * 1024,
+                "note": "Aucune nouvelle requête après 60 secondes ; une requête déjà en cours peut dépasser ce budget."}
+
+    @staticmethod
+    def _exploration_brief_fingerprint(brief: dict[str, Any]) -> str:
+        return hashlib.sha256(json.dumps(brief, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+    def get_exploration(self) -> dict[str, Any]:
+        """Read and rescore the last explorer snapshot; never perform network I/O."""
+        brief_payload = self.get_stage_search()
+        brief = brief_payload["brief"]
+        with self._lock, self._connection() as connection:
+            row = connection.execute("SELECT setting_value FROM career_settings WHERE setting_key = ?",
+                                     (EXPLORATION_LAST_SETTING,)).fetchone()
+        snapshot: dict[str, Any] = {}
+        if row:
+            try:
+                decoded = json.loads(str(row["setting_value"]))
+                if isinstance(decoded, dict):
+                    snapshot = decoded
+            except (ValueError, TypeError):
+                pass
+        matches: list[dict[str, Any]] = []
+        references = snapshot.get("match_refs", [])
+        if not isinstance(references, list):
+            references = []
+        for reference in references[:EXPLORATION_MAX_RESULTS]:
+            if not isinstance(reference, dict):
+                continue
+            try:
+                job = self.get_job(str(reference.get("job_id") or ""))
+            except UserFacingError:
+                # A person may have deliberately deleted an offer since the
+                # snapshot was saved. Never recreate it on a read.
+                continue
+            internship = classify_internship(job)
+            match = score_brief_match(brief, job)
+            if job.get("source_status") == "closed" or internship["status"] != "confirmed" or not criteria_admit(match, job, brief):
+                continue
+            matches.append({"job": job, "stage_match": match, "internship": internship,
+                            "source_id": reference.get("source_id", ""),
+                            "verified_at": reference.get("verified_at", "")})
+        matches.sort(key=lambda item: ranking_key(item["job"], item["stage_match"]))
+        changed = bool(snapshot) and snapshot.get("brief_fingerprint") != self._exploration_brief_fingerprint(brief)
+        summary = dict(snapshot["summary"]) if isinstance(snapshot.get("summary"), dict) else {}
+        summary["displayed_count"] = len(matches)
+        return {"mode": "explore", "has_run": bool(snapshot), "run_id": snapshot.get("run_id", ""),
+                "started_at": snapshot.get("started_at", ""), "finished_at": snapshot.get("finished_at", ""),
+                "criteria_changed": changed, "requires_refresh": changed,
+                "configured": brief_payload["configured"], "brief": brief,
+                "outcomes": snapshot.get("outcomes", []) if isinstance(snapshot.get("outcomes", []), list) else [],
+                "summary": summary, "matches": matches,
+                "registry": list(self._exploration_registry()), "limits": self._exploration_limits(),
+                "disclaimer": "Sources publiques uniquement. Résultats du dernier parcours, reclassés localement ; aucune candidature envoyée."
+                + (" Tes critères ont changé : relance l’exploration pour couvrir les sources avec ces critères." if changed else "")}
+
+    def explore_internships(self, *, force: bool = False) -> dict[str, Any]:
+        """Explicit read-only exploration; works with zero personal boards.
+
+        Only confirmed internships meeting explicit domain/location admission
+        are ranked. Source errors never erase jobs, notes or applications.
+        The source interface is extensible; unsupported connectors are visible,
+        never silently treated as a success or fetched through arbitrary URLs.
+        """
+        if not self._discovery_lock.acquire(blocking=False):
+            raise UserFacingError("Une recherche d’opportunités est déjà en cours. Attends sa fin avant de relancer.")
+        try:
+            brief = self.get_stage_search()["brief"]
+            fingerprint = self._exploration_brief_fingerprint(brief)
+            started_at = utc_now()
+            started_clock = time.monotonic()
+            deadline = started_clock + EXPLORATION_NETWORK_BUDGET_SECONDS
+            registry = self._exploration_registry()
+            outcomes: list[dict[str, Any]] = []
+            candidates: list[dict[str, Any]] = []
+            allowed_ids = {str(source.get("id") or "") for source in registry[:EXPLORATION_MAX_SOURCES]}
+            self._exploration_cache = {key: value for key, value in self._exploration_cache.items() if key in allowed_ids}
+            for index, source in enumerate(registry):
+                source_id = clean_text(source.get("id"), limit=160)
+                provider = clean_text(source.get("provider"), limit=40)
+                company = clean_text(source.get("company"), limit=240)
+                outcome: dict[str, Any] = {"source_id": source_id, "provider": provider, "company": company,
+                                          "public_url": source.get("public_url", ""),
+                                          "provenance_url": source.get("provenance_url", ""),
+                                          "registry_verified_at": source.get("verified_at", ""), "attempted": False}
+                if index >= EXPLORATION_MAX_SOURCES:
+                    outcome.update(status="not_queried", message="Limite de sources de ce parcours atteinte.")
+                    outcomes.append(outcome)
+                    continue
+                connector = self._exploration_connectors.get(provider)
+                if connector is None or not callable(getattr(connector, "discover_internships", None)):
+                    outcome.update(status="unsupported", message="Connecteur non disponible ; source non consultée.")
+                    outcomes.append(outcome)
+                    continue
+                if not source_id or not company or not source.get("verified_at") or not source.get("provenance_url"):
+                    outcome.update(status="unsupported", message="Source sans identité ou provenance vérifiée ; non consultée.")
+                    outcomes.append(outcome)
+                    continue
+                cache_fingerprint = hashlib.sha256(
+                    json.dumps(source, sort_keys=True, ensure_ascii=False).encode("utf-8") + fingerprint.encode("ascii")
+                ).hexdigest()
+                cached = self._exploration_cache.get(source_id)
+                result = None
+                if not force and cached and cached[0] == cache_fingerprint and self._discovery_cache_valid(cached[1].verified_at):
+                    result = cached[1]
+                    outcome.update(status="cached", message="Dernière lecture réussie conservée (cache de 10 minutes).")
+                elif time.monotonic() >= deadline:
+                    outcome.update(status="not_queried", message="Budget réseau atteint ; cette source n’a pas été consultée.")
+                    outcomes.append(outcome)
+                    continue
+                else:
+                    try:
+                        # Greenhouse currently is the only registry provider.
+                        # Future connectors receive their own source descriptor.
+                        descriptor = GreenhouseBoard(source_id, company, parse_greenhouse_board_token(source.get("board_token"))) if provider == "greenhouse" else source
+                        outcome["attempted"] = True
+                        result = connector.discover_internships(descriptor, selection_brief=brief, deadline=deadline)
+                        if not isinstance(result, DiscoveryPayload) or not isinstance(result.jobs, tuple) or any(not isinstance(job, dict) for job in result.jobs):
+                            raise PublicSourceError("Le connecteur n’a pas renvoyé un résultat d’exploration valide.", code="invalid_payload")
+                        counts = (result.raw_count, result.evaluated_count, result.invalid_count,
+                                  result.confirmed_count, result.uncertain_count, result.excluded_count,
+                                  result.relevant_count, result.filtered_criteria_count)
+                        if (any(type(count) is not int or count < 0 for count in counts)
+                            or result.raw_count != result.evaluated_count + result.invalid_count
+                            or result.evaluated_count != result.confirmed_count + result.uncertain_count + result.excluded_count
+                            or result.confirmed_count != result.relevant_count + result.filtered_criteria_count
+                            or len(result.jobs) > min(EXPLORATION_MAX_RESULTS, result.relevant_count)):
+                            raise PublicSourceError("Le connecteur n’a pas fourni des compteurs d’exploration cohérents.", code="invalid_counts")
+                        self._exploration_cache[source_id] = (cache_fingerprint, result)
+                        outcome.update(status="success", message="Flux officiel lu ; admission et classement effectués localement.")
+                    except Exception as caught:
+                        self._exploration_cache.pop(source_id, None)
+                        code = clean_text(getattr(caught, "code", "unexpected"), limit=40)
+                        outcome.update(status="error", error_code=code,
+                                       message="Cette source n’a pas pu être vérifiée. Les offres et candidatures existantes sont conservées.")
+                        outcomes.append(outcome)
+                        continue
+                if result is None:
+                    continue
+                count_fields = ("raw_count", "evaluated_count", "invalid_count", "confirmed_count", "uncertain_count",
+                                "excluded_count", "relevant_count", "filtered_criteria_count")
+                outcome.update({key: int(getattr(result, key, 0)) for key in count_fields})
+                outcome.update(verified_at=result.verified_at, retained_count=len(result.jobs), truncated=bool(result.truncated))
+                if result.invalid_count and outcome["status"] == "success":
+                    outcome.update(status="partial", message="Flux officiel lu, avec des entrées incomplètes ou invalides ignorées.")
+                outcomes.append(outcome)
+                for job in result.jobs:
+                    # Defend the connector boundary as well as production ATS
+                    # admission; never accept a custom connector's false stage.
+                    classification = classify_internship(job)
+                    match = score_brief_match(brief, job)
+                    if classification["status"] == "confirmed" and criteria_admit(match, job, brief):
+                        candidates.append({"job": dict(job), "stage_match": match, "internship": classification,
+                                           "source_id": source_id, "verified_at": result.verified_at,
+                                           "board_token": source.get("board_token", "")})
+            # At most eight per-source heaps of 150 are materialised. Sort then
+            # collapse exact official URL aliases before the global cap, so a
+            # repeated board cannot fill the list with duplicates.
+            candidates.sort(key=lambda item: ranking_key(item["job"], item["stage_match"]))
+            unique: dict[str, dict[str, Any]] = {}
+            for candidate in candidates:
+                url = canonical_url(candidate["job"].get("official_url"))
+                unique.setdefault(url, candidate)
+            selected = list(unique.values())[:EXPLORATION_MAX_RESULTS]
+            imported = updated = invalid_imports = 0
+            match_refs: list[dict[str, Any]] = []
+            availability = self._current_availability_values()
+            for item in selected:
+                payload = dict(item["job"])
+                payload["source_id"] = f"curated:{item['board_token']}:{payload.get('source_id', '')}"
+                try:
+                    job = self.import_job(payload, availability=availability, preserve_unknown_source_fields=True)
+                except UserFacingError:
+                    invalid_imports += 1
+                    continue
+                imported += int(job["created"])
+                updated += int(not job["created"])
+                with self._lock, self._connection() as connection:
+                    connection.execute("UPDATE jobs SET last_seen_at = ?, last_verified_at = ? WHERE id = ?",
+                                       (item["verified_at"], item["verified_at"], job["id"]))
+                match_refs.append({"job_id": job["id"], "source_id": item["source_id"], "verified_at": item["verified_at"]})
+            summary = {"sources_total": len(registry),
+                       "sources_attempted": sum(int(item["attempted"]) for item in outcomes),
+                       "sources_succeeded": sum(item["status"] in {"success", "partial"} for item in outcomes),
+                       "sources_cached": sum(item["status"] == "cached" for item in outcomes),
+                       "sources_failed": sum(item["status"] == "error" for item in outcomes),
+                       "sources_not_queried": sum(item["status"] in {"not_queried", "unsupported"} for item in outcomes),
+                       "retained_count": len(match_refs), "imported_count": imported, "updated_count": updated,
+                       "invalid_imports": invalid_imports, "duplicate_count": len(candidates) - len(unique),
+                       "elapsed_seconds": round(time.monotonic() - started_clock, 3),
+                       "partial": any(item["status"] not in {"success", "cached"} for item in outcomes)
+                       or any(item.get("invalid_count", 0) for item in outcomes) or bool(invalid_imports),
+                       "counts_include_cached_sources": any(item["status"] == "cached" for item in outcomes)}
+            for key in ("raw_count", "evaluated_count", "invalid_count", "confirmed_count", "uncertain_count",
+                        "excluded_count", "relevant_count", "filtered_criteria_count"):
+                summary[key] = sum(int(item.get(key, 0)) for item in outcomes)
+            snapshot = {"run_id": f"explore_{uuid.uuid4().hex}", "started_at": started_at, "finished_at": utc_now(),
+                        "brief_fingerprint": fingerprint, "outcomes": outcomes, "summary": summary, "match_refs": match_refs}
+            with self._lock, self._connection() as connection:
+                connection.execute("INSERT INTO career_settings (setting_key, setting_value) VALUES (?, ?) "
+                                   "ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value",
+                                   (EXPLORATION_LAST_SETTING, json.dumps(snapshot, ensure_ascii=False)))
+                self._audit(connection, "internships_explored", "stage_explorer", snapshot["run_id"])
+            return self.get_exploration()
+        finally:
+            self._discovery_lock.release()
+
     @staticmethod
     def _serialize_discovery_source(row: sqlite3.Row) -> dict[str, Any]:
         result = dict(row)
@@ -2237,21 +2473,39 @@ class CareerService:
             raise UserFacingError(f"{label} doit être compris entre {minimum} et {maximum}.")
         return number
 
-    def import_job(self, payload: dict[str, Any], *, availability: dict[str, Any] | None = None) -> dict[str, Any]:
-        job = self._normalize_job(payload, availability=availability or self._current_availability_values())
+    def import_job(self, payload: dict[str, Any], *, availability: dict[str, Any] | None = None,
+                   preserve_unknown_source_fields: bool = False) -> dict[str, Any]:
+        current_availability = availability or self._current_availability_values()
+        job = self._normalize_job(payload, availability=current_availability)
         with self._lock, self._connection() as connection:
-            existing = connection.execute("SELECT id FROM jobs WHERE dedup_key = ?", (job["dedup_key"],)).fetchone()
+            existing = connection.execute("SELECT * FROM jobs WHERE dedup_key = ?", (job["dedup_key"],)).fetchone()
             # A person may have pasted an official offer before configuring the
             # company's board.  If a public source later returns exactly that
             # canonical official URL, refresh the same record rather than
             # creating a second opportunity with a different ATS source ID.
             if not existing and job["source_name"] != "manual" and job["official_url"]:
                 existing = connection.execute(
-                    "SELECT id FROM jobs WHERE official_url = ?", (job["official_url"],)
+                    "SELECT * FROM jobs WHERE official_url = ?", (job["official_url"],)
                 ).fetchone()
             now = utc_now()
             if existing:
                 job_id = str(existing["id"])
+                if preserve_unknown_source_fields:
+                    # Explorer receives a public ATS feed that often omits
+                    # dates, duration and structured requirements. Absence is
+                    # not evidence that previously recorded facts vanished.
+                    # This opt-in is NOT applied to explicit manual edits or
+                    # the existing personal-board discovery behaviour.
+                    for key in ("city", "country", "posted_date", "deadline_date", "start_date", "end_date",
+                                "duration_months", "employment_type", "role_level", "requirements",
+                                "languages_required", "eligibility_requirement"):
+                        if job.get(key) in {"", None} and existing[key] not in {"", None}:
+                            job[key] = existing[key]
+                    if job["job_family"] == "À préciser" and existing["job_family"] != "À préciser":
+                        job["job_family"] = existing["job_family"]
+                    assessment = self._calendar_assessment(job, current_availability)
+                    job["calendar_status"] = assessment["status"]
+                    job["calendar_reasons_json"] = json.dumps(assessment["reasons"], ensure_ascii=False)
                 # A repeated import refreshes factual source fields but does not
                 # erase a user's shortlist, status, personal note or application.
                 connection.execute(
