@@ -22,7 +22,7 @@
 | Tranche | Statut | Branche / tag | Résumé |
 |---|---|---|---|
 | W2 | TERMINÉE (isolée, non intégrée) | `codex/w2-offer-qualification` / tag `night-W2-done` | Qualification conservatrice branchée à la découverte ; suite complète et évaluation HTTP synthétique vérifiées. |
-| W3 | À FAIRE | `codex/w3-source-connectors` | Connecteurs publics désactivés par défaut. |
+| W3 | TERMINÉE (isolée, non intégrée) | `codex/w3-source-connectors` | Connecteurs ATS publics Lever/Ashby/SmartRecruiters; source registry encore inchangé, aucun employeur ajouté. Voir `REPORT_W3.md`. |
 | W4 | À FAIRE | `codex/w4-daily-freshness` | Fraîcheur, cache et propositions du jour. |
 | W9-lite | À FAIRE | `codex/w9-lite-router-resilience` | Cooldowns et Retry-After. |
 | W6 | À FAIRE | `codex/w6-explainable-fit` | Adéquation vérifiable et explicable. |
@@ -50,4 +50,5 @@
 - Prologue : worktree créé depuis `main`; baseline complète mesurée et consignée ci-dessus.
 - Autorisation actualisée : recherches publiques en lecture seule permises ; limite de mission étendue à 13 h depuis le début. Pas d'appel aux fournisseurs Gemini/OpenRouter et pas de données personnelles dans les tests.
 - W2 : tests adversariaux d'abord (30 cas de base, puis cas HTTP et plages de dates), implémentation conservatrice, suite complète verte à 785 tests et évaluation `come-ai` stricte à 11/11 cas exécutés réussis, 1 non pris en charge. Détails et limites dans `REPORT_W2.md`.
-- Le point de reprise après W2 est l'audit ciblé, en lecture seule, de `codex/t1-privacy-guards`; aucun travail W3 n'a commencé.
+- Le point de reprise après W2 était l'audit ciblé, en lecture seule, de `codex/t1-privacy-guards`; le lot T1 est maintenant dans le candidat isolé décrit au journal.
+- W3 : adaptateurs séparés ajoutés au map par défaut, désactivés pour les consultations; fixtures, cas HTTP application_verified, smoke réseau uniquement sur les boards-exemples de documentation. Aucun identifiant réel d'employeur n'a été ajouté au registre. Détails dans `REPORT_W3.md`.
