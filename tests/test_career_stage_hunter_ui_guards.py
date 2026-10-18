@@ -128,6 +128,26 @@ assert.strictEqual(confirmed.children[0].children[1].className, "good");
     assert completed.returncode == 0, completed.stderr
 
 
+def test_stage_match_sort_keeps_nonconforming_offers_below_eligible_ones() -> None:
+    source = (Path(__file__).resolve().parents[1] / "career_static/career.js").read_text()
+    function = source.split("function stageMatchEligibilityRank(match) {", 1)[1].split(
+        "\nfunction renderStageMap", 1
+    )[0]
+    script = r'''
+const assert = require("assert");
+function stageMatchEligibilityRank(match) {FUNCTION
+const matches = [
+  {qualification: {target_status: "non_conforming"}, stage_match: {score: 100}},
+  {qualification: {target_status: "conforming"}, stage_match: {score: 20}},
+  {qualification: {target_status: "to_verify"}, stage_match: {score: 95}},
+];
+const sorted = [...matches].sort((a, b) => stageMatchEligibilityRank(a) - stageMatchEligibilityRank(b));
+assert.deepStrictEqual(sorted.map((item) => item.qualification.target_status), ["conforming", "to_verify", "non_conforming"]);
+'''.replace("FUNCTION", function)
+    completed = subprocess.run([_node(), "-e", script], text=True, capture_output=True, timeout=8)
+    assert completed.returncode == 0, completed.stderr
+
+
 def test_today_dashboard_profile_shortcut_is_present() -> None:
     html = (Path(__file__).resolve().parents[1] / "career_static/career.html").read_text(encoding="utf-8") if (Path(__file__).resolve().parents[1] / "career_static/career.html").exists() else (Path(__file__).resolve().parents[1] / "career_static/index.html").read_text(encoding="utf-8")
     js = (Path(__file__).resolve().parents[1] / "career_static/career.js").read_text(encoding="utf-8")

@@ -64,6 +64,13 @@ PYTHONPATH=/Users/comedelavenne/AI-Excel-Agent .venv/bin/python scripts/live_sou
 - Décision : PRÊT POUR MERGE, sous réserve du dry-run final sur le commit de livraison.
 - `main` non modifié.
 
+## 8. Acceptation Ultimate
+- Rapport : `docs/career_intl/agents/REPORT_CODEX_ULTIMATE_MERGE.md` (STATUT: PRÊT POUR MERGE).
+- Décision : PRÊT POUR MERGE.
+- Dry-run merge dans `main` : sans conflit.
+- `main` non modifié.
+- Corrections : classement fiable + compétences courtes.
+
 ## 9. Interdits rappelés
 - Pas de `git reset --hard`, `clean`, force-push sur `main`.
 - Pas de secrets dans le contexte modèle.
