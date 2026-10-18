@@ -1963,6 +1963,12 @@ function stageMatchScore(match) {
   return Number((match.stage_match || match.qualification || {}).score ?? (match.stage_match || {}).score ?? 0);
 }
 
+function stageMatchEligibilityRank(match) {
+  const status = (match.stage_match || match.qualification || {}).qualification_status
+    || (match.qualification || {}).target_status;
+  return {conforming: 0, to_verify: 1, non_conforming: 2}[status] ?? 1;
+}
+
 function renderStageMap(matches) {
   const map = $("#stagehunter-map");
   if (!map) return;
@@ -1992,9 +1998,11 @@ function renderStageMatches(payload) {
   const direction = localStorage.getItem("stagehunter_sort") || "desc";
   const sortSelect = $("#stagehunter-sort");
   if (sortSelect) sortSelect.value = direction;
-  const sorted = [...matches].sort((a, b) => direction === "asc"
-    ? stageMatchScore(a) - stageMatchScore(b)
-    : stageMatchScore(b) - stageMatchScore(a));
+  const sorted = [...matches].sort((a, b) => {
+    const eligibilityDelta = stageMatchEligibilityRank(a) - stageMatchEligibilityRank(b);
+    if (eligibilityDelta) return eligibilityDelta;
+    return direction === "asc" ? stageMatchScore(a) - stageMatchScore(b) : stageMatchScore(b) - stageMatchScore(a);
+  });
   renderStageMap(sorted);
   empty.hidden = sorted.length > 0;
   sorted.forEach((match) => {
