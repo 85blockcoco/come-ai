@@ -63,3 +63,8 @@ PYTHONPATH=/Users/comedelavenne/AI-Excel-Agent .venv/bin/python scripts/live_sou
 - Tests verts (≥ 1110 passed).
 - Rapport avec métriques réelles (aucune donnée personnelle).
 - Live source check : 21/21 sources, 0 échec.
+
+## 9. Vérification navigateur finale
+- Rapport : `docs/career_intl/agents/REPORT_CODEX_BROWSER_VERIFY.md`
+- Statut : TERMINÉE sur fixture synthétique isolée ; aucun envoi externe.
+- HTTP `/career` et `/v5` : succès ; carte, tri, fiche et actions Career présents.
