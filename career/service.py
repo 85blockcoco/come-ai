@@ -93,6 +93,25 @@ SCHEMA_VERSION = 6
 # schema migration, and it is exported with the rest of the local settings.
 STAGE_SEARCH_SETTING_KEY = "stage_search_brief"
 DISCOVERY_CACHE_SECONDS = 10 * 60
+
+
+def _attach_qualification_presentation(match: dict[str, Any], qualification: dict[str, Any]) -> dict[str, Any]:
+    """Keep relevance and mandatory eligibility distinct in every API path."""
+    status = clean_text(qualification.get("target_status"), limit=40) or "to_verify"
+    fit_label = clean_text(match.get("label"), limit=160)
+    match["fit_label"] = fit_label
+    match["qualification_status"] = status
+    if status == "non_conforming":
+        match["label"] = "Hors critères obligatoires sélectionnés"
+    elif status == "to_verify":
+        score = match.get("score")
+        if isinstance(score, (int, float)) and score >= 70:
+            match["label"] = "Pertinence élevée — informations obligatoires à vérifier"
+        elif isinstance(score, (int, float)) and score >= 45:
+            match["label"] = "Pertinence possible — informations obligatoires à vérifier"
+        else:
+            match["label"] = "Informations obligatoires à vérifier"
+    return match
 DELETE_CONFIRMATION = "SUPPRIMER MES DONNÉES CAREER"
 PROFILE_EDITABLE_FIELDS = (
     "display_name",
@@ -1792,7 +1811,7 @@ class CareerService:
                     allowed_start_months=brief.get("start_months"),
                     minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
                 ).to_dict()
-                stage_match["qualification_status"] = qualification["target_status"]
+                _attach_qualification_presentation(stage_match, qualification)
                 matches.append({"job": job, "stage_match": stage_match, "qualification": qualification})
             # Break ties by source identity, never a random database ID or
             # import/update time: the same postings have the same ordering
@@ -1887,7 +1906,7 @@ class CareerService:
             if job.get("source_status") == "closed" or qualification["target_status"] == "non_conforming":
                 continue
             job["qualification"] = qualification
-            match["qualification_status"] = qualification["target_status"]
+            _attach_qualification_presentation(match, qualification)
             if qualification["contract_type"] == "unknown" and not internship.get("evidence"):
                 continue
             matches.append({"job": job, "stage_match": match, "internship": internship,
@@ -2017,7 +2036,7 @@ class CareerService:
                     if (qualification["target_status"] != "non_conforming"
                             and (qualification["contract_type"] != "unknown" or classification.get("evidence"))
                             and criteria_admit(match, qualified_job, brief)):
-                        match["qualification_status"] = qualification["target_status"]
+                        _attach_qualification_presentation(match, qualification)
                         candidates.append({"job": qualified_job, "stage_match": match, "internship": classification,
                                            "qualification": qualification,
                                            "source_id": source_id, "verified_at": result.verified_at,

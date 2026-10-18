@@ -19,7 +19,7 @@ import urllib.parse
 import urllib.request
 from typing import Any, Callable, Protocol
 
-from ..discovery import DiscoveryPayload, PublicSourceError, _location_parts
+from ..discovery import DiscoveryPayload, PublicSourceError, _location_parts, source_html_to_text
 from ..exploration import EXPLORATION_MAX_RESULTS, criteria_admit, ranking_key, classify_internship
 from ..offer_qualification import qualify_offer
 from ..scoring import classify_job_family
@@ -354,7 +354,9 @@ def _common_job(provider: str, source: dict[str, Any], job_id: Any, title: Any, 
     if parsed.scheme != "https" or parsed.hostname not in _LISTING_HOSTS[provider] or parsed.username or parsed.password:
         raise ValueError("missing official URL")
     city, country_from_location = _location_parts(location, preserve_multi_locations=True)
-    text = clean_text(description, limit=30_000)
+    # Normalize remote markup once at the connector boundary so matching,
+    # evidence and UI all use the same safe, provenance-preserving text.
+    text = source_html_to_text(description)
     contract = clean_text(employment_type, limit=120)
     return {
         "company": clean_text(company_name or source.get("company"), limit=240),

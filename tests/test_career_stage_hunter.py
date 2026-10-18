@@ -186,6 +186,43 @@ def test_stage_matches_are_sorted_and_flag_unverified_sources(tmp_path: Path) ->
     assert flagged["stage_match"]["warnings"], "une offre non confirmée ouverte doit être signalée"
 
 
+def test_high_relevance_never_hides_missing_mandatory_offer_facts(tmp_path: Path) -> None:
+    service = CareerService(tmp_path)
+    job = service.import_job(synthetic_job(
+        source_name="greenhouse",
+        source_id="synthetic-missing-facts",
+        start_date="",
+        end_date="",
+        duration_months=None,
+        description_original="M&A internship with corporate finance responsibilities.",
+    ))
+    service.update_stage_search({"domains": ["M&A"]})
+    item = next(entry for entry in service.list_stage_matches()["matches"] if entry["job"]["id"] == job["id"])
+    match = item["stage_match"]
+    assert match["score"] == 100
+    assert match["fit_label"] == "Correspondance forte"
+    assert match["qualification_status"] == "to_verify"
+    assert match["label"] == "Pertinence élevée — informations obligatoires à vérifier"
+    assert "Correspondance forte" not in match["label"]
+
+
+def test_non_conforming_offer_never_gets_a_positive_presentation_label(tmp_path: Path) -> None:
+    service = CareerService(tmp_path)
+    job = service.import_job(synthetic_job(
+        source_name="greenhouse",
+        source_id="synthetic-april-short",
+        start_date="2027-04-01",
+        end_date="2027-07-31",
+        duration_months=4,
+        description_original="M&A internship with corporate finance responsibilities.",
+    ))
+    service.update_stage_search({"domains": ["M&A"]})
+    item = next(entry for entry in service.list_stage_matches()["matches"] if entry["job"]["id"] == job["id"])
+    assert item["stage_match"]["score"] == 100
+    assert item["stage_match"]["qualification_status"] == "non_conforming"
+    assert item["stage_match"]["label"] == "Hors critères obligatoires sélectionnés"
+
+
 def test_unconfigured_brief_leaves_default_order(tmp_path: Path) -> None:
     service = CareerService(tmp_path)
     service.import_job(synthetic_job())

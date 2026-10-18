@@ -171,6 +171,14 @@ def source_html_to_text(value: Any) -> str:
     raw = clean_text(value, limit=100_000)
     if not raw:
         return ""
+    # Some ATS feeds HTML-escape their already HTML-formatted description.
+    # Decode at most twice before parsing: this removes display-only tags such
+    # as ``&lt;li&gt;`` without turning the parser into an unbounded decoder.
+    for _ in range(2):
+        decoded = html.unescape(raw)
+        if decoded == raw:
+            break
+        raw = decoded
     parser = _PlainTextParser()
     try:
         parser.feed(raw)

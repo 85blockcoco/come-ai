@@ -23,7 +23,7 @@ from pypdf import PdfReader
 from career.models import availability_assessment, canonical_url, dedup_key
 from career import discovery as discovery_module
 from career import service as career_service_module
-from career.discovery import DiscoveryPayload, GreenhouseBoard, GreenhouseJobBoardConnector, PublicSourceError, parse_greenhouse_board_token
+from career.discovery import DiscoveryPayload, GreenhouseBoard, GreenhouseJobBoardConnector, PublicSourceError, parse_greenhouse_board_token, source_html_to_text
 from career.ocr import OCRResult
 from career.application_studio import build_local_application_draft, parse_ai_draft
 from career.interview import evaluate_answer, progress_summary, select_question
@@ -33,6 +33,13 @@ from career.service import CareerService, DELETE_CONFIRMATION
 from career.sources import LOCAL_LANGUAGE_HINTS, SEARCH_TERMS, discovery_request_for
 from come_ai_web import create_app
 from workspace_core import UserFacingError
+
+
+def test_double_encoded_source_html_is_rendered_as_plain_text() -> None:
+    raw = "&lt;ul&gt;&lt;li&gt;Bachelor’s degree required.&lt;/li&gt;&lt;/ul&gt;"
+    rendered = source_html_to_text(raw)
+    assert rendered == "Bachelor’s degree required."
+    assert "<" not in rendered and ">" not in rendered
 
 
 def manual_job(**changes: object) -> dict[str, object]:

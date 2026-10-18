@@ -1889,8 +1889,9 @@ function stageMatchBlock(stageMatch) {
   const block = make("section", "", "stage-match-block");
   const header = make("div", "", "stage-match-header");
   const scoreText = Number.isFinite(stageMatch.score) ? `${stageMatch.score}/100` : "non calculé";
-  const tone = Number.isFinite(stageMatch.score) && stageMatch.score >= 70 ? "good" : "warning";
-  header.append(make("p", `Correspondance stage : ${scoreText}`, "scoring-title"), chip(stageMatch.label || "", tone));
+  const tone = stageMatch.qualification_status === "conforming"
+    && Number.isFinite(stageMatch.score) && stageMatch.score >= 70 ? "good" : "warning";
+  header.append(make("p", `Pertinence selon tes critères : ${scoreText}`, "scoring-title"), chip(stageMatch.label || "", tone));
   block.append(header);
   const eligibility = {
     conforming: "Conforme à tes critères contractuels et de période",

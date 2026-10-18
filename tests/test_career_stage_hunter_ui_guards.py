@@ -104,6 +104,30 @@ def _node() -> str:
     pytest.skip("Node absent: JavaScript behavioural guards not executable on this host")
 
 
+def test_stage_match_visual_tone_requires_confirmed_qualification() -> None:
+    source = (Path(__file__).resolve().parents[1] / "career_static/career.js").read_text()
+    function = source.split("function stageMatchBlock(stageMatch) {", 1)[1].split(
+        "\nfunction renderStageMatches", 1
+    )[0]
+    script = r'''
+const assert = require("assert");
+function make(tag, text="", className="") {
+  return {tag, textContent:text, className, children:[], append(...items){this.children.push(...items);}};
+}
+function chip(text, tone) { return {textContent:text, className:tone}; }
+function stageMatchBlock(stageMatch) {FUNCTION
+const uncertain = stageMatchBlock({score:100,label:"Pertinence élevée — informations obligatoires à vérifier",
+  qualification_status:"to_verify",components:[],warnings:[]});
+assert.strictEqual(uncertain.children[0].children[0].textContent, "Pertinence selon tes critères : 100/100");
+assert.strictEqual(uncertain.children[0].children[1].className, "warning");
+const confirmed = stageMatchBlock({score:100,label:"Correspondance forte",
+  qualification_status:"conforming",components:[],warnings:[]});
+assert.strictEqual(confirmed.children[0].children[1].className, "good");
+'''.replace("FUNCTION", function)
+    completed = subprocess.run([_node(), "-e", script], text=True, capture_output=True, timeout=8)
+    assert completed.returncode == 0, completed.stderr
+
+
 @pytest.mark.parametrize("scenario", ["http-error", "source-error", "partial", "success"])
 def test_stage_hunter_search_preserves_actual_discovery_result(scenario: str) -> None:
     source = (Path(__file__).resolve().parents[1] / "career_static/career.js").read_text()

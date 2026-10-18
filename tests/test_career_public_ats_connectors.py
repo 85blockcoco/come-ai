@@ -9,6 +9,7 @@ import pytest
 
 from career.connectors import CONNECTOR_SPECS, AshbyConnector, LeverConnector, SmartRecruitersConnector
 from career.discovery import PublicSourceError
+from career.education_access import assess_education_access
 from career.stage_search import default_brief
 from career.service import CareerService
 
@@ -82,6 +83,23 @@ def test_connector_maps_synthetic_public_postings_to_common_contract(
     assert job["source_verified"] is True
     assert job["posted_date"] in {"", "2026-10-01T09:00:00Z"}
     assert "start_date" not in job or job["start_date"] == ""
+
+
+def test_public_ats_html_is_normalized_before_education_evidence(fixtures):
+    raw = [dict(fixtures["lever"][0])]
+    raw[0]["descriptionPlain"] = (
+        "<ul><li>Bachelor’s degree in Finance required.</li></ul>"
+        "<script>secret_marker()</script>"
+    )
+    job = LeverConnector(enabled=True).parse(source("lever"), raw)[0]
+    assert job["description_original"] == "Bachelor’s degree in Finance required."
+    assert "<" not in job["description_original"]
+    assert "secret_marker" not in job["description_original"]
+    education = assess_education_access(job)
+    assert education["status"] == "preferred"
+    assert education["evidence"] == [{
+        "field": "description_original", "passage": "Bachelor’s degree in Finance required."
+    }]
 
 
 @pytest.mark.parametrize("connector_type,provider,fixture_key", [
