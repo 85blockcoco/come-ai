@@ -1,0 +1,42 @@
+{
+  "label": "synthetic connector fixtures; not validated against live APIs",
+  "lever": [
+    {
+      "id": "synthetic-lever-001",
+      "text": "Finance Intern (synthetic)",
+      "categories": {"location": "Paris, France", "commitment": "Intern"},
+      "country": "FR",
+      "descriptionPlain": "Synthetic internship description for finance.",
+      "hostedUrl": "https://jobs.lever.co/synthetic-board/synthetic-lever-001",
+      "applyUrl": "https://jobs.lever.co/synthetic-board/synthetic-lever-001/apply"
+    }
+  ],
+  "ashby": {
+    "apiVersion": "1",
+    "jobs": [
+      {
+        "title": "Synthetic Finance Intern",
+        "location": "Paris, France",
+        "jobUrl": "https://jobs.ashbyhq.com/synthetic-board/synthetic-id",
+        "applyUrl": "https://jobs.ashbyhq.com/synthetic-board/synthetic-id/application",
+        "isListed": true
+      }
+    ]
+  },
+  "smartrecruiters": {
+    "limit": 10,
+    "offset": 0,
+    "totalFound": 1,
+    "content": [
+      {
+        "id": "synthetic-sr-001",
+        "name": "Synthetic Finance Intern",
+        "company": {"identifier": "synthetic-board", "name": "Synthetic Finance"},
+        "releasedDate": "2026-10-01T09:00:00Z",
+        "location": {"city": "Paris", "country": "FR"},
+        "typeOfEmployment": {"label": "Internship"},
+        "ref": "https://api.smartrecruiters.com/api-v1/companies/synthetic-board/postings/synthetic-sr-001"
+      }
+    ]
+  }
+}
