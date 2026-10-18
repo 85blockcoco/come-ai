@@ -26,7 +26,7 @@ MAX_TOTAL_BYTES = 15 * 1024 * 1024
 MAX_FILES = 1000
 MAX_REPORT_BYTES = 1024 * 1024
 SOURCE_DIRECTORIES = frozenset(
-    {"career", "tests", "devkit", "evals", "web_static", "career_static", "v5_static"}
+    {"career", "consent_guard", "study_coach", "tests", "scripts", "devkit", "evals", "web_static", "career_static", "v5_static"}
 )
 SOURCE_SUFFIXES = frozenset({".py", ".html", ".css", ".js", ".md", ".txt", ".ini", ".toml"})
 EXCLUDED_DIRECTORIES = frozenset(
@@ -106,6 +106,10 @@ def source_path_allowed(relative_path: str) -> bool:
             return False
         if PurePosixPath(relative_path).suffix.lower() == ".json":
             return len(parts) == 3 and parts[1] == "cases"
+    if parts[0] == "tests" and len(parts) >= 3 and parts[1] == "fixtures":
+        return PurePosixPath(relative_path).suffix.lower() in {".json", ".txt", ".md"}
+    if parts[0] == "consent_guard":
+        return PurePosixPath(relative_path).suffix.lower() in {".json", ".py", ".md"}
     return PurePosixPath(relative_path).suffix.lower() in SOURCE_SUFFIXES
 
 

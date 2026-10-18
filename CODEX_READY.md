@@ -1,12 +1,12 @@
 # CODEX READY — État de préparation (préparé pour validation finale)
 
 Date : 2026-10-18
-Branche candidate : `codex/profile-compatibility-ux` @ `095e81b` (fusion audit mega + profil readiness + import CV + accueil)
+Branche candidate : `codex/profile-compatibility-ux` (fusion audit mega + profil readiness + import CV + accueil + correction DevKit)
 Python : `.venv/bin/python` (3.12)
 
 ## 1. État des tests (suite complète)
 - Commande : `.venv/bin/python -m pytest -q`
-- Résultat : **1110 passed, 0 failed, 0 errors** (durée ~63 s)
+- Résultat après la correction DevKit : **1112 passed, 0 failed, 0 errors** (63.76 s)
 - Sous-suites vertes :
   - `tests/test_career_*.py` : 327 passed
   - `tests/test_consent_guard_*.py` : 185 passed
@@ -59,9 +59,9 @@ PYTHONPATH=/Users/comedelavenne/AI-Excel-Agent .venv/bin/python scripts/live_sou
 - Rapport : `docs/career_intl/agents/REPORT_CODEX_BROWSER_VERIFY.md` (STATUT: TERMINÉE).
 
 ## 8. Acceptation finale
-- Rapport : `docs/career_intl/agents/REPORT_CODEX_FINAL_ACCEPTANCE.md` (STATUT: TERMINÉE).
-- Décision : PRÊT POUR MERGE.
-- Dry-run merge dans `main` : sans conflit.
+- Rapport : `docs/career_intl/agents/REPORT_CODEX_FINAL_ACCEPTANCE.md` (STATUT: TERMINÉE après correction DevKit).
+- Diagnostic DevKit : `passed`, empreinte `4fd9ad4096b9cee924c4c66dd73e6ec6ffeeb0f43c18c1099bca258980c8467f`.
+- Décision : PRÊT POUR MERGE, sous réserve du dry-run final sur le commit de livraison.
 - `main` non modifié.
 
 ## 9. Interdits rappelés

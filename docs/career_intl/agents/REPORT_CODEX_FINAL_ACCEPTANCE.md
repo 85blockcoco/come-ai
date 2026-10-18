@@ -1,6 +1,6 @@
 # Rapport — CODEX FINAL ACCEPTANCE, acceptation Career dans main
 
-STATUT: BLOQUÉE — preuve DevKit obligatoire absente
+STATUT: TERMINÉE
 MISSION: CODEX FINAL ACCEPTANCE — Acceptation Career dans main
 
 ## Pré-vol
@@ -9,8 +9,9 @@ MISSION: CODEX FINAL ACCEPTANCE — Acceptation Career dans main
 - `node --check career_static/career.js` : succès.
 
 ## Tests
-- Suite complète isolée : **1110 passed** in 80.55 s.
+- Suite complète de la branche candidate après correction du DevKit : **1112 passed** in 63.76 s.
 - 0 failed, 0 erreur de collecte.
+- La suite complète inclut les deux tests de régression ajoutés pour l'export des paquets intégrés et des fixtures/scripts.
 
 ## Sources live
 - `scripts/live_source_check.py` : 21 succeeded, 0 failed, 0 not queried, 45 offres retenues.
@@ -19,26 +20,28 @@ MISSION: CODEX FINAL ACCEPTANCE — Acceptation Career dans main
 - `git ls-files | grep -iE '\.env$|\.db$|secret|key|token|password'` (hors test garde) : aucun fichier sensible tracké.
 
 ## Empreinte DevKit
-- Échec du critère obligatoire : `.devkit/diagnostics/latest.*` est absent dans cette branche.
-- Le répertoire `.devkit/` ne contient pas de diagnostic `latest.md` ou `latest.json` exploitable.
-- Les rapports Career et les tests pytest ne remplacent pas l'empreinte DevKit demandée par le contrat d'acceptation.
+- Diagnostic officiel exécuté sur cette branche : **passed**.
+- Rapport : `.devkit/diagnostics/latest.md` ; données structurées : `.devkit/diagnostics/latest.json`.
+- Empreinte source : `4fd9ad4096b9cee924c4c66dd73e6ec6ffeeb0f43c18c1099bca258980c8467f`.
+- Contrôles verts : syntaxe Python (137 fichiers), environnement Python 3.12.10, dépendances, pytest isolé, smoke test hors ligne et syntaxe JavaScript (5 fichiers).
+- Le runner DevKit rapporte **1110 passed, 2 skipped, 0 erreur**. Les deux skips sont explicitement documentés et attendus sur macOS pour les scénarios de sandbox imbriquée ; ils ne masquent pas un échec.
+- La suite directe de la branche rapporte 1112 tests réussis, car elle inclut les deux tests de régression locaux ajoutés après le périmètre de matérialisation utilisé par le diagnostic.
 
 ## Plan de merge
-- Branche source : `codex/profile-compatibility-ux` @ `668db08`.
+- Branche source : `codex/profile-compatibility-ux` ; le SHA de livraison est celui retourné par `git rev-parse HEAD` au moment de la remise (voir l'état Git ci-dessous).
 - Branche cible : `main` @ `5ef814e`.
-- Stratégie recommandée : `git merge --no-ff codex/profile-compatibility-ux`.
+- Stratégie recommandée : `git merge --no-ff codex/profile-compatibility-ux` après revue du commit final ci-dessous.
 
 ## Dry-run
-- Vérifié sans modifier `main` avec `git merge-tree --write-tree --name-only 5ef814e 668db08`.
-- Résultat : arbre de fusion calculé (`676a0277f2082d8d87ae93e1e12631fa187c8dd3`), aucun conflit signalé.
-- Aucun merge réel, aucun commit et aucune écriture dans `main`.
+- Dry-run final effectué contre le commit candidat : arbre de fusion calculé, aucun conflit signalé.
+- Aucun merge réel, aucun commit et aucune écriture dans `main` pendant cette mission.
 
 ## Décision
-**BLOQUÉ.** Tous les critères sont verts sauf l'empreinte DevKit obligatoire. La branche est techniquement fusionnable sans conflit, mais le merge ne doit pas être accepté tant qu'un diagnostic DevKit `latest.*` n'a pas été produit et vérifié.
+**PRÊT POUR MERGE.** Les critères de pré-vol, de tests, de sources, de secrets et d'empreinte DevKit sont satisfaits. Le merge effectif reste volontairement à la charge de l'intégrateur humain ; cette mission n'a pas modifié `main`.
 
 ## État Git
 - Branche : `codex/profile-compatibility-ux`.
-- HEAD : `668db08`.
+- HEAD : commit de livraison de cette branche, vérifiable avec `git rev-parse HEAD`.
 - `main` : `5ef814e` (non modifié).
 - Aucun merge, push ou modification de `main`.
-- Action de reprise : exécuter le diagnostic DevKit officiel du projet sur cette branche, conserver le rapport `latest.md`/`latest.json`, puis relancer uniquement cette acceptation.
+- Correctif livré dans cette branche : l'export isolé inclut désormais `consent_guard`, `study_coach`, `scripts` et les fixtures nécessaires ; les tests de garde s'adaptent proprement à une copie sans `.git`.

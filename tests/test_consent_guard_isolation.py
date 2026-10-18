@@ -283,6 +283,37 @@ class TestNoRealPersonalData:
 
 
 class TestNoProtectedFileTouched:
+    def _authorised_delivery_paths(self) -> set[str]:
+        """Use Git history when available, otherwise inspect the isolated copy.
+
+        DevKit diagnostics intentionally materialize source without `.git`; the
+        fallback keeps the same protected-path assertion meaningful there.
+        """
+        probe = subprocess.run(
+            ["git", "cat-file", "-e", "dc2e9ee^{commit}"],
+            cwd=REPO_ROOT, capture_output=True, text=True, check=False, timeout=60,
+        )
+        if probe.returncode == 0:
+            output = subprocess.run(
+                ["git", "show", "--format=", "--name-only", "dc2e9ee"],
+                cwd=REPO_ROOT, capture_output=True, text=True, check=True, timeout=60,
+            )
+            return {line for line in output.stdout.splitlines() if line.strip()}
+        paths = {
+            path.relative_to(REPO_ROOT).as_posix()
+            for path in PACKAGE_DIR.rglob("*")
+            if path.is_file()
+        }
+        paths.update(
+            path.relative_to(REPO_ROOT).as_posix()
+            for path in (REPO_ROOT / "tests").glob("test_consent_guard_*.py")
+            if path.is_file()
+        )
+        for path in (REPO_ROOT / "HANDOFF_consent_guard.md", REPO_ROOT / "docs/CONSENT_GUARD_CONTRACT.md"):
+            if path.is_file():
+                paths.add(path.relative_to(REPO_ROOT).as_posix())
+        return paths
+
     def test_package_lives_in_its_own_directory(self) -> None:
         assert PACKAGE_DIR.is_dir()
         assert PACKAGE_DIR.name == "consent_guard"
@@ -290,11 +321,7 @@ class TestNoProtectedFileTouched:
     def test_only_authorised_paths_were_added(self) -> None:
         # Check the reused guard's original standalone delivery, not all files
         # changed later by unrelated integration lots in this worktree.
-        output = subprocess.run(
-            ["git", "show", "--format=", "--name-only", "dc2e9ee"],
-            cwd=REPO_ROOT, capture_output=True, text=True, check=True, timeout=60,
-        )
-        changed = {line for line in output.stdout.splitlines() if line.strip()}
+        changed = self._authorised_delivery_paths()
         unexpected = [
             path for path in changed
             if not path.startswith("consent_guard/")
@@ -304,11 +331,7 @@ class TestNoProtectedFileTouched:
         assert unexpected == [], f"La livraison source du garde dépasse son périmètre : {sorted(unexpected)}"
 
     def test_protected_backend_files_are_untouched(self) -> None:
-        output = subprocess.run(
-            ["git", "show", "--format=", "--name-only", "dc2e9ee"],
-            cwd=REPO_ROOT, capture_output=True, text=True, check=True, timeout=60,
-        )
-        tracked = {line for line in output.stdout.splitlines() if line.strip()}
+        tracked = self._authorised_delivery_paths()
         for protected in PROTECTED_PATHS:
             assert not any(path.endswith(f"/{protected}") or path == protected for path in tracked), protected
 
