@@ -176,5 +176,53 @@
     "acceptance": [{"check": "no_error"}],
     "failure_conditions": ["Déclarer la génération évaluée sans appel à un vrai modèle."],
     "notes": "Cette cible refuse explicitement la génération ; aucun modèle local ou cloud n'est requis pour la suite."
+  },
+  {
+    "id": "REAL-010", "category": "documents", "title": "Qualification d'un stage finance via Career HTTP",
+    "objective": "Faire qualifier une offre fictive de six mois débutant en janvier via le vrai endpoint HTTP Career.",
+    "status": "supported", "required_features": ["career_http_qualification"], "severity": "major",
+    "application_verified": true,
+    "input": {"action": "career_qualification_http", "offer": {"title": "Corporate Finance Intern", "employment_type": "Internship", "description_original": "Six-month internship starting January 2027", "start_date": "2027-01-04", "duration_months": 6, "language": "English", "country": "France", "city": "Paris"}},
+    "expected": {"structured": {"http_status": 200, "retained_count": 1, "qualification": {"target_status": "conforming", "contract_type": "internship", "duration_min_months": 6}}},
+    "acceptance": [
+      {"check": "exact_value", "path": "structured.http_status", "value": 200},
+      {"check": "exact_value", "path": "structured.retained_count", "value": 1},
+      {"check": "exact_value", "path": "structured.qualification.target_status", "value": "conforming"},
+      {"check": "exact_value", "path": "structured.qualification.duration_min_months", "value": 6},
+      {"check": "exact_value", "path": "structured.synthetic_fixture", "value": true},
+      {"check": "exact_value", "path": "usage.network_attempts", "value": 0}
+    ],
+    "failure_conditions": ["Une offre synthétique non conforme est déclarée conforme ou un appel réseau est tenté."]
+  },
+  {
+    "id": "REAL-011", "category": "documents", "title": "Données manquantes restent à vérifier",
+    "objective": "Vérifier qu'une offre dont la durée et le début sont absents ne satisfait pas les critères.",
+    "status": "supported", "required_features": ["career_http_qualification"], "severity": "major",
+    "application_verified": true,
+    "input": {"action": "career_qualification_http", "offer": {"title": "Finance Intern", "employment_type": "Internship", "description_original": "A finance internship opportunity."}},
+    "expected": {"structured": {"http_status": 200, "qualification": {"target_status": "to_verify"}}},
+    "acceptance": [
+      {"check": "exact_value", "path": "structured.http_status", "value": 200},
+      {"check": "exact_value", "path": "structured.qualification.target_status", "value": "to_verify"},
+      {"check": "exact_value", "path": "structured.missing_start", "value": true},
+      {"check": "exact_value", "path": "structured.missing_duration", "value": true},
+      {"check": "exact_value", "path": "usage.network_attempts", "value": 0}
+    ],
+    "failure_conditions": ["Des champs absents sont inférés comme vrais."]
+  },
+  {
+    "id": "REAL-012", "category": "documents", "title": "Un CDI au titre trompeur est exclu",
+    "objective": "Vérifier qu'un contrat permanent ne devient pas un stage par son titre ou son score.",
+    "status": "supported", "required_features": ["career_http_qualification"], "severity": "critical",
+    "application_verified": true,
+    "input": {"action": "career_qualification_http", "offer": {"title": "Finance Internship — CDI", "employment_type": "CDI", "description_original": "Permanent position. Six months. Starting January 2027.", "start_date": "2027-01-04", "duration_months": 6}},
+    "expected": {"structured": {"http_status": 200, "retained_count": 0, "excluded_count": 1}},
+    "acceptance": [
+      {"check": "exact_value", "path": "structured.http_status", "value": 200},
+      {"check": "exact_value", "path": "structured.retained_count", "value": 0},
+      {"check": "exact_value", "path": "structured.excluded_count", "value": 1},
+      {"check": "exact_value", "path": "usage.network_attempts", "value": 0}
+    ],
+    "failure_conditions": ["Un CDI est conservé comme stage confirmé."]
   }
 ]
