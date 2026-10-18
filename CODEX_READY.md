@@ -58,7 +58,13 @@ PYTHONPATH=/Users/comedelavenne/AI-Excel-Agent .venv/bin/python scripts/live_sou
 - Tests UI guards + explorer web : 16 passed.
 - Rapport : `docs/career_intl/agents/REPORT_CODEX_BROWSER_VERIFY.md` (STATUT: TERMINÉE).
 
-## 8. Interdits rappelés
+## 8. Acceptation finale
+- Rapport : `docs/career_intl/agents/REPORT_CODEX_FINAL_ACCEPTANCE.md` (STATUT: TERMINÉE).
+- Décision : PRÊT POUR MERGE.
+- Dry-run merge dans `main` : sans conflit.
+- `main` non modifié.
+
+## 9. Interdits rappelés
 - Pas de `git reset --hard`, `clean`, force-push sur `main`.
 - Pas de secrets dans le contexte modèle.
 - Pas de données personnelles réelles dans les fixtures.
