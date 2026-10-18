@@ -137,6 +137,13 @@ def test_today_dashboard_profile_shortcut_is_present() -> None:
     assert "renderTodayProfileReadiness" in js
 
 
+def test_dashboard_quick_tools_expose_only_real_career_views() -> None:
+    html = (Path(__file__).resolve().parents[1] / "career_static/index.html").read_text(encoding="utf-8")
+    for view in ("stagehunter", "profile", "studio", "applications", "interviews", "discover"):
+        assert f'data-view-action="{view}"' in html
+    assert "Tous tes outils Career" in html
+
+
 @pytest.mark.parametrize("scenario", ["http-error", "source-error", "partial", "success"])
 def test_stage_hunter_search_preserves_actual_discovery_result(scenario: str) -> None:
     source = (Path(__file__).resolve().parents[1] / "career_static/career.js").read_text()
