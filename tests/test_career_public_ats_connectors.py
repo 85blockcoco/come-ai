@@ -46,12 +46,16 @@ def test_public_connectors_are_registered_but_disabled_by_default():
                for spec in CONNECTOR_SPECS.values())
 
 
-def test_career_service_knows_future_ats_adapters_but_keeps_them_inert(tmp_path):
+def test_career_service_enables_public_ats_only_for_explicit_curated_exploration(tmp_path):
     service = CareerService(tmp_path)
     assert set(service._exploration_connectors) == {"greenhouse", "lever", "ashby", "smartrecruiters"}
-    assert service._exploration_connectors["lever"].enabled is False
-    assert service._exploration_connectors["ashby"].enabled is False
-    assert service._exploration_connectors["smartrecruiters"].enabled is False
+    assert service._exploration_connectors["lever"].enabled is True
+    assert service._exploration_connectors["ashby"].enabled is True
+    assert service._exploration_connectors["smartrecruiters"].enabled is True
+    # Direct construction remains opt-in: no source or import activates I/O.
+    assert LeverConnector().enabled is False
+    assert AshbyConnector().enabled is False
+    assert SmartRecruitersConnector().enabled is False
 
 
 @pytest.mark.parametrize("connector_type,provider,fixture_key", [

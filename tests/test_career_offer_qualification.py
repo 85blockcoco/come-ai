@@ -90,3 +90,53 @@ def test_invalid_iso_date_is_reported_as_missing_not_as_a_month():
     assert result.start_month is None
     assert "début" in result.missing_fields
     assert result.target_status == "to_verify"
+
+
+def test_explicit_month_and_year_in_title_are_start_evidence() -> None:
+    result = qualify_offer({
+        "title": "Debt Advisory Internship (March 2027)",
+        "description_original": "This internship lasts six months.",
+        "employment_type": "Internship",
+        "official_url": "https://careers.example.test/debt-advisory",
+        "source_name": "greenhouse",
+        "source_id": "debt-advisory-2027",
+        "source_verified": True,
+    }, as_of=date(2026, 10, 18))
+    assert result.start_month == 3
+    assert result.target_status == "conforming"
+    assert result.provenance["start_month"].source == "title_passage"
+    assert result.provenance["start_month"].quote == "March 2027"
+
+
+def test_month_range_in_title_uses_first_month_but_does_not_invent_duration() -> None:
+    result = qualify_offer({
+        "title": "Stockholm - M&A Internship Jan-June 2027",
+        "description_original": "Investment banking internship.",
+        "employment_type": "Internship",
+        "official_url": "https://careers.example.test/stockholm",
+        "source_name": "greenhouse",
+        "source_id": "stockholm-2027",
+        "source_verified": True,
+    }, as_of=date(2026, 10, 18))
+    assert result.start_month == 1
+    assert result.duration_min_months is None
+    assert result.target_status == "to_verify"
+
+
+@pytest.mark.parametrize("title", [
+    "Quantitative Trading Internship Summer 2027",
+    "Apply by March 2027 - Finance Internship",
+    "Finance Internship Q3 2027",
+])
+def test_title_seasons_deadlines_and_quarters_do_not_invent_start_month(title: str) -> None:
+    result = qualify_offer({
+        "title": title,
+        "description_original": "Six month internship; start date to be confirmed.",
+        "employment_type": "Internship",
+        "official_url": "https://careers.example.test/unknown-start",
+        "source_name": "greenhouse",
+        "source_id": title,
+        "source_verified": True,
+    }, as_of=date(2026, 10, 18))
+    assert result.start_month is None
+    assert result.target_status == "to_verify"

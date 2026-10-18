@@ -11,9 +11,9 @@ from pathlib import Path
 import pytest
 
 from career.discovery import DiscoveryPayload, GreenhouseBoard, GreenhouseJobBoardConnector, PublicSourceError
-from career.exploration import classify_internship
+from career.exploration import EXPLORATION_MAX_SOURCES, classify_internship
 from career.service import CareerService
-from career.stage_search import validate_brief
+from career.stage_search import STAGE_DOMAINS, validate_brief
 
 
 def source(token: str = "fiction", company: str = "Finance Synthétique") -> dict:
@@ -98,6 +98,22 @@ def test_admission_and_ranking_happen_before_first_150_limit():
     assert payload.uncertain_count == 2
     assert payload.filtered_criteria_count == 1
     assert payload.relevant_count == 1
+
+
+def test_employer_boilerplate_does_not_turn_support_roles_into_finance_matches():
+    raw = [
+        posting(201, "Receptionist Intern", content="Private equity investment firm. This internship lasts six months."),
+        posting(202, "Staff Product Designer Intern", content="Financial markets company. This internship lasts six months."),
+        posting(203, "Datacentre Operations Intern", content="Investment management business. This internship lasts six months."),
+        posting(204, "Join Our European Talent Community Internship", content="Corporate finance group. This internship lasts six months."),
+        posting(205, "Investment Operations Intern", content="Portfolio management and fixed income. This internship lasts six months."),
+    ]
+    connector = GreenhouseJobBoardConnector(FeedTransport({"fiction": raw}))
+    payload = connector.discover_internships(
+        GreenhouseBoard("fiction", "Fiction Finance", "fiction"),
+        selection_brief=validate_brief({"domains": list(STAGE_DOMAINS)}),
+    )
+    assert [job["title"] for job in payload.jobs] == ["Investment Operations Intern"]
 
 
 def test_relevant_finance_stage_after_150_weak_stages_is_retained():
@@ -236,13 +252,13 @@ def test_global_top_150_is_chosen_across_sources_and_exact_aliases_deduped(tmp_p
 
 
 def test_source_limit_and_unsupported_connectors_are_not_fake_successes(tmp_path):
-    feeds = {f"fiction{i}": [posting(i + 1)] for i in range(10)}
+    feeds = {f"fiction{i}": [posting(i + 1)] for i in range(EXPLORATION_MAX_SOURCES + 2)}
     sources = [source(key) for key in feeds]
     sources[0]["provider"] = "future_ashby"
     service, transport = service_with(tmp_path, feeds, sources)
     result = service.explore_internships()
-    assert result["summary"]["sources_total"] == 10
-    assert result["summary"]["sources_attempted"] == len(transport.calls) == 7
+    assert result["summary"]["sources_total"] == EXPLORATION_MAX_SOURCES + 2
+    assert result["summary"]["sources_attempted"] == len(transport.calls) == EXPLORATION_MAX_SOURCES - 1
     assert result["summary"]["sources_not_queried"] == 3
     assert result["summary"]["partial"]
     assert result["outcomes"][0]["status"] == "unsupported"

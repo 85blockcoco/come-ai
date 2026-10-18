@@ -58,17 +58,18 @@ _CONTRACT_PATTERNS = (
     ("fixed_term", re.compile(r"\b(?:CDD|fixed[- ]term contract)\b", re.I)),
 )
 _MONTHS = {
-    "january": 1, "janvier": 1, "januar": 1, "gennaio": 1, "enero": 1,
-    "february": 2, "fevrier": 2, "februar": 2, "febbraio": 2, "febrero": 2,
-    "march": 3, "mars": 3, "marz": 3, "marzo": 3, "abril": 4, "april": 4,
-    "avril": 4, "aprile": 4, "may": 5, "mai": 5, "maggio": 5, "mayo": 5,
-    "june": 6, "juin": 6, "juni": 6, "giugno": 6, "junio": 6,
-    "july": 7, "juillet": 7, "juli": 7, "luglio": 7, "julio": 7,
-    "august": 8, "aout": 8, "agosto": 8, "september": 9, "septembre": 9,
-    "settembre": 9, "septiembre": 9, "october": 10, "octobre": 10,
-    "oktober": 10, "ottobre": 10, "octubre": 10, "november": 11,
-    "novembre": 11, "noviembre": 11, "december": 12, "decembre": 12,
-    "dezember": 12, "dicembre": 12, "diciembre": 12,
+    "january": 1, "janvier": 1, "januar": 1, "gennaio": 1, "enero": 1, "jan": 1,
+    "february": 2, "fevrier": 2, "februar": 2, "febbraio": 2, "febrero": 2, "feb": 2,
+    "march": 3, "mars": 3, "marz": 3, "marzo": 3, "mar": 3,
+    "abril": 4, "april": 4, "avril": 4, "aprile": 4, "apr": 4,
+    "may": 5, "mai": 5, "maggio": 5, "mayo": 5,
+    "june": 6, "juin": 6, "juni": 6, "giugno": 6, "junio": 6, "jun": 6,
+    "july": 7, "juillet": 7, "juli": 7, "luglio": 7, "julio": 7, "jul": 7,
+    "august": 8, "aout": 8, "agosto": 8, "aug": 8,
+    "september": 9, "septembre": 9, "settembre": 9, "septiembre": 9, "sep": 9, "sept": 9,
+    "october": 10, "octobre": 10, "oktober": 10, "ottobre": 10, "octubre": 10, "oct": 10,
+    "november": 11, "novembre": 11, "noviembre": 11, "nov": 11,
+    "december": 12, "decembre": 12, "dezember": 12, "dicembre": 12, "diciembre": 12, "dec": 12,
 }
 _START_MONTH_PATTERN = re.compile(
     r"\b(?:start(?:s|ing)?(?:\s+date)?|begin(?:s|ning)?|d[eé]but(?:e|er|ant)?|[aà]\s+partir|"
@@ -76,6 +77,11 @@ _START_MONTH_PATTERN = re.compile(
     r"(?:(?:in|from|on|en|de|du|le|the|dal|da|el)\s+)*(?:\d{1,2}\s+)?"
     r"(?P<month>" + "|".join(sorted((*_MONTHS, "février", "märz", "août"), key=len, reverse=True)) +
     r")\b(?:\s+(?P<year>20\d{2}))?", re.I)
+_TITLE_MONTH_YEAR_PATTERN = re.compile(
+    r"\b(?P<month>" + "|".join(sorted((*_MONTHS, "février", "märz", "août"), key=len, reverse=True)) +
+    r")\b(?:\s*[-–—]\s*(?:" +
+    "|".join(sorted((*_MONTHS, "février", "märz", "août"), key=len, reverse=True)) +
+    r")\b)?[\s,()/\-]*(?P<year>20\d{2})\b", re.I)
 _NUMBER_WORDS = {"one": 1, "un": 1, "une": 1, "einen": 1, "due": 2, "deux": 2,
                  "two": 2, "drei": 3, "trois": 3, "three": 3, "quattro": 4,
                  "quatre": 4, "four": 4, "cinque": 5, "cinq": 5, "five": 5,
@@ -186,6 +192,20 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
                     missing.append("jour de début vérifiable")
             else:
                 missing.append("année de début")
+    if start_month is None and title:
+        title_month_match = _TITLE_MONTH_YEAR_PATTERN.search(title)
+        if title_month_match:
+            prefix = _fold(title[max(0, title_month_match.start() - 45):title_month_match.start()])
+            if not re.search(r"\b(?:apply|applications?|deadline|candidatures?)\b", prefix):
+                start_month = _MONTHS.get(_fold(title_month_match.group("month")))
+                start_year = int(title_month_match.group("year"))
+                quote = title_month_match.group(0)
+                evidence["start_month"] = FactEvidence(start_month, "title_passage", quote)
+                evidence["start_year"] = FactEvidence(start_year, "title_passage", quote)
+                if (start_year, start_month) < (today.year, today.month):
+                    start_month = -start_month
+                elif (start_year, start_month) == (today.year, today.month):
+                    missing.append("jour de début vérifiable")
     if start_month is None:
         missing.append("mois de début")
     elif "start_month" not in evidence:

@@ -33,12 +33,18 @@ CONNECTOR_SPECS = {
 
 
 def default_exploration_connectors(greenhouse_connector):
-    """Return the app's connector map; new ATS adapters remain inert by default."""
+    """Return connectors used only after an explicit Explorer button click.
+
+    Public ATS connector classes remain disabled when instantiated directly.
+    The application map enables them because its curated registry and service
+    boundary both validate source identity and provenance before any request.
+    With no registered source for a provider, enabling it performs no I/O.
+    """
     return {
         "greenhouse": greenhouse_connector,
-        "lever": LeverConnector(),
-        "ashby": AshbyConnector(),
-        "smartrecruiters": SmartRecruitersConnector(),
+        "lever": LeverConnector(enabled=True),
+        "ashby": AshbyConnector(enabled=True),
+        "smartrecruiters": SmartRecruitersConnector(enabled=True),
     }
 
 __all__ = [

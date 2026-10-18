@@ -58,4 +58,34 @@ CURATED_SOURCES: tuple[dict[str, str], ...] = (
         "provenance_url": "https://www.optiver.com/join-us/jobs/risk-finance-and-legal/singapore/market-risk-internship-2027-singapore/apply",
         "verified_at": "2026-10-13T22:10:48.919382+00:00",
     },
+    {
+        "id": "registry:greenhouse:mangroup", "provider": "greenhouse", "company": "Man Group",
+        "board_token": "mangroup", "public_url": "https://job-boards.greenhouse.io/mangroup",
+        "provenance_url": "https://www.man.com/careers",
+        "verified_at": "2026-10-18T10:14:39+00:00",
+    },
+    {
+        "id": "registry:greenhouse:aqr", "provider": "greenhouse", "company": "AQR",
+        "board_token": "aqr", "public_url": "https://job-boards.greenhouse.io/aqr",
+        "provenance_url": "https://careers.aqr.com/",
+        "verified_at": "2026-10-18T10:14:39+00:00",
+    },
+    {
+        "id": "registry:greenhouse:robinhood", "provider": "greenhouse", "company": "Robinhood",
+        "board_token": "robinhood", "public_url": "https://job-boards.greenhouse.io/robinhood",
+        "provenance_url": "https://careers.robinhood.com/",
+        "verified_at": "2026-10-18T10:14:39+00:00",
+    },
+    {
+        "id": "registry:greenhouse:generalatlantic", "provider": "greenhouse", "company": "General Atlantic",
+        "board_token": "generalatlantic", "public_url": "https://job-boards.greenhouse.io/generalatlantic",
+        "provenance_url": "https://www.generalatlantic.com/careers/",
+        "verified_at": "2026-10-18T10:14:39+00:00",
+    },
+    {
+        "id": "registry:lever:qonto", "provider": "lever", "company": "Qonto",
+        "board_token": "qonto", "public_url": "https://jobs.lever.co/qonto",
+        "provenance_url": "https://qonto.com/fr/careers",
+        "verified_at": "2026-10-18T10:14:39+00:00",
+    },
 )
