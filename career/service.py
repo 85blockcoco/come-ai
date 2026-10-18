@@ -48,6 +48,7 @@ from .application_studio import (
 from .calendar_export import build_deadline_calendar_ics
 from .application_prep import prepare_application
 from .stage_search import (
+    STAGE_DOMAINS,
     brief_is_configured,
     default_brief,
     score_brief_match,
@@ -1760,6 +1761,10 @@ class CareerService:
         with self._lock, self._connection() as connection:
             raw = self._read_stage_search_raw(connection)
         brief = default_brief()
+        # Keep the reusable matching contract neutral, but make the first
+        # Career screen immediately useful for this finance-focused product.
+        # Every domain remains an editable checkbox and a saved choice wins.
+        brief["domains"] = list(STAGE_DOMAINS)
         # A stored brief can become invalid without any action from the person
         # (a vocabulary entry removed by an update, a manual database edit…).
         # A read must never fail hard and lock the whole tab: fall back to an
@@ -1770,16 +1775,18 @@ class CareerService:
                 brief = validate_brief(json.loads(raw))
             except (json.JSONDecodeError, TypeError, ValueError, UserFacingError):
                 brief = default_brief()
+                brief["domains"] = list(STAGE_DOMAINS)
                 stored_brief_invalid = True
         return {
             "brief": brief,
-            "configured": brief_is_configured(brief),
+            "configured": bool(raw) and not stored_brief_invalid and brief_is_configured(brief),
             "stored_brief_invalid": stored_brief_invalid,
             "vocabulary": stage_search_vocabulary(),
             "search_terms": search_terms_for(brief.get("domains", [])),
             "disclaimer": (
                 "Critères enregistrés localement. Par défaut : Stage, CDD, CDI et VIE, "
-                "débuts de janvier à mars et stages d’au moins six mois. Modifie les cases selon ta recherche."
+                "tous les domaines financiers, débuts de janvier à mars et stages d’au moins six mois. "
+                "Modifie les cases selon ta recherche."
             ),
         }
 

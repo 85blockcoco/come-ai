@@ -40,7 +40,8 @@ def test_contract_metadata_not_working_hours_decides_admission(metadata, retaine
 @pytest.mark.parametrize("title,retained", [
     ("Hardware Engineering Intern", False), ("Security Engineer Intern", False),
     ("FPGA Engineering Intern", False), ("Quantitative Research Intern", True),
-    ("Financial Engineering Intern", True),
+    ("Financial Engineering Intern", True), ("IT Operations - Workplace (Internship)", False),
+    ("Investment Operations Intern", True),
 ])
 def test_investment_firm_boilerplate_does_not_make_an_engineering_role_financial(title, retained):
     payload = GreenhouseJobBoardConnector._normalise(

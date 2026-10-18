@@ -9,7 +9,7 @@ import pytest
 
 from career.offer_qualification import qualify_offer
 from career.service import CareerService
-from career.stage_search import brief_is_configured, default_brief, validate_brief
+from career.stage_search import STAGE_DOMAINS, brief_is_configured, default_brief, validate_brief
 
 
 @pytest.fixture(autouse=True)
@@ -94,9 +94,11 @@ def test_unknown_dates_and_duration_are_not_invented():
 
 def test_contract_and_month_criteria_validate_and_persist_locally(tmp_path):
     defaults = default_brief()
+    assert defaults["domains"] == []
     assert defaults["contract_types"] == ["stage", "cdd", "cdi", "vie"]
     assert defaults["start_months"] == [1, 2, 3]
     assert defaults["minimum_stage_duration_months"] == 6
+    assert set(CareerService(tmp_path).get_stage_search()["brief"]["domains"]) == set(STAGE_DOMAINS)
     chosen = validate_brief({"contract_types": ["cdd", "vie"], "start_months": [2, 12],
                              "minimum_stage_duration_months": 8})
     assert chosen["contract_types"] == ["cdd", "vie"]
@@ -164,7 +166,9 @@ def test_personalized_contract_and_month_filters_alone_configure_the_search():
 def test_real_connector_path_keeps_selected_non_intern_contracts(provider, contract):
     from career.discovery import GreenhouseBoard, GreenhouseJobBoardConnector
     from career.connectors import LeverConnector
-    brief = validate_brief({"contract_types": [contract.lower()], "start_months": [3]})
+    # This regression isolates contract handling; an explicit empty domain list
+    # disables the separate finance-domain filter.
+    brief = validate_brief({"domains": [], "contract_types": [contract.lower()], "start_months": [3]})
     text = "Synthetic finance role. Starts in March 2027."
     if provider == "greenhouse":
         raw = {"jobs": [{"id": "synthetic-contract", "title": "Finance Analyst",

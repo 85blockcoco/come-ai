@@ -88,4 +88,52 @@ CURATED_SOURCES: tuple[dict[str, str], ...] = (
         "provenance_url": "https://qonto.com/fr/careers",
         "verified_at": "2026-10-18T10:14:39+00:00",
     },
+    {
+        "id": "registry:greenhouse:doctolib", "provider": "greenhouse", "company": "Doctolib",
+        "board_token": "doctolib", "public_url": "https://job-boards.greenhouse.io/doctolib",
+        "provenance_url": "https://careers.doctolib.com/jobs/",
+        "verified_at": "2026-10-18T12:41:15+00:00",
+    },
+    {
+        "id": "registry:lever:pigment", "provider": "lever", "company": "Pigment",
+        "board_token": "pigment", "public_url": "https://jobs.lever.co/pigment",
+        "provenance_url": "https://www.pigment.com/careers",
+        "verified_at": "2026-10-18T12:41:15+00:00",
+    },
+    {
+        "id": "registry:ashby:oaknorth", "provider": "ashby", "company": "OakNorth",
+        "board_token": "oaknorth", "public_url": "https://jobs.ashbyhq.com/oaknorth",
+        "provenance_url": "https://www.oaknorth.com/careers/",
+        "verified_at": "2026-10-18T12:41:15+00:00",
+    },
+    {
+        "id": "registry:greenhouse:monzo", "provider": "greenhouse", "company": "Monzo",
+        "board_token": "monzo", "public_url": "https://boards.greenhouse.io/monzo",
+        "provenance_url": "https://monzo.com/careers/",
+        "verified_at": "2026-10-18T12:41:15+00:00",
+    },
+    {
+        "id": "registry:ashby:thought-machine", "provider": "ashby", "company": "Thought Machine",
+        "board_token": "thought-machine", "public_url": "https://jobs.ashbyhq.com/thought-machine",
+        "provenance_url": "https://www.thoughtmachine.net/careers",
+        "verified_at": "2026-10-18T12:41:15+00:00",
+    },
+    {
+        "id": "registry:ashby:alan", "provider": "ashby", "company": "Alan",
+        "board_token": "alan", "public_url": "https://jobs.ashbyhq.com/alan",
+        "provenance_url": "https://alan.com/careers",
+        "verified_at": "2026-10-18T12:41:15+00:00",
+    },
+    {
+        "id": "registry:lever:contentsquare", "provider": "lever", "company": "Contentsquare",
+        "board_token": "contentsquare", "public_url": "https://jobs.lever.co/contentsquare",
+        "provenance_url": "https://contentsquare.com/careers/",
+        "verified_at": "2026-10-18T12:41:15+00:00",
+    },
+    {
+        "id": "registry:greenhouse:dataiku", "provider": "greenhouse", "company": "Dataiku",
+        "board_token": "dataiku", "public_url": "https://job-boards.greenhouse.io/dataiku",
+        "provenance_url": "https://www.dataiku.com/careers/",
+        "verified_at": "2026-10-18T12:41:15+00:00",
+    },
 )

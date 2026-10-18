@@ -13,7 +13,7 @@ import pytest
 from career.discovery import DiscoveryPayload, GreenhouseBoard, GreenhouseJobBoardConnector, PublicSourceError
 from career.exploration import EXPLORATION_MAX_SOURCES, classify_internship
 from career.service import CareerService
-from career.stage_search import STAGE_DOMAINS, validate_brief
+from career.stage_search import STAGE_DOMAINS, default_brief, validate_brief
 
 
 def source(token: str = "fiction", company: str = "Finance Synthétique") -> dict:
@@ -114,6 +114,19 @@ def test_employer_boilerplate_does_not_turn_support_roles_into_finance_matches()
         selection_brief=validate_brief({"domains": list(STAGE_DOMAINS)}),
     )
     assert [job["title"] for job in payload.jobs] == ["Investment Operations Intern"]
+
+
+def test_fresh_default_search_covers_finance_without_filling_results_with_software_roles(tmp_path):
+    raw = [
+        posting(301, "Software Engineering Intern", content="Financial markets company. This internship lasts six months."),
+        posting(302, "Corporate Finance Intern", content="Financial analysis and valuation. This internship lasts six months."),
+    ]
+    connector = GreenhouseJobBoardConnector(FeedTransport({"fiction": raw}))
+    payload = connector.discover_internships(
+        GreenhouseBoard("fiction", "Fiction Finance", "fiction"),
+        selection_brief=CareerService(tmp_path).get_stage_search()["brief"],
+    )
+    assert [job["source_id"] for job in payload.jobs] == ["302"]
 
 
 def test_relevant_finance_stage_after_150_weak_stages_is_retained():

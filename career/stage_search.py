@@ -34,6 +34,8 @@ STAGE_DOMAINS: dict[str, tuple[str, ...]] = {
     "Corporate Finance": (
         "corporate finance",
         "finance d entreprise",
+        "finance intern",
+        "finance analyst",
         "financial analysis",
         "analyse financiere",
         "valuation",

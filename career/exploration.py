@@ -15,10 +15,10 @@ from typing import Any, Protocol
 from .models import canonical_url, clean_text
 
 
-# The curated registry currently contains thirteen reviewed sources. Sixteen
-# keeps one explicit refresh able to cover all of them while preserving a hard
-# resource bound and a small margin for later reviewed additions.
-EXPLORATION_MAX_SOURCES = 16
+# The curated registry currently contains twenty-one reviewed sources. Twenty-
+# four keeps one explicit refresh able to cover all of them while preserving a
+# hard resource bound and a small margin for later reviewed additions.
+EXPLORATION_MAX_SOURCES = 24
 EXPLORATION_MAX_RESULTS = 150
 EXPLORATION_NETWORK_BUDGET_SECONDS = 60
 EXPLORATION_LAST_SETTING = "stage_explorer_last_result"
@@ -121,7 +121,7 @@ _NON_FINANCE_TITLE = re.compile(
     r"\b(?:software|frontend|backend|full[ -]stack|site\s+reliability|human\s+resources|HR|"
     r"recruit(?:ing|ment|er)?|talent\s+acquisition|marketing|graphic\s+design|"
     r"reception(?:ist)?|product\s+design(?:er|ers|ing)?|data\s*cent(?:er|re)|talent\s+communit(?:y|ies)|"
-    r"engineering|engineer|security|cybersecurity|FPGA|hardware)\b", re.I
+    r"IT\s+operations?|engineering|engineer|security|cybersecurity|FPGA|hardware)\b", re.I
 )
 _FINANCIAL_TECHNICAL_TITLE = re.compile(
     r"\b(?:financial\s+engineer(?:ing)?|(?:quantitative|quant)\s+(?:research(?:er)?|trading|trader|analyst))\b", re.I

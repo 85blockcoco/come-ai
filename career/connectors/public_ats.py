@@ -358,6 +358,13 @@ def _common_job(provider: str, source: dict[str, Any], job_id: Any, title: Any, 
     # evidence and UI all use the same safe, provenance-preserving text.
     text = source_html_to_text(description)
     contract = clean_text(employment_type, limit=120)
+    posted = clean_text(posted_date, limit=80)
+    if posted:
+        try:
+            posted = datetime.fromisoformat(posted.replace("Z", "+00:00")).date().isoformat()
+        except ValueError:
+            # A malformed vendor timestamp is not an application date fact.
+            posted = ""
     return {
         "company": clean_text(company_name or source.get("company"), limit=240),
         "title": title_text,
@@ -367,7 +374,7 @@ def _common_job(provider: str, source: dict[str, Any], job_id: Any, title: Any, 
         "apply_url": clean_text(apply_url, limit=2_000),
         "city": city,
         "country": clean_text(country or country_from_location, limit=120),
-        "posted_date": clean_text(posted_date, limit=80),
+        "posted_date": posted,
         "deadline_date": "",
         "start_date": "",
         "end_date": "",

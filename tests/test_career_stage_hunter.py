@@ -78,7 +78,7 @@ def _profile_payload(**changes: object) -> dict[str, object]:
 
 
 def test_empty_brief_presumes_nothing() -> None:
-    """An unset brief is valid and presumes no preference at all."""
+    """An unset reusable brief remains neutral outside the Career first-open UI."""
     brief = validate_brief({})
     assert brief == default_brief()
     assert brief_is_configured(brief) is False
@@ -750,15 +750,17 @@ def test_multi_domain_offer_lists_every_matched_domain() -> None:
 # --- Parcours de première utilisation (service vierge) -----------------------
 
 
-def test_first_open_starts_empty_and_explains_itself(tmp_path: Path) -> None:
-    """Une ouverture sans aucune configuration : rien n'est supposé, tout est guide."""
+def test_first_open_starts_with_useful_finance_defaults_and_explains_itself(tmp_path: Path) -> None:
+    """Une première ouverture recherche la finance sans inventer de préférence personnelle."""
     service = CareerService(tmp_path)
     payload = service.get_stage_search()
     assert payload["configured"] is False
-    assert payload["brief"] == default_brief()
+    expected = default_brief()
+    expected["domains"] = list(STAGE_DOMAINS)
+    assert payload["brief"] == expected
     assert payload["stored_brief_invalid"] is False
     assert payload["vocabulary"]["domains"], "le formulaire des domaines doit être renseignable"
-    assert payload["search_terms"] == [], "aucun terme imposé sans domaine choisi"
+    assert {item["domain"] for item in payload["search_terms"]} == set(STAGE_DOMAINS)
     matches = service.list_stage_matches()
     assert matches["matches"] == [], "aucune offre inventée au premier lancement"
     # Lancer une recherche sans source affiche une consigne claire, pas un échec muet.

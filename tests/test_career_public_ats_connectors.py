@@ -81,7 +81,7 @@ def test_connector_maps_synthetic_public_postings_to_common_contract(
     assert job["source_id"].startswith("synthetic-")
     assert job["official_url"].startswith("https://")
     assert job["source_verified"] is True
-    assert job["posted_date"] in {"", "2026-10-01T09:00:00Z"}
+    assert job["posted_date"] in {"", "2026-10-01"}
     assert "start_date" not in job or job["start_date"] == ""
 
 
@@ -131,6 +131,14 @@ def test_enabled_connector_requires_a_verified_source_record_before_network():
     with pytest.raises(PublicSourceError, match="vérifiée"):
         connector.discover_internships(unverified, selection_brief=default_brief())
     assert transport.calls == []
+
+
+def test_public_ats_timestamp_is_normalized_before_career_import(tmp_path, fixtures):
+    connector = SmartRecruitersConnector(enabled=True)
+    job = connector.parse(source("smartrecruiters"), fixtures["smartrecruiters"])[0]
+    assert job["posted_date"] == "2026-10-01"
+    stored = CareerService(tmp_path).import_job(job)
+    assert stored["posted_date"] == "2026-10-01"
 
 
 @pytest.mark.parametrize("connector_type,provider,fixture_key", [

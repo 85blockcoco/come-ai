@@ -21,6 +21,17 @@ NEW_VERIFIED_SOURCES = {
     ("Qonto", "lever", "qonto"),
 }
 
+SECOND_WAVE_VERIFIED_SOURCES = {
+    ("Doctolib", "greenhouse", "doctolib"),
+    ("Pigment", "lever", "pigment"),
+    ("OakNorth", "ashby", "oaknorth"),
+    ("Monzo", "greenhouse", "monzo"),
+    ("Thought Machine", "ashby", "thought-machine"),
+    ("Alan", "ashby", "alan"),
+    ("Contentsquare", "lever", "contentsquare"),
+    ("Dataiku", "greenhouse", "dataiku"),
+}
+
 
 def _token(source: dict[str, str]) -> str:
     return source.get("board_token") or source.get("company_identifier") or ""
@@ -29,6 +40,7 @@ def _token(source: dict[str, str]) -> str:
 def test_registry_contains_only_the_reviewed_source_expansion() -> None:
     observed = {(source["company"], source["provider"], _token(source)) for source in CURATED_SOURCES}
     assert NEW_VERIFIED_SOURCES <= observed
+    assert SECOND_WAVE_VERIFIED_SOURCES <= observed
 
 
 def test_registry_identifiers_are_unique_and_have_auditable_provenance() -> None:
