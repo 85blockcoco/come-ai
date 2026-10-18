@@ -1,6 +1,6 @@
 # Rapport — CODEX FINAL ACCEPTANCE, acceptation Career dans main
 
-STATUT: TERMINÉE
+STATUT: BLOQUÉE — preuve DevKit obligatoire absente
 MISSION: CODEX FINAL ACCEPTANCE — Acceptation Career dans main
 
 ## Pré-vol
@@ -19,7 +19,9 @@ MISSION: CODEX FINAL ACCEPTANCE — Acceptation Career dans main
 - `git ls-files | grep -iE '\.env$|\.db$|secret|key|token|password'` (hors test garde) : aucun fichier sensible tracké.
 
 ## Empreinte DevKit
-- `.devkit/diagnostics/latest.*` : absent dans cette branche (gitignored). Les rapports de pré-vol et de vérification navigateur sont présents dans `docs/career_intl/agents/`.
+- Échec du critère obligatoire : `.devkit/diagnostics/latest.*` est absent dans cette branche.
+- Le répertoire `.devkit/` ne contient pas de diagnostic `latest.md` ou `latest.json` exploitable.
+- Les rapports Career et les tests pytest ne remplacent pas l'empreinte DevKit demandée par le contrat d'acceptation.
 
 ## Plan de merge
 - Branche source : `codex/profile-compatibility-ux` @ `668db08`.
@@ -27,15 +29,16 @@ MISSION: CODEX FINAL ACCEPTANCE — Acceptation Career dans main
 - Stratégie recommandée : `git merge --no-ff codex/profile-compatibility-ux`.
 
 ## Dry-run
-- Exécuté dans un worktree temporaire basé sur `main`.
-- Résultat : **Automatic merge went well; stopped before committing** (aucun conflit).
-- `main` restauré à `5ef814e` après `git merge --abort`. Aucune modification persistante.
+- Vérifié sans modifier `main` avec `git merge-tree --write-tree --name-only 5ef814e 668db08`.
+- Résultat : arbre de fusion calculé (`676a0277f2082d8d87ae93e1e12631fa187c8dd3`), aucun conflit signalé.
+- Aucun merge réel, aucun commit et aucune écriture dans `main`.
 
 ## Décision
-**PRÊT POUR MERGE.** Tous les critères d'acceptation sont verts. Le merge effectif est à la charge de l'intégrateur humain.
+**BLOQUÉ.** Tous les critères sont verts sauf l'empreinte DevKit obligatoire. La branche est techniquement fusionnable sans conflit, mais le merge ne doit pas être accepté tant qu'un diagnostic DevKit `latest.*` n'a pas été produit et vérifié.
 
 ## État Git
 - Branche : `codex/profile-compatibility-ux`.
 - HEAD : `668db08`.
 - `main` : `5ef814e` (non modifié).
 - Aucun merge, push ou modification de `main`.
+- Action de reprise : exécuter le diagnostic DevKit officiel du projet sur cette branche, conserver le rapport `latest.md`/`latest.json`, puis relancer uniquement cette acceptation.
