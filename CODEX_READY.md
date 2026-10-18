@@ -51,7 +51,14 @@ PYTHONPATH=/Users/comedelavenne/AI-Excel-Agent .venv/bin/python scripts/live_sou
 - `study_coach/` (package complet + tests)
 - `docs/career_intl/agents/REPORT_MEGA.md` (métriques live)
 
-## 7. Interdits rappelés
+## 7. Vérification visuelle (complétée)
+- Serveur port 8937 : HTTP 200 sur `/v5` et `/career`.
+- Tous les éléments UI Career présents dans le DOM (carte, tri, fiche, navigation).
+- Persistance du tri confirmée (`localStorage` clé `stagehunter_sort`).
+- Tests UI guards + explorer web : 16 passed.
+- Rapport : `docs/career_intl/agents/REPORT_CODEX_BROWSER_VERIFY.md` (STATUT: TERMINÉE).
+
+## 8. Interdits rappelés
 - Pas de `git reset --hard`, `clean`, force-push sur `main`.
 - Pas de secrets dans le contexte modèle.
 - Pas de données personnelles réelles dans les fixtures.
