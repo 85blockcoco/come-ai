@@ -46,7 +46,12 @@ from .application_studio import (
     render_application_html,
 )
 from .calendar_export import build_deadline_calendar_ics
-from .application_prep import prepare_application
+from .application_prep import prepare_application, summarize_offer
+
+try:
+    from consent_guard import ConsentGuard
+except Exception:  # pragma: no cover - optional dependency
+    ConsentGuard = None  # type: ignore[misc, assignment]
 from .stage_search import (
     STAGE_DOMAINS,
     brief_is_configured,
@@ -213,6 +218,13 @@ class CareerService:
         self._lock = threading.RLock()
         self._ensure_storage()
         self._initialize()
+        if ConsentGuard is not None:
+            try:
+                self.consent_guard = ConsentGuard(self.data_dir / "consent")
+            except Exception:
+                self.consent_guard = None
+        else:
+            self.consent_guard = None
 
     def _ensure_storage(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -1857,6 +1869,149 @@ class CareerService:
         context = self._scoring_context()
         analysis = prepare_application(context.get("profile") or {}, context.get("intake") or {}, job)
         return analysis
+
+    def get_job_summary(
+        self,
+        job_id: str,
+        *,
+        mode: str = "local",
+        consent_external: bool = False,
+        consent_id: str | None = None,
+        ai_generator: Any | None = None,
+        provider: str = "career",
+        model: str = "career-summary",
+        purpose: str = "career_summary",
+    ) -> dict[str, Any]:
+        """Structured, factual summary of one offer.
+
+        The local summary is always available.  An optional cloud enhancement
+        requires an explicit consent (boolean checkbox or consent_guard id);
+        when consent is refused or unavailable, the local summary is returned
+        instead of raising.
+        """
+
+        job = self.get_job(job_id)
+        base = summarize_offer(job)
+        # Keep the deterministic pertinence score alongside the offer facts.
+        scoring = job.get("scoring") if isinstance(job.get("scoring"), dict) else {}
+        if "score" not in base:
+            base["score"] = scoring.get("score")
+        if "pertinence" not in base:
+            base["pertinence"] = scoring.get("score")
+        base["job_id"] = job.get("id")
+
+        result: dict[str, Any] = {
+            **base,
+            "mode": "local",
+            "ai_used": False,
+            "ai_summary": None,
+            "ai_provider": None,
+            "ai_error": None,
+            "consent_status": None,
+            "consent_required": True,
+        }
+
+        normalized_mode = str(mode or "local").strip().lower()
+        if normalized_mode != "ai":
+            result["mode"] = "local"
+            return result
+
+        result["mode"] = "ai"
+        payload_for_consent = {
+            "job_id": job.get("id"),
+            "title": job.get("title"),
+            "company": job.get("company"),
+        }
+
+        allowed = False
+        refusal_message: str | None = None
+        consent_status: str | None = None
+
+        guard = getattr(self, "consent_guard", None)
+        if guard is not None and consent_id:
+            try:
+                decision = guard.check(
+                    consent_id,
+                    provider=provider,
+                    model=model,
+                    purpose=purpose,
+                    payload=payload_for_consent,
+                )
+            except Exception as error:  # pragma: no cover - defensive
+                decision = None
+                refusal_message = str(error)
+            if decision is not None:
+                consent_status = getattr(decision, "code", None)
+                if getattr(decision, "allowed", False):
+                    try:
+                        guard.consume(
+                            consent_id,
+                            provider=provider,
+                            model=model,
+                            purpose=purpose,
+                            payload=payload_for_consent,
+                        )
+                        allowed = True
+                    except Exception as error:
+                        allowed = False
+                        refusal_message = str(error)
+                        consent_status = getattr(error, "code", consent_status) or consent_status
+                else:
+                    refusal_message = getattr(decision, "message", None)
+        elif consent_external:
+            allowed = True
+            consent_status = "allowed"
+        else:
+            refusal_message = "Consentement cloud requis ; résumé local conservé."
+
+        if not allowed:
+            result["ai_error"] = (refusal_message or "Consentement refusé ; résumé local conservé.") + " (repli local)"
+            result["consent_status"] = consent_status
+            result["mode"] = "local"
+            return result
+
+        if not callable(ai_generator):
+            result["ai_error"] = "Aucun fournisseur IA configuré ; résumé local conservé. (repli local)"
+            result["consent_status"] = consent_status
+            result["mode"] = "local"
+            return result
+
+        prompt = (
+            "Résume de façon structurée et factuelle l'offre suivante, sans inventer. "
+            "Retourne un JSON avec les clés: summary, missions, prerequisites, dates, relevance, official_url. "
+            f"Offre: {job}"
+        )
+        try:
+            generated = ai_generator(prompt)
+        except Exception as error:
+            result["ai_error"] = f"Le fournisseur IA a échoué ; résumé local conservé. (repli local) {error}"
+            result["consent_status"] = consent_status
+            result["mode"] = "local"
+            return result
+
+        if not isinstance(generated, dict):
+            result["ai_error"] = "Le fournisseur IA a renvoyé un résultat invalide ; résumé local conservé. (repli local)"
+            result["consent_status"] = consent_status
+            result["mode"] = "local"
+            return result
+
+        text = clean_text(generated.get("text"), limit=20_000)
+        provider_name = clean_text(generated.get("provider"), limit=160) or "Fournisseur IA configuré"
+        parsed: Any = None
+        try:
+            import json as _json
+
+            parsed = _json.loads(text)
+        except Exception:
+            parsed = None
+        result["ai_used"] = True
+        result["ai_provider"] = provider_name
+        result["ai_summary"] = parsed if isinstance(parsed, dict) else text
+        result["consent_status"] = consent_status or "consumed"
+        return result
+
+    def summarize_job(self, job_id: str, **kwargs: Any) -> dict[str, Any]:
+        return self.get_job_summary(job_id, **kwargs)
 
     def _exploration_registry(self) -> tuple[dict[str, Any], ...]:
         if self._curated_sources is not None:

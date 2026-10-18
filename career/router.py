@@ -157,6 +157,12 @@ class ApplicationDraftPayload(BaseModel):
     consent_external: bool = False
 
 
+class JobSummaryPayload(BaseModel):
+    mode: str = Field(default="local", max_length=12)
+    consent_external: bool = False
+    consent_id: str = Field(default="", max_length=120)
+
+
 class DiscoverySourcePayload(BaseModel):
     company: str = Field(min_length=1, max_length=240)
     board_reference: str = Field(min_length=1, max_length=2_000)
@@ -388,6 +394,41 @@ def create_career_router(
     @router.get("/api/career/jobs/{job_id}/prep")
     async def job_prep(job_id: str) -> Any:
         return await local(lambda: service.get_job_prep(job_id))
+
+    @router.get("/api/career/jobs/{job_id}/summary")
+    async def job_summary(
+        job_id: str,
+        mode: str = "local",
+        consent_external: bool = False,
+        consent_id: str = "",
+    ) -> Any:
+        normalized_mode = str(mode or "local").strip().lower()
+        if normalized_mode not in {"local", "ai"}:
+            raise UserFacingError("Le mode de résumé doit être local ou IA.")
+        return await local(
+            lambda: service.get_job_summary(
+                job_id,
+                mode=normalized_mode,
+                consent_external=bool(consent_external),
+                consent_id=consent_id or None,
+                ai_generator=ai_generator if normalized_mode == "ai" else None,
+            )
+        )
+
+    @router.post("/api/career/jobs/{job_id}/summary")
+    async def job_summary_post(job_id: str, payload: JobSummaryPayload) -> Any:
+        normalized_mode = str(payload.mode or "local").strip().lower()
+        if normalized_mode not in {"local", "ai"}:
+            raise UserFacingError("Le mode de résumé doit être local ou IA.")
+        return await local(
+            lambda: service.get_job_summary(
+                job_id,
+                mode=normalized_mode,
+                consent_external=bool(payload.consent_external),
+                consent_id=payload.consent_id or None,
+                ai_generator=ai_generator if normalized_mode == "ai" else None,
+            )
+        )
 
     @router.post("/api/career/jobs/{job_id}/shortlist")
     async def shortlist(job_id: str, payload: ShortlistPayload) -> Any:

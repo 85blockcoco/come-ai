@@ -465,9 +465,28 @@
             <div class="job-actions">
               <button id="stagehunter-refresh" class="secondary-button" type="button">Recalculer le classement</button>
             </div>
+            <div class="job-actions">
+              <label for="stagehunter-sort">Tri par correspondance</label>
+              <select id="stagehunter-sort">
+                <option value="desc">Décroissant (recommandé)</option>
+                <option value="asc">Croissant</option>
+              </select>
+            </div>
+            <div id="stagehunter-map" class="stagehunter-map"></div>
             <p id="stagehunter-matches-note" class="fixed-period-note"></p>
             <div id="stagehunter-matches" class="job-list"></div>
             <p id="stagehunter-matches-empty" class="empty-state">Aucune offre enregistrée pour l’instant. Passe à l’étape B pour en importer.</p>
+          </section>
+
+          <section class="panel">
+            <p class="eyebrow">Détail d’une offre</p>
+            <h3>Fiche complète</h3>
+            <div class="job-actions">
+              <button id="stagehunter-detail-prev" class="secondary-button" type="button">Précédente</button>
+              <button id="stagehunter-detail-next" class="secondary-button" type="button">Suivante</button>
+            </div>
+            <div id="stagehunter-detail" class="stagehunter-detail"></div>
+            <p id="stagehunter-detail-empty" class="empty-state">Sélectionne une offre dans la liste pour afficher sa fiche complète.</p>
           </section>
 
           <section class="panel">

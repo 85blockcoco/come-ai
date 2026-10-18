@@ -11,6 +11,8 @@ const state = {
   activeApplicationDraft: null,
   studioJobs: [],
   discoverySources: [],
+  stageMatches: [],
+  stageDetailIndex: 0,
   coachSessions: [],
   activeCoachSession: null,
 };
@@ -1957,14 +1959,45 @@ function stageMatchBlock(stageMatch) {
   return block;
 }
 
+function stageMatchScore(match) {
+  return Number((match.stage_match || match.qualification || {}).score ?? (match.stage_match || {}).score ?? 0);
+}
+
+function renderStageMap(matches) {
+  const map = $("#stagehunter-map");
+  if (!map) return;
+  map.replaceChildren();
+  const counts = new Map();
+  matches.forEach((match) => {
+    const job = match.job || {};
+    const key = [job.city, job.country].filter(Boolean).join(", ") || "Lieu non précisé";
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  const title = make("p", "Carte des offres disponibles (par ville)", "stagehunter-map-title");
+  map.append(title);
+  const list = make("ul", "", "stagehunter-map-list");
+  [...counts.entries()].sort((a, b) => b[1] - a[1]).forEach(([city, count]) => {
+    list.append(make("li", `${city} : ${count} offre${count > 1 ? "s" : ""}`));
+  });
+  map.append(list);
+}
+
 function renderStageMatches(payload) {
   const target = $("#stagehunter-matches");
   const empty = $("#stagehunter-matches-empty");
   if (!target || !empty) return;
   target.replaceChildren();
   const matches = payload.matches || [];
-  empty.hidden = matches.length > 0;
-  matches.forEach((match) => {
+  state.stageMatches = matches;
+  const direction = localStorage.getItem("stagehunter_sort") || "desc";
+  const sortSelect = $("#stagehunter-sort");
+  if (sortSelect) sortSelect.value = direction;
+  const sorted = [...matches].sort((a, b) => direction === "asc"
+    ? stageMatchScore(a) - stageMatchScore(b)
+    : stageMatchScore(b) - stageMatchScore(a));
+  renderStageMap(sorted);
+  empty.hidden = sorted.length > 0;
+  sorted.forEach((match) => {
     const wrapper = make("div", "", "stagehunter-match");
     if (match.stage_match || match.qualification) {
       const displayedMatch = {
@@ -1982,12 +2015,113 @@ function renderStageMatches(payload) {
     prep.type = "button";
     prep.addEventListener("click", () => loadStagePrep(match.job.id));
     actions?.append(prep);
+    const detail = make("button", "Détail", "secondary-button");
+    detail.type = "button";
+    detail.addEventListener("click", () => loadStageDetail(match.job.id));
+    actions?.append(detail);
     wrapper.append(card);
     target.append(wrapper);
   });
   $("#stagehunter-matches-note").textContent = payload.configured
     ? "Classement calculé localement à partir de tes critères ; chaque composante est expliquée ci-dessus."
     : "Les contrats et mois sélectionnés par défaut sont appliqués. Ajoute tes préférences à l’étape A pour affiner le classement.";
+}
+
+async function loadStageDetail(jobId) {
+  const container = $("#stagehunter-detail");
+  const empty = $("#stagehunter-detail-empty");
+  if (!container || !empty) return;
+  container.replaceChildren();
+  empty.hidden = true;
+  state.stageDetailIndex = state.stageMatches.findIndex((m) => m.job?.id === jobId);
+  container.textContent = "Chargement…";
+  try {
+    const prep = await api(`/api/career/jobs/${encodeURIComponent(jobId)}/prep`);
+    container.replaceChildren();
+    const job = prep.job || {};
+    const fields = [
+      ["Entreprise", job.company],
+      ["Titre", job.title],
+      ["Lieu", [job.city, job.country].filter(Boolean).join(", ")],
+      ["Début annoncé", job.start_date || prep.qualification?.start_date || prep.qualification?.start_month],
+      ["Fin annoncée", job.end_date || prep.qualification?.end_date],
+      ["Durée", job.duration_months != null ? `${job.duration_months} mois` : (prep.qualification?.duration_min_months != null ? `${prep.qualification.duration_min_months} à ${prep.qualification.duration_max_months} mois` : "non précisée")],
+      ["Date de candidature", job.deadline_date],
+      ["Date de publication", job.posted_date],
+      ["Pertinence", prep.stage_match?.score],
+      ["Lien officiel", job.official_url],
+    ];
+    fields.forEach(([label, value]) => {
+      if (value === null || value === undefined || value === "") return;
+      const row = make("div", "", "detail-row");
+      row.append(make("strong", `${label} : `));
+      if (label === "Lien officiel") {
+        const link = document.createElement("a");
+        link.href = value;
+        link.textContent = value;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        row.append(link);
+      } else {
+        row.append(document.createTextNode(String(value)));
+      }
+      container.append(row);
+    });
+    if ((prep.stage_match?.reasons || []).length) {
+      const list = make("ul", "", "detail-reasons");
+      prep.stage_match.reasons.slice(0, 5).forEach((reason) => list.append(make("li", reason)));
+      container.append(list);
+    }
+    // Résumé structuré (local déterministe) + IA optionnelle avec consentement.
+    try {
+      const summary = await api(`/api/career/jobs/${encodeURIComponent(jobId)}/summary`);
+      if (summary?.missions?.length) {
+        const title = make("p", "Missions / prérequis extraits", "scoring-title");
+        container.append(title);
+        const list = make("ul", "", "detail-reasons");
+        summary.missions.forEach((mission) => list.append(make("li", mission)));
+        container.append(list);
+      }
+      if (summary?.ai_summary) {
+        const aiTitle = make("p", "Résumé IA (consentement cloud)", "scoring-title");
+        container.append(aiTitle);
+        const aiBox = make("div", "", "detail-row");
+        aiBox.textContent = typeof summary.ai_summary === "string" ? summary.ai_summary : JSON.stringify(summary.ai_summary);
+        container.append(aiBox);
+      } else if (summary?.ai_error) {
+        container.append(make("p", summary.ai_error, "fixed-period-note"));
+      }
+      const aiButton = make("button", "Résumé IA (consentement cloud)", "secondary-button");
+      aiButton.type = "button";
+      aiButton.addEventListener("click", async () => {
+        if (!confirm("Autoriser une transmission unique et bornée de cette offre vers le fournisseur IA configuré ?")) return;
+        try {
+          const aiSummary = await api(`/api/career/jobs/${encodeURIComponent(jobId)}/summary`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({mode: "ai", consent_external: true}),
+          });
+          const box = make("div", "", "detail-row");
+          if (aiSummary?.ai_summary) {
+            box.textContent = typeof aiSummary.ai_summary === "string" ? aiSummary.ai_summary : JSON.stringify(aiSummary.ai_summary);
+          } else {
+            box.textContent = aiSummary?.ai_error || "Résumé IA indisponible ; repli local conservé.";
+          }
+          container.append(make("p", "Résumé IA (consentement cloud)", "scoring-title"));
+          container.append(box);
+        } catch (error) {
+          container.append(make("p", "Résumé IA indisponible ; repli local conservé.", "fixed-period-note"));
+        }
+      });
+      container.append(aiButton);
+    } catch (error) {
+      // Le résumé est optionnel : la fiche reste utilisable.
+    }
+  } catch (error) {
+    container.replaceChildren();
+    container.textContent = error.message || "Impossible de charger la fiche.";
+  }
+
 }
 
 function renderStagePrepSelect() {
@@ -2286,3 +2420,20 @@ async function bootstrap() {
 }
 
 bootstrap();
+
+$("#stagehunter-sort")?.addEventListener("change", (event) => {
+  localStorage.setItem("stagehunter_sort", event.target.value);
+  renderStageMatches({ matches: state.stageMatches, configured: true });
+});
+
+$("#stagehunter-detail-prev")?.addEventListener("click", () => {
+  if (!state.stageMatches.length) return;
+  state.stageDetailIndex = (state.stageDetailIndex - 1 + state.stageMatches.length) % state.stageMatches.length;
+  loadStageDetail(state.stageMatches[state.stageDetailIndex].job.id);
+});
+
+$("#stagehunter-detail-next")?.addEventListener("click", () => {
+  if (!state.stageMatches.length) return;
+  state.stageDetailIndex = (state.stageDetailIndex + 1) % state.stageMatches.length;
+  loadStageDetail(state.stageMatches[state.stageDetailIndex].job.id);
+});
