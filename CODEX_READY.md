@@ -1,12 +1,12 @@
 # CODEX READY — État de préparation (préparé pour validation finale)
 
 Date : 2026-10-18
-Branche courante : `audit/total-v3-2026-10-14` @ `5ef814e` + modifications de travail
+Branche candidate : `codex/profile-compatibility-ux` @ `095e81b` (fusion audit mega + profil readiness + import CV + accueil)
 Python : `.venv/bin/python` (3.12)
 
 ## 1. État des tests (suite complète)
 - Commande : `.venv/bin/python -m pytest -q`
-- Résultat : **1111 passed, 0 failed, 0 errors** (durée ~59 s)
+- Résultat : **1110 passed, 0 failed, 0 errors** (durée ~63 s)
 - Sous-suites vertes :
   - `tests/test_career_*.py` : 327 passed
   - `tests/test_consent_guard_*.py` : 185 passed

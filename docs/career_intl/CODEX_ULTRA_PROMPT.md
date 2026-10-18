@@ -6,7 +6,7 @@ dans `main`.
 
 ## 0. Contexte et base de travail
 - Répertoire de travail : `/Users/comedelavenne/AI-Excel-Agent`
-- Branche courante : `audit/total-v3-2026-10-14` @ `5ef814e` + modifications de travail (non committées)
+- Branche candidate : `codex/profile-compatibility-ux` @ `095e81b` (fusion audit mega + profil readiness + import CV + accueil)
 - Python : `.venv/bin/python` (3.12)
 - État initial vérifié : **1111 tests passent**, 0 échec, 0 erreur de collecte.
 - Rapport de préparation : `CODEX_READY.md` (racine) — à lire en premier.
