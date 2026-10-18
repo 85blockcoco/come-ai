@@ -150,7 +150,24 @@
     "failure_conditions": ["Outil non autorisé accepté ou exécuté."]
   },
   {
-    "id": "REAL-009", "category": "conversation", "title": "Qualité de génération modèle non mesurée",
+    "id": "REAL-009", "category": "conversation", "title": "Refus réel du contexte local sans consentement cloud",
+    "objective": "Le chat refuse un fichier local avant tout catalogue, socket ou génération cloud si la permission de cette requête est absente.",
+    "status": "supported", "required_features": ["cloud_context_consent", "csv_inspection"], "severity": "critical",
+    "application_verified": true,
+    "input": {
+      "action": "cloud_context_refusal", "message": "Résume le fichier synthétique.",
+      "file": {"name": "privacy_fixture.csv", "rows": [["fact"], ["synthetic-only"]]}
+    },
+    "expected": {"error": "Cette demande contient du contexte local (fichier, mémoire ou outil). Confirme sa transmission cloud pour cette demande, ou repasse en mode Hors ligne."},
+    "acceptance": [
+      {"check": "error_signaled"},
+      {"check": "contains_all", "path": "error", "values": ["contexte local", "cette demande"]},
+      {"check": "budget_respected", "max": {"api_calls": 0, "generation_requests": 0, "network_attempts": 0}}
+    ],
+    "failure_conditions": ["Fichier local envoyé sans permission, socket tenté ou refus non explicite."]
+  },
+  {
+    "id": "REAL-010", "category": "conversation", "title": "Qualité de génération modèle non mesurée",
     "objective": "Distinguer une capacité non exercée d'un succès simulé ou d'une réponse incorrecte.",
     "status": "supported", "required_features": ["local_model_generation"], "severity": "major",
     "application_verified": false,

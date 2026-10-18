@@ -76,9 +76,10 @@ class ComeAITarget:
     supported_features = frozenset({
         "local_arithmetic", "memory_search", "citations", "csv_inspection",
         "excel_inspection", "table_statistics", "local_plan_execution",
-        "write_confirmation", "opaque_file_ids", "tool_validation",
+        "write_confirmation", "opaque_file_ids", "tool_validation", "cloud_context_consent",
     })
-    _ACTIONS = frozenset({"calculate", "memory_search", "orchestrate", "invalid_file_id", "validate_tools"})
+    _ACTIONS = frozenset({"calculate", "memory_search", "orchestrate", "invalid_file_id", "validate_tools",
+                          "cloud_context_refusal"})
 
     def __init__(self) -> None:
         self.network_attempts = 0
@@ -276,6 +277,15 @@ class ComeAITarget:
             return {**self._observation(answer="Validation réelle des propositions d'outils."),
                     "structured": {"validated_tool": approved.name, "rejected_tool": data["forbidden_tool"], "rejected": rejected},
                     "tools_called": ["validate_proposal", "validate_proposal"]}
+        if action == "cloud_context_refusal":
+            fixture = data["file"]
+            file_id, _ = self._fixture(workspace, fixture)
+            service = self._chat(root, workspace, tools)
+            return self._from_service(self._call(
+                "HybridChatService", "ask", service.ask,
+                message=data["message"], selected_file_ids=[file_id], mode="performance",
+                provider="gemini", allow_cloud_context=False,
+            ))
         raise ValueError("Unsupported action reached execution.")
 
     def run(self, case: Case) -> TargetResult:

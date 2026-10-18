@@ -31,6 +31,9 @@ import numpy as np
 import pandas as pd
 from openpyxl import Workbook
 
+from chat_privacy import consume_cloud_context_consent
+from task_queue import redact_payload
+
 
 APP_NAME = "Côme AI V3"
 SUPPORTED_SUFFIXES = {
@@ -819,7 +822,14 @@ class AgentService:
             raise UserFacingError("Ollama n’a renvoyé aucun brouillon exploitable.")
         return {"text": text, "provider": f"Ollama local · {self.config.ollama_model}"}
 
-    def ask(self, user_message: str, *, allow_writes: bool = False) -> dict[str, Any]:
+    def ask(
+        self,
+        user_message: str,
+        *,
+        allow_writes: bool = False,
+        allow_cloud_context: bool = False,
+        local_context_present: bool = False,
+    ) -> dict[str, Any]:
         message = user_message.strip()
         if not message:
             raise UserFacingError("Écris une demande avant de l’envoyer.")
@@ -830,7 +840,11 @@ class AgentService:
         budget = RequestBudget()
         if self.config.has_gemini_key:
             try:
-                return self._ask_gemini(message, allow_writes=allow_writes, budget=budget)
+                return self._ask_gemini(
+                    message, allow_writes=allow_writes, budget=budget,
+                    allow_cloud_context=allow_cloud_context,
+                    local_context_present=local_context_present,
+                )
             except Exception as error:
                 self._event(f"Gemini indisponible: {safe_error(error)}")
                 if self.config.ollama_model:
@@ -861,6 +875,8 @@ class AgentService:
         user_message: str,
         *,
         allow_writes: bool,
+        allow_cloud_context: bool = False,
+        local_context_present: bool = False,
         budget: RequestBudget | None = None,
     ) -> dict[str, Any]:
         try:
@@ -895,6 +911,22 @@ class AgentService:
             for model in models:
                 try:
                     self._event(f"Requête IA envoyée au modèle {model}.")
+                    if local_context_present:
+                        if not allow_cloud_context:
+                            raise UserFacingError(
+                                "Cette demande contient des noms de fichiers locaux. Confirme leur transmission cloud pour cette demande, ou utilise le mode hors ligne."
+                            )
+                        try:
+                            consume_cloud_context_consent(
+                                self.config.data_dir / "cloud-consent",
+                                provider="gemini",
+                                model=model,
+                                payload={"message_with_local_context": user_message},
+                            )
+                        except Exception:
+                            raise UserFacingError(
+                                "La transmission du contexte local n’a pas été autorisée pour cette demande. Aucun contenu n’a été envoyé au fournisseur cloud."
+                            ) from None
                     # Each fallback starts from the original question. It never
                     # inherits a half-completed tool exchange from another model.
                     result = self._run_tool_loop(
@@ -905,6 +937,7 @@ class AgentService:
                         config,
                         budget,
                         allow_writes=allow_writes,
+                        allow_cloud_context=allow_cloud_context,
                     )
                     result["provider"] = f"Gemini · {model}"
                     return result
@@ -932,6 +965,7 @@ class AgentService:
         budget: RequestBudget,
         *,
         allow_writes: bool,
+        allow_cloud_context: bool = False,
     ) -> dict[str, Any]:
         tool_events: list[str] = []
         for turn in range(MAX_TOOL_TURNS + 1):
@@ -962,17 +996,34 @@ class AgentService:
             model_content = response.candidates[0].content
             history.append(model_content)
             response_parts = []
+            local_tool_results: list[dict[str, Any]] = []
             for function_call in calls:
                 name = function_call.name
                 arguments = dict(function_call.args or {})
                 tool_events.append(name)
                 self._event(f"Outil local appelé: {name}")
+                if not allow_cloud_context:
+                    raise UserFacingError(
+                        "Le modèle a demandé des données locales. Autorise leur transmission cloud pour cette demande, ou utilise le chat hors ligne."
+                    )
                 try:
                     result = self._invoke_tool(name, arguments, allow_writes=allow_writes)
                 except Exception as error:
                     result = {"error": safe_error(error)}
-                result = truncate_tool_result(to_jsonable(result))
+                result = truncate_tool_result(redact_payload(to_jsonable(result)))
+                local_tool_results.append({"function_response": {"name": name, "result": result}})
                 response_parts.append(self._gemini_function_response_part(types, function_call, result))
+            try:
+                consume_cloud_context_consent(
+                    self.config.data_dir / "cloud-consent",
+                    provider="gemini",
+                    model=model,
+                    payload={"local_tool_results": local_tool_results},
+                )
+            except Exception:
+                raise UserFacingError(
+                    "La transmission des résultats locaux n’a pas été autorisée pour cette demande. Aucun résultat n’a été envoyé au modèle."
+                ) from None
             # The installed Google SDK itself records returned function values
             # as a user-content turn. A "tool" role is not accepted here.
             history.append(types.Content(role="user", parts=response_parts))

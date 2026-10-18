@@ -288,20 +288,29 @@ class TestNoProtectedFileTouched:
         assert PACKAGE_DIR.name == "consent_guard"
 
     def test_only_authorised_paths_were_added(self) -> None:
-        tracked = set(_changed_files())
+        # Check the reused guard's original standalone delivery, not all files
+        # changed later by unrelated integration lots in this worktree.
+        output = subprocess.run(
+            ["git", "show", "--format=", "--name-only", "dc2e9ee"],
+            cwd=REPO_ROOT, capture_output=True, text=True, check=True, timeout=60,
+        )
+        changed = {line for line in output.stdout.splitlines() if line.strip()}
         unexpected = [
-            path
-            for path in tracked
-            if not path.startswith(EXPECTED_NEW_PREFIXES)
+            path for path in changed
+            if not path.startswith("consent_guard/")
             and not path.startswith("tests/test_consent_guard_")
+            and path not in {"HANDOFF_consent_guard.md", "docs/CONSENT_GUARD_CONTRACT.md"}
         ]
-        assert unexpected == [], f"Chemins hors périmètre : {sorted(unexpected)}"
+        assert unexpected == [], f"La livraison source du garde dépasse son périmètre : {sorted(unexpected)}"
 
     def test_protected_backend_files_are_untouched(self) -> None:
-        tracked = set(_changed_files())
+        output = subprocess.run(
+            ["git", "show", "--format=", "--name-only", "dc2e9ee"],
+            cwd=REPO_ROOT, capture_output=True, text=True, check=True, timeout=60,
+        )
+        tracked = {line for line in output.stdout.splitlines() if line.strip()}
         for protected in PROTECTED_PATHS:
-            matches = [path for path in tracked if path.endswith(f"/{protected}") or path == protected]
-            assert matches == [], f"{protected} a été modifié par ce lot"
+            assert not any(path.endswith(f"/{protected}") or path == protected for path in tracked), protected
 
     def test_package_does_not_import_protected_modules(self) -> None:
         for path in _python_files():

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import socket
 from urllib.error import HTTPError
 from urllib.request import ProxyHandler
 
@@ -162,6 +163,97 @@ def test_local_file_and_memory_context_uses_opaque_ids_and_sources(tmp_path):
     assert "actualise" in text
     assert str(tmp_path) not in text
     assert document.read_text() == "La diversification réduit les risques spécifiques."
+
+
+@pytest.mark.parametrize("provider", ["gemini", "openrouter"])
+def test_local_context_cloud_is_refused_before_any_network_without_request_consent(tmp_path, monkeypatch, provider):
+    calls = []
+    def transport(*args):
+        calls.append(args)
+        raise AssertionError("No catalogue or generation request is allowed without consent")
+    service = make_service(tmp_path, transport, catalog=FakeCatalog(),
+                          credential_loader=lambda *args: "fictional-key-only")
+    source = tmp_path / "data" / "private-synthetic.md"
+    source.write_text("Synthetic local fact: portfolio note.", encoding="utf-8")
+    service.workspace.refresh()
+    file_id = service.workspace.file_id_by_name(source.name)
+    socket_attempts = []
+    def blocked(*args, **kwargs):
+        socket_attempts.append((args, kwargs))
+        raise AssertionError("Socket access must be blocked")
+    monkeypatch.setattr(socket, "create_connection", blocked)
+    monkeypatch.setattr(socket, "getaddrinfo", blocked)
+    for method in ("connect", "connect_ex", "sendto", "sendmsg"):
+        if hasattr(socket.socket, method):
+            monkeypatch.setattr(socket.socket, method, blocked)
+    with pytest.raises(UserFacingError, match="contexte local"):
+        service.ask("Résume le document", selected_file_ids=[file_id], mode="performance", provider=provider)
+    assert calls == []
+    assert socket_attempts == []
+
+
+@pytest.mark.parametrize("provider", ["gemini", "openrouter"])
+def test_consented_cloud_receives_redacted_local_context_and_permission_is_per_request(tmp_path, provider):
+    gemini_secret = "AIza" + "F" * 36
+    router_secret = "sk-or-v1-" + "R" * 48
+    bearer_secret = "BearerToken-" + "Z" * 32
+    calls = []
+    def transport(method, url, headers, payload, timeout):
+        calls.append((method, url, payload))
+        if url.endswith("/models"):
+            return {"data": [{"id": "synthetic/model:free", "pricing": {
+                "prompt": "0", "completion": "0", "request": "0", "image": "0"}}]}
+        if "generativelanguage.googleapis.com" in url:
+            return {"candidates": [{"finishReason": "STOP", "content": {"parts": [{"text": "Synthèse fictive."}]}}],
+                    "usageMetadata": {"promptTokenCount": 20, "candidatesTokenCount": 4, "totalTokenCount": 24}}
+        return {"model": "synthetic/model:free", "choices": [{"finish_reason": "stop", "message": {"content": "Synthèse fictive."}}],
+                "usage": {"total_tokens": 24}}
+
+    model = "gemini-3.8-flash" if provider == "gemini" else "synthetic/model:free"
+    (tmp_path / ".env").write_text("COME_AI_GEMINI_FREE_PROJECT_CONFIRMED=true\n", encoding="utf-8")
+    service = make_service(tmp_path, transport, catalog=FakeCatalog(model),
+                           credential_loader=lambda *args: "fictional-key-only")
+    source = tmp_path / "data" / "secrets-synthetic.md"
+    source.write_text(
+        f"api_key={gemini_secret}\nopenrouter_key={router_secret}\nAuthorization: Bearer {bearer_secret}\npassword=synthetic-password-value",
+        encoding="utf-8",
+    )
+    service.workspace.refresh()
+    file_id = service.workspace.file_id_by_name(source.name)
+    result = service.ask("Résume ce document", selected_file_ids=[file_id], mode="performance",
+                         provider=provider, allow_cloud_context=True)
+    assert result["remote_model_used"] is True
+    sent = json.dumps([call[2] for call in calls], ensure_ascii=False)
+    assert gemini_secret not in sent
+    assert router_secret not in sent
+    assert bearer_secret not in sent
+    assert "synthetic-password-value" not in sent
+    assert "secret" in sent.casefold() and ("masqué" in sent.casefold() or "redacted" in sent.casefold())
+
+    # A second HTTP action has its own default-denied permission; the previous
+    # request does not authorize it or cause another provider attempt.
+    prior_calls = len(calls)
+    with pytest.raises(UserFacingError, match="contexte local"):
+        service.ask("Résume encore", selected_file_ids=[file_id], mode="performance", provider=provider)
+    assert len(calls) == prior_calls
+
+
+def test_ollama_can_receive_redacted_local_context_without_cloud_consent(tmp_path):
+    secret = "sk-or-v1-" + "L" * 42
+    calls = []
+    def transport(method, url, headers, payload, timeout):
+        calls.append((url, payload))
+        return local_transport(method, url, headers, payload, timeout)
+    service = make_service(tmp_path, transport, catalog=FakeCatalog(), credential_loader=no_credentials)
+    source = tmp_path / "data" / "local-synthetic.md"
+    source.write_text(f"api_key={secret}", encoding="utf-8")
+    service.workspace.refresh()
+    file_id = service.workspace.file_id_by_name(source.name)
+    result = service.ask("Résume le document", selected_file_ids=[file_id], mode="offline", provider="ollama")
+    assert result["provider"] == "ollama"
+    sent = json.dumps([payload for _, payload in calls], ensure_ascii=False)
+    assert secret not in sent
+    assert "secret" in sent.casefold() and ("masqué" in sent.casefold() or "redacted" in sent.casefold())
 
 
 def test_arbitrary_file_path_is_not_a_workspace_id(tmp_path):

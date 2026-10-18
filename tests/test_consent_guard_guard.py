@@ -197,7 +197,7 @@ def test_active_lists_only_usable_agreements(tmp_path) -> None:
     assert active == {usable.consent_id}
     assert guard.active() == (usable,)
     assert guard.get(expired.consent_id).is_expired()
-    assert not guard.get(usable.consent_id).is_expired()
+    assert not guard.get(usable.consent_id).is_expired(moments[0])
     guard.close()
 
 
