@@ -72,8 +72,10 @@ def test_exploration_filters_known_nonconforming_duration_before_selection() -> 
     )
     by_id = {job["source_id"]: job for job in result.jobs}
     assert set(by_id) == {"unknown-internship"}
-    assert result.confirmed_count == 2
-    assert result.filtered_criteria_count == 1
+    assert result.confirmed_count == 0
+    assert result.uncertain_count == 1
+    assert result.excluded_count == 1
+    assert result.filtered_criteria_count == 0
     assert by_id["unknown-internship"]["qualification"]["target_status"] == "to_verify"
 
 

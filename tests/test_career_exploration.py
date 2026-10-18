@@ -25,7 +25,7 @@ def source(token: str = "fiction", company: str = "Finance Synthétique") -> dic
 def posting(identifier: int, title: str = "Corporate Finance Intern", **changes) -> dict:
     value = {"id": identifier, "title": title, "absolute_url": f"https://careers.example.test/jobs/{identifier}",
              "location": {"name": "Paris, France"},
-             "content": "<p>Financial analysis and valuation. This internship lasts four months.</p>"}
+             "content": "<p>Financial analysis and valuation. This synthetic internship lasts six months.</p>"}
     value.update(changes)
     return value
 
@@ -94,7 +94,8 @@ def test_admission_and_ranking_happen_before_first_150_limit():
     assert [job["source_id"] for job in payload.jobs] == ["171"]
     assert payload.raw_count == payload.evaluated_count == 172
     assert payload.excluded_count == 170
-    assert payload.confirmed_count == 2
+    assert payload.confirmed_count == 0
+    assert payload.uncertain_count == 2
     assert payload.filtered_criteria_count == 1
     assert payload.relevant_count == 1
 

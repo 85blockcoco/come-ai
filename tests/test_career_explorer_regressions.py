@@ -20,10 +20,10 @@ def test_live_false_positive_examples_do_not_become_confirmed_stages(title, desc
 
 
 @pytest.mark.parametrize("metadata,retained", [
-    ([{"name": "Employment Type", "value": "Permanent"}], False),
-    ([{"name": "Requisition Type", "value": "CDI"}], False),
-    ([{"name": "Employment Type", "value": ["Internship", "Graduate"]}], False),
-    ([{"name": "Employment Type", "value": "Graduate"}], False),
+    ([{"name": "Employment Type", "value": "Permanent"}], True),
+    ([{"name": "Requisition Type", "value": "CDI"}], True),
+    ([{"name": "Employment Type", "value": ["Internship", "Graduate"]}], True),
+    ([{"name": "Employment Type", "value": "Graduate"}], True),
     ([{"name": "Time Type", "value": "Full Time"}], True),
     ([{"name": "Employment Type", "value": "Intern"}], True),
     ([{"name": "Unrelated", "value": "Permanent"}], True),
@@ -33,6 +33,8 @@ def test_contract_metadata_not_working_hours_decides_admission(metadata, retaine
     payload = GreenhouseJobBoardConnector._normalise(GreenhouseBoard("fiction", "Finance", "fiction"),
                                                     {"jobs": feed}, internships_only=True)
     assert bool(payload.jobs) is retained
+    if payload.jobs:
+        assert payload.jobs[0]["qualification"]["target_status"] == "to_verify"
 
 
 @pytest.mark.parametrize("title,retained", [

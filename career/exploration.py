@@ -126,7 +126,20 @@ _FINANCIAL_TECHNICAL_TITLE = re.compile(
 
 def criteria_admit(match: dict[str, Any], job: dict[str, Any] | None = None,
                    brief: dict[str, Any] | None = None) -> bool:
-    """Explicit domain must match; known location mismatch does not fill results."""
+    """Apply contract/month eligibility, then domain and location criteria."""
+    if job is not None and brief is not None:
+        # Local import avoids coupling the pure offer parser to this module.
+        from .offer_qualification import qualify_offer
+        qualification = job.get("qualification")
+        if not isinstance(qualification, dict):
+            qualification = qualify_offer(
+                job,
+                allowed_contract_types=brief.get("contract_types"),
+                allowed_start_months=brief.get("start_months"),
+                minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
+            ).to_dict()
+        if qualification.get("target_status") == "non_conforming":
+            return False
     title = str(job.get("title") or "") if job else ""
     requested_technical_role = bool(brief and any(
         _NON_FINANCE_TITLE.search(str(role)) and str(role).casefold() in title.casefold()
@@ -153,6 +166,9 @@ def criteria_admit(match: dict[str, Any], job: dict[str, Any] | None = None,
 
 def ranking_key(job: dict[str, Any], match: dict[str, Any]) -> tuple[Any, ...]:
     digest = hashlib.sha256(json.dumps(job, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
-    return (-(int(match["score"]) if match.get("score") is not None else 0),
+    status = (job.get("qualification") or {}).get("target_status")
+    eligibility_order = {"conforming": 0, "to_verify": 1, "non_conforming": 2}.get(status, 0)
+    return (eligibility_order, -(int(match["score"]) if match.get("score") is not None else 0),
+            (match.get("education_access") or {}).get("priority_rank", 2),
             str(job.get("company") or "").casefold(), str(job.get("source_name") or ""),
             str(job.get("source_id") or ""), canonical_url(job.get("official_url")), digest)

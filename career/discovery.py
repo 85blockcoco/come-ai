@@ -300,7 +300,8 @@ def _explicit_employment_type(raw: dict[str, Any]) -> str:
     recognized: set[str] = set()
     values = {"intern": "internship", "internship": "internship", "internships": "internship",
               "stage": "internship", "stagiaire": "internship", "summer internship": "internship",
-              "permanent": "permanent", "cdi": "CDI", "graduate": "graduate"}
+              "permanent": "permanent", "cdi": "CDI", "cdd": "CDD", "fixed term": "CDD",
+              "vie": "VIE", "graduate": "graduate"}
     for entry in entries[:100]:
         if not isinstance(entry, dict) or normalized_text(entry.get("name")) not in {
             "employment type", "requisition type", "candidate type"}:
@@ -428,26 +429,33 @@ class GreenhouseJobBoardConnector:
                     "description_original": description,
                     "job_family": classify_job_family(title, description),
                 }
-                if internships_only:
-                    job["qualification"] = qualify_offer({**job, "source_verified": True}).to_dict()
                 evaluated_count += 1
                 match = score_brief_match(brief, job)
                 if internships_only:
                     classification = classify_internship(job)
-                    status = classification["status"]
-                    confirmed_count += int(status == "confirmed")
-                    uncertain_count += int(status == "uncertain")
-                    excluded_count += int(status == "excluded")
-                    if status != "confirmed":
+                    qualification = qualify_offer(
+                        {**job, "source_verified": True},
+                        allowed_contract_types=brief.get("contract_types"),
+                        allowed_start_months=brief.get("start_months"),
+                        minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
+                    ).to_dict()
+                    job["qualification"] = qualification
+                    target = qualification["target_status"]
+                    confirmed_count += int(target == "conforming")
+                    uncertain_count += int(target == "to_verify")
+                    excluded_count += int(target == "non_conforming")
+                    if target == "non_conforming":
                         continue
-                    if job["qualification"]["target_status"] == "non_conforming":
+                    if qualification["contract_type"] == "unknown" and not classification.get("evidence"):
                         filtered_criteria_count += 1
                         continue
                     if not criteria_admit(match, job, brief):
                         filtered_criteria_count += 1
                         continue
                     job["internship_classification"] = classification
-                relevant_count += 1
+                    relevant_count += 1
+                else:
+                    relevant_count += 1
                 score = match["score"]
                 # Source identities, not arrival order or generated database
                 # IDs, break ties. The content digest resolves conflicting
@@ -455,7 +463,11 @@ class GreenhouseJobBoardConnector:
                 digest = hashlib.sha256(
                     json.dumps(job, sort_keys=True, ensure_ascii=False).encode("utf-8")
                 ).hexdigest()
-                key = (-(int(score) if score is not None else 0), job_id, canonical, digest)
+                status_rank = {"conforming": 0, "to_verify": 1}.get(
+                    (job.get("qualification") or {}).get("target_status"), 0
+                )
+                education_rank = (match.get("education_access") or {}).get("priority_rank", 2)
+                key = (status_rank, -(int(score) if score is not None else 0), education_rank, job_id, canonical, digest)
                 yield key, job
 
         # nsmallest retains only a 150-item heap (O(N log 150)), not a second

@@ -126,7 +126,7 @@ def test_enabled_fixture_discovery_returns_consistent_counts_without_sockets(
 
     assert result.raw_count == result.evaluated_count + result.invalid_count
     assert result.evaluated_count == result.confirmed_count + result.uncertain_count + result.excluded_count
-    assert result.confirmed_count == result.relevant_count + result.filtered_criteria_count
+    assert result.confirmed_count + result.uncertain_count == result.relevant_count + result.filtered_criteria_count
     assert result.verified_at == "2026-10-18T01:00:00Z"
     assert len(result.jobs) <= result.relevant_count
     assert len(transport.calls) == 1

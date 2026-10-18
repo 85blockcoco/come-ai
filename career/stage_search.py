@@ -13,6 +13,7 @@ from typing import Any
 
 from .models import JOB_FAMILIES, clean_text, normalized_text, parse_date
 from .sources import SEARCH_TERMS
+from .education_access import assess_education_access
 from workspace_core import UserFacingError
 
 
@@ -147,13 +148,18 @@ _STUDY_LEVEL_RANKS: tuple[tuple[int, tuple[str, ...]], ...] = (
 
 # Unambiguous permanent-contract markers only: "temps plein" alone is
 # deliberately excluded because a full-time internship is still an internship.
-_PERMANENT_CONTRACT_PATTERNS: tuple[str, ...] = ("cdi", "permanent", "full time")
+_PERMANENT_CONTRACT_PATTERNS: tuple[str, ...] = ("cdi", "permanent")
 
 MAX_COMPONENTS = 8
+CONTRACT_TYPES: dict[str, str] = {"stage": "Stage", "cdd": "CDD", "cdi": "CDI", "vie": "VIE"}
+MONTHS: tuple[tuple[int, str], ...] = (
+    (1, "janvier"), (2, "février"), (3, "mars"), (4, "avril"), (5, "mai"), (6, "juin"),
+    (7, "juillet"), (8, "août"), (9, "septembre"), (10, "octobre"), (11, "novembre"), (12, "décembre"),
+)
 
 
 def default_brief() -> dict[str, Any]:
-    """An empty brief: nothing is presumed about the person's search."""
+    """Default search criteria; optional personal preferences remain empty."""
     return {
         "domains": [],
         "other_domains": [],
@@ -162,6 +168,10 @@ def default_brief() -> dict[str, Any]:
         "cities": [],
         "start_date": "",
         "duration_months": None,
+        "contract_types": ["stage", "cdd", "cdi", "vie"],
+        "start_months": [1, 2, 3],
+        "minimum_stage_duration_months": 6,
+        "education_preference": "bachelor_m1_then_m2",
         "study_level": "",
         "languages": [],
         "constraints": "",
@@ -240,6 +250,34 @@ def validate_brief(payload: Any) -> dict[str, Any]:
             raise UserFacingError("La durée recherchée doit être un nombre de mois entier.") from error
         if not 1 <= duration <= 24:
             raise UserFacingError("La durée recherchée doit être comprise entre 1 et 24 mois.")
+    contract_types: list[str] = []
+    for item in _string_list(payload.get("contract_types", ["stage", "cdd", "cdi", "vie"]),
+                             "Les types de contrat", max_items=4, max_length=20):
+        canonical = item.strip().casefold()
+        if canonical not in CONTRACT_TYPES:
+            raise UserFacingError("Type de contrat inconnu. Choisis Stage, CDD, CDI ou VIE.")
+        if canonical not in contract_types:
+            contract_types.append(canonical)
+    if not contract_types:
+        raise UserFacingError("Sélectionne au moins un type de contrat.")
+    month_values = payload.get("start_months", [1, 2, 3])
+    if not isinstance(month_values, list) or len(month_values) > 12:
+        raise UserFacingError("Les mois de début doivent être une liste de 1 à 12.")
+    start_months: list[int] = []
+    for item in month_values:
+        if type(item) is not int or not 1 <= item <= 12:
+            raise UserFacingError("Chaque mois de début doit être compris entre janvier et décembre.")
+        if item not in start_months:
+            start_months.append(item)
+    start_months.sort()
+    if not start_months:
+        raise UserFacingError("Sélectionne au moins un mois de début.")
+    minimum_stage_duration = payload.get("minimum_stage_duration_months", 6)
+    if type(minimum_stage_duration) is not int or not 1 <= minimum_stage_duration <= 24:
+        raise UserFacingError("La durée minimale du stage doit être comprise entre 1 et 24 mois.")
+    education_preference = payload.get("education_preference", "bachelor_m1_then_m2")
+    if education_preference not in {"bachelor_m1_then_m2", "any"}:
+        raise UserFacingError("Préférence de niveau d’études inconnue.")
     return {
         "domains": domains,
         "other_domains": _string_list(payload.get("other_domains"), "Les autres métiers", max_items=12, max_length=120),
@@ -248,6 +286,10 @@ def validate_brief(payload: Any) -> dict[str, Any]:
         "cities": _string_list(payload.get("cities"), "Les villes", max_items=20, max_length=120),
         "start_date": start_text,
         "duration_months": duration,
+        "contract_types": contract_types,
+        "start_months": start_months,
+        "minimum_stage_duration_months": minimum_stage_duration,
+        "education_preference": education_preference,
         "study_level": clean_text(payload.get("study_level"), limit=120),
         "languages": _string_list(payload.get("languages"), "Les langues", max_items=10, max_length=60),
         "constraints": clean_text(payload.get("constraints"), limit=2_000),
@@ -268,6 +310,9 @@ def brief_is_configured(brief: dict[str, Any]) -> bool:
             clean_text(brief.get("duration_months")),
             clean_text(brief.get("study_level"), limit=120),
             brief.get("languages"),
+            brief.get("contract_types", ["stage", "cdd", "cdi", "vie"]) != ["stage", "cdd", "cdi", "vie"],
+            brief.get("start_months", [1, 2, 3]) != [1, 2, 3],
+            brief.get("minimum_stage_duration_months", 6) != 6,
         ]
     )
 
@@ -276,6 +321,9 @@ def vocabulary() -> dict[str, Any]:
     """Everything the interface needs to render the brief form."""
     return {
         "domains": list(STAGE_DOMAINS),
+        "contract_types": [{"key": key, "label": label} for key, label in CONTRACT_TYPES.items()],
+        "months": [{"value": value, "label": label} for value, label in MONTHS],
+        "quarter_months": [1, 2, 3],
         "ranking_criteria": [
             {"key": key, "label": label} for key, label in RANKING_CRITERIA.items()
         ],
@@ -584,10 +632,10 @@ def score_brief_match(brief: dict[str, Any], job: dict[str, Any]) -> dict[str, A
     deadline_status = clean_text(job.get("deadline_status"), limit=40)
     if deadline_status == "closed":
         warnings.append("La date limite connue est dépassée ou l’annonce est indiquée fermée.")
-    # Stage Hunter targets internships: a posting that announces a permanent
-    # contract is flagged rather than hidden, so the ranking stays honest.
+    # Warn only when a permanent contract falls outside the selected types.
     employment = normalized_text(job.get("employment_type"))
-    if employment and any(_contains(employment, pattern) for pattern in _PERMANENT_CONTRACT_PATTERNS):
+    if ("cdi" not in brief.get("contract_types", ["stage", "cdd", "cdi", "vie"])
+            and employment and any(_contains(employment, pattern) for pattern in _PERMANENT_CONTRACT_PATTERNS)):
         warnings.append(
             f"Contrat permanent annoncé (« {clean_text(job.get('employment_type'), limit=120)} ») : "
             "cette offre n’est probablement pas un stage."
@@ -597,6 +645,7 @@ def score_brief_match(brief: dict[str, Any], job: dict[str, Any]) -> dict[str, A
 
     return {
         "score": score,
+        "education_access": assess_education_access(job, brief.get("education_preference", "bachelor_m1_then_m2")),
         "label": label,
         "components": components[:MAX_COMPONENTS],
         "weights_applied": applied,

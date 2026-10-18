@@ -179,14 +179,22 @@ class PublicATSConnector:
                     invalid += 1
                     continue
                 evaluated += 1
-                status = classify_internship(job)["status"]
-                confirmed += int(status == "confirmed")
-                uncertain += int(status == "uncertain")
-                excluded += int(status == "excluded")
-                if status != "confirmed" or not job.get("official_url"):
+                classification = classify_internship(job)
+                qualification = qualify_offer(
+                    job,
+                    allowed_contract_types=brief.get("contract_types"),
+                    allowed_start_months=brief.get("start_months"),
+                    minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
+                ).to_dict()
+                job["qualification"] = qualification
+                target = qualification["target_status"]
+                confirmed += int(target == "conforming")
+                uncertain += int(target == "to_verify")
+                excluded += int(target == "non_conforming")
+                if target == "non_conforming":
                     continue
-                qualification = qualify_offer({**job, "source_verified": True}).to_dict()
-                if qualification["target_status"] == "non_conforming":
+                if (not job.get("official_url") or
+                        (qualification["contract_type"] == "unknown" and not classification.get("evidence"))):
                     filtered += 1
                     continue
                 match = score_brief_match(brief, job)
@@ -194,8 +202,7 @@ class PublicATSConnector:
                     filtered += 1
                     continue
                 relevant += 1
-                job["qualification"] = qualification
-                job["internship_classification"] = classify_internship(job)
+                job["internship_classification"] = classification
                 ranked.append((ranking_key(job, match), {"job": job, "match": match}))
         selected = heapq.nsmallest(self.max_results, ranked, key=lambda item: item[0])
         return DiscoveryPayload(

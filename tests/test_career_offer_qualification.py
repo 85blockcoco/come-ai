@@ -28,16 +28,17 @@ def deny_network(monkeypatch):
 
 
 @pytest.mark.parametrize("offer", json.loads(FIXTURES.read_text(encoding="utf-8")), ids=lambda item: item["id"])
-def test_synthetic_adversarial_offer_never_overstates_january_six_month_fit(offer):
+def test_synthetic_adversarial_offer_never_overstates_configured_search_fit(offer):
     expected = offer["expected"]
     result = qualify_offer({key: value for key, value in offer.items() if key != "expected"})
     assert result.target_status == expected
-    assert result.contract_type in {"internship", "apprenticeship", "permanent", "fixed_term", "VIE", "graduate", "unknown"}
+    assert result.contract_type in {"internship", "apprenticeship", "permanent", "fixed_term", "VIE", "graduate", "unknown", "ambiguous"}
     assert isinstance(result.missing_fields, tuple)
     if expected == "conforming":
-        assert result.contract_type == "internship"
-        assert result.duration_min_months is not None and result.duration_min_months >= 6
-        assert result.start_date and result.start_date[5:7] == "01"
+        assert result.contract_type in {"internship", "fixed_term", "permanent", "VIE"}
+        if result.contract_type == "internship":
+            assert result.duration_min_months is not None and result.duration_min_months >= 6
+        assert result.start_date and int(result.start_date[5:7]) in {1, 2, 3}
         assert result.verification_status == "verified"
 
 

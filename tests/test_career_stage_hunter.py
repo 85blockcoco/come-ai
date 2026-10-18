@@ -676,7 +676,7 @@ def test_higher_degree_requirement_breaks_the_match_visibly() -> None:
 
 
 def test_permanent_contract_is_warned_but_not_hidden() -> None:
-    brief = validate_brief({"domains": ["M&A"]})
+    brief = validate_brief({"domains": ["M&A"], "contract_types": ["stage"]})
     permanent = score_brief_match(
         brief, dict(synthetic_job(employment_type="CDI, Temps plein", description_original="Analyste M&A confirmé."))
     )

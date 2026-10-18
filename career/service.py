@@ -1759,8 +1759,8 @@ class CareerService:
             "vocabulary": stage_search_vocabulary(),
             "search_terms": search_terms_for(brief.get("domains", [])),
             "disclaimer": (
-                "Critères de recherche stockés uniquement dans tes données locales ; "
-                "aucune préférence n’est supposée tant que tu ne l’as pas renseignée."
+                "Critères enregistrés localement. Par défaut : Stage, CDD, CDI et VIE, "
+                "débuts de janvier à mars et stages d’au moins six mois. Modifie les cases selon ta recherche."
             ),
         }
 
@@ -1785,12 +1785,24 @@ class CareerService:
         matches: list[dict[str, Any]] = []
         if payload["configured"]:
             for job in jobs:
-                matches.append({"job": job, "stage_match": score_brief_match(brief, job)})
+                stage_match = score_brief_match(brief, job)
+                qualification = qualify_offer(
+                    job,
+                    allowed_contract_types=brief.get("contract_types"),
+                    allowed_start_months=brief.get("start_months"),
+                    minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
+                ).to_dict()
+                stage_match["qualification_status"] = qualification["target_status"]
+                matches.append({"job": job, "stage_match": stage_match, "qualification": qualification})
             # Break ties by source identity, never a random database ID or
             # import/update time: the same postings have the same ordering
             # after a board reorders its feed or the application restarts.
             matches.sort(key=lambda item: (
+                {"conforming": 0, "to_verify": 1, "non_conforming": 2}.get(
+                    item["stage_match"].get("qualification_status"), 0
+                ),
                 -(int(item["stage_match"]["score"] or 0)),
+                (item["stage_match"].get("education_access") or {}).get("priority_rank", 2),
                 str(item["job"].get("source_name") or ""),
                 str(item["job"].get("source_id") or ""),
                 str(item["job"].get("canonical_url") or item["job"].get("official_url") or ""),
@@ -1798,7 +1810,16 @@ class CareerService:
                 str(item["job"].get("title") or ""),
             ))
         else:
-            matches = [{"job": job, "stage_match": None} for job in jobs]
+            matches = []
+            for job in jobs:
+                qualification = qualify_offer(
+                    job,
+                    allowed_contract_types=brief.get("contract_types"),
+                    allowed_start_months=brief.get("start_months"),
+                    minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
+                ).to_dict()
+                matches.append({"job": job, "stage_match": None, "qualification": qualification,
+                                "education_access": score_brief_match(brief, job)["education_access"]})
         payload["matches"] = matches
         return payload
 
@@ -1857,10 +1878,17 @@ class CareerService:
                 continue
             internship = classify_internship(job)
             match = score_brief_match(brief, job)
-            if job.get("source_status") == "closed" or internship["status"] != "confirmed" or not criteria_admit(match, job, brief):
+            qualification = qualify_offer(
+                {**job, "source_verified": bool(reference.get("verified_at"))},
+                allowed_contract_types=brief.get("contract_types"),
+                allowed_start_months=brief.get("start_months"),
+                minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
+            ).to_dict()
+            if job.get("source_status") == "closed" or qualification["target_status"] == "non_conforming":
                 continue
-            qualification = qualify_offer({**job, "source_verified": bool(reference.get("verified_at"))}).to_dict()
-            if qualification["target_status"] == "non_conforming":
+            job["qualification"] = qualification
+            match["qualification_status"] = qualification["target_status"]
+            if qualification["contract_type"] == "unknown" and not internship.get("evidence"):
                 continue
             matches.append({"job": job, "stage_match": match, "internship": internship,
                             "qualification": qualification,
@@ -1868,6 +1896,10 @@ class CareerService:
                             "verified_at": reference.get("verified_at", "")})
         matches.sort(key=lambda item: ranking_key(item["job"], item["stage_match"]))
         changed = bool(snapshot) and snapshot.get("brief_fingerprint") != self._exploration_brief_fingerprint(brief)
+        if changed:
+            # A previous result set is not a match for newly saved criteria.
+            # Require an explicit refresh instead of presenting stale offers.
+            matches = []
         summary = dict(snapshot["summary"]) if isinstance(snapshot.get("summary"), dict) else {}
         summary["displayed_count"] = len(matches)
         return {"mode": "explore", "has_run": bool(snapshot), "run_id": snapshot.get("run_id", ""),
@@ -1949,7 +1981,7 @@ class CareerService:
                         if (any(type(count) is not int or count < 0 for count in counts)
                             or result.raw_count != result.evaluated_count + result.invalid_count
                             or result.evaluated_count != result.confirmed_count + result.uncertain_count + result.excluded_count
-                            or result.confirmed_count != result.relevant_count + result.filtered_criteria_count
+                            or result.relevant_count + result.filtered_criteria_count != result.confirmed_count + result.uncertain_count
                             or len(result.jobs) > min(EXPLORATION_MAX_RESULTS, result.relevant_count)):
                             raise PublicSourceError("Le connecteur n’a pas fourni des compteurs d’exploration cohérents.", code="invalid_counts")
                         self._exploration_cache[source_id] = (cache_fingerprint, result)
@@ -1971,14 +2003,23 @@ class CareerService:
                     outcome.update(status="partial", message="Flux officiel lu, avec des entrées incomplètes ou invalides ignorées.")
                 outcomes.append(outcome)
                 for job in result.jobs:
-                    # Defend the connector boundary as well as production ATS
-                    # admission; never accept a custom connector's false stage.
+                    # Re-qualify at the service boundary using the current
+                    # saved criteria; connector output is never trusted alone.
                     classification = classify_internship(job)
                     match = score_brief_match(brief, job)
-                    qualification = qualify_offer({**job, "source_verified": bool(result.verified_at)}).to_dict()
-                    if (classification["status"] == "confirmed" and criteria_admit(match, job, brief)
-                            and qualification["target_status"] != "non_conforming"):
-                        candidates.append({"job": dict(job), "stage_match": match, "internship": classification,
+                    qualification = qualify_offer(
+                        {**job, "source_verified": bool(result.verified_at)},
+                        allowed_contract_types=brief.get("contract_types"),
+                        allowed_start_months=brief.get("start_months"),
+                        minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
+                    ).to_dict()
+                    qualified_job = {**job, "qualification": qualification}
+                    if (qualification["target_status"] != "non_conforming"
+                            and (qualification["contract_type"] != "unknown" or classification.get("evidence"))
+                            and criteria_admit(match, qualified_job, brief)):
+                        match["qualification_status"] = qualification["target_status"]
+                        candidates.append({"job": qualified_job, "stage_match": match, "internship": classification,
+                                           "qualification": qualification,
                                            "source_id": source_id, "verified_at": result.verified_at,
                                            "board_token": source.get("board_token", "")})
             # At most eight per-source heaps of 150 are materialised. Sort then
