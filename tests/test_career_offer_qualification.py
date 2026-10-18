@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import socket
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
@@ -55,4 +56,36 @@ def test_missing_official_link_never_yields_verified_qualification():
     result = qualify_offer({"title": "Finance Intern", "start_date": "2027-01-01", "duration_months": 6,
                             "source_name": "greenhouse", "source_id": "synthetic-2", "source_verified": True})
     assert result.verification_status == "unverified"
+    assert result.target_status == "to_verify"
+
+
+def test_valid_six_month_date_range_can_prove_duration():
+    result = qualify_offer({"title": "Finance Intern", "official_url": "https://careers.example.test/range",
+                            "source_name": "greenhouse", "source_id": "synthetic-range", "source_verified": True,
+                            "start_date": "2027-01-01", "end_date": "2027-07-01",
+                            "language": "English", "country": "France", "city": "Paris"},
+                           as_of=date(2026, 10, 18))
+    assert result.duration_min_months == result.duration_max_months == 6
+    assert result.target_status == "conforming"
+    assert result.provenance["duration_min_months"].source == "source_date_range"
+
+
+def test_ambiguous_date_range_does_not_round_up_to_six_months():
+    result = qualify_offer({"title": "Finance Intern", "official_url": "https://careers.example.test/ambiguous-range",
+                            "source_name": "greenhouse", "source_id": "synthetic-range-2", "source_verified": True,
+                            "start_date": "2027-01-15", "end_date": "2027-07-14",
+                            "language": "English", "country": "France", "city": "Paris"},
+                           as_of=date(2026, 10, 18))
+    assert result.duration_min_months == 5
+    assert result.duration_max_months == 6
+    assert result.target_status == "to_verify"
+
+
+def test_invalid_iso_date_is_reported_as_missing_not_as_a_month():
+    result = qualify_offer({"title": "Finance Intern", "start_date": "2027-13-01", "duration_months": 6,
+                            "official_url": "https://careers.example.test/invalid-date",
+                            "source_name": "greenhouse", "source_id": "synthetic-invalid-date", "source_verified": True})
+    assert result.start_date is None
+    assert result.start_month is None
+    assert "début" in result.missing_fields
     assert result.target_status == "to_verify"
