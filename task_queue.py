@@ -156,6 +156,9 @@ _SENSITIVE_KEY_PARTS = frozenset(
 _SECRET_PATTERNS = (
     # Gemini-style keys, without relying on any one provider being enabled.
     re.compile(r"\bAIza[0-9A-Za-z_-]{20,}\b"),
+    # OpenRouter keys have a distinct hyphenated prefix and are not covered by
+    # the underscore-prefixed generic key rule below.
+    re.compile(r"\bsk-or-v1-[0-9A-Za-z_-]{24,}\b", re.IGNORECASE),
     # Common API-key prefixes. The length avoids masking ordinary prose.
     re.compile(r"\b(?:sk|rk|pk)_[A-Za-z0-9_-]{16,}\b", re.IGNORECASE),
     # Headers and key=value fragments that can accidentally occur in errors.
@@ -189,6 +192,31 @@ def redact_text(value: object, *, limit: int | None = None) -> str:
     if limit is not None and len(text) > limit:
         return text[: max(0, limit - 1)] + "…"
     return text
+
+
+def redact_payload(value: Any) -> Any:
+    """Redact nested tool data using the same credential policy as task text.
+
+    Tool results can be dictionaries/lists rather than a single error string.
+    This traversal deliberately reuses ``redact_text`` and the existing
+    sensitive-key classifier; it introduces no second set of secret patterns.
+    """
+    if isinstance(value, str):
+        return redact_text(value)
+    if isinstance(value, dict):
+        cleaned: dict[Any, Any] = {}
+        for key, item in value.items():
+            if isinstance(key, str) and _is_sensitive_key(key):
+                cleaned[redact_text(key)] = "[secret redacted]"
+            else:
+                safe_key = redact_text(key) if isinstance(key, str) else key
+                cleaned[safe_key] = redact_payload(item)
+        return cleaned
+    if isinstance(value, list):
+        return [redact_payload(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(redact_payload(item) for item in value)
+    return value
 
 
 def _coerce_enum(enum_type: type[StrEnum], value: StrEnum | str, label: str) -> StrEnum:

@@ -178,6 +178,8 @@ def test_provider_fallback_shares_one_budget(tmp_path: Path, monkeypatch: pytest
         _: str,
         *,
         allow_writes: bool,
+        allow_cloud_context: bool = False,
+        local_context_present: bool = False,
         budget: RequestBudget | None = None,
     ) -> dict[str, object]:
         assert allow_writes is False
@@ -240,6 +242,7 @@ def test_manual_gemini_tool_loop_uses_user_role_and_preserves_call_id(tmp_path: 
         types.GenerateContentConfig(http_options=types.HttpOptions(timeout=30_000)),
         RequestBudget(max_requests=3),
         allow_writes=False,
+        allow_cloud_context=True,
     )
 
     assert result["answer"] == "Analyse terminée."
@@ -261,6 +264,65 @@ def test_error_classification_masks_secret_and_stops_quota_rotation() -> None:
     assert "/Users/come" not in masked_path
     assert "[chemin local masqué]" in masked_path
     assert retryable(TransientProviderError("Ollama local indisponible"))
+
+
+def test_agent_tool_result_is_redacted_before_gemini_followup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config, workspace, _ = make_workspace(tmp_path)
+    agent = AgentService(config, workspace)
+    secrets = ["AIza" + "A" * 32, "sk-or-v1-" + "B" * 48,
+               "Authorization: Bearer " + "C" * 32]
+    monkeypatch.setattr(agent, "_invoke_tool", lambda *args, **kwargs: {
+        "excerpt": " ".join(secrets), "nested": {"password": "synthetic-private-password"}
+    })
+    call = types.FunctionCall(name="list_workspace_files", args={}, id="call-secret")
+    first = SimpleNamespace(function_calls=[call], candidates=[SimpleNamespace(content=types.Content(role="model", parts=[]))], text=None)
+    second = SimpleNamespace(function_calls=[], candidates=[], text="Faits fictifs masqués.")
+    class FakeModels:
+        def __init__(self):
+            self.calls = []
+            self.responses = [first, second]
+        def generate_content(self, **kwargs):
+            self.calls.append(kwargs["contents"])
+            return self.responses.pop(0)
+    client = SimpleNamespace(models=FakeModels())
+    history = [types.Content(role="user", parts=[types.Part.from_text(text="Inspecte le fichier synthétique")])]
+    result = agent._run_tool_loop(
+        client, types, "fictional-model", history,
+        types.GenerateContentConfig(http_options=types.HttpOptions(timeout=30_000)),
+        RequestBudget(max_requests=3), allow_writes=False, allow_cloud_context=True,
+    )
+    assert result["answer"] == "Faits fictifs masqués."
+    function_response = client.models.calls[1][-1].parts[0].function_response
+    serialized = str(function_response.response)
+    for secret in secrets:
+        assert secret not in serialized
+    assert "synthetic-private-password" not in serialized
+    assert "[secret redacted]" in serialized
+
+
+def test_agent_tool_request_without_consent_refuses_before_running_tool(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config, workspace, _ = make_workspace(tmp_path)
+    agent = AgentService(config, workspace)
+    invoked = []
+    monkeypatch.setattr(agent, "_invoke_tool", lambda *args, **kwargs: invoked.append(True))
+    call = types.FunctionCall(name="list_workspace_files", args={})
+    response = SimpleNamespace(function_calls=[call], candidates=[SimpleNamespace(content=types.Content(role="model", parts=[]))], text=None)
+    class FakeModels:
+        def __init__(self):
+            self.calls = 0
+        def generate_content(self, **kwargs):
+            self.calls += 1
+            return response
+    client = SimpleNamespace(models=FakeModels())
+    with pytest.raises(UserFacingError, match="données locales"):
+        agent._run_tool_loop(
+            client, types, "fictional-model",
+            [types.Content(role="user", parts=[types.Part.from_text(text="Lis le fichier")])],
+            types.GenerateContentConfig(http_options=types.HttpOptions(timeout=30_000)),
+            RequestBudget(max_requests=3), allow_writes=False,
+        )
+    assert client.models.calls == 1
+    assert invoked == []
 
 
 def test_ollama_url_must_stay_on_loopback(tmp_path: Path) -> None:
@@ -389,7 +451,8 @@ class FakeAgent:
             "retry_attempts": 1,
         }
 
-    def ask(self, message: str, *, allow_writes: bool) -> dict[str, object]:
+    def ask(self, message: str, *, allow_writes: bool, allow_cloud_context: bool = False,
+            local_context_present: bool = False) -> dict[str, object]:
         self.messages.append((message, allow_writes))
         return {"answer": "Réponse simulée", "tool_events": ["inspect_file"], "provider": "Faux modèle"}
 
@@ -426,7 +489,8 @@ def test_local_web_api_upload_actions_and_chat_are_isolated(tmp_path: Path) -> N
 
     chat = client.post(
         "/api/chat",
-        json={"message": "Analyse le fichier sélectionné", "selected_file_ids": [file_id], "allow_write": False},
+        json={"message": "Analyse le fichier sélectionné", "selected_file_ids": [file_id], "allow_write": False,
+              "allow_cloud_context": True},
     )
     assert chat.status_code == 200
     assert chat.json()["answer"] == "Réponse simulée"

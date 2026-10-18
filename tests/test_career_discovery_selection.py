@@ -60,6 +60,25 @@ def test_finance_offer_after_position_150_is_scored_before_selection() -> None:
     assert result.truncated is True
 
 
+def test_exploration_filters_known_nonconforming_duration_before_selection() -> None:
+    jobs = [
+        raw_job("short-internship", title="Corporate Finance Intern",
+                content="<p>This internship lasts 4 months starting January 2027.</p>"),
+        raw_job("unknown-internship", title="Corporate Finance Intern",
+                content="<p>This is a finance internship.</p>"),
+    ]
+    result = GreenhouseJobBoardConnector._normalise(
+        BOARD, {"jobs": jobs}, selection_brief={"domains": ["Corporate Finance"]}, internships_only=True
+    )
+    by_id = {job["source_id"]: job for job in result.jobs}
+    assert set(by_id) == {"unknown-internship"}
+    assert result.confirmed_count == 0
+    assert result.uncertain_count == 1
+    assert result.excluded_count == 1
+    assert result.filtered_criteria_count == 0
+    assert by_id["unknown-internship"]["qualification"]["target_status"] == "to_verify"
+
+
 def test_selected_jobs_and_tie_order_are_invariant_to_feed_reordering() -> None:
     jobs = [raw_job(f"offer-{index:04}") for index in range(170)]
     jobs.append(raw_job("late-finance", title="M&A Intern"))

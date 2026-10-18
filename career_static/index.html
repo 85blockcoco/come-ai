@@ -29,7 +29,7 @@
         <section class="career-intro panel">
           <div>
             <p class="eyebrow">Recherche ciblée</p>
-            <h2>Stages européens · janvier–juin 2027</h2>
+            <h2>Finance · recherche internationale</h2>
             <p>Importe et suis des offres vérifiées à la source. Les dates inconnues restent à vérifier, les candidatures restent manuelles.</p>
           </div>
           <div id="career-health" class="status-badge" aria-live="polite">Vérification du module local…</div>
@@ -341,13 +341,26 @@
           <header class="view-intro">
             <p class="eyebrow">Parcours de candidature</p>
             <h2 id="stagehunter-title">Stage Hunter</h2>
-            <p>Définis le stage que tu cherches, retrouve les offres réelles venues des sources officielles que tu as configurées, compare-les avec des explications, prépare chaque candidature uniquement avec des faits, puis suis les statuts. Rien n’est envoyé automatiquement.</p>
+            <p>Choisis tes contrats et périodes, retrouve les offres réelles venues des sources officielles, compare-les avec des explications, prépare chaque candidature uniquement avec des faits, puis suis les statuts. Rien n’est envoyé automatiquement.</p>
           </header>
 
           <section class="panel">
             <p class="eyebrow">Étape A</p>
-            <h3>Définir le stage recherché</h3>
+            <h3>Définir les contrats et dates recherchés</h3>
             <form id="stagehunter-brief-form" class="form-stack">
+              <fieldset>
+                <legend>Types de contrat</legend>
+                <div id="stagehunter-contract-types" class="stagehunter-domains"></div>
+              </fieldset>
+              <fieldset>
+                <legend>Mois de début possibles</legend>
+                <label class="stagehunter-domain"><input id="stagehunter-quarter-one" type="checkbox" /> Premier trimestre (janvier à mars)</label>
+                <div id="stagehunter-start-months" class="stagehunter-domains"></div>
+              </fieldset>
+              <div class="form-row two-columns">
+                <label>Durée minimale requise pour un stage (mois)<input id="stagehunter-min-stage-duration" type="number" min="1" max="24" inputmode="numeric" /></label>
+                <p class="fixed-period-note">Une offre sans date de début ou sans durée connue reste « à vérifier » ; elle ne sera pas déclarée conforme.</p>
+              </div>
               <fieldset>
                 <legend>Domaines de la finance</legend>
                 <div id="stagehunter-domains" class="stagehunter-domains"></div>
@@ -363,13 +376,16 @@
                 <label>Villes (facultatif)<input id="stagehunter-cities" maxlength="1500" placeholder="Ex. Paris, Londres" /></label>
               </div>
               <div class="form-row two-columns">
-                <label>Date de début souhaitée<input id="stagehunter-start" type="date" /></label>
-                <label>Durée minimale (mois)<input id="stagehunter-duration" type="number" min="1" max="24" inputmode="numeric" placeholder="Ex. 4" /></label>
-              </div>
-              <div class="form-row two-columns">
                 <label>Niveau d’études déclaré<input id="stagehunter-level" maxlength="120" placeholder="Ex. Bac+5, Master 2…" /></label>
                 <label>Langues déclarées<input id="stagehunter-languages" maxlength="1000" placeholder="Ex. anglais C1, français natif…" /></label>
               </div>
+              <label>Préférence sur le niveau demandé dans les offres
+                <select id="stagehunter-education-preference">
+                  <option value="bachelor_m1_then_m2">Bachelor / Master 1 en priorité, Master 2 aussi</option>
+                  <option value="any">Tous les niveaux, sans préférence</option>
+                </select>
+              </label>
+              <p class="fixed-period-note">Cette préférence départage les offres de pertinence équivalente. Elle ne déclare aucun diplôme à ta place et n’exclut pas les offres M2. Un niveau absent ou « Master » non précisé reste à vérifier.</p>
               <label>Contraintes (facultatif)
                 <textarea id="stagehunter-constraints" rows="2" maxlength="2000" placeholder="Ex. mobilité sur Paris uniquement…"></textarea>
               </label>
@@ -385,7 +401,7 @@
           <section class="panel">
             <p class="eyebrow">Étape B</p>
             <h3>Trouver des offres réelles</h3>
-            <p class="fixed-period-note">Explore les sources publiques vérifiées du registre sans ajouter d’entreprise. Seules les annonces contenant une indication explicite de stage sont proposées comme stages ; les contrats incertains et les emplois permanents ne remplissent pas artificiellement les résultats. Tes critères et ton profil restent sur ton Mac.</p>
+            <p class="fixed-period-note">Explore les sources publiques vérifiées sans ajouter d’entreprise. Les offres sont qualifiées selon les types de contrat et les mois que tu as sélectionnés ; les stages doivent respecter la durée minimale connue. Les informations manquantes restent « à vérifier ». Tes critères et ton profil restent sur ton Mac.</p>
             <div class="job-actions" role="group" aria-label="Mode de recherche de stages">
               <button id="stagehunter-explore" class="primary-button" type="button">Explorer les stages</button>
               <button id="stagehunter-my-companies" class="secondary-button" type="button">Mes entreprises</button>
@@ -420,9 +436,28 @@
             <div class="job-actions">
               <button id="stagehunter-refresh" class="secondary-button" type="button">Recalculer le classement</button>
             </div>
+            <div class="job-actions">
+              <label for="stagehunter-sort">Tri par correspondance</label>
+              <select id="stagehunter-sort">
+                <option value="desc">Décroissant (recommandé)</option>
+                <option value="asc">Croissant</option>
+              </select>
+            </div>
+            <div id="stagehunter-map" class="stagehunter-map"></div>
             <p id="stagehunter-matches-note" class="fixed-period-note"></p>
             <div id="stagehunter-matches" class="job-list"></div>
             <p id="stagehunter-matches-empty" class="empty-state">Aucune offre enregistrée pour l’instant. Passe à l’étape B pour en importer.</p>
+          </section>
+
+          <section class="panel">
+            <p class="eyebrow">Détail d’une offre</p>
+            <h3>Fiche complète</h3>
+            <div class="job-actions">
+              <button id="stagehunter-detail-prev" class="secondary-button" type="button">Précédente</button>
+              <button id="stagehunter-detail-next" class="secondary-button" type="button">Suivante</button>
+            </div>
+            <div id="stagehunter-detail" class="stagehunter-detail"></div>
+            <p id="stagehunter-detail-empty" class="empty-state">Sélectionne une offre dans la liste pour afficher sa fiche complète.</p>
           </section>
 
           <section class="panel">

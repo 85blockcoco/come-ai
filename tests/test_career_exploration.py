@@ -11,9 +11,9 @@ from pathlib import Path
 import pytest
 
 from career.discovery import DiscoveryPayload, GreenhouseBoard, GreenhouseJobBoardConnector, PublicSourceError
-from career.exploration import classify_internship
+from career.exploration import EXPLORATION_MAX_SOURCES, classify_internship
 from career.service import CareerService
-from career.stage_search import validate_brief
+from career.stage_search import STAGE_DOMAINS, default_brief, validate_brief
 
 
 def source(token: str = "fiction", company: str = "Finance Synthétique") -> dict:
@@ -25,7 +25,7 @@ def source(token: str = "fiction", company: str = "Finance Synthétique") -> dic
 def posting(identifier: int, title: str = "Corporate Finance Intern", **changes) -> dict:
     value = {"id": identifier, "title": title, "absolute_url": f"https://careers.example.test/jobs/{identifier}",
              "location": {"name": "Paris, France"},
-             "content": "<p>Financial analysis and valuation. This internship lasts four months.</p>"}
+             "content": "<p>Financial analysis and valuation. This synthetic internship lasts six months.</p>"}
     value.update(changes)
     return value
 
@@ -94,9 +94,39 @@ def test_admission_and_ranking_happen_before_first_150_limit():
     assert [job["source_id"] for job in payload.jobs] == ["171"]
     assert payload.raw_count == payload.evaluated_count == 172
     assert payload.excluded_count == 170
-    assert payload.confirmed_count == 2
+    assert payload.confirmed_count == 0
+    assert payload.uncertain_count == 2
     assert payload.filtered_criteria_count == 1
     assert payload.relevant_count == 1
+
+
+def test_employer_boilerplate_does_not_turn_support_roles_into_finance_matches():
+    raw = [
+        posting(201, "Receptionist Intern", content="Private equity investment firm. This internship lasts six months."),
+        posting(202, "Staff Product Designer Intern", content="Financial markets company. This internship lasts six months."),
+        posting(203, "Datacentre Operations Intern", content="Investment management business. This internship lasts six months."),
+        posting(204, "Join Our European Talent Community Internship", content="Corporate finance group. This internship lasts six months."),
+        posting(205, "Investment Operations Intern", content="Portfolio management and fixed income. This internship lasts six months."),
+    ]
+    connector = GreenhouseJobBoardConnector(FeedTransport({"fiction": raw}))
+    payload = connector.discover_internships(
+        GreenhouseBoard("fiction", "Fiction Finance", "fiction"),
+        selection_brief=validate_brief({"domains": list(STAGE_DOMAINS)}),
+    )
+    assert [job["title"] for job in payload.jobs] == ["Investment Operations Intern"]
+
+
+def test_fresh_default_search_covers_finance_without_filling_results_with_software_roles(tmp_path):
+    raw = [
+        posting(301, "Software Engineering Intern", content="Financial markets company. This internship lasts six months."),
+        posting(302, "Corporate Finance Intern", content="Financial analysis and valuation. This internship lasts six months."),
+    ]
+    connector = GreenhouseJobBoardConnector(FeedTransport({"fiction": raw}))
+    payload = connector.discover_internships(
+        GreenhouseBoard("fiction", "Fiction Finance", "fiction"),
+        selection_brief=CareerService(tmp_path).get_stage_search()["brief"],
+    )
+    assert [job["source_id"] for job in payload.jobs] == ["302"]
 
 
 def test_relevant_finance_stage_after_150_weak_stages_is_retained():
@@ -235,13 +265,13 @@ def test_global_top_150_is_chosen_across_sources_and_exact_aliases_deduped(tmp_p
 
 
 def test_source_limit_and_unsupported_connectors_are_not_fake_successes(tmp_path):
-    feeds = {f"fiction{i}": [posting(i + 1)] for i in range(10)}
+    feeds = {f"fiction{i}": [posting(i + 1)] for i in range(EXPLORATION_MAX_SOURCES + 2)}
     sources = [source(key) for key in feeds]
     sources[0]["provider"] = "future_ashby"
     service, transport = service_with(tmp_path, feeds, sources)
     result = service.explore_internships()
-    assert result["summary"]["sources_total"] == 10
-    assert result["summary"]["sources_attempted"] == len(transport.calls) == 7
+    assert result["summary"]["sources_total"] == EXPLORATION_MAX_SOURCES + 2
+    assert result["summary"]["sources_attempted"] == len(transport.calls) == EXPLORATION_MAX_SOURCES - 1
     assert result["summary"]["sources_not_queried"] == 3
     assert result["summary"]["partial"]
     assert result["outcomes"][0]["status"] == "unsupported"

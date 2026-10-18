@@ -11,6 +11,8 @@ const state = {
   activeApplicationDraft: null,
   studioJobs: [],
   discoverySources: [],
+  stageMatches: [],
+  stageDetailIndex: 0,
   coachSessions: [],
   activeCoachSession: null,
 };
@@ -840,13 +842,16 @@ function chip(label, tone = "") {
   return make("span", label, `job-chip${tone ? ` ${tone}` : ""}`);
 }
 
-function jobCard(job, mode = "discover") {
+function jobCard(job, mode = "discover", qualification = null) {
   const card = make("article", "", "job-card");
   const header = make("div", "", "job-card-header");
   const titleBlock = make("div");
   titleBlock.append(make("h3", job.title), make("p", job.company, "job-company"));
   const calendarTone = calendarClasses[job.calendar_status] || "warning";
-  header.append(titleBlock, chip(calendarLabels[job.calendar_status] || "À vérifier", calendarTone));
+  const qualificationLabels = {conforming:"Conforme aux critères sélectionnés", to_verify:"À vérifier", non_conforming:"Non conforme"};
+  header.append(titleBlock, qualification
+    ? chip(qualificationLabels[qualification.target_status] || "À vérifier", qualification.target_status === "conforming" ? "good" : "warning")
+    : chip(calendarLabels[job.calendar_status] || "À vérifier", calendarTone));
   card.append(header);
 
   const chips = make("div", "", "job-chips");
@@ -854,7 +859,7 @@ function jobCard(job, mode = "discover") {
   if (job.city || job.country) chips.append(chip([job.city, job.country].filter(Boolean).join(", ")));
   const availabilityTone = job.deadline_status === "closed" ? "danger" : job.source_status === "open" ? "good" : "warning";
   chips.append(chip(job.deadline_status === "closed" ? "Annonce fermée / échue" : job.source_status === "open" ? "Annonce ouverte" : "Statut à vérifier", availabilityTone));
-  const scoring = job.scoring || {};
+  const scoring = qualification ? {} : (job.scoring || {});
   const scoreTone = scoring.blocking_constraints?.length ? "danger" : scoring.is_recommendable ? "good" : "warning";
   if (Number.isFinite(scoring.score)) chips.append(chip(`Pertinence ${scoring.score}/100`, scoreTone));
   if (job.shortlisted) chips.append(chip("Shortlist", "good"));
@@ -865,12 +870,19 @@ function jobCard(job, mode = "discover") {
   if (job.start_date || job.end_date || job.duration_months) {
     details.append(make("p", `Période annoncée : ${[job.start_date, job.end_date].filter(Boolean).join(" → ") || "dates non précisées"}${job.duration_months ? ` · ${job.duration_months} mois` : ""}`));
   }
-  if (!job.deadline_date && !job.start_date && !job.end_date && !job.duration_months) details.append(make("p", "Dates non renseignées."));
+  if (qualification) {
+    const month = qualification.start_month ? new Date(2000, qualification.start_month - 1, 1).toLocaleString("fr-FR", {month:"long"}) : "non précisé";
+    details.append(make("p", `Début annoncé : ${qualification.start_date || `${month} ${qualification.provenance?.start_year?.value || "(année à vérifier)"}`}`));
+    const minimum = qualification.duration_min_months, maximum = qualification.duration_max_months;
+    details.append(make("p", `Durée annoncée : ${minimum == null ? "non précisée" : minimum === maximum ? `${minimum} mois` : `${minimum} à ${maximum} mois`}`));
+    const sourceDate = qualification.provenance?.start_month;
+    if (sourceDate?.source === "description_passage") details.append(make("p", `Passage source du début : « ${sourceDate.quote} »`));
+  } else if (!job.deadline_date && !job.start_date && !job.end_date && !job.duration_months) details.append(make("p", "Dates non renseignées."));
   if (job.source_name && job.source_name !== "manual") {
     details.append(make("p", `Source officielle : ${job.source_name} · vérifiée : ${formatVerification(job.last_verified_at)}`));
   }
   card.append(details);
-  if ((job.calendar_reasons || []).length) {
+  if (!qualification && (job.calendar_reasons || []).length) {
     const reasons = make("ul", "", "job-reasons");
     job.calendar_reasons.forEach((reason) => reasons.append(make("li", reason)));
     card.append(reasons);
@@ -900,7 +912,7 @@ function jobCard(job, mode = "discover") {
     scoring.blocking_constraints.forEach((reason) => list.append(make("li", `Blocage : ${reason}`)));
     scoreBlock.append(list);
   }
-  card.append(scoreBlock);
+  if (!qualification) card.append(scoreBlock);
 
   const actions = make("div", "", "job-actions");
   const shortlist = make("button", job.shortlisted ? "Retirer de la shortlist" : "Ajouter à la shortlist", "secondary-button");
@@ -1781,8 +1793,10 @@ function stageHunterListValue(selector) {
 function renderStageBrief(payload) {
   const brief = payload.brief || {};
   const domainsTarget = $("#stagehunter-domains");
+  const contractsTarget = $("#stagehunter-contract-types");
+  const monthsTarget = $("#stagehunter-start-months");
   const rankingTarget = $("#stagehunter-ranking");
-  if (!domainsTarget || !rankingTarget) return;
+  if (!domainsTarget || !contractsTarget || !monthsTarget || !rankingTarget) return;
   domainsTarget.replaceChildren();
   (payload.vocabulary?.domains || []).forEach((domain) => {
     const label = make("label", "", "stagehunter-domain");
@@ -1793,13 +1807,45 @@ function renderStageBrief(payload) {
     label.append(box, document.createTextNode(domain));
     domainsTarget.append(label);
   });
+  contractsTarget.replaceChildren();
+  (payload.vocabulary?.contract_types || []).forEach((contract) => {
+    const label = make("label", "", "stagehunter-domain");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.value = contract.key;
+    box.checked = (brief.contract_types || []).includes(contract.key);
+    label.append(box, document.createTextNode(contract.label));
+    contractsTarget.append(label);
+  });
+  monthsTarget.replaceChildren();
+  (payload.vocabulary?.months || []).forEach((month) => {
+    const label = make("label", "", "stagehunter-domain");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.value = String(month.value);
+    box.checked = (brief.start_months || []).includes(month.value);
+    label.append(box, document.createTextNode(month.label));
+    monthsTarget.append(label);
+  });
+  $("#stagehunter-quarter-one").checked = [1, 2, 3].every((month) => (brief.start_months || []).includes(month));
+  $("#stagehunter-quarter-one").onchange = (event) => {
+    monthsTarget.querySelectorAll("input").forEach((box) => {
+      if (["1", "2", "3"].includes(box.value)) box.checked = event.target.checked;
+    });
+  };
+  monthsTarget.querySelectorAll("input").forEach((box) => {
+    box.onchange = () => {
+      $("#stagehunter-quarter-one").checked = ["1", "2", "3"].every((month) =>
+        [...monthsTarget.querySelectorAll("input")].some((input) => input.value === String(month) && input.checked));
+    };
+  });
+  $("#stagehunter-min-stage-duration").value = brief.minimum_stage_duration_months ?? 6;
   $("#stagehunter-other-domains").value = (brief.other_domains || []).join(", ");
   $("#stagehunter-roles").value = (brief.roles || []).join(", ");
   $("#stagehunter-countries").value = (brief.countries || []).join(", ");
   $("#stagehunter-cities").value = (brief.cities || []).join(", ");
-  $("#stagehunter-start").value = brief.start_date || "";
-  $("#stagehunter-duration").value = brief.duration_months ?? "";
   $("#stagehunter-level").value = brief.study_level || "";
+  $("#stagehunter-education-preference").value = brief.education_preference || "bachelor_m1_then_m2";
   $("#stagehunter-languages").value = (brief.languages || []).join(", ");
   $("#stagehunter-constraints").value = brief.constraints || "";
   rankingTarget.replaceChildren();
@@ -1845,9 +1891,22 @@ function stageMatchBlock(stageMatch) {
   const block = make("section", "", "stage-match-block");
   const header = make("div", "", "stage-match-header");
   const scoreText = Number.isFinite(stageMatch.score) ? `${stageMatch.score}/100` : "non calculé";
-  const tone = Number.isFinite(stageMatch.score) && stageMatch.score >= 70 ? "good" : "warning";
-  header.append(make("p", `Correspondance stage : ${scoreText}`, "scoring-title"), chip(stageMatch.label || "", tone));
+  const tone = stageMatch.qualification_status === "conforming"
+    && Number.isFinite(stageMatch.score) && stageMatch.score >= 70 ? "good" : "warning";
+  header.append(make("p", `Pertinence selon tes critères : ${scoreText}`, "scoring-title"), chip(stageMatch.label || "", tone));
   block.append(header);
+  const eligibility = {
+    conforming: "Conforme à tes critères contractuels et de période",
+    to_verify: "À vérifier : informations ou critères incomplets",
+    non_conforming: "Non conforme à tes critères sélectionnés",
+  }[stageMatch.qualification_status];
+  if (eligibility) block.append(make("p", eligibility, stageMatch.qualification_status === "conforming" ? "eligibility-good" : "fixed-period-note"));
+  const education = stageMatch.education_access;
+  if (education) {
+    block.append(make("p", `Niveau demandé : ${education.reason}`, "fixed-period-note"));
+    (education.evidence || []).slice(0, 2).forEach((proof) =>
+      block.append(make("p", `Passage source (${proof.field}) : « ${proof.passage} »`, "scoring-disclaimer")));
+  }
   if (stageMatch.disclaimer) block.append(make("p", stageMatch.disclaimer, "scoring-disclaimer"));
   const good = make("ul", "", "scoring-list good-list");
   const review = make("ul", "", "scoring-list review-list");
@@ -1865,28 +1924,162 @@ function stageMatchBlock(stageMatch) {
   return block;
 }
 
+function stageMatchScore(match) {
+  return Number((match.stage_match || match.qualification || {}).score ?? (match.stage_match || {}).score ?? 0);
+}
+
+function renderStageMap(matches) {
+  const map = $("#stagehunter-map");
+  if (!map) return;
+  map.replaceChildren();
+  const counts = new Map();
+  matches.forEach((match) => {
+    const job = match.job || {};
+    const key = [job.city, job.country].filter(Boolean).join(", ") || "Lieu non précisé";
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+  const title = make("p", "Carte des offres disponibles (par ville)", "stagehunter-map-title");
+  map.append(title);
+  const list = make("ul", "", "stagehunter-map-list");
+  [...counts.entries()].sort((a, b) => b[1] - a[1]).forEach(([city, count]) => {
+    list.append(make("li", `${city} : ${count} offre${count > 1 ? "s" : ""}`));
+  });
+  map.append(list);
+}
+
 function renderStageMatches(payload) {
   const target = $("#stagehunter-matches");
   const empty = $("#stagehunter-matches-empty");
   if (!target || !empty) return;
   target.replaceChildren();
   const matches = payload.matches || [];
-  empty.hidden = matches.length > 0;
-  matches.forEach((match) => {
+  state.stageMatches = matches;
+  const direction = localStorage.getItem("stagehunter_sort") || "desc";
+  const sortSelect = $("#stagehunter-sort");
+  if (sortSelect) sortSelect.value = direction;
+  const sorted = [...matches].sort((a, b) => direction === "asc"
+    ? stageMatchScore(a) - stageMatchScore(b)
+    : stageMatchScore(b) - stageMatchScore(a));
+  renderStageMap(sorted);
+  empty.hidden = sorted.length > 0;
+  sorted.forEach((match) => {
     const wrapper = make("div", "", "stagehunter-match");
-    if (match.stage_match) wrapper.append(stageMatchBlock(match.stage_match));
-    const card = jobCard(match.job, "discover");
+    if (match.stage_match || match.qualification) wrapper.append(stageMatchBlock(match.stage_match || {
+      label: "Critères par défaut", qualification_status: match.qualification.target_status,
+      education_access: match.education_access,
+    }));
+    const card = jobCard(match.job, "discover", match.qualification);
     const actions = card.querySelector(".job-actions");
     const prep = make("button", "Préparer cette candidature", "secondary-button");
     prep.type = "button";
     prep.addEventListener("click", () => loadStagePrep(match.job.id));
     actions?.append(prep);
+    const detail = make("button", "Détail", "secondary-button");
+    detail.type = "button";
+    detail.addEventListener("click", () => loadStageDetail(match.job.id));
+    actions?.append(detail);
     wrapper.append(card);
     target.append(wrapper);
   });
   $("#stagehunter-matches-note").textContent = payload.configured
     ? "Classement calculé localement à partir de tes critères ; chaque composante est expliquée ci-dessus."
-    : "Renseigne tes critères à l’étape A pour obtenir un classement expliqué. Aucune préférence n’est supposée.";
+    : "Les contrats et mois sélectionnés par défaut sont appliqués. Ajoute tes préférences à l’étape A pour affiner le classement.";
+}
+
+async function loadStageDetail(jobId) {
+  const container = $("#stagehunter-detail");
+  const empty = $("#stagehunter-detail-empty");
+  if (!container || !empty) return;
+  container.replaceChildren();
+  empty.hidden = true;
+  state.stageDetailIndex = state.stageMatches.findIndex((m) => m.job?.id === jobId);
+  container.textContent = "Chargement…";
+  try {
+    const prep = await api(`/api/career/jobs/${encodeURIComponent(jobId)}/prep`);
+    container.replaceChildren();
+    const job = prep.job || {};
+    const fields = [
+      ["Entreprise", job.company],
+      ["Titre", job.title],
+      ["Lieu", [job.city, job.country].filter(Boolean).join(", ")],
+      ["Début annoncé", job.start_date || prep.qualification?.start_date || prep.qualification?.start_month],
+      ["Fin annoncée", job.end_date || prep.qualification?.end_date],
+      ["Durée", job.duration_months != null ? `${job.duration_months} mois` : (prep.qualification?.duration_min_months != null ? `${prep.qualification.duration_min_months} à ${prep.qualification.duration_max_months} mois` : "non précisée")],
+      ["Date de candidature", job.deadline_date],
+      ["Date de publication", job.posted_date],
+      ["Pertinence", prep.stage_match?.score],
+      ["Lien officiel", job.official_url],
+    ];
+    fields.forEach(([label, value]) => {
+      if (value === null || value === undefined || value === "") return;
+      const row = make("div", "", "detail-row");
+      row.append(make("strong", `${label} : `));
+      if (label === "Lien officiel") {
+        const link = document.createElement("a");
+        link.href = value;
+        link.textContent = value;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        row.append(link);
+      } else {
+        row.append(document.createTextNode(String(value)));
+      }
+      container.append(row);
+    });
+    if ((prep.stage_match?.reasons || []).length) {
+      const list = make("ul", "", "detail-reasons");
+      prep.stage_match.reasons.slice(0, 5).forEach((reason) => list.append(make("li", reason)));
+      container.append(list);
+    }
+    // Résumé structuré (local déterministe) + IA optionnelle avec consentement.
+    try {
+      const summary = await api(`/api/career/jobs/${encodeURIComponent(jobId)}/summary`);
+      if (summary?.missions?.length) {
+        const title = make("p", "Missions / prérequis extraits", "scoring-title");
+        container.append(title);
+        const list = make("ul", "", "detail-reasons");
+        summary.missions.forEach((mission) => list.append(make("li", mission)));
+        container.append(list);
+      }
+      if (summary?.ai_summary) {
+        const aiTitle = make("p", "Résumé IA (consentement cloud)", "scoring-title");
+        container.append(aiTitle);
+        const aiBox = make("div", "", "detail-row");
+        aiBox.textContent = typeof summary.ai_summary === "string" ? summary.ai_summary : JSON.stringify(summary.ai_summary);
+        container.append(aiBox);
+      } else if (summary?.ai_error) {
+        container.append(make("p", summary.ai_error, "fixed-period-note"));
+      }
+      const aiButton = make("button", "Résumé IA (consentement cloud)", "secondary-button");
+      aiButton.type = "button";
+      aiButton.addEventListener("click", async () => {
+        if (!confirm("Autoriser une transmission unique et bornée de cette offre vers le fournisseur IA configuré ?")) return;
+        try {
+          const aiSummary = await api(`/api/career/jobs/${encodeURIComponent(jobId)}/summary`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({mode: "ai", consent_external: true}),
+          });
+          const box = make("div", "", "detail-row");
+          if (aiSummary?.ai_summary) {
+            box.textContent = typeof aiSummary.ai_summary === "string" ? aiSummary.ai_summary : JSON.stringify(aiSummary.ai_summary);
+          } else {
+            box.textContent = aiSummary?.ai_error || "Résumé IA indisponible ; repli local conservé.";
+          }
+          container.append(make("p", "Résumé IA (consentement cloud)", "scoring-title"));
+          container.append(box);
+        } catch (error) {
+          container.append(make("p", "Résumé IA indisponible ; repli local conservé.", "fixed-period-note"));
+        }
+      });
+      container.append(aiButton);
+    } catch (error) {
+      // Le résumé est optionnel : la fiche reste utilisable.
+    }
+  } catch (error) {
+    container.replaceChildren();
+    container.textContent = error.message || "Impossible de charger la fiche.";
+  }
 }
 
 function renderStagePrepSelect() {
@@ -1914,7 +2107,7 @@ function renderStageExploration(payload) {
   if (!outcomes.length) {
     status.textContent = "Aucune entreprise à configurer. Enregistre tes critères et clique sur Explorer les stages ; seules les sources vérifiées du registre seront lues.";
   } else {
-    status.textContent = `${number("sources_attempted")} sources consultées sur le réseau · ${number("sources_cached")} en cache · ${number("sources_failed")} en erreur · ${number("raw_count")} annonces dans les flux (cache compris) · ${number("retained_count")} stages retenus lors de la recherche · ${number("displayed_count")} affichés avec tes critères actuels. ${summary.partial ? "Recherche partielle : consulte les limites et les sources ci-dessous." : "Couverture limitée au registre, pas à tout Internet."}`;
+    status.textContent = `${number("sources_attempted")} sources consultées sur le réseau · ${number("sources_cached")} en cache · ${number("sources_failed")} en erreur · ${number("raw_count")} annonces dans les flux (cache compris) · ${number("retained_count")} offres retenues lors de la recherche · ${number("displayed_count")} affichées avec tes critères actuels. ${summary.partial ? "Recherche partielle : consulte les limites et les sources ci-dessous." : "Couverture limitée au registre, pas à tout Internet."}`;
     if (payload.criteria_changed) status.textContent += " Critères modifiés depuis cette recherche : relance Explorer pour sélectionner à nouveau les stages.";
   }
   outcomes.forEach((outcome) => {
@@ -1934,21 +2127,21 @@ function renderStageExploration(payload) {
     }
     sources.append(entry);
   });
-  coverage.textContent = `Stages identifiés dans les flux : ${number("confirmed_count")} · contrats incertains non présentés comme stages : ${number("uncertain_count")} · emplois non admissibles : ${number("excluded_count")} · entrées invalides : ${number("invalid_count")}. ${number("sources_not_queried")} sources non consultées. Limite : ${payload.limits?.max_sources ?? "non communiquée"} sources et ${payload.limits?.max_results ?? "non communiqué"} résultats classés. Les dates, la durée et les conditions absentes restent à vérifier. Aucun CV, profil ou critère personnel n’est transmis aux sites. La présence dans un flux public ne garantit pas que le recruteur accepte encore les candidatures.`;
+  coverage.textContent = `Offres conformes aux critères : ${number("confirmed_count")} · offres à vérifier : ${number("uncertain_count")} · offres exclues : ${number("excluded_count")} · entrées invalides : ${number("invalid_count")}. ${number("sources_not_queried")} sources non consultées. Limite : ${payload.limits?.max_sources ?? "non communiquée"} sources et ${payload.limits?.max_results ?? "non communiqué"} résultats classés. Les dates, la durée et les conditions absentes restent à vérifier. Aucun CV, profil ou critère personnel n’est transmis aux sites. La présence dans un flux public ne garantit pas que le recruteur accepte encore les candidatures.`;
 }
 
 function renderExplorationMatches(payload) {
   renderStageMatches({configured: payload.configured, matches: payload.matches || []});
   $("#stagehunter-result-mode").textContent = "Explorer les stages — résultats de cette exploration uniquement. Les autres offres et candidatures restent conservées dans Mes entreprises / Découvrir.";
   const empty = $("#stagehunter-matches-empty");
-  empty.textContent = "Aucun stage retenu par cette exploration. Vérifie les sources et tes critères : aucun résultat fictif ni CDI n’est ajouté pour remplir la liste.";
+  empty.textContent = "Aucune offre retenue par cette exploration. Vérifie les sources et tes critères : aucun résultat fictif n’est ajouté pour remplir la liste.";
   (payload.matches || []).forEach((match, index) => {
     const wrapper = $("#stagehunter-matches").children[index];
-    if (wrapper && match.internship) {
-      wrapper.prepend(make("p", `Stage repéré dans l’annonce : ${match.internship.reason || "indication explicite dans le texte source"}`, "fixed-period-note"));
-      (match.internship.evidence || []).slice(0, 3).forEach((evidence) => {
-        wrapper.prepend(make("p", `Preuve source (${evidence.field || "annonce"}) : « ${evidence.quote || ""} »`, "scoring-disclaimer"));
-      });
+    if (wrapper && match.qualification) {
+      const labels = {internship:"Stage", fixed_term:"CDD", permanent:"CDI", VIE:"VIE", ambiguous:"à vérifier", unknown:"non précisé"};
+      wrapper.prepend(make("p", `Type de contrat : ${labels[match.qualification.contract_type] || match.qualification.contract_type}`, "fixed-period-note"));
+      const proof = match.qualification.provenance?.contract_type;
+      if (proof?.quote) wrapper.prepend(make("p", `Preuve source : « ${proof.quote} »`, "scoring-disclaimer"));
     }
   });
 }
@@ -2075,9 +2268,13 @@ $("#stagehunter-brief-form")?.addEventListener("submit", async (event) => {
     roles: stageHunterListValue("#stagehunter-roles"),
     countries: stageHunterListValue("#stagehunter-countries"),
     cities: stageHunterListValue("#stagehunter-cities"),
-    start_date: $("#stagehunter-start").value,
-    duration_months: $("#stagehunter-duration").value ? Number.parseInt($("#stagehunter-duration").value, 10) : null,
+    start_date: "",
+    duration_months: null,
+    contract_types: [...document.querySelectorAll("#stagehunter-contract-types input:checked")].map((box) => box.value),
+    start_months: [...document.querySelectorAll("#stagehunter-start-months input:checked")].map((box) => Number.parseInt(box.value, 10)),
+    minimum_stage_duration_months: Number.parseInt($("#stagehunter-min-stage-duration").value, 10),
     study_level: $("#stagehunter-level").value.trim(),
+    education_preference: $("#stagehunter-education-preference").value,
     languages: stageHunterListValue("#stagehunter-languages"),
     constraints: $("#stagehunter-constraints").value.trim(),
     ranking,
@@ -2177,3 +2374,20 @@ async function bootstrap() {
 }
 
 bootstrap();
+
+$("#stagehunter-sort")?.addEventListener("change", (event) => {
+  localStorage.setItem("stagehunter_sort", event.target.value);
+  renderStageMatches({ matches: state.stageMatches, configured: true });
+});
+
+$("#stagehunter-detail-prev")?.addEventListener("click", () => {
+  if (!state.stageMatches.length) return;
+  state.stageDetailIndex = (state.stageDetailIndex - 1 + state.stageMatches.length) % state.stageMatches.length;
+  loadStageDetail(state.stageMatches[state.stageDetailIndex].job.id);
+});
+
+$("#stagehunter-detail-next")?.addEventListener("click", () => {
+  if (!state.stageMatches.length) return;
+  state.stageDetailIndex = (state.stageDetailIndex + 1) % state.stageMatches.length;
+  loadStageDetail(state.stageMatches[state.stageDetailIndex].job.id);
+});

@@ -18,7 +18,7 @@ from workspace_core import LocalTools
 CASES = {case.id: case for case in load_real_cases()}
 
 
-@pytest.mark.parametrize("case_id", [f"REAL-{number:03d}" for number in range(1, 9)])
+@pytest.mark.parametrize("case_id", [f"REAL-{number:03d}" for number in range(1, 10)])
 def test_supported_handlers_execute_real_services(case_id):
     target = ComeAITarget()
     result = execute_case(CASES[case_id], target)
@@ -113,7 +113,7 @@ def test_all_real_handlers_ignore_dotenv_credentials_and_private_memory_override
     monkeypatch.setattr("hybrid_chat._credential", forbidden)
     target = ComeAITarget()
     run = run_suite(target, list(CASES.values()), persist=False)
-    assert run["metrics"]["cases_passed"] == 8
+    assert run["metrics"]["cases_passed"] == 13
     assert run["metrics"]["cases_unsupported"] == 1
     assert not private_store.exists()
     assert "synthetic-sentinel-not-a-key" not in json.dumps(run)
@@ -140,11 +140,35 @@ def test_unsupported_generation_and_core_contract_are_never_executed(monkeypatch
         raise AssertionError("Unsupported cases must not execute.")
 
     monkeypatch.setattr(target, "_execute", forbidden)
-    for case in [CASES["REAL-009"], load_cases()[0]]:
+    for case in [CASES["REAL-013"], load_cases()[0]]:
         result = execute_case(case, target)
         assert result.outcome == "unsupported"
         assert result.passed is None
         assert result.trace == []
+
+
+def test_real_privacy_refusal_case_blocks_network_and_is_application_verified():
+    case = CASES["REAL-009"]
+    target = ComeAITarget()
+    result = execute_case(case, target)
+    assert case.application_verified is True
+    assert result.outcome == "real"
+    assert result.passed is True, (result.reason, result.checks)
+    assert result.observation["usage"] == {
+        "api_calls": 0, "generation_requests": 0, "network_attempts": 0,
+    }
+    assert any(event.get("status") == "refused" for event in result.trace)
+
+
+def test_public_ats_connector_application_verified_path_is_synthetic_and_no_network():
+    case = CASES["REAL-014"]
+    target = ComeAITarget()
+    result = execute_case(case, target)
+    assert case.application_verified is True
+    assert result.outcome == "real"
+    assert result.passed is True, (result.reason, result.checks)
+    assert result.observation["structured"]["synthetic_fixture"] is True
+    assert result.observation["usage"]["network_attempts"] == 0
 
 
 def test_execution_error_contains_type_without_private_exception_payload(monkeypatch):

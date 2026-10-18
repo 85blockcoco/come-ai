@@ -93,6 +93,10 @@ class StageSearchPayload(BaseModel):
     cities: list[str] = Field(default_factory=list, max_length=20)
     start_date: str = Field(default="", max_length=32)
     duration_months: int | None = Field(default=None, ge=1, le=24)
+    contract_types: list[str] = Field(default_factory=lambda: ["stage", "cdd", "cdi", "vie"], max_length=4)
+    start_months: list[int] = Field(default_factory=lambda: [1, 2, 3], max_length=12)
+    minimum_stage_duration_months: int = Field(default=6, ge=1, le=24)
+    education_preference: str = Field(default="bachelor_m1_then_m2", max_length=40)
     study_level: str = Field(default="", max_length=120)
     languages: list[str] = Field(default_factory=list, max_length=10)
     constraints: str = Field(default="", max_length=2_000)
@@ -151,6 +155,12 @@ class ApplicationDraftPayload(BaseModel):
     language: str = Field(default="fr", min_length=2, max_length=16)
     mode: str = Field(default="local", max_length=12)
     consent_external: bool = False
+
+
+class JobSummaryPayload(BaseModel):
+    mode: str = Field(default="local", max_length=12)
+    consent_external: bool = False
+    consent_id: str = Field(default="", max_length=120)
 
 
 class DiscoverySourcePayload(BaseModel):
@@ -384,6 +394,41 @@ def create_career_router(
     @router.get("/api/career/jobs/{job_id}/prep")
     async def job_prep(job_id: str) -> Any:
         return await local(lambda: service.get_job_prep(job_id))
+
+    @router.get("/api/career/jobs/{job_id}/summary")
+    async def job_summary(
+        job_id: str,
+        mode: str = "local",
+        consent_external: bool = False,
+        consent_id: str = "",
+    ) -> Any:
+        normalized_mode = str(mode or "local").strip().lower()
+        if normalized_mode not in {"local", "ai"}:
+            raise UserFacingError("Le mode de résumé doit être local ou IA.")
+        return await local(
+            lambda: service.get_job_summary(
+                job_id,
+                mode=normalized_mode,
+                consent_external=bool(consent_external),
+                consent_id=consent_id or None,
+                ai_generator=ai_generator if normalized_mode == "ai" else None,
+            )
+        )
+
+    @router.post("/api/career/jobs/{job_id}/summary")
+    async def job_summary_post(job_id: str, payload: JobSummaryPayload) -> Any:
+        normalized_mode = str(payload.mode or "local").strip().lower()
+        if normalized_mode not in {"local", "ai"}:
+            raise UserFacingError("Le mode de résumé doit être local ou IA.")
+        return await local(
+            lambda: service.get_job_summary(
+                job_id,
+                mode=normalized_mode,
+                consent_external=bool(payload.consent_external),
+                consent_id=payload.consent_id or None,
+                ai_generator=ai_generator if normalized_mode == "ai" else None,
+            )
+        )
 
     @router.post("/api/career/jobs/{job_id}/shortlist")
     async def shortlist(job_id: str, payload: ShortlistPayload) -> Any:

@@ -68,6 +68,27 @@ def test_zero_personal_boards_http_explore_prepare_track_and_cache(tmp_path: Pat
         assert client.get(f"/api/career/applications/{application_id}").json()["stage"] == "to_prepare"
 
 
+def test_job_summary_endpoint_returns_local_summary(tmp_path: Path) -> None:
+    transport = SyntheticTransport()
+    service = CareerService(tmp_path, curated_sources=(SYNTHETIC_SOURCE,),
+        exploration_connectors={"greenhouse": GreenhouseJobBoardConnector(transport)})
+    app = create_app(base_dir=tmp_path, career_override=service)
+    with TestClient(app) as client:
+        assert client.put("/api/career/stage-search", json={"domains":["Corporate Finance"], "cities":["Paris"]}).status_code == 200
+        report = client.post("/api/career/stage-search/explore", json={"force":False}).json()
+        job_id = report["matches"][0]["job"]["id"]
+        response = client.get(f"/api/career/jobs/{job_id}/summary")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["job_id"] == job_id
+        assert payload["title"] == "Corporate Finance Intern"
+        assert payload["mode"] == "local"
+        assert payload["ai_used"] is False
+        post_response = client.post(f"/api/career/jobs/{job_id}/summary", json={"mode":"local"})
+        assert post_response.status_code == 200
+        assert post_response.json()["job_id"] == job_id
+
+
 def test_exploration_api_rejects_unknown_payload_types(tmp_path: Path) -> None:
     service = CareerService(tmp_path, curated_sources=())
     with TestClient(create_app(base_dir=tmp_path, career_override=service)) as client:

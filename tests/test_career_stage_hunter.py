@@ -78,7 +78,7 @@ def _profile_payload(**changes: object) -> dict[str, object]:
 
 
 def test_empty_brief_presumes_nothing() -> None:
-    """An unset brief is valid and presumes no preference at all."""
+    """An unset reusable brief remains neutral outside the Career first-open UI."""
     brief = validate_brief({})
     assert brief == default_brief()
     assert brief_is_configured(brief) is False
@@ -184,6 +184,43 @@ def test_stage_matches_are_sorted_and_flag_unverified_sources(tmp_path: Path) ->
     matches = service.list_stage_matches()
     flagged = next(item for item in matches["matches"] if item["job"]["source_status"] == "unknown")
     assert flagged["stage_match"]["warnings"], "une offre non confirmée ouverte doit être signalée"
+
+
+def test_high_relevance_never_hides_missing_mandatory_offer_facts(tmp_path: Path) -> None:
+    service = CareerService(tmp_path)
+    job = service.import_job(synthetic_job(
+        source_name="greenhouse",
+        source_id="synthetic-missing-facts",
+        start_date="",
+        end_date="",
+        duration_months=None,
+        description_original="M&A internship with corporate finance responsibilities.",
+    ))
+    service.update_stage_search({"domains": ["M&A"]})
+    item = next(entry for entry in service.list_stage_matches()["matches"] if entry["job"]["id"] == job["id"])
+    match = item["stage_match"]
+    assert match["score"] == 100
+    assert match["fit_label"] == "Correspondance forte"
+    assert match["qualification_status"] == "to_verify"
+    assert match["label"] == "Pertinence élevée — informations obligatoires à vérifier"
+    assert "Correspondance forte" not in match["label"]
+
+
+def test_non_conforming_offer_never_gets_a_positive_presentation_label(tmp_path: Path) -> None:
+    service = CareerService(tmp_path)
+    job = service.import_job(synthetic_job(
+        source_name="greenhouse",
+        source_id="synthetic-april-short",
+        start_date="2027-04-01",
+        end_date="2027-07-31",
+        duration_months=4,
+        description_original="M&A internship with corporate finance responsibilities.",
+    ))
+    service.update_stage_search({"domains": ["M&A"]})
+    item = next(entry for entry in service.list_stage_matches()["matches"] if entry["job"]["id"] == job["id"])
+    assert item["stage_match"]["score"] == 100
+    assert item["stage_match"]["qualification_status"] == "non_conforming"
+    assert item["stage_match"]["label"] == "Hors critères obligatoires sélectionnés"
 
 
 def test_unconfigured_brief_leaves_default_order(tmp_path: Path) -> None:
@@ -676,7 +713,7 @@ def test_higher_degree_requirement_breaks_the_match_visibly() -> None:
 
 
 def test_permanent_contract_is_warned_but_not_hidden() -> None:
-    brief = validate_brief({"domains": ["M&A"]})
+    brief = validate_brief({"domains": ["M&A"], "contract_types": ["stage"]})
     permanent = score_brief_match(
         brief, dict(synthetic_job(employment_type="CDI, Temps plein", description_original="Analyste M&A confirmé."))
     )
@@ -713,15 +750,17 @@ def test_multi_domain_offer_lists_every_matched_domain() -> None:
 # --- Parcours de première utilisation (service vierge) -----------------------
 
 
-def test_first_open_starts_empty_and_explains_itself(tmp_path: Path) -> None:
-    """Une ouverture sans aucune configuration : rien n'est supposé, tout est guide."""
+def test_first_open_starts_with_useful_finance_defaults_and_explains_itself(tmp_path: Path) -> None:
+    """Une première ouverture recherche la finance sans inventer de préférence personnelle."""
     service = CareerService(tmp_path)
     payload = service.get_stage_search()
     assert payload["configured"] is False
-    assert payload["brief"] == default_brief()
+    expected = default_brief()
+    expected["domains"] = list(STAGE_DOMAINS)
+    assert payload["brief"] == expected
     assert payload["stored_brief_invalid"] is False
     assert payload["vocabulary"]["domains"], "le formulaire des domaines doit être renseignable"
-    assert payload["search_terms"] == [], "aucun terme imposé sans domaine choisi"
+    assert {item["domain"] for item in payload["search_terms"]} == set(STAGE_DOMAINS)
     matches = service.list_stage_matches()
     assert matches["matches"] == [], "aucune offre inventée au premier lancement"
     # Lancer une recherche sans source affiche une consigne claire, pas un échec muet.
