@@ -48,7 +48,7 @@ Résultat réel sur cette branche : **945 passed en 57,31 s**, aucun échec ni t
 
 `env -u GEMINI_API_KEY -u GOOGLE_API_KEY -u OPENROUTER_API_KEY HOME=/tmp/codex_home PYTHONDONTWRITEBYTECODE=1 /Users/comedelavenne/AI-Excel-Agent/.venv/bin/python -m evals run --target come-ai --strict --no-persist`
 
-Résultat : **9 exécutés, 9 réussis, 0 échec, 1 non pris en charge** (`REAL-010 local_model_generation`), zéro simulation, zéro tentative réseau/API, 0,128 s, pic 77,8 MiB. `REAL-009` exerce le refus réel du `HybridChatService` avec fixture fichier synthétique; ce résultat n'évalue aucune qualité de modèle.
+Résultat : **9 exécutés, 9 réussis, 0 échec, 1 non pris en charge** (`REAL-010 local_model_generation`), zéro simulation, zéro tentative réseau observée par la barrière socket; le compteur API de la cible rapporte 0 (ce compteur est déclaré par la cible, pas mesuré par le runner), 0,128 s, pic 77,8 MiB. `REAL-009` exerce le refus réel du `HybridChatService` avec fixture fichier synthétique; ce résultat n'évalue aucune qualité de modèle.
 
 `git diff --check` : succès, aucune erreur d'espacement.
 
