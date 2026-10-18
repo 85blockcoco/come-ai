@@ -224,5 +224,21 @@
       {"check": "exact_value", "path": "usage.network_attempts", "value": 0}
     ],
     "failure_conditions": ["Un CDI est conservé comme stage confirmé."]
+  },
+  {
+    "id": "REAL-014", "category": "documents", "title": "Connecteur public ATS via Career HTTP",
+    "objective": "Exercer le connecteur Lever et le service Career à travers le client HTTP de l'application sur une fixture synthétique.",
+    "status": "supported", "required_features": ["public_ats_http"], "severity": "major",
+    "application_verified": true,
+    "input": {"action": "public_ats_connector_http", "provider": "lever"},
+    "expected": {"structured": {"http_status": 200, "provider": "lever", "raw_count": 1, "network_attempts": 0, "synthetic_fixture": true}},
+    "acceptance": [
+      {"check": "exact_value", "path": "structured.http_status", "value": 200},
+      {"check": "exact_value", "path": "structured.provider", "value": "lever"},
+      {"check": "exact_value", "path": "structured.raw_count", "value": 1},
+      {"check": "exact_value", "path": "structured.synthetic_fixture", "value": true},
+      {"check": "exact_value", "path": "usage.network_attempts", "value": 0}
+    ],
+    "failure_conditions": ["Connecteur contourné, flux non synthétique, endpoint HTTP absent ou socket externe tenté."]
   }
 ]

@@ -113,7 +113,7 @@ def test_all_real_handlers_ignore_dotenv_credentials_and_private_memory_override
     monkeypatch.setattr("hybrid_chat._credential", forbidden)
     target = ComeAITarget()
     run = run_suite(target, list(CASES.values()), persist=False)
-    assert run["metrics"]["cases_passed"] == 9
+    assert run["metrics"]["cases_passed"] == 13
     assert run["metrics"]["cases_unsupported"] == 1
     assert not private_store.exists()
     assert "synthetic-sentinel-not-a-key" not in json.dumps(run)
@@ -158,6 +158,17 @@ def test_real_privacy_refusal_case_blocks_network_and_is_application_verified():
         "api_calls": 0, "generation_requests": 0, "network_attempts": 0,
     }
     assert any(event.get("status") == "refused" for event in result.trace)
+
+
+def test_public_ats_connector_application_verified_path_is_synthetic_and_no_network():
+    case = CASES["REAL-014"]
+    target = ComeAITarget()
+    result = execute_case(case, target)
+    assert case.application_verified is True
+    assert result.outcome == "real"
+    assert result.passed is True, (result.reason, result.checks)
+    assert result.observation["structured"]["synthetic_fixture"] is True
+    assert result.observation["usage"]["network_attempts"] == 0
 
 
 def test_execution_error_contains_type_without_private_exception_payload(monkeypatch):
