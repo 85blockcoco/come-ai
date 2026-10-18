@@ -31,6 +31,7 @@ from .models import canonical_url, clean_text, normalized_text
 from .scoring import classify_job_family
 from .stage_search import default_brief, score_brief_match, validate_brief
 from .exploration import classify_internship, criteria_admit
+from .offer_qualification import qualify_offer
 
 
 GREENHOUSE_HOST = "boards-api.greenhouse.io"
@@ -427,6 +428,8 @@ class GreenhouseJobBoardConnector:
                     "description_original": description,
                     "job_family": classify_job_family(title, description),
                 }
+                if internships_only:
+                    job["qualification"] = qualify_offer({**job, "source_verified": True}).to_dict()
                 evaluated_count += 1
                 match = score_brief_match(brief, job)
                 if internships_only:
@@ -436,6 +439,9 @@ class GreenhouseJobBoardConnector:
                     uncertain_count += int(status == "uncertain")
                     excluded_count += int(status == "excluded")
                     if status != "confirmed":
+                        continue
+                    if job["qualification"]["target_status"] == "non_conforming":
+                        filtered_criteria_count += 1
                         continue
                     if not criteria_admit(match, job, brief):
                         filtered_criteria_count += 1

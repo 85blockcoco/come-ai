@@ -76,6 +76,7 @@ from .exploration import (
     criteria_admit,
     ranking_key,
 )
+from .offer_qualification import qualify_offer
 from .scoring import classify_job_family, score_job
 from workspace_core import UserFacingError, extract_text
 from .profile_import import (
@@ -1856,7 +1857,11 @@ class CareerService:
             match = score_brief_match(brief, job)
             if job.get("source_status") == "closed" or internship["status"] != "confirmed" or not criteria_admit(match, job, brief):
                 continue
+            qualification = qualify_offer({**job, "source_verified": bool(reference.get("verified_at"))}).to_dict()
+            if qualification["target_status"] == "non_conforming":
+                continue
             matches.append({"job": job, "stage_match": match, "internship": internship,
+                            "qualification": qualification,
                             "source_id": reference.get("source_id", ""),
                             "verified_at": reference.get("verified_at", "")})
         matches.sort(key=lambda item: ranking_key(item["job"], item["stage_match"]))
@@ -1968,7 +1973,9 @@ class CareerService:
                     # admission; never accept a custom connector's false stage.
                     classification = classify_internship(job)
                     match = score_brief_match(brief, job)
-                    if classification["status"] == "confirmed" and criteria_admit(match, job, brief):
+                    qualification = qualify_offer({**job, "source_verified": bool(result.verified_at)}).to_dict()
+                    if (classification["status"] == "confirmed" and criteria_admit(match, job, brief)
+                            and qualification["target_status"] != "non_conforming"):
                         candidates.append({"job": dict(job), "stage_match": match, "internship": classification,
                                            "source_id": source_id, "verified_at": result.verified_at,
                                            "board_token": source.get("board_token", "")})

@@ -26,6 +26,12 @@ from free_ai_router import (
     classify_task,
     prepare_function_calls,
 )
+from career.discovery import DiscoveryPayload
+from career.exploration import classify_internship, criteria_admit
+from career.service import CareerService
+from career.stage_search import score_brief_match
+from fastapi.testclient import TestClient
+from come_ai_web import create_app
 from hybrid_chat import HybridChatService
 from openpyxl import Workbook
 from personal_memory import PersonalMemoryStore
@@ -77,9 +83,10 @@ class ComeAITarget:
         "local_arithmetic", "memory_search", "citations", "csv_inspection",
         "excel_inspection", "table_statistics", "local_plan_execution",
         "write_confirmation", "opaque_file_ids", "tool_validation", "cloud_context_consent",
+        "career_http_qualification",
     })
     _ACTIONS = frozenset({"calculate", "memory_search", "orchestrate", "invalid_file_id", "validate_tools",
-                          "cloud_context_refusal"})
+                          "cloud_context_refusal", "career_qualification_http"})
 
     def __init__(self) -> None:
         self.network_attempts = 0
@@ -286,6 +293,56 @@ class ComeAITarget:
                 message=data["message"], selected_file_ids=[file_id], mode="performance",
                 provider="gemini", allow_cloud_context=False,
             ))
+        if action == "career_qualification_http":
+            offer = dict(data["offer"])
+            offer.setdefault("company", "Entreprise synthétique")
+            offer.setdefault("source_name", "greenhouse")
+            offer.setdefault("source_id", "synthetic-career-offer")
+            offer.setdefault("official_url", "https://careers.example.test/synthetic-offer")
+            offer.setdefault("source_status", "open")
+
+            class SyntheticConnector:
+                def discover_internships(self, _source: Any, *, selection_brief: dict[str, Any], **_kwargs: Any) -> DiscoveryPayload:
+                    classification = classify_internship(offer)
+                    confirmed = classification["status"] == "confirmed"
+                    excluded = classification["status"] == "excluded"
+                    match = score_brief_match(selection_brief, offer)
+                    relevant = confirmed and criteria_admit(match, offer, selection_brief)
+                    return DiscoveryPayload(
+                        jobs=(offer,) if relevant else (), verified_at="2026-10-18T00:00:00+00:00", truncated=False,
+                        raw_count=1, evaluated_count=1, invalid_count=0,
+                        confirmed_count=int(confirmed),
+                        uncertain_count=int(classification["status"] == "uncertain"), excluded_count=int(excluded),
+                        relevant_count=int(relevant),
+                        filtered_criteria_count=int(confirmed and not relevant),
+                    )
+
+            source = {"id": "registry:greenhouse:synthetic", "provider": "greenhouse",
+                      "company": offer["company"], "board_token": "synthetic",
+                      "public_url": "https://boards.greenhouse.io/synthetic",
+                      "provenance_url": "https://careers.example.test/synthetic",
+                      "verified_at": "2026-10-18T00:00:00Z"}
+            service = CareerService(root, curated_sources=(source,),
+                                     exploration_connectors={"greenhouse": SyntheticConnector()})
+            with TestClient(create_app(base_dir=root, career_override=service)) as client:
+                response = client.post("/api/career/stage-search/explore", json={"force": True})
+            if response.status_code != 200:
+                return self._observation(error=f"Career HTTP returned {response.status_code}.")
+            payload = response.json()
+            matches = payload.get("matches", [])
+            outcomes = payload.get("outcomes", [])
+            missing_fields = matches[0].get("qualification", {}).get("missing_fields", []) if matches else []
+            structured = {"http_status": response.status_code,
+                          "retained_count": payload.get("summary", {}).get("retained_count", 0),
+                          "excluded_count": sum(int(item.get("excluded_count", 0)) for item in outcomes),
+                          "qualification": matches[0].get("qualification") if matches else None,
+                          "missing_start": "début" in missing_fields,
+                          "missing_duration": "durée" in missing_fields,
+                          "synthetic_fixture": True, "network_attempts": self.network_attempts}
+            return {**self._observation(answer="Parcours HTTP Career exécuté sur fixture synthétique."),
+                    "structured": structured,
+                    "usage": {"api_calls": 0, "generation_requests": 0,
+                              "network_attempts": self.network_attempts}}
         raise ValueError("Unsupported action reached execution.")
 
     def run(self, case: Case) -> TargetResult:
