@@ -67,6 +67,7 @@ from .interview import (
 )
 from .ocr import LocalVisionOCR, OCRResult
 from .discovery import DiscoveryPayload, GreenhouseBoard, GreenhouseJobBoardConnector, PublicSourceError, parse_greenhouse_board_token
+from .connectors import default_exploration_connectors
 from .exploration import (
     EXPLORATION_LAST_SETTING,
     EXPLORATION_MAX_RESULTS,
@@ -181,7 +182,8 @@ class CareerService:
         # parallel requests to the same public board.
         self.discovery_connector = discovery_connector or GreenhouseJobBoardConnector()
         self._curated_sources = curated_sources
-        self._exploration_connectors = exploration_connectors or {"greenhouse": self.discovery_connector}
+        self._exploration_connectors = (exploration_connectors if exploration_connectors is not None
+                                        else default_exploration_connectors(self.discovery_connector))
         # Bounded in-memory cache, separate from personal boards and private
         # profile settings. Restarting drops HTTP cache but keeps the last
         # result's job references and tracking in SQLite.

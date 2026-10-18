@@ -30,6 +30,7 @@ from career.discovery import DiscoveryPayload
 from career.exploration import classify_internship, criteria_admit
 from career.service import CareerService
 from career.stage_search import score_brief_match
+from career.connectors import LeverConnector
 from fastapi.testclient import TestClient
 from come_ai_web import create_app
 from hybrid_chat import HybridChatService
@@ -83,10 +84,10 @@ class ComeAITarget:
         "local_arithmetic", "memory_search", "citations", "csv_inspection",
         "excel_inspection", "table_statistics", "local_plan_execution",
         "write_confirmation", "opaque_file_ids", "tool_validation", "cloud_context_consent",
-        "career_http_qualification",
+        "career_http_qualification", "public_ats_http",
     })
     _ACTIONS = frozenset({"calculate", "memory_search", "orchestrate", "invalid_file_id", "validate_tools",
-                          "cloud_context_refusal", "career_qualification_http"})
+                          "cloud_context_refusal", "career_qualification_http", "public_ats_connector_http"})
 
     def __init__(self) -> None:
         self.network_attempts = 0
@@ -151,6 +152,23 @@ class ComeAITarget:
                      error: str | None = None) -> dict[str, Any]:
         return {"answer": answer, "structured": structured, "citations": [], "facts": [],
                 "tools_called": [], "plan": [], "usage": None, "error": error}
+
+    @staticmethod
+    def _create_synthetic_http_app(root: Path, career: CareerService):
+        """Build the real FastAPI app with an explicit credential-free config."""
+        config = AppConfig(
+            base_dir=root, data_dir=root / "data", output_dir=root / "output", log_dir=root / "logs",
+            memory_dir=root / "memory_data", settings_path=root / "settings.json", env_path=root / ".env",
+            primary_model="synthetic-disabled", fallback_models=(), request_timeout_seconds=10,
+            retry_attempts=1, ollama_model=None,
+            ollama_base_url="http://127.0.0.1:11434/api/chat",
+        )
+        # create_app needs its runtime config, but an evaluation must never
+        # inspect the user's dotenv file or provider environment.
+        from unittest.mock import patch as mock_patch
+
+        with mock_patch("come_ai_web.AppConfig.load", return_value=config):
+            return create_app(base_dir=root, career_override=career)
 
     def _chat(self, root: Path, workspace: Workspace, tools: LocalTools,
               memory: PersonalMemoryStore | None = None) -> HybridChatService:
@@ -324,7 +342,7 @@ class ComeAITarget:
                       "verified_at": "2026-10-18T00:00:00Z"}
             service = CareerService(root, curated_sources=(source,),
                                      exploration_connectors={"greenhouse": SyntheticConnector()})
-            with TestClient(create_app(base_dir=root, career_override=service)) as client:
+            with TestClient(self._create_synthetic_http_app(root, service)) as client:
                 response = client.post("/api/career/stage-search/explore", json={"force": True})
             if response.status_code != 200:
                 return self._observation(error=f"Career HTTP returned {response.status_code}.")
@@ -341,6 +359,36 @@ class ComeAITarget:
                           "synthetic_fixture": True, "network_attempts": self.network_attempts}
             return {**self._observation(answer="Parcours HTTP Career exécuté sur fixture synthétique."),
                     "structured": structured,
+                    "usage": {"api_calls": 0, "generation_requests": 0,
+                              "network_attempts": self.network_attempts}}
+        if action == "public_ats_connector_http":
+            source = {"id": "synthetic:lever:board", "provider": "lever", "company": "Finance synthétique",
+                      "board_token": "synthetic-board", "verified_at": "2026-10-18T00:00:00Z",
+                      "provenance_url": "https://careers.example.test/synthetic"}
+            posting = [{"id": "synthetic-lever-01", "text": "Finance Intern (synthetic)",
+                        "categories": {"location": "Paris, France", "commitment": "Intern"},
+                        "country": "FR", "descriptionPlain": "Synthetic finance internship.",
+                        "hostedUrl": "https://jobs.lever.co/synthetic-board/synthetic-lever-01",
+                        "applyUrl": "https://jobs.lever.co/synthetic-board/synthetic-lever-01/apply"}]
+
+            class SyntheticTransport:
+                def get_json(self, _endpoint: str, _timeout_seconds: int) -> Any:
+                    return posting
+
+            connector = LeverConnector(transport=SyntheticTransport(), enabled=True,
+                                       clock=lambda: "2026-10-18T00:00:00Z")
+            service = CareerService(root, curated_sources=(source,), exploration_connectors={"lever": connector})
+            with TestClient(self._create_synthetic_http_app(root, service)) as client:
+                response = client.post("/api/career/stage-search/explore", json={"force": True})
+            if response.status_code != 200:
+                return self._observation(error=f"Career HTTP returned {response.status_code}.")
+            payload = response.json()
+            self._trace.append({"component": "LeverConnector", "method": "get_json",
+                                "status": "returned", "synthetic_only": True})
+            return {**self._observation(answer="Connecteur ATS et route Career HTTP exécutés sur fixture synthétique."),
+                    "structured": {"http_status": response.status_code, "provider": "lever",
+                                   "raw_count": payload.get("summary", {}).get("raw_count", 0),
+                                   "synthetic_fixture": True, "network_attempts": self.network_attempts},
                     "usage": {"api_calls": 0, "generation_requests": 0,
                               "network_attempts": self.network_attempts}}
         raise ValueError("Unsupported action reached execution.")
