@@ -349,6 +349,19 @@ async function loadProfile() {
   $("#profile-eligibility").value = profile.eligibility || "unknown";
   $("#profile-companies").value = profile.target_companies || "";
   $("#profile-notes").value = profile.notes || "";
+  renderProfileReadiness(profile.readiness || {});
+}
+
+function renderProfileReadiness(readiness) {
+  const title = $("#profile-readiness-title");
+  const score = $("#profile-readiness-score");
+  const next = $("#profile-readiness-next");
+  if (!title || !score || !next) return;
+  const value = Number.isFinite(readiness.score_out_of_20) ? readiness.score_out_of_20 : 0;
+  title.textContent = readiness.label || "Profil à compléter";
+  score.textContent = `Profil prêt à ${value}/20 · ${readiness.disclaimer || "Note locale de complétude, pas une probabilité d’embauche."}`;
+  next.replaceChildren();
+  (readiness.next_actions || []).forEach((action) => next.append(make("li", action)));
 }
 
 const profileImportFieldLabels = {
@@ -1886,6 +1899,7 @@ function renderStageTerms(payload) {
 }
 
 function stageMatchBlock(stageMatch) {
+  const profileScoring = stageMatch._profileScoring || null;
   const block = make("section", "", "stage-match-block");
   const header = make("div", "", "stage-match-header");
   const scoreText = Number.isFinite(stageMatch.score) ? `${stageMatch.score}/100` : "non calculé";
@@ -1899,6 +1913,11 @@ function stageMatchBlock(stageMatch) {
     non_conforming: "Non conforme à tes critères sélectionnés",
   }[stageMatch.qualification_status];
   if (eligibility) block.append(make("p", eligibility, stageMatch.qualification_status === "conforming" ? "eligibility-good" : "fixed-period-note"));
+  if (profileScoring && Number.isFinite(profileScoring.score_out_of_20)) {
+    const confidence = profileScoring.confidence || "à vérifier";
+    block.append(make("p", `Compatibilité avec ton profil : ${profileScoring.score_out_of_20}/20 · confiance ${confidence}`, "scoring-title"));
+    block.append(make("p", "Cette note compare uniquement les faits déclarés localement avec les éléments de l’offre ; elle ne prédit pas une embauche.", "scoring-disclaimer"));
+  }
   const education = stageMatch.education_access;
   if (education) {
     block.append(make("p", `Niveau demandé : ${education.reason}`, "fixed-period-note"));
@@ -1931,10 +1950,16 @@ function renderStageMatches(payload) {
   empty.hidden = matches.length > 0;
   matches.forEach((match) => {
     const wrapper = make("div", "", "stagehunter-match");
-    if (match.stage_match || match.qualification) wrapper.append(stageMatchBlock(match.stage_match || {
-      label: "Critères par défaut", qualification_status: match.qualification.target_status,
-      education_access: match.education_access,
-    }));
+    if (match.stage_match || match.qualification) {
+      const displayedMatch = {
+        ...(match.stage_match || {
+          label: "Critères par défaut", qualification_status: match.qualification.target_status,
+          education_access: match.education_access,
+        }),
+        _profileScoring: match.job?.scoring,
+      };
+      wrapper.append(stageMatchBlock(displayedMatch));
+    }
     const card = jobCard(match.job, "discover", match.qualification);
     const actions = card.querySelector(".job-actions");
     const prep = make("button", "Préparer cette candidature", "secondary-button");

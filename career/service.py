@@ -87,6 +87,7 @@ from .profile_import import (
     PROFILE_IMPORT_KINDS,
     parse_profile_text,
 )
+from .profile_readiness import assess_profile_readiness
 
 
 SCHEMA_VERSION = 6
@@ -731,6 +732,7 @@ class CareerService:
             profile = self._row_dict(connection.execute("SELECT * FROM candidate_profile WHERE id = 1").fetchone())
         # Work authorization is deliberately a user-declared field. No location,
         # school, language or other profile fact changes its value automatically.
+        profile["readiness"] = assess_profile_readiness(profile)
         return profile
 
     def update_profile(self, payload: dict[str, Any]) -> dict[str, Any]:

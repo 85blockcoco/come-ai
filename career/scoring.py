@@ -462,9 +462,14 @@ def score_job(
         for component in components
     )
     recommendable = not blockers and score >= 55 and not critical_unknown
+    unknown_component_count = sum(component["status"] == "unknown" for component in components)
+    known_component_count = len(components) - unknown_component_count
+    evidence_ratio = known_component_count / len(components) if components else 0.0
+    confidence = "élevée" if evidence_ratio >= 0.8 else "moyenne" if evidence_ratio >= 0.5 else "faible"
     return {
         "state": state,
         "score": score,
+        "score_out_of_20": round(score / 5),
         "maximum_score": sum(SCORING_WEIGHTS.values()),
         "label": label,
         "version": SCORING_VERSION,
@@ -475,5 +480,8 @@ def score_job(
         "blocking_constraints": blockers[:6],
         "is_recommendable": recommendable,
         "automatic_recommendation": recommendable,
+        "confidence": confidence,
+        "known_component_count": known_component_count,
+        "unknown_component_count": unknown_component_count,
         "disclaimer": "Score de pertinence explicable fondé sur les données connues, pas une probabilité de recrutement.",
     }
