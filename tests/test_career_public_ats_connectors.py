@@ -8,6 +8,8 @@ from pathlib import Path
 import pytest
 
 from career.connectors import CONNECTOR_SPECS, AshbyConnector, LeverConnector, SmartRecruitersConnector
+from career.stage_search import default_brief
+from career.service import CareerService
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "career_connectors_synthetic.json"
@@ -41,6 +43,14 @@ def test_public_connectors_are_registered_but_disabled_by_default():
     assert all(spec.enabled_by_default is False for spec in CONNECTOR_SPECS.values())
     assert all(spec.doc_verified is True and spec.documentation_url.startswith("https://")
                for spec in CONNECTOR_SPECS.values())
+
+
+def test_career_service_knows_future_ats_adapters_but_keeps_them_inert(tmp_path):
+    service = CareerService(tmp_path)
+    assert set(service._exploration_connectors) == {"greenhouse", "lever", "ashby", "smartrecruiters"}
+    assert service._exploration_connectors["lever"].enabled is False
+    assert service._exploration_connectors["ashby"].enabled is False
+    assert service._exploration_connectors["smartrecruiters"].enabled is False
 
 
 @pytest.mark.parametrize("connector_type,provider,fixture_key", [
@@ -91,9 +101,56 @@ def test_connectors_bound_page_count_and_validate_employer_identifier(fixtures):
     assert transport.calls == []
 
 
+def test_enabled_connector_requires_a_verified_source_record_before_network():
+    transport = FixtureTransport([])
+    connector = LeverConnector(transport=transport, enabled=True)
+    unverified = {"provider": "lever", "company": "Synthetic Finance", "board_token": "synthetic-board"}
+    with pytest.raises(Exception, match="vérifiée|verified"):
+        connector.discover_internships(unverified, selection_brief=default_brief())
+    assert transport.calls == []
+
+
+@pytest.mark.parametrize("connector_type,provider,fixture_key", [
+    (LeverConnector, "lever", "lever"),
+    (AshbyConnector, "ashby", "ashby"),
+    (SmartRecruitersConnector, "smartrecruiters", "smartrecruiters"),
+])
+def test_enabled_fixture_discovery_returns_consistent_counts_without_sockets(
+    connector_type, provider, fixture_key, fixtures,
+):
+    transport = FixtureTransport([fixtures[fixture_key]])
+    connector = connector_type(transport=transport, enabled=True, clock=lambda: "2026-10-18T01:00:00Z")
+
+    result = connector.discover_internships(source(provider), selection_brief=default_brief())
+
+    assert result.raw_count == result.evaluated_count + result.invalid_count
+    assert result.evaluated_count == result.confirmed_count + result.uncertain_count + result.excluded_count
+    assert result.confirmed_count == result.relevant_count + result.filtered_criteria_count
+    assert result.verified_at == "2026-10-18T01:00:00Z"
+    assert len(result.jobs) <= result.relevant_count
+    assert len(transport.calls) == 1
+
+
 def test_smartrecruiters_always_requests_public_destination(fixtures):
     transport = FixtureTransport([fixtures["smartrecruiters"]])
     connector = SmartRecruitersConnector(transport=transport, enabled=True)
     endpoint = connector.build_endpoint(source("smartrecruiters"))
     assert "destination=PUBLIC" in endpoint
     assert transport.calls == []
+
+
+@pytest.mark.parametrize("connector_type,provider,fixture_key,malicious_url", [
+    (LeverConnector, "lever", "lever", "https://attacker.invalid/fake"),
+    (AshbyConnector, "ashby", "ashby", "https://jobs.attacker.invalid/fake"),
+    (SmartRecruitersConnector, "smartrecruiters", "smartrecruiters", "https://attacker.invalid/fake"),
+])
+def test_foreign_posting_url_is_not_admitted(connector_type, provider, fixture_key, malicious_url, fixtures):
+    raw = fixtures[fixture_key]
+    if isinstance(raw, list):
+        raw = [dict(raw[0], hostedUrl=malicious_url)]
+    elif provider == "ashby":
+        raw = {**raw, "jobs": [dict(raw["jobs"][0], jobUrl=malicious_url)]}
+    else:
+        raw = {**raw, "content": [dict(raw["content"][0], applyUrl=malicious_url, ref=malicious_url)]}
+    with pytest.raises(ValueError):
+        connector_type(transport=FixtureTransport([]), enabled=True).parse(source(provider), raw)
