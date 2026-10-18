@@ -22,6 +22,7 @@ const elements = {
   message: $("#career-message"),
   metrics: $("#dashboard-metrics"),
   dashboardContent: $("#dashboard-content"),
+  todayProfileReadiness: $("#today-profile-readiness"),
   dashboardActionPlanPanel: $("#dashboard-action-plan-panel"),
   dashboardActionPlan: $("#dashboard-action-plan"),
   dashboardActionPlanEmpty: $("#dashboard-action-plan-empty"),
@@ -799,6 +800,8 @@ async function loadDashboard() {
   let dashboard;
   try {
     dashboard = await api("/api/career/dashboard");
+    const profile = await api("/api/career/profile");
+    renderTodayProfileReadiness(profile?.readiness || {});
   } catch (error) {
     renderDashboardActionPlanError();
     throw error;
@@ -826,6 +829,19 @@ async function loadDashboard() {
     elements.dashboardDeadlinesEmpty,
     (dashboard.upcoming_deadlines || []).slice(0, 4),
     "deadline",
+  );
+}
+
+function renderTodayProfileReadiness(readiness) {
+  const target = elements.todayProfileReadiness;
+  if (!target) return;
+  const score = Number.isFinite(Number(readiness.score_out_of_20)) ? Number(readiness.score_out_of_20) : 0;
+  const maximum = Number.isFinite(Number(readiness.maximum_score)) ? Number(readiness.maximum_score) : 20;
+  const label = readiness.label || "Profil à compléter";
+  const actions = Array.isArray(readiness.next_actions) ? readiness.next_actions : [];
+  target.replaceChildren(
+    make("strong", `${label} · ${score}/${maximum}`),
+    make("span", actions.length ? `Prochaine amélioration : ${actions[0]}` : "Ton profil contient les éléments essentiels.", "today-profile-next"),
   );
 }
 

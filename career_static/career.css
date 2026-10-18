@@ -116,6 +116,10 @@ h1 span { color: var(--accent); }
 .profile-readiness h4 { color: #14532d; font-size: .9rem; }
 .profile-readiness #profile-readiness-score { color: var(--muted); font-size: .72rem; line-height: 1.45; }
 .profile-readiness .job-reasons { margin: 2px 0 0 16px; }
+.today-profile-panel { display: grid; gap: .8rem; }
+.today-profile-readiness { display: flex; flex-wrap: wrap; align-items: baseline; gap: .7rem; min-height: 2rem; }
+.today-profile-readiness strong { color: #14532d; font-size: 1.05rem; }
+.today-profile-next { color: var(--muted); }
 .single-view-content { display: grid; gap: 16px; }
 .single-view-content .profile-panel { max-width: 1080px; }
 .view-intro { max-width: 860px; margin: 4px 0 16px; }

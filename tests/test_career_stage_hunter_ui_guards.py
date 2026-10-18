@@ -128,6 +128,15 @@ assert.strictEqual(confirmed.children[0].children[1].className, "good");
     assert completed.returncode == 0, completed.stderr
 
 
+def test_today_dashboard_profile_shortcut_is_present() -> None:
+    html = (Path(__file__).resolve().parents[1] / "career_static/career.html").read_text(encoding="utf-8") if (Path(__file__).resolve().parents[1] / "career_static/career.html").exists() else (Path(__file__).resolve().parents[1] / "career_static/index.html").read_text(encoding="utf-8")
+    js = (Path(__file__).resolve().parents[1] / "career_static/career.js").read_text(encoding="utf-8")
+    assert 'id="today-profile-readiness"' in html
+    assert 'data-view-action="profile"' in html
+    assert 'api("/api/career/profile")' in js
+    assert "renderTodayProfileReadiness" in js
+
+
 @pytest.mark.parametrize("scenario", ["http-error", "source-error", "partial", "success"])
 def test_stage_hunter_search_preserves_actual_discovery_result(scenario: str) -> None:
     source = (Path(__file__).resolve().parents[1] / "career_static/career.js").read_text()
