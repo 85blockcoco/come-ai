@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from career.connectors import CONNECTOR_SPECS, AshbyConnector, LeverConnector, SmartRecruitersConnector
+from career.discovery import PublicSourceError
 from career.stage_search import default_brief
 from career.service import CareerService
 
@@ -105,7 +106,7 @@ def test_enabled_connector_requires_a_verified_source_record_before_network():
     transport = FixtureTransport([])
     connector = LeverConnector(transport=transport, enabled=True)
     unverified = {"provider": "lever", "company": "Synthetic Finance", "board_token": "synthetic-board"}
-    with pytest.raises(Exception, match="vérifiée|verified"):
+    with pytest.raises(PublicSourceError, match="vérifiée"):
         connector.discover_internships(unverified, selection_brief=default_brief())
     assert transport.calls == []
 
