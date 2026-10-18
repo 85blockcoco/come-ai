@@ -150,7 +150,24 @@
     "failure_conditions": ["Outil non autorisé accepté ou exécuté."]
   },
   {
-    "id": "REAL-009", "category": "conversation", "title": "Qualité de génération modèle non mesurée",
+    "id": "REAL-009", "category": "conversation", "title": "Refus réel du contexte local sans consentement cloud",
+    "objective": "Le chat refuse un fichier local avant tout catalogue, socket ou génération cloud si la permission de cette requête est absente.",
+    "status": "supported", "required_features": ["cloud_context_consent", "csv_inspection"], "severity": "critical",
+    "application_verified": true,
+    "input": {
+      "action": "cloud_context_refusal", "message": "Résume le fichier synthétique.",
+      "file": {"name": "privacy_fixture.csv", "rows": [["fact"], ["synthetic-only"]]}
+    },
+    "expected": {"error": "Cette demande contient du contexte local (fichier, mémoire ou outil). Confirme sa transmission cloud pour cette demande, ou repasse en mode Hors ligne."},
+    "acceptance": [
+      {"check": "error_signaled"},
+      {"check": "contains_all", "path": "error", "values": ["contexte local", "cette demande"]},
+      {"check": "budget_respected", "max": {"api_calls": 0, "generation_requests": 0, "network_attempts": 0}}
+    ],
+    "failure_conditions": ["Fichier local envoyé sans permission, socket tenté ou refus non explicite."]
+  },
+  {
+    "id": "REAL-013", "category": "conversation", "title": "Qualité de génération modèle non mesurée",
     "objective": "Distinguer une capacité non exercée d'un succès simulé ou d'une réponse incorrecte.",
     "status": "supported", "required_features": ["local_model_generation"], "severity": "major",
     "application_verified": false,
@@ -159,5 +176,69 @@
     "acceptance": [{"check": "no_error"}],
     "failure_conditions": ["Déclarer la génération évaluée sans appel à un vrai modèle."],
     "notes": "Cette cible refuse explicitement la génération ; aucun modèle local ou cloud n'est requis pour la suite."
+  },
+  {
+    "id": "REAL-010", "category": "documents", "title": "Qualification d'un stage finance via Career HTTP",
+    "objective": "Faire qualifier une offre fictive de six mois débutant en janvier via le vrai endpoint HTTP Career.",
+    "status": "supported", "required_features": ["career_http_qualification"], "severity": "major",
+    "application_verified": true,
+    "input": {"action": "career_qualification_http", "offer": {"title": "Corporate Finance Intern", "employment_type": "Internship", "description_original": "Six-month internship starting January 2027", "start_date": "2027-01-04", "duration_months": 6, "language": "English", "country": "France", "city": "Paris"}},
+    "expected": {"structured": {"http_status": 200, "retained_count": 1, "qualification": {"target_status": "conforming", "contract_type": "internship", "duration_min_months": 6}}},
+    "acceptance": [
+      {"check": "exact_value", "path": "structured.http_status", "value": 200},
+      {"check": "exact_value", "path": "structured.retained_count", "value": 1},
+      {"check": "exact_value", "path": "structured.qualification.target_status", "value": "conforming"},
+      {"check": "exact_value", "path": "structured.qualification.duration_min_months", "value": 6},
+      {"check": "exact_value", "path": "structured.synthetic_fixture", "value": true},
+      {"check": "exact_value", "path": "usage.network_attempts", "value": 0}
+    ],
+    "failure_conditions": ["Une offre synthétique non conforme est déclarée conforme ou un appel réseau est tenté."]
+  },
+  {
+    "id": "REAL-011", "category": "documents", "title": "Données manquantes restent à vérifier",
+    "objective": "Vérifier qu'une offre dont la durée et le début sont absents ne satisfait pas les critères.",
+    "status": "supported", "required_features": ["career_http_qualification"], "severity": "major",
+    "application_verified": true,
+    "input": {"action": "career_qualification_http", "offer": {"title": "Finance Intern", "employment_type": "Internship", "description_original": "A finance internship opportunity."}},
+    "expected": {"structured": {"http_status": 200, "qualification": {"target_status": "to_verify"}}},
+    "acceptance": [
+      {"check": "exact_value", "path": "structured.http_status", "value": 200},
+      {"check": "exact_value", "path": "structured.qualification.target_status", "value": "to_verify"},
+      {"check": "exact_value", "path": "structured.missing_start", "value": true},
+      {"check": "exact_value", "path": "structured.missing_duration", "value": true},
+      {"check": "exact_value", "path": "usage.network_attempts", "value": 0}
+    ],
+    "failure_conditions": ["Des champs absents sont inférés comme vrais."]
+  },
+  {
+    "id": "REAL-012", "category": "documents", "title": "Un CDI au titre trompeur est exclu",
+    "objective": "Vérifier qu'un contrat permanent ne devient pas un stage par son titre ou son score.",
+    "status": "supported", "required_features": ["career_http_qualification"], "severity": "critical",
+    "application_verified": true,
+    "input": {"action": "career_qualification_http", "offer": {"title": "Finance Internship — CDI", "employment_type": "CDI", "description_original": "Permanent position. Six months. Starting January 2027.", "start_date": "2027-01-04", "duration_months": 6}},
+    "expected": {"structured": {"http_status": 200, "retained_count": 0, "excluded_count": 1}},
+    "acceptance": [
+      {"check": "exact_value", "path": "structured.http_status", "value": 200},
+      {"check": "exact_value", "path": "structured.retained_count", "value": 0},
+      {"check": "exact_value", "path": "structured.excluded_count", "value": 1},
+      {"check": "exact_value", "path": "usage.network_attempts", "value": 0}
+    ],
+    "failure_conditions": ["Un CDI est conservé comme stage confirmé."]
+  },
+  {
+    "id": "REAL-014", "category": "documents", "title": "Connecteur public ATS via Career HTTP",
+    "objective": "Exercer le connecteur Lever et le service Career à travers le client HTTP de l'application sur une fixture synthétique.",
+    "status": "supported", "required_features": ["public_ats_http"], "severity": "major",
+    "application_verified": true,
+    "input": {"action": "public_ats_connector_http", "provider": "lever"},
+    "expected": {"structured": {"http_status": 200, "provider": "lever", "raw_count": 1, "network_attempts": 0, "synthetic_fixture": true}},
+    "acceptance": [
+      {"check": "exact_value", "path": "structured.http_status", "value": 200},
+      {"check": "exact_value", "path": "structured.provider", "value": "lever"},
+      {"check": "exact_value", "path": "structured.raw_count", "value": 1},
+      {"check": "exact_value", "path": "structured.synthetic_fixture", "value": true},
+      {"check": "exact_value", "path": "usage.network_attempts", "value": 0}
+    ],
+    "failure_conditions": ["Connecteur contourné, flux non synthétique, endpoint HTTP absent ou socket externe tenté."]
   }
 ]

@@ -53,7 +53,8 @@ def test_chat_defaults_offline_and_preserves_bounded_conversation(hybrid_client)
     assert service.calls == [{
         "message": "Bonjour, aide-moi à réviser.", "selected_file_ids": [],
         "history": [{"role": "user", "content": "Je prépare un cours fictif."}, {"role": "assistant", "content": "Quel sujet ?"}],
-        "mode": "offline", "provider": "auto", "model": "auto", "allow_write": False, "memory_project_id": None,
+        "mode": "offline", "provider": "auto", "model": "auto", "allow_write": False,
+        "memory_project_id": None, "allow_cloud_context": False,
     }]
 
 
@@ -62,12 +63,41 @@ def test_chat_manual_mode_is_forwarded_without_browser_tools(hybrid_client) -> N
     response = client.post("/api/v5/chat", json={
         "message": "Résume ce cours fictif.", "mode": "performance", "provider": "openrouter",
         "model": "fiction/model:free", "selected_file_ids": ["opaque-test-id"], "allow_write": True,
-        "memory_project_id": "fiction-project",
+        "memory_project_id": "fiction-project", "allow_cloud_context": True,
     })
     assert response.status_code == 200
     assert service.calls[0]["mode"] == "performance"
     assert service.calls[0]["model"] == "fiction/model:free"
     assert service.calls[0]["allow_write"] is True
+    assert service.calls[0]["allow_cloud_context"] is True
+
+
+def test_legacy_chat_selected_local_file_requires_cloud_consent_before_agent(tmp_path: Path, monkeypatch):
+    async def selected_names(runtime, file_ids):
+        return ["synthetic.csv"] if file_ids else []
+    monkeypatch.setattr(come_ai_web, "_selected_file_names", selected_names)
+    service = StubHybrid()
+    app = create_app(tmp_path, hybrid_override=service)
+    with TestClient(app) as client:
+        cross_origin = client.post("/api/chat", json={"message": "Bonjour fictif"},
+                                   headers={"Origin": "https://external.invalid"})
+        assert cross_origin.status_code == 403
+        assert service.calls == []
+        denied = client.post("/api/chat", json={
+            "message": "Résume le fichier", "selected_file_ids": ["opaque-fixture-id"]
+        })
+        assert denied.status_code == 400
+        assert "Confirme" in denied.json()["detail"]
+        assert service.calls == []
+
+        # Consent is a field of this request only, never stored in the client
+        # session or carried into a follow-up request.
+        accepted = client.post("/api/chat", json={
+            "message": "Résume le fichier", "selected_file_ids": ["opaque-fixture-id"],
+            "allow_cloud_context": True,
+        })
+        assert accepted.status_code == 200
+        assert len(service.calls) == 1
 
 
 @pytest.mark.parametrize("invalid", [
@@ -93,6 +123,24 @@ def test_cross_origin_cannot_trigger_generation(hybrid_client) -> None:
     accepted = client.post("/api/v5/chat", json={"message": "Bonjour"}, headers={"Origin": "http://testserver"})
     assert accepted.status_code == 200
     assert len(service.calls) == 1
+
+
+def test_v5_selected_file_cloud_request_requires_per_request_consent(hybrid_client) -> None:
+    client, service, _ = hybrid_client
+    denied = client.post("/api/v5/chat", json={
+        "message": "Résume le fichier fictif", "mode": "performance", "provider": "gemini",
+        "selected_file_ids": ["opaque-fixture-id"],
+    })
+    assert denied.status_code == 400
+    assert "Confirme" in denied.json()["detail"]
+    assert service.calls == []
+
+    accepted = client.post("/api/v5/chat", json={
+        "message": "Résume le fichier fictif", "mode": "performance", "provider": "gemini",
+        "selected_file_ids": ["opaque-fixture-id"], "allow_cloud_context": True,
+    })
+    assert accepted.status_code == 200
+    assert service.calls[-1]["allow_cloud_context"] is True
 
 
 def test_large_http_body_is_rejected_before_service(hybrid_client) -> None:

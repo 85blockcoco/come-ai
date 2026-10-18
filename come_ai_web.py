@@ -156,6 +156,7 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=MAX_CHAT_CHARS)
     selected_file_ids: list[str] = Field(default_factory=list, max_length=12)
     allow_write: bool = False
+    allow_cloud_context: bool = False
 
 
 class V5TaskRequest(BaseModel):
@@ -189,6 +190,7 @@ class HybridChatRequest(BaseModel):
     model: str = Field(default="auto", min_length=1, max_length=128, pattern=r"^[A-Za-z0-9._:/-]+$")
     allow_write: bool = False
     memory_project_id: str | None = Field(default=None, max_length=48)
+    allow_cloud_context: bool = False
 
 
 class MemoryFileImportRequest(BaseModel):
@@ -467,6 +469,16 @@ def create_app(
         origin = request.headers.get("origin")
         if origin and origin != f"{request.url.scheme}://{request.url.netloc}":
             raise HTTPException(status_code=403, detail="La conversation doit être lancée depuis cette application locale.")
+        if (payload.selected_file_ids and payload.mode != "offline" and payload.provider != "ollama"
+                and not payload.allow_cloud_context):
+            raise HTTPException(
+                status_code=400,
+                detail="La demande contient un fichier local. Confirme sa transmission cloud pour cette demande, ou passe en mode Hors ligne.",
+            )
+
+        # A cloud permission belongs only to this request. The service checks
+        # whether local context exists and consumes its exact provider/model
+        # consent before any contextual generation call.
 
         def ask() -> dict[str, Any]:
             with runtime.agent_lock, runtime.workspace_lock:
@@ -479,6 +491,7 @@ def create_app(
                     model=payload.model,
                     allow_write=payload.allow_write,
                     memory_project_id=payload.memory_project_id,
+                    allow_cloud_context=payload.allow_cloud_context,
                 ))
 
         return await run_in_threadpool(ask)
@@ -723,10 +736,18 @@ def create_app(
         )
 
     @app.post("/api/chat")
-    async def chat(payload: ChatRequest) -> dict[str, Any]:
+    async def chat(payload: ChatRequest, request: Request) -> dict[str, Any]:
         message = payload.message.strip()
         if not message:
             raise UserFacingError("Écris une demande avant de l’envoyer.")
+        origin = request.headers.get("origin")
+        if origin and origin != f"{request.url.scheme}://{request.url.netloc}":
+            raise HTTPException(status_code=403, detail="La conversation doit être lancée depuis cette application locale.")
+        if payload.selected_file_ids and not payload.allow_cloud_context:
+            raise HTTPException(
+                status_code=400,
+                detail="La sélection contient des données locales. Confirme leur transmission cloud pour cette demande, ou utilise le mode hors ligne.",
+            )
         selected_names = await _selected_file_names(runtime, payload.selected_file_ids)
         if selected_names:
             message = (
@@ -747,6 +768,7 @@ def create_app(
                         mode="automatic",
                         selected_file_ids=list(payload.selected_file_ids),
                         allow_write=payload.allow_write,
+                        allow_cloud_context=payload.allow_cloud_context,
                     )
                     # The legacy UI displays tool names, not structured events.
                     # Preserve the full free-only routing metadata alongside
@@ -757,7 +779,12 @@ def create_app(
                         for event in result.get("tool_events", [])
                     ]
                     return response
-                return runtime.agent.ask(message, allow_writes=payload.allow_write)
+                return runtime.agent.ask(
+                    message,
+                    allow_writes=payload.allow_write,
+                    allow_cloud_context=payload.allow_cloud_context,
+                    local_context_present=bool(selected_names),
+                )
 
         result = await run_in_threadpool(ask_agent)
         return to_jsonable(result)

@@ -92,6 +92,28 @@ def test_source_snapshot_and_materialization_match_with_no_overwrite(tmp_path: P
     assert destination.read_bytes() == original
 
 
+def test_materialization_includes_integrated_guard_and_study_packages(tmp_path: Path) -> None:
+    root = _project(tmp_path / "project")
+    for directory in ("consent_guard", "study_coach"):
+        package = root / directory
+        package.mkdir()
+        (package / "__init__.py").write_text("# synthetic package\n", encoding="utf-8")
+    paths = {item["path"] for item in source_inventory(root)}
+    assert "consent_guard/__init__.py" in paths
+    assert "study_coach/__init__.py" in paths
+
+
+def test_materialization_includes_test_fixtures_and_scripts(tmp_path: Path) -> None:
+    root = _project(tmp_path / "project")
+    (root / "tests" / "fixtures").mkdir()
+    (root / "tests" / "fixtures" / "synthetic.json").write_text("[]", encoding="utf-8")
+    (root / "scripts").mkdir()
+    (root / "scripts" / "live_source_check.py").write_text("REPORT_SCHEMA = 1\n", encoding="utf-8")
+    paths = {item["path"] for item in source_inventory(root)}
+    assert "tests/fixtures/synthetic.json" in paths
+    assert "scripts/live_source_check.py" in paths
+
+
 def test_evaluation_sources_and_synthetic_cases_are_exported_without_run_data(tmp_path: Path) -> None:
     root = _project(tmp_path / "project")
     for directory in ("evals/cases", "evals/tests", "evals/runs/nested"):

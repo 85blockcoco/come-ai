@@ -49,6 +49,8 @@ from intelligence_bridge import (
     observe_quotas,
 )
 from usage_ledger import UsageLedger, UsageLedgerError
+from chat_privacy import consume_cloud_context_consent
+from task_queue import redact_payload
 from workspace_core import LocalTools, UserFacingError, Workspace, read_dotenv, to_jsonable
 
 
@@ -630,7 +632,7 @@ class HybridChatService:
 
     def ask(self, message: str, *, selected_file_ids: list[str] | None = None, history: list[dict[str, str]] | None = None,
             mode: str = "offline", provider: str = "auto", model: str = "auto", allow_write: bool = False,
-            memory_project_id: str | None = None) -> dict[str, Any]:
+            memory_project_id: str | None = None, allow_cloud_context: bool = False) -> dict[str, Any]:
         if not isinstance(message, str) or not message.strip() or len(message) > MAX_MESSAGE_CHARS:
             raise UserFacingError("Écris une demande de moins de 12 000 caractères.")
         if isinstance(provider, str):
@@ -639,7 +641,8 @@ class HybridChatService:
                 provider = "ollama"
         if mode not in {"offline", "automatic", "performance"} or provider not in {"auto", "ollama", "gemini", "openrouter"}:
             raise UserFacingError("Le mode ou le fournisseur demandé est invalide.")
-        if not isinstance(model, str) or not MODEL_PATTERN.fullmatch(model) or SECRET_PATTERN.search(model) or not isinstance(allow_write, bool):
+        if (not isinstance(model, str) or not MODEL_PATTERN.fullmatch(model) or SECRET_PATTERN.search(model)
+                or not isinstance(allow_write, bool) or not isinstance(allow_cloud_context, bool)):
             raise UserFacingError("La sélection de modèle ou l’autorisation est invalide.")
         # This refusal happens before catalogue inspection, key loading, metadata
         # requests, local tools or any fallback decision.
@@ -648,6 +651,18 @@ class HybridChatService:
         started = time.monotonic()
         history = self._validate_history(history)
         events, citations, context = self._local_context(message, [] if selected_file_ids is None else selected_file_ids, allow_write, memory_project_id)
+        events = redact_payload(events)
+        citations = redact_payload(citations)
+        context = redact_payload(context)
+        # ``context`` always serializes an empty local_results/citations
+        # envelope, so consent is driven by actual observations, not that
+        # non-empty JSON wrapper.
+        local_context_present = bool(events or citations or history)
+        if (local_context_present and mode != "offline" and provider != "ollama"
+                and not allow_cloud_context):
+            raise UserFacingError(
+                "Cette demande contient du contexte local (fichier, mémoire ou outil). Confirme sa transmission cloud pour cette demande, ou repasse en mode Hors ligne."
+            )
         folded = _fold(message)
         pure_memory_lookup = (any(term in folded for term in ("memoire", "memory"))
                               and re.search(r"\b(?:cherche|recherche|retrouve|find|search)\b", folded)
@@ -737,6 +752,18 @@ class HybridChatService:
             try:
                 if selected_provider != "ollama":
                     selected_model = self._cloud_model(selected_provider, selected_model, config)
+                    if local_context_present:
+                        try:
+                            consume_cloud_context_consent(
+                                self.workspace.config.data_dir / "cloud-consent",
+                                provider=selected_provider,
+                                model=selected_model,
+                                payload={"messages": messages},
+                            )
+                        except Exception:
+                            raise UserFacingError(
+                                "La transmission du contexte local n’a pas été autorisée pour cette demande. Aucun contenu n’a été envoyé au fournisseur cloud."
+                            ) from None
                 answer = self._generate(selected_provider, selected_model, messages, config, usage)
             except (ProviderUnavailable, ModelCatalogError) as error:
                 category = error.category if isinstance(error, ProviderUnavailable) else "missing_configuration"

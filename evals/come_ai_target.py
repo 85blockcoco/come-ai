@@ -26,6 +26,13 @@ from free_ai_router import (
     classify_task,
     prepare_function_calls,
 )
+from career.discovery import DiscoveryPayload
+from career.exploration import classify_internship, criteria_admit
+from career.service import CareerService
+from career.stage_search import score_brief_match
+from career.connectors import LeverConnector
+from fastapi.testclient import TestClient
+from come_ai_web import create_app
 from hybrid_chat import HybridChatService
 from openpyxl import Workbook
 from personal_memory import PersonalMemoryStore
@@ -76,9 +83,11 @@ class ComeAITarget:
     supported_features = frozenset({
         "local_arithmetic", "memory_search", "citations", "csv_inspection",
         "excel_inspection", "table_statistics", "local_plan_execution",
-        "write_confirmation", "opaque_file_ids", "tool_validation",
+        "write_confirmation", "opaque_file_ids", "tool_validation", "cloud_context_consent",
+        "career_http_qualification", "public_ats_http",
     })
-    _ACTIONS = frozenset({"calculate", "memory_search", "orchestrate", "invalid_file_id", "validate_tools"})
+    _ACTIONS = frozenset({"calculate", "memory_search", "orchestrate", "invalid_file_id", "validate_tools",
+                          "cloud_context_refusal", "career_qualification_http", "public_ats_connector_http"})
 
     def __init__(self) -> None:
         self.network_attempts = 0
@@ -143,6 +152,23 @@ class ComeAITarget:
                      error: str | None = None) -> dict[str, Any]:
         return {"answer": answer, "structured": structured, "citations": [], "facts": [],
                 "tools_called": [], "plan": [], "usage": None, "error": error}
+
+    @staticmethod
+    def _create_synthetic_http_app(root: Path, career: CareerService):
+        """Build the real FastAPI app with an explicit credential-free config."""
+        config = AppConfig(
+            base_dir=root, data_dir=root / "data", output_dir=root / "output", log_dir=root / "logs",
+            memory_dir=root / "memory_data", settings_path=root / "settings.json", env_path=root / ".env",
+            primary_model="synthetic-disabled", fallback_models=(), request_timeout_seconds=10,
+            retry_attempts=1, ollama_model=None,
+            ollama_base_url="http://127.0.0.1:11434/api/chat",
+        )
+        # create_app needs its runtime config, but an evaluation must never
+        # inspect the user's dotenv file or provider environment.
+        from unittest.mock import patch as mock_patch
+
+        with mock_patch("come_ai_web.AppConfig.load", return_value=config):
+            return create_app(base_dir=root, career_override=career)
 
     def _chat(self, root: Path, workspace: Workspace, tools: LocalTools,
               memory: PersonalMemoryStore | None = None) -> HybridChatService:
@@ -276,6 +302,95 @@ class ComeAITarget:
             return {**self._observation(answer="Validation réelle des propositions d'outils."),
                     "structured": {"validated_tool": approved.name, "rejected_tool": data["forbidden_tool"], "rejected": rejected},
                     "tools_called": ["validate_proposal", "validate_proposal"]}
+        if action == "cloud_context_refusal":
+            fixture = data["file"]
+            file_id, _ = self._fixture(workspace, fixture)
+            service = self._chat(root, workspace, tools)
+            return self._from_service(self._call(
+                "HybridChatService", "ask", service.ask,
+                message=data["message"], selected_file_ids=[file_id], mode="performance",
+                provider="gemini", allow_cloud_context=False,
+            ))
+        if action == "career_qualification_http":
+            offer = dict(data["offer"])
+            offer.setdefault("company", "Entreprise synthétique")
+            offer.setdefault("source_name", "greenhouse")
+            offer.setdefault("source_id", "synthetic-career-offer")
+            offer.setdefault("official_url", "https://careers.example.test/synthetic-offer")
+            offer.setdefault("source_status", "open")
+
+            class SyntheticConnector:
+                def discover_internships(self, _source: Any, *, selection_brief: dict[str, Any], **_kwargs: Any) -> DiscoveryPayload:
+                    classification = classify_internship(offer)
+                    confirmed = classification["status"] == "confirmed"
+                    excluded = classification["status"] == "excluded"
+                    match = score_brief_match(selection_brief, offer)
+                    relevant = confirmed and criteria_admit(match, offer, selection_brief)
+                    return DiscoveryPayload(
+                        jobs=(offer,) if relevant else (), verified_at="2026-10-18T00:00:00+00:00", truncated=False,
+                        raw_count=1, evaluated_count=1, invalid_count=0,
+                        confirmed_count=int(confirmed),
+                        uncertain_count=int(classification["status"] == "uncertain"), excluded_count=int(excluded),
+                        relevant_count=int(relevant),
+                        filtered_criteria_count=int(confirmed and not relevant),
+                    )
+
+            source = {"id": "registry:greenhouse:synthetic", "provider": "greenhouse",
+                      "company": offer["company"], "board_token": "synthetic",
+                      "public_url": "https://boards.greenhouse.io/synthetic",
+                      "provenance_url": "https://careers.example.test/synthetic",
+                      "verified_at": "2026-10-18T00:00:00Z"}
+            service = CareerService(root, curated_sources=(source,),
+                                     exploration_connectors={"greenhouse": SyntheticConnector()})
+            with TestClient(self._create_synthetic_http_app(root, service)) as client:
+                response = client.post("/api/career/stage-search/explore", json={"force": True})
+            if response.status_code != 200:
+                return self._observation(error=f"Career HTTP returned {response.status_code}.")
+            payload = response.json()
+            matches = payload.get("matches", [])
+            outcomes = payload.get("outcomes", [])
+            missing_fields = matches[0].get("qualification", {}).get("missing_fields", []) if matches else []
+            structured = {"http_status": response.status_code,
+                          "retained_count": payload.get("summary", {}).get("retained_count", 0),
+                          "excluded_count": sum(int(item.get("excluded_count", 0)) for item in outcomes),
+                          "qualification": matches[0].get("qualification") if matches else None,
+                          "missing_start": "début" in missing_fields,
+                          "missing_duration": "durée" in missing_fields,
+                          "synthetic_fixture": True, "network_attempts": self.network_attempts}
+            return {**self._observation(answer="Parcours HTTP Career exécuté sur fixture synthétique."),
+                    "structured": structured,
+                    "usage": {"api_calls": 0, "generation_requests": 0,
+                              "network_attempts": self.network_attempts}}
+        if action == "public_ats_connector_http":
+            source = {"id": "synthetic:lever:board", "provider": "lever", "company": "Finance synthétique",
+                      "board_token": "synthetic-board", "verified_at": "2026-10-18T00:00:00Z",
+                      "provenance_url": "https://careers.example.test/synthetic"}
+            posting = [{"id": "synthetic-lever-01", "text": "Finance Intern (synthetic)",
+                        "categories": {"location": "Paris, France", "commitment": "Intern"},
+                        "country": "FR", "descriptionPlain": "Synthetic finance internship.",
+                        "hostedUrl": "https://jobs.lever.co/synthetic-board/synthetic-lever-01",
+                        "applyUrl": "https://jobs.lever.co/synthetic-board/synthetic-lever-01/apply"}]
+
+            class SyntheticTransport:
+                def get_json(self, _endpoint: str, _timeout_seconds: int) -> Any:
+                    return posting
+
+            connector = LeverConnector(transport=SyntheticTransport(), enabled=True,
+                                       clock=lambda: "2026-10-18T00:00:00Z")
+            service = CareerService(root, curated_sources=(source,), exploration_connectors={"lever": connector})
+            with TestClient(self._create_synthetic_http_app(root, service)) as client:
+                response = client.post("/api/career/stage-search/explore", json={"force": True})
+            if response.status_code != 200:
+                return self._observation(error=f"Career HTTP returned {response.status_code}.")
+            payload = response.json()
+            self._trace.append({"component": "LeverConnector", "method": "get_json",
+                                "status": "returned", "synthetic_only": True})
+            return {**self._observation(answer="Connecteur ATS et route Career HTTP exécutés sur fixture synthétique."),
+                    "structured": {"http_status": response.status_code, "provider": "lever",
+                                   "raw_count": payload.get("summary", {}).get("raw_count", 0),
+                                   "synthetic_fixture": True, "network_attempts": self.network_attempts},
+                    "usage": {"api_calls": 0, "generation_requests": 0,
+                              "network_attempts": self.network_attempts}}
         raise ValueError("Unsupported action reached execution.")
 
     def run(self, case: Case) -> TargetResult:

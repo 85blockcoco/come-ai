@@ -391,3 +391,25 @@ def prepare_application(
             "Elle ne prédit aucune embauche, n’invente aucun fait et n’envoie aucune candidature."
         ),
     }
+
+
+def summarize_offer(job: dict[str, Any]) -> dict[str, Any]:
+    """Local, deterministic, factual summary of one offer (no model, no network)."""
+    requirements = extract_requirements(job)
+    return {
+        "title": clean_text(job.get("title"), limit=300),
+        "company": clean_text(job.get("company"), limit=240),
+        "location": ", ".join(part for part in (clean_text(job.get("city"), limit=120),
+                                                clean_text(job.get("country"), limit=120)) if part),
+        "start_date": clean_text(job.get("start_date"), limit=32),
+        "end_date": clean_text(job.get("end_date"), limit=32),
+        "deadline_date": clean_text(job.get("deadline_date"), limit=32),
+        "posted_date": clean_text(job.get("posted_date"), limit=32),
+        "duration_months": job.get("duration_months"),
+        "missions": [clean_text(r.get("text"), limit=300) for r in requirements],
+        "prerequisites_count": len(requirements),
+        "official_url": clean_text(job.get("official_url"), limit=2_000),
+        "uncertainty": [
+            "Résumé local déterministe ; aucune invention. Les champs absents restent inconnus."
+        ],
+    }

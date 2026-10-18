@@ -104,6 +104,49 @@ def _node() -> str:
     pytest.skip("Node absent: JavaScript behavioural guards not executable on this host")
 
 
+def test_stage_match_visual_tone_requires_confirmed_qualification() -> None:
+    source = (Path(__file__).resolve().parents[1] / "career_static/career.js").read_text()
+    function = source.split("function stageMatchBlock(stageMatch) {", 1)[1].split(
+        "\nfunction renderStageMatches", 1
+    )[0]
+    script = r'''
+const assert = require("assert");
+function make(tag, text="", className="") {
+  return {tag, textContent:text, className, children:[], append(...items){this.children.push(...items);}};
+}
+function chip(text, tone) { return {textContent:text, className:tone}; }
+function stageMatchBlock(stageMatch) {FUNCTION
+const uncertain = stageMatchBlock({score:100,label:"Pertinence élevée — informations obligatoires à vérifier",
+  qualification_status:"to_verify",components:[],warnings:[]});
+assert.strictEqual(uncertain.children[0].children[0].textContent, "Pertinence selon tes critères : 100/100");
+assert.strictEqual(uncertain.children[0].children[1].className, "warning");
+const confirmed = stageMatchBlock({score:100,label:"Correspondance forte",
+  qualification_status:"conforming",components:[],warnings:[]});
+assert.strictEqual(confirmed.children[0].children[1].className, "good");
+'''.replace("FUNCTION", function)
+    completed = subprocess.run([_node(), "-e", script], text=True, capture_output=True, timeout=8)
+    assert completed.returncode == 0, completed.stderr
+
+
+def test_today_dashboard_profile_shortcut_is_present() -> None:
+    html = (Path(__file__).resolve().parents[1] / "career_static/career.html").read_text(encoding="utf-8") if (Path(__file__).resolve().parents[1] / "career_static/career.html").exists() else (Path(__file__).resolve().parents[1] / "career_static/index.html").read_text(encoding="utf-8")
+    js = (Path(__file__).resolve().parents[1] / "career_static/career.js").read_text(encoding="utf-8")
+    assert 'id="today-profile-readiness"' in html
+    assert 'data-view-action="profile"' in html
+    assert 'api("/api/career/profile")' in js
+    assert "renderTodayProfileReadiness" in js
+
+
+def test_dashboard_quick_tools_expose_only_real_career_views() -> None:
+    html = (Path(__file__).resolve().parents[1] / "career_static/index.html").read_text(encoding="utf-8")
+    js = (Path(__file__).resolve().parents[1] / "career_static/career.js").read_text(encoding="utf-8")
+    for view in ("stagehunter", "profile", "studio", "applications", "interviews", "discover"):
+        assert f'data-view-action="{view}"' in html
+    assert "Tous tes outils Career" in html
+    assert 'data-focus-target="profile-document-file"' in html
+    assert "focusTarget" in js
+
+
 @pytest.mark.parametrize("scenario", ["http-error", "source-error", "partial", "success"])
 def test_stage_hunter_search_preserves_actual_discovery_result(scenario: str) -> None:
     source = (Path(__file__).resolve().parents[1] / "career_static/career.js").read_text()

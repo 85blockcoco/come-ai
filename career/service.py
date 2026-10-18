@@ -46,8 +46,14 @@ from .application_studio import (
     render_application_html,
 )
 from .calendar_export import build_deadline_calendar_ics
-from .application_prep import prepare_application
+from .application_prep import prepare_application, summarize_offer
+
+try:
+    from consent_guard import ConsentGuard
+except Exception:  # pragma: no cover - optional dependency
+    ConsentGuard = None  # type: ignore[misc, assignment]
 from .stage_search import (
+    STAGE_DOMAINS,
     brief_is_configured,
     default_brief,
     score_brief_match,
@@ -67,6 +73,7 @@ from .interview import (
 )
 from .ocr import LocalVisionOCR, OCRResult
 from .discovery import DiscoveryPayload, GreenhouseBoard, GreenhouseJobBoardConnector, PublicSourceError, parse_greenhouse_board_token
+from .connectors import default_exploration_connectors
 from .exploration import (
     EXPLORATION_LAST_SETTING,
     EXPLORATION_MAX_RESULTS,
@@ -76,6 +83,7 @@ from .exploration import (
     criteria_admit,
     ranking_key,
 )
+from .offer_qualification import qualify_offer
 from .scoring import classify_job_family, score_job
 from workspace_core import UserFacingError, extract_text
 from .profile_import import (
@@ -84,6 +92,7 @@ from .profile_import import (
     PROFILE_IMPORT_KINDS,
     parse_profile_text,
 )
+from .profile_readiness import assess_profile_readiness
 
 
 SCHEMA_VERSION = 6
@@ -91,6 +100,25 @@ SCHEMA_VERSION = 6
 # schema migration, and it is exported with the rest of the local settings.
 STAGE_SEARCH_SETTING_KEY = "stage_search_brief"
 DISCOVERY_CACHE_SECONDS = 10 * 60
+
+
+def _attach_qualification_presentation(match: dict[str, Any], qualification: dict[str, Any]) -> dict[str, Any]:
+    """Keep relevance and mandatory eligibility distinct in every API path."""
+    status = clean_text(qualification.get("target_status"), limit=40) or "to_verify"
+    fit_label = clean_text(match.get("label"), limit=160)
+    match["fit_label"] = fit_label
+    match["qualification_status"] = status
+    if status == "non_conforming":
+        match["label"] = "Hors critères obligatoires sélectionnés"
+    elif status == "to_verify":
+        score = match.get("score")
+        if isinstance(score, (int, float)) and score >= 70:
+            match["label"] = "Pertinence élevée — informations obligatoires à vérifier"
+        elif isinstance(score, (int, float)) and score >= 45:
+            match["label"] = "Pertinence possible — informations obligatoires à vérifier"
+        else:
+            match["label"] = "Informations obligatoires à vérifier"
+    return match
 DELETE_CONFIRMATION = "SUPPRIMER MES DONNÉES CAREER"
 PROFILE_EDITABLE_FIELDS = (
     "display_name",
@@ -180,7 +208,8 @@ class CareerService:
         # parallel requests to the same public board.
         self.discovery_connector = discovery_connector or GreenhouseJobBoardConnector()
         self._curated_sources = curated_sources
-        self._exploration_connectors = exploration_connectors or {"greenhouse": self.discovery_connector}
+        self._exploration_connectors = (exploration_connectors if exploration_connectors is not None
+                                        else default_exploration_connectors(self.discovery_connector))
         # Bounded in-memory cache, separate from personal boards and private
         # profile settings. Restarting drops HTTP cache but keeps the last
         # result's job references and tracking in SQLite.
@@ -189,6 +218,13 @@ class CareerService:
         self._lock = threading.RLock()
         self._ensure_storage()
         self._initialize()
+        if ConsentGuard is not None:
+            try:
+                self.consent_guard = ConsentGuard(self.data_dir / "consent")
+            except Exception:
+                self.consent_guard = None
+        else:
+            self.consent_guard = None
 
     def _ensure_storage(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -708,6 +744,7 @@ class CareerService:
             profile = self._row_dict(connection.execute("SELECT * FROM candidate_profile WHERE id = 1").fetchone())
         # Work authorization is deliberately a user-declared field. No location,
         # school, language or other profile fact changes its value automatically.
+        profile["readiness"] = assess_profile_readiness(profile)
         return profile
 
     def update_profile(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -1738,6 +1775,10 @@ class CareerService:
         with self._lock, self._connection() as connection:
             raw = self._read_stage_search_raw(connection)
         brief = default_brief()
+        # Keep the reusable matching contract neutral, but make the first
+        # Career screen immediately useful for this finance-focused product.
+        # Every domain remains an editable checkbox and a saved choice wins.
+        brief["domains"] = list(STAGE_DOMAINS)
         # A stored brief can become invalid without any action from the person
         # (a vocabulary entry removed by an update, a manual database edit…).
         # A read must never fail hard and lock the whole tab: fall back to an
@@ -1748,16 +1789,18 @@ class CareerService:
                 brief = validate_brief(json.loads(raw))
             except (json.JSONDecodeError, TypeError, ValueError, UserFacingError):
                 brief = default_brief()
+                brief["domains"] = list(STAGE_DOMAINS)
                 stored_brief_invalid = True
         return {
             "brief": brief,
-            "configured": brief_is_configured(brief),
+            "configured": bool(raw) and not stored_brief_invalid and brief_is_configured(brief),
             "stored_brief_invalid": stored_brief_invalid,
             "vocabulary": stage_search_vocabulary(),
             "search_terms": search_terms_for(brief.get("domains", [])),
             "disclaimer": (
-                "Critères de recherche stockés uniquement dans tes données locales ; "
-                "aucune préférence n’est supposée tant que tu ne l’as pas renseignée."
+                "Critères enregistrés localement. Par défaut : Stage, CDD, CDI et VIE, "
+                "tous les domaines financiers, débuts de janvier à mars et stages d’au moins six mois. "
+                "Modifie les cases selon ta recherche."
             ),
         }
 
@@ -1782,12 +1825,24 @@ class CareerService:
         matches: list[dict[str, Any]] = []
         if payload["configured"]:
             for job in jobs:
-                matches.append({"job": job, "stage_match": score_brief_match(brief, job)})
+                stage_match = score_brief_match(brief, job)
+                qualification = qualify_offer(
+                    job,
+                    allowed_contract_types=brief.get("contract_types"),
+                    allowed_start_months=brief.get("start_months"),
+                    minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
+                ).to_dict()
+                _attach_qualification_presentation(stage_match, qualification)
+                matches.append({"job": job, "stage_match": stage_match, "qualification": qualification})
             # Break ties by source identity, never a random database ID or
             # import/update time: the same postings have the same ordering
             # after a board reorders its feed or the application restarts.
             matches.sort(key=lambda item: (
+                {"conforming": 0, "to_verify": 1, "non_conforming": 2}.get(
+                    item["stage_match"].get("qualification_status"), 0
+                ),
                 -(int(item["stage_match"]["score"] or 0)),
+                (item["stage_match"].get("education_access") or {}).get("priority_rank", 2),
                 str(item["job"].get("source_name") or ""),
                 str(item["job"].get("source_id") or ""),
                 str(item["job"].get("canonical_url") or item["job"].get("official_url") or ""),
@@ -1795,7 +1850,16 @@ class CareerService:
                 str(item["job"].get("title") or ""),
             ))
         else:
-            matches = [{"job": job, "stage_match": None} for job in jobs]
+            matches = []
+            for job in jobs:
+                qualification = qualify_offer(
+                    job,
+                    allowed_contract_types=brief.get("contract_types"),
+                    allowed_start_months=brief.get("start_months"),
+                    minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
+                ).to_dict()
+                matches.append({"job": job, "stage_match": None, "qualification": qualification,
+                                "education_access": score_brief_match(brief, job)["education_access"]})
         payload["matches"] = matches
         return payload
 
@@ -1805,6 +1869,149 @@ class CareerService:
         context = self._scoring_context()
         analysis = prepare_application(context.get("profile") or {}, context.get("intake") or {}, job)
         return analysis
+
+    def get_job_summary(
+        self,
+        job_id: str,
+        *,
+        mode: str = "local",
+        consent_external: bool = False,
+        consent_id: str | None = None,
+        ai_generator: Any | None = None,
+        provider: str = "career",
+        model: str = "career-summary",
+        purpose: str = "career_summary",
+    ) -> dict[str, Any]:
+        """Structured, factual summary of one offer.
+
+        The local summary is always available.  An optional cloud enhancement
+        requires an explicit consent (boolean checkbox or consent_guard id);
+        when consent is refused or unavailable, the local summary is returned
+        instead of raising.
+        """
+
+        job = self.get_job(job_id)
+        base = summarize_offer(job)
+        # Keep the deterministic pertinence score alongside the offer facts.
+        scoring = job.get("scoring") if isinstance(job.get("scoring"), dict) else {}
+        if "score" not in base:
+            base["score"] = scoring.get("score")
+        if "pertinence" not in base:
+            base["pertinence"] = scoring.get("score")
+        base["job_id"] = job.get("id")
+
+        result: dict[str, Any] = {
+            **base,
+            "mode": "local",
+            "ai_used": False,
+            "ai_summary": None,
+            "ai_provider": None,
+            "ai_error": None,
+            "consent_status": None,
+            "consent_required": True,
+        }
+
+        normalized_mode = str(mode or "local").strip().lower()
+        if normalized_mode != "ai":
+            result["mode"] = "local"
+            return result
+
+        result["mode"] = "ai"
+        payload_for_consent = {
+            "job_id": job.get("id"),
+            "title": job.get("title"),
+            "company": job.get("company"),
+        }
+
+        allowed = False
+        refusal_message: str | None = None
+        consent_status: str | None = None
+
+        guard = getattr(self, "consent_guard", None)
+        if guard is not None and consent_id:
+            try:
+                decision = guard.check(
+                    consent_id,
+                    provider=provider,
+                    model=model,
+                    purpose=purpose,
+                    payload=payload_for_consent,
+                )
+            except Exception as error:  # pragma: no cover - defensive
+                decision = None
+                refusal_message = str(error)
+            if decision is not None:
+                consent_status = getattr(decision, "code", None)
+                if getattr(decision, "allowed", False):
+                    try:
+                        guard.consume(
+                            consent_id,
+                            provider=provider,
+                            model=model,
+                            purpose=purpose,
+                            payload=payload_for_consent,
+                        )
+                        allowed = True
+                    except Exception as error:
+                        allowed = False
+                        refusal_message = str(error)
+                        consent_status = getattr(error, "code", consent_status) or consent_status
+                else:
+                    refusal_message = getattr(decision, "message", None)
+        elif consent_external:
+            allowed = True
+            consent_status = "allowed"
+        else:
+            refusal_message = "Consentement cloud requis ; résumé local conservé."
+
+        if not allowed:
+            result["ai_error"] = (refusal_message or "Consentement refusé ; résumé local conservé.") + " (repli local)"
+            result["consent_status"] = consent_status
+            result["mode"] = "local"
+            return result
+
+        if not callable(ai_generator):
+            result["ai_error"] = "Aucun fournisseur IA configuré ; résumé local conservé. (repli local)"
+            result["consent_status"] = consent_status
+            result["mode"] = "local"
+            return result
+
+        prompt = (
+            "Résume de façon structurée et factuelle l'offre suivante, sans inventer. "
+            "Retourne un JSON avec les clés: summary, missions, prerequisites, dates, relevance, official_url. "
+            f"Offre: {job}"
+        )
+        try:
+            generated = ai_generator(prompt)
+        except Exception as error:
+            result["ai_error"] = f"Le fournisseur IA a échoué ; résumé local conservé. (repli local) {error}"
+            result["consent_status"] = consent_status
+            result["mode"] = "local"
+            return result
+
+        if not isinstance(generated, dict):
+            result["ai_error"] = "Le fournisseur IA a renvoyé un résultat invalide ; résumé local conservé. (repli local)"
+            result["consent_status"] = consent_status
+            result["mode"] = "local"
+            return result
+
+        text = clean_text(generated.get("text"), limit=20_000)
+        provider_name = clean_text(generated.get("provider"), limit=160) or "Fournisseur IA configuré"
+        parsed: Any = None
+        try:
+            import json as _json
+
+            parsed = _json.loads(text)
+        except Exception:
+            parsed = None
+        result["ai_used"] = True
+        result["ai_provider"] = provider_name
+        result["ai_summary"] = parsed if isinstance(parsed, dict) else text
+        result["consent_status"] = consent_status or "consumed"
+        return result
+
+    def summarize_job(self, job_id: str, **kwargs: Any) -> dict[str, Any]:
+        return self.get_job_summary(job_id, **kwargs)
 
     def _exploration_registry(self) -> tuple[dict[str, Any], ...]:
         if self._curated_sources is not None:
@@ -1854,13 +2061,28 @@ class CareerService:
                 continue
             internship = classify_internship(job)
             match = score_brief_match(brief, job)
-            if job.get("source_status") == "closed" or internship["status"] != "confirmed" or not criteria_admit(match, job, brief):
+            qualification = qualify_offer(
+                {**job, "source_verified": bool(reference.get("verified_at"))},
+                allowed_contract_types=brief.get("contract_types"),
+                allowed_start_months=brief.get("start_months"),
+                minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
+            ).to_dict()
+            if job.get("source_status") == "closed" or qualification["target_status"] == "non_conforming":
+                continue
+            job["qualification"] = qualification
+            _attach_qualification_presentation(match, qualification)
+            if qualification["contract_type"] == "unknown" and not internship.get("evidence"):
                 continue
             matches.append({"job": job, "stage_match": match, "internship": internship,
+                            "qualification": qualification,
                             "source_id": reference.get("source_id", ""),
                             "verified_at": reference.get("verified_at", "")})
         matches.sort(key=lambda item: ranking_key(item["job"], item["stage_match"]))
         changed = bool(snapshot) and snapshot.get("brief_fingerprint") != self._exploration_brief_fingerprint(brief)
+        if changed:
+            # A previous result set is not a match for newly saved criteria.
+            # Require an explicit refresh instead of presenting stale offers.
+            matches = []
         summary = dict(snapshot["summary"]) if isinstance(snapshot.get("summary"), dict) else {}
         summary["displayed_count"] = len(matches)
         return {"mode": "explore", "has_run": bool(snapshot), "run_id": snapshot.get("run_id", ""),
@@ -1942,7 +2164,7 @@ class CareerService:
                         if (any(type(count) is not int or count < 0 for count in counts)
                             or result.raw_count != result.evaluated_count + result.invalid_count
                             or result.evaluated_count != result.confirmed_count + result.uncertain_count + result.excluded_count
-                            or result.confirmed_count != result.relevant_count + result.filtered_criteria_count
+                            or result.relevant_count + result.filtered_criteria_count != result.confirmed_count + result.uncertain_count
                             or len(result.jobs) > min(EXPLORATION_MAX_RESULTS, result.relevant_count)):
                             raise PublicSourceError("Le connecteur n’a pas fourni des compteurs d’exploration cohérents.", code="invalid_counts")
                         self._exploration_cache[source_id] = (cache_fingerprint, result)
@@ -1964,12 +2186,23 @@ class CareerService:
                     outcome.update(status="partial", message="Flux officiel lu, avec des entrées incomplètes ou invalides ignorées.")
                 outcomes.append(outcome)
                 for job in result.jobs:
-                    # Defend the connector boundary as well as production ATS
-                    # admission; never accept a custom connector's false stage.
+                    # Re-qualify at the service boundary using the current
+                    # saved criteria; connector output is never trusted alone.
                     classification = classify_internship(job)
                     match = score_brief_match(brief, job)
-                    if classification["status"] == "confirmed" and criteria_admit(match, job, brief):
-                        candidates.append({"job": dict(job), "stage_match": match, "internship": classification,
+                    qualification = qualify_offer(
+                        {**job, "source_verified": bool(result.verified_at)},
+                        allowed_contract_types=brief.get("contract_types"),
+                        allowed_start_months=brief.get("start_months"),
+                        minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
+                    ).to_dict()
+                    qualified_job = {**job, "qualification": qualification}
+                    if (qualification["target_status"] != "non_conforming"
+                            and (qualification["contract_type"] != "unknown" or classification.get("evidence"))
+                            and criteria_admit(match, qualified_job, brief)):
+                        _attach_qualification_presentation(match, qualification)
+                        candidates.append({"job": qualified_job, "stage_match": match, "internship": classification,
+                                           "qualification": qualification,
                                            "source_id": source_id, "verified_at": result.verified_at,
                                            "board_token": source.get("board_token", "")})
             # At most eight per-source heaps of 150 are materialised. Sort then
