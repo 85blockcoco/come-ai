@@ -139,9 +139,12 @@ def test_today_dashboard_profile_shortcut_is_present() -> None:
 
 def test_dashboard_quick_tools_expose_only_real_career_views() -> None:
     html = (Path(__file__).resolve().parents[1] / "career_static/index.html").read_text(encoding="utf-8")
+    js = (Path(__file__).resolve().parents[1] / "career_static/career.js").read_text(encoding="utf-8")
     for view in ("stagehunter", "profile", "studio", "applications", "interviews", "discover"):
         assert f'data-view-action="{view}"' in html
     assert "Tous tes outils Career" in html
+    assert 'data-focus-target="profile-document-file"' in html
+    assert "focusTarget" in js
 
 
 @pytest.mark.parametrize("scenario", ["http-error", "source-error", "partial", "success"])

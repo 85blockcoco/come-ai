@@ -2256,7 +2256,11 @@ $("#stagehunter-prep-submit")?.addEventListener("click", () => {
 });
 
 document.querySelectorAll(".career-tab").forEach((tab) => tab.addEventListener("click", () => showView(tab.dataset.view)));
-document.querySelectorAll("[data-view-action]").forEach((action) => action.addEventListener("click", () => showView(action.dataset.viewAction)));
+document.querySelectorAll("[data-view-action]").forEach((action) => action.addEventListener("click", () => {
+  showView(action.dataset.viewAction);
+  const targetId = action.dataset.focusTarget;
+  if (targetId) window.setTimeout(() => document.getElementById(targetId)?.focus(), 0);
+}));
 window.addEventListener("hashchange", () => {
   if (internalHashChange) {
     internalHashChange = false;
