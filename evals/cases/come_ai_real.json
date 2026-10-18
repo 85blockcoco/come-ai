@@ -167,7 +167,7 @@
     "failure_conditions": ["Fichier local envoyé sans permission, socket tenté ou refus non explicite."]
   },
   {
-    "id": "REAL-010", "category": "conversation", "title": "Qualité de génération modèle non mesurée",
+    "id": "REAL-013", "category": "conversation", "title": "Qualité de génération modèle non mesurée",
     "objective": "Distinguer une capacité non exercée d'un succès simulé ou d'une réponse incorrecte.",
     "status": "supported", "required_features": ["local_model_generation"], "severity": "major",
     "application_verified": false,

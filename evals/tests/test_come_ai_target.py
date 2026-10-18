@@ -140,7 +140,7 @@ def test_unsupported_generation_and_core_contract_are_never_executed(monkeypatch
         raise AssertionError("Unsupported cases must not execute.")
 
     monkeypatch.setattr(target, "_execute", forbidden)
-    for case in [CASES["REAL-010"], load_cases()[0]]:
+    for case in [CASES["REAL-013"], load_cases()[0]]:
         result = execute_case(case, target)
         assert result.outcome == "unsupported"
         assert result.passed is None
