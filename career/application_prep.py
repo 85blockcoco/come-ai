@@ -117,6 +117,14 @@ _GENERIC_TOKENS: frozenset[str] = frozenset(
     }
 )
 
+# Short, domain-specific skills are meaningful evidence even though their
+# normalized spelling is shorter than the conservative four-character
+# threshold below.  Keep this an explicit allowlist: accepting every short
+# token would make articles and prepositions create false matches.
+_SHORT_SKILL_TOKENS: frozenset[str] = frozenset(
+    {"api", "aws", "cfa", "erp", "git", "sas", "sap", "sql", "vba"}
+)
+
 _CHECKS: tuple[dict[str, Any], ...] = (
     {
         "key": "no_invented_facts",
@@ -145,7 +153,9 @@ def _tokens(text: str) -> list[str]:
     return [
         token
         for token in normalized_text(text).split()
-        if len(token) >= 4 and token not in _GENERIC_TOKENS and not token.isdigit()
+        if (len(token) >= 4 or token in _SHORT_SKILL_TOKENS)
+        and token not in _GENERIC_TOKENS
+        and not token.isdigit()
     ]
 
 
