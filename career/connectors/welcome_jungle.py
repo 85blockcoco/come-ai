@@ -7,7 +7,6 @@ Documentation: No public API; uses search HTML with structured data attributes.
 
 from __future__ import annotations
 
-import json
 import re
 import socket
 import time
@@ -157,27 +156,16 @@ def _default_fetch(url: str) -> str | None:
 
 def _build_search_url(query: str, location: str, page: int) -> str:
     """Build Welcome to the Jungle search URL with filters."""
+    country_codes = [
+        "GB", "DE", "NL", "BE", "LU", "CH", "IE", "ES", "IT", "PT",
+        "SE", "NO", "DK", "FI", "AT", "PL",
+    ]
     params = {
         "query": query,
         "page": str(page),
         "aroundQuery": location,
         "refinementList[contract_type][]": "internship",
-        "refinementList[office.country_code][]": "GB",
-        "refinementList[office.country_code][]": "DE",
-        "refinementList[office.country_code][]": "NL",
-        "refinementList[office.country_code][]": "BE",
-        "refinementList[office.country_code][]": "LU",
-        "refinementList[office.country_code][]": "CH",
-        "refinementList[office.country_code][]": "IE",
-        "refinementList[office.country_code][]": "ES",
-        "refinementList[office.country_code][]": "IT",
-        "refinementList[office.country_code][]": "PT",
-        "refinementList[office.country_code][]": "SE",
-        "refinementList[office.country_code][]": "NO",
-        "refinementList[office.country_code][]": "DK",
-        "refinementList[office.country_code][]": "FI",
-        "refinementList[office.country_code][]": "AT",
-        "refinementList[office.country_code][]": "PL",
+        "refinementList[office.country_code][]": country_codes,
     }
     query_string = urllib.parse.urlencode(params, doseq=True)
     return f"{_WTJ_SEARCH}?{query_string}"
