@@ -1,0 +1,20 @@
+On branch audit/total-v3-2026-10-14
+Unmerged paths:
+  (use "git restore --staged <file>..." to unstage)
+  (use "git add/rm <file>..." as appropriate to mark resolution)
+	deleted by us:   study_coach/syllabus.py
+	deleted by us:   tests/test_study_coach_citations.py
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	"BASE_SHA_VALID\303\211/"
+	HANDOFF_AGENT_CAREER.md
+	HANDOFF_AGENT_CODEX.md
+	HANDOFF_AGENT_MEMOIRE.md
+	HANDOFF_AGENT_STUDY_COACH.md
+	HANDOFF_REVUE_SECURITE_MEMOIRE.md
+	checklist_codex.sh
+	docs/audit_v2/
+	tests/test_study_coach_v3_validation.py
+
+no changes added to commit (use "git add" and/or "git commit -a")

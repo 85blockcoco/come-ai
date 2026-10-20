@@ -1,0 +1,17 @@
+=== sw_vers ===
+ProductName:		macOS
+ProductVersion:		14.8.9
+BuildVersion:		23J631
+=== uname -m ===
+x86_64
+=== sysctl hw.memsize ===
+hw.memsize: 17179869184
+=== which -a python3 ===
+/Library/Frameworks/Python.framework/Versions/3.12/bin/python3
+/Library/Frameworks/Python.framework/Versions/3.8/bin/python3
+/usr/local/bin/python3
+/usr/bin/python3
+=== python3 -V ===
+Python 3.12.10
+=== sqlite3 CLI version ===
+3.43.2 2023-10-10 13:08:14 1b37c146ee9ebb7acd0160c0ab1fd11017a419fa8a3187386ed8cb32b709aapl (64-bit)

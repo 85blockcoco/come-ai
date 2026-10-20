@@ -1,0 +1,44 @@
+FILE_ID: f_4de5b03e94
+
+===== CASE: 1_tool =====
+EVENT: Outil local appelé: inspect_file
+INVOKE_RESULT: inspect_file {"file_id": "f_4de5b03e94", "file": "sample.csv", "type": "csv", "size_kb": 0.0, "kind": "table", "rows_sampled": 2, "columns": 2, "column_names": ["a", "b"], "missing_values": {"a": 0, "b": 0}, "preview": [{"a": 1, "b": 2}, {"a": 3, "b": 4}]}
+RESULT: {"answer": "Réponse après 1 outil.", "tool_events": ["inspect_file"]}
+
+===== CASE: 5_tools_at_once =====
+EXCEPTION: UserFacingError : Le modèle a demandé trop d’outils simultanément. Reformule la demande en une action plus ciblée.
+
+===== CASE: exceed_max_tool_turns =====
+EVENT: Outil local appelé: list_workspace_files
+INVOKE_RESULT: list_workspace_files {"files": [{"file_id": "f_4de5b03e94", "name": "sample.csv", "type": "csv", "size_kb": 0.0, "modified": "2026-10-17 04:50"}], "count": 1}
+EVENT: Outil local appelé: list_workspace_files
+INVOKE_RESULT: list_workspace_files {"files": [{"file_id": "f_4de5b03e94", "name": "sample.csv", "type": "csv", "size_kb": 0.0, "modified": "2026-10-17 04:50"}], "count": 1}
+EVENT: Outil local appelé: list_workspace_files
+INVOKE_RESULT: list_workspace_files {"files": [{"file_id": "f_4de5b03e94", "name": "sample.csv", "type": "csv", "size_kb": 0.0, "modified": "2026-10-17 04:50"}], "count": 1}
+EVENT: Outil local appelé: list_workspace_files
+INVOKE_RESULT: list_workspace_files {"files": [{"file_id": "f_4de5b03e94", "name": "sample.csv", "type": "csv", "size_kb": 0.0, "modified": "2026-10-17 04:50"}], "count": 1}
+EVENT: Outil local appelé: list_workspace_files
+INVOKE_RESULT: list_workspace_files {"files": [{"file_id": "f_4de5b03e94", "name": "sample.csv", "type": "csv", "size_kb": 0.0, "modified": "2026-10-17 04:50"}], "count": 1}
+EXCEPTION: UserFacingError : La demande nécessite trop d’étapes automatiques. Reformule-la en une action plus ciblée.
+
+===== CASE: tool_raises =====
+EVENT: Outil local appelé: inspect_file
+INVOKE_RESULT: inspect_file EXCEPTION: UserFacingError Ce fichier n’est pas disponible dans l’espace de travail.
+RESULT: {"answer": "Après erreur outil.", "tool_events": ["inspect_file"]}
+
+===== CASE: traversal_path =====
+EVENT: Outil local appelé: inspect_file
+INVOKE_RESULT: inspect_file EXCEPTION: UserFacingError Ce fichier n’est pas disponible dans l’espace de travail.
+RESULT: {"answer": "Après traversal.", "tool_events": ["inspect_file"]}
+
+===== CASE: secret_in_tool_result =====
+EVENT: Outil local appelé: inspect_file
+INVOKE_RESULT: inspect_file {"file_id": "f_cfd6bc1640", "file": "secret.txt", "type": "txt", "size_kb": 0.1, "kind": "document", "characters": 52, "excerpt": "token = sk-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n", "truncated": false}
+RESULT: {"answer": "Réponse avec secret.", "tool_events": ["inspect_file"]}
+
+===== DIRECT INVOKE traversal =====
+INVOKE_RESULT: inspect_file EXCEPTION: UserFacingError Ce fichier n’est pas disponible dans l’espace de travail.
+UserFacingError : Ce fichier n’est pas disponible dans l’espace de travail.
+
+===== DIRECT get_path traversal =====
+UserFacingError : Ce fichier n’est pas disponible dans l’espace de travail.

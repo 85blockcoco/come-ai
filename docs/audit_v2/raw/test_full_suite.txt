@@ -1,0 +1,28 @@
+........................................................................ [  9%]
+........................................................................ [ 19%]
+........................................................................ [ 28%]
+........................................................................ [ 38%]
+........................................................................ [ 48%]
+........................................................................ [ 57%]
+........................................................................ [ 67%]
+........................................................................ [ 76%]
+........................................................................ [ 86%]
+........................................................................ [ 96%]
+.............................                                            [100%]
+============================= slowest 15 durations =============================
+3.85s call     tests/test_career_exploration.py::test_global_top_150_is_chosen_across_sources_and_exact_aliases_deduped
+3.79s call     tests/test_career_discovery_selection.py::test_changed_criteria_invalidate_selection_cache_without_losing_tracking
+3.72s call     tests/test_evolution_real_sandbox.py::test_demo_uses_real_sandbox_and_preserves_immutable_acceptance_tests
+1.84s call     tests/test_devkit_real_workflow.py::test_real_sandbox_patch_validation_apply_and_rollback
+1.81s call     tests/test_career_discovery_selection.py::test_service_imports_late_finance_offer_using_saved_brief
+0.63s call     tests/test_career_stage_hunter_ui_guards.py::test_stage_hunter_search_preserves_actual_discovery_result[http-error]
+0.55s call     tests/test_career_explorer_web.py::test_zero_personal_boards_http_explore_prepare_track_and_cache
+0.49s call     tests/test_career_agent.py::test_discovery_routes_use_an_injected_offline_connector_and_keep_exports_private
+0.48s call     tests/test_career_stage_hunter.py::test_full_http_journey_from_brief_to_offer_received
+0.47s call     tests/test_hybrid_web.py::test_production_career_ai_uses_common_router_and_refuses_truncation[True]
+0.46s call     tests/test_evolution_web.py::test_evolution_backlog_settings_persist_and_offline_forces_local_provider
+0.46s call     tests/test_career_agent.py::test_career_routes_are_local_and_do_not_break_v3
+0.45s call     tests/test_v5_web.py::test_v5_memory_is_source_cited_and_survives_app_restart
+0.42s call     tests/test_devkit_diagnostics.py::test_real_bootstrap_collects_application_and_evaluation_tests[folders2]
+0.42s call     tests/test_task_queue.py::test_errors_messages_and_terminal_state_are_bounded_and_redacted
+749 passed in 52.88s
