@@ -19,7 +19,7 @@ brique a un rôle précis ; ne jamais les faire travailler en écrivant tous dan
 ### a) Installer et connecter GitHub CLI (une seule fois)
 
 ```bash
-brew install gh                 # déjà fait si la commande `gh` répond
+brew install gh                 # déjà fait (gh 2.102.0 installé le 2026-10-20)
 gh auth login                   # choisir: GitHub.com → HTTPS → Login with web browser
 ```
 

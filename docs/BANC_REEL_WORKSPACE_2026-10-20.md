@@ -40,8 +40,13 @@ réelles »).
 
 - Commit `4a89ac6` : `SCHEMA_VERSION` 6→7 + migration `quality_json`
   (bases de données v7 opensafely → v6 d'applis plus anciennes toujours migrées).
-- Lot d'amélioration direct (commits `d29ea74`, `db3483e`, 4 tests adjoutés,
-  (4 tests ajoutés, suite : 1137 passed).
+- Lot d'amélioration direct (commits `d29ea74`, `db3483e`, 4 tests ajoutés,
+  suite : 1137 passed à l'époque ; 1141 passed le soir, ruff zéro erreur).
+- **Round 2 du banc (fin de journée, après tous les changements) : 6/6 vert**
+  sur le vrai workspace — refus pptx propre, analyse transposée (3 colonnes
+  numériques + note d'en-têtes), note « correspondance élargie » transmise,
+  Career v7 en santé, formats annoncés sans pptx. Vérifié sur l'app réelle
+  (`create_app` + TestClient), sans serveur, sans réseau sortant.
 - Le banc a servi l'app réelle (uvicorn non lancé, TestClient create_app) :
   imports dans `data/`, rapport dans `output/`, index dans `memory_data/` —
   tous dossiers gitignorés ; rien n'a été committé de personnel.
