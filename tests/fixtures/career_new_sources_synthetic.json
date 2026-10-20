@@ -1,0 +1,106 @@
+{
+  "welcome_jungle": [
+    {
+      "title": "M&A Internship - London",
+      "company": "Goldman Sachs",
+      "location": "London, United Kingdom",
+      "contract_type": "Internship",
+      "url": "https://www.welcometothejungle.com/fr/companies/goldman-sachs/jobs/m-a-internship-london",
+      "description": "<p>Join our M&A team in London for a 6-month internship. You will work on live deals, perform financial modeling, and prepare client presentations. Bachelor's degree in Finance required.</p>"
+    },
+    {
+      "title": "Asset Management Intern - Frankfurt",
+      "company": "DWS Group",
+      "location": "Frankfurt, Germany",
+      "contract_type": "Stage",
+      "url": "https://www.welcometothejungle.com/fr/companies/dws-group/jobs/asset-management-intern-frankfurt",
+      "description": "<p>Support the portfolio management team in equity research and fixed income analysis. 6-month internship starting January 2027. Master's degree preferred.</p>"
+    },
+    {
+      "title": "Corporate Finance Analyst Intern - Amsterdam",
+      "company": "ING Bank",
+      "location": "Amsterdam, Netherlands",
+      "contract_type": "Internship",
+      "url": "https://www.welcometothejungle.com/fr/companies/ing-bank/jobs/corporate-finance-intern-amsterdam",
+      "description": "<p>Assist with valuation, due diligence, and financial modeling for corporate finance advisory projects. Internship duration: 6 months.</p>"
+    }
+  ],
+  "jobteaser": [
+    {
+      "title": "Investment Banking Off-Cycle Analyst - London",
+      "company": "Morgan Stanley",
+      "location": "London, UK",
+      "contract_type": "Internship",
+      "url": "https://www.jobteaser.com/en/jobs/investment-banking-off-cycle-analyst-london",
+      "description": "<p>Off-cycle analyst program in Investment Banking Division. Work on M&A and capital markets transactions. Duration: 6 months. Start date flexible.</p>"
+    },
+    {
+      "title": "Private Equity Intern - Luxembourg",
+      "company": "Partners Group",
+      "location": "Luxembourg, Luxembourg",
+      "contract_type": "Stage",
+      "url": "https://www.jobteaser.com/en/jobs/private-equity-intern-luxembourg",
+      "description": "<p>Support deal sourcing, due diligence, and portfolio monitoring for European private equity funds. 6-month internship. Master's in Finance required.</p>"
+    },
+    {
+      "title": "Sales & Trading Intern - Madrid",
+      "company": "Banco Santander",
+      "location": "Madrid, Spain",
+      "contract_type": "Internship",
+      "url": "https://www.jobteaser.com/en/jobs/sales-trading-intern-madrid",
+      "description": "<p>Join the Global Markets desk in Madrid. Rotate between Sales and Trading. Learn fixed income, equities, and derivatives. 6-month program.</p>"
+    }
+  ],
+  "talent_com": [
+    {
+      "title": "Financial Analyst Intern - Brussels",
+      "company": "KBC Group",
+      "location": "Brussels, Belgium",
+      "contract_type": "Internship",
+      "url": "https://www.talent.com/job/financial-analyst-intern-brussels",
+      "description": "<p>Financial planning and analysis internship. Support budgeting, forecasting, and variance analysis. 6-month duration. Bachelor's degree minimum.</p>"
+    },
+    {
+      "title": "Risk Management Intern - Dublin",
+      "company": "Bank of Ireland",
+      "location": "Dublin, Ireland",
+      "contract_type": "Internship",
+      "url": "https://www.talent.com/job/risk-management-intern-dublin",
+      "description": "<p>Market and credit risk internship. Assist with risk models, stress testing, and regulatory reporting. Duration: 6 months.</p>"
+    },
+    {
+      "title": "Treasury Intern - Zurich",
+      "company": "UBS",
+      "location": "Zurich, Switzerland",
+      "contract_type": "Stage",
+      "url": "https://www.talent.com/job/treasury-intern-zurich",
+      "description": "<p>Corporate treasury internship. Cash management, funding, and FX hedging. 6-month program starting 2027.</p>"
+    }
+  ],
+  "apec": [
+    {
+      "title": "Stage Analyste Financier - Genève",
+      "company": "Pictet Group",
+      "location": "Genève, Suisse",
+      "contract_type": "STAGE",
+      "url": "https://www.apec.fr/emploi/stage-analyste-financier-geneve",
+      "description": "<p>Stage de 6 mois en analyse financière. Modélisation, valorisation, reporting. Master Finance requis. Démarrage janvier 2027.</p>"
+    },
+    {
+      "title": "Stage Contrôle de Gestion - Milan",
+      "company": "UniCredit",
+      "location": "Milan, Italie",
+      "contract_type": "STAGE",
+      "url": "https://www.apec.fr/emploi/stage-controle-gestion-milan",
+      "description": "<p>Stage contrôle de gestion 6 mois. Budgeting, forecasting, analyse d'écart. Anglais courant exigé. Bac+5 Finance.</p>"
+    },
+    {
+      "title": "Stage Trésorerie - Vienne",
+      "company": "Erste Group",
+      "location": "Vienne, Autriche",
+      "contract_type": "STAGE",
+      "url": "https://www.apec.fr/emploi/stage-tresorerie-vienne",
+      "description": "<p>Stage trésorerie d'entreprise 6 mois. Gestion de cash, financement, couverture de change. Allemand + anglais requis.</p>"
+    }
+  ]
+}

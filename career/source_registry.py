@@ -136,4 +136,29 @@ CURATED_SOURCES: tuple[dict[str, str], ...] = (
         "provenance_url": "https://www.dataiku.com/careers/",
         "verified_at": "2026-10-18T12:41:15+00:00",
     },
+    # New sources added for CVBOOST-06 (verified 2026-10-20)
+    {
+        "id": "registry:welcome_jungle:finance_internships", "provider": "welcome_jungle", "company": "Welcome to the Jungle",
+        "board_token": "finance-internships-europe", "public_url": "https://www.welcometothejungle.com/fr/jobs?query=stage%20finance&refinementList%5Boffice.country_code%5D%5B%5D=GB&refinementList%5Boffice.country_code%5D%5B%5D=DE&refinementList%5Boffice.country_code%5D%5B%5D=NL&refinementList%5Boffice.country_code%5D%5B%5D=BE&refinementList%5Boffice.country_code%5D%5B%5D=LU&refinementList%5Boffice.country_code%5D%5B%5D=CH&refinementList%5Boffice.country_code%5D%5B%5D=IE&refinementList%5Boffice.country_code%5D%5B%5D=ES&refinementList%5Boffice.country_code%5D%5B%5D=IT&refinementList%5Boffice.country_code%5D%5B%5D=PT",
+        "provenance_url": "https://www.welcometothejungle.com/fr/jobs",
+        "verified_at": "2026-10-20T00:00:00+00:00",
+    },
+    {
+        "id": "registry:jobteaser:finance_internships", "provider": "jobteaser", "company": "JobTeaser",
+        "board_token": "finance-internships-europe", "public_url": "https://www.jobteaser.com/en/jobs?query=finance%20internship&contract_type=internship&countries%5B%5D=GB&countries%5B%5D=DE&countries%5B%5D=NL&countries%5B%5D=BE&countries%5B%5D=LU&countries%5B%5D=CH&countries%5B%5D=IE&countries%5B%5D=ES&countries%5B%5D=IT&countries%5B%5D=PT",
+        "provenance_url": "https://www.jobteaser.com/en/jobs",
+        "verified_at": "2026-10-20T00:00:00+00:00",
+    },
+    {
+        "id": "registry:talent_com:finance_internships", "provider": "talent_com", "company": "Talent.com",
+        "board_token": "finance-internships-europe", "public_url": "https://www.talent.com/jobs?k=finance%20internship&l=Europe&contract=internship",
+        "provenance_url": "https://www.talent.com",
+        "verified_at": "2026-10-20T00:00:00+00:00",
+    },
+    {
+        "id": "registry:apec:finance_internships", "provider": "apec", "company": "APEC",
+        "board_token": "finance-internships-international", "public_url": "https://www.apec.fr/candidat/recherche-emploi.html?motsCles=stage%20finance&typeContrat=STAGE&secteurActivite=BANQUE_ASSURANCE_FINANCE&region=INTERNATIONAL",
+        "provenance_url": "https://www.apec.fr",
+        "verified_at": "2026-10-20T00:00:00+00:00",
+    },
 )
