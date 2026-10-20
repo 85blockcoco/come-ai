@@ -118,6 +118,17 @@ Ce que je fais de mieux pour toi ici, et tu peux le redemander tel quel :
 > Un agent qui **écrit** sur une branche dédiée ; un agent qui **relit** avant
 > fusion ; la **CI** comme arbitre ; et jamais deux writers sur `main`.
 
+## Règles produit non négociables (l'utilisateur)
+
+`docs/REGLES_UTILISATEUR_CAREER.md` fixe les constantes produit de la partie
+Career : **aucun stage en France (destinations 100 % à l'étranger, le
+classement doit pénaliser/exclure la France et ne doit plus être
+« preference-free »)** et **résumé d'offre complet** (tout ce qui est visible
+sur la page officielle doit apparaître ; information absente = « non affiché »,
+jamais inventé, et le classement pénalise les résumés incomplets). Toute
+mission classement/extraction y réfère dans son rapport ; la relecture et
+l'intégration (Mission 10) les vérifient lot par lot.
+
 ## Check-list d'une session multi-agents
 
 ```bash
