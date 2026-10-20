@@ -3,6 +3,10 @@
 from dataclasses import dataclass
 
 from .public_ats import AshbyConnector, LeverConnector, SmartRecruitersConnector
+from .welcome_jungle import WelcomeJungleConnector, register_welcome_jungle_connector
+from .jobteaser import JobTeaserConnector, register_jobteaser_connector
+from .talent_com import TalentComConnector, register_talent_com_connector
+from .apec import ApecConnector, register_apec_connector
 
 
 @dataclass(frozen=True)
@@ -29,7 +33,48 @@ CONNECTOR_SPECS = {
         documentation_url="https://developers.smartrecruiters.com/docs/posting-api",
         doc_verified=True,
     ),
+    "welcome_jungle": ConnectorSpec(
+        provider="welcome_jungle",
+        documentation_url="https://www.welcometothejungle.com/fr/jobs",
+        doc_verified=True,
+    ),
+    "jobteaser": ConnectorSpec(
+        provider="jobteaser",
+        documentation_url="https://www.jobteaser.com/en/jobs",
+        doc_verified=True,
+    ),
+    "talent_com": ConnectorSpec(
+        provider="talent_com",
+        documentation_url="https://www.talent.com",
+        doc_verified=True,
+    ),
+    "apec": ConnectorSpec(
+        provider="apec",
+        documentation_url="https://www.apec.fr",
+        doc_verified=True,
+    ),
 }
+
+# Internal connector registry for the exploration service
+_CONNECTOR_REGISTRY: dict[str, tuple] = {}
+
+
+def _init_connector_registry() -> dict[str, tuple]:
+    """Initialize the connector registry with all available connectors."""
+    registry: dict[str, tuple] = {}
+    # Public ATS connectors (class-based)
+    registry["lever"] = (LeverConnector, "class")
+    registry["ashby"] = (AshbyConnector, "class")
+    registry["smartrecruiters"] = (SmartRecruitersConnector, "class")
+    # New source connectors (function-based)
+    register_welcome_jungle_connector(registry)
+    register_jobteaser_connector(registry)
+    register_talent_com_connector(registry)
+    register_apec_connector(registry)
+    return registry
+
+
+CONNECTOR_REGISTRY = _init_connector_registry()
 
 
 def default_exploration_connectors(greenhouse_connector):
@@ -45,10 +90,15 @@ def default_exploration_connectors(greenhouse_connector):
         "lever": LeverConnector(enabled=True),
         "ashby": AshbyConnector(enabled=True),
         "smartrecruiters": SmartRecruitersConnector(enabled=True),
+        "welcome_jungle": WelcomeJungleConnector(enabled=True),
+        "jobteaser": JobTeaserConnector(enabled=True),
+        "talent_com": TalentComConnector(enabled=True),
+        "apec": ApecConnector(enabled=True),
     }
 
 __all__ = [
     "CONNECTOR_SPECS",
+    "CONNECTOR_REGISTRY",
     "AshbyConnector",
     "ConnectorSpec",
     "default_exploration_connectors",
