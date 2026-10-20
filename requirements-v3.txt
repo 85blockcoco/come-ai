@@ -24,6 +24,8 @@ xlrd>=2.0.1,<3
 fastapi>=0.115,<1
 uvicorn[standard]>=0.30,<1
 python-multipart>=0.0.12,<1
+# TestClient de Starlette requiert httpx ; sans lui la CI échoue à l'import.
+httpx>=0.28,<2
 pytest>=8,<10
 
 # Exports Career locaux, sans Word, Pages, navigateur ou service distant
