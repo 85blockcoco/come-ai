@@ -31,9 +31,16 @@ def test_http_export_issue_and_test_gated_patch_preserve_private_files(tmp_path:
     app = create_app(root)
     try:
         with TestClient(app) as client:
-            response = client.get("/api/devkit/status")
+            response = client.get("/api/devkit/status", headers={"Origin": "http://testserver"})
             assert response.status_code == 200
             token = response.json()["workshop_token"]
+            assert token, "l'atelier doit libérer son jeton pour son propre navigateur"
+            # Un navigateur étranger ne doit ni recevoir le jeton ni le déduire.
+            foreign = client.get("/api/devkit/status", headers={"Origin": "https://example.invalid"})
+            assert foreign.status_code == 403
+            anonymous = client.get("/api/devkit/status")
+            assert anonymous.status_code == 200
+            assert anonymous.json()["workshop_token"] == ""
             headers = {"X-Workshop-Token": token}
             assert client.post("/api/devkit/exports", json={}).status_code == 403
             assert client.post("/api/devkit/exports", json={}, headers={**headers, "Origin": "https://example.invalid"}).status_code == 403

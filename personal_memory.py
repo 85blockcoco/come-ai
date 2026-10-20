@@ -265,6 +265,9 @@ class PersonalMemoryStore:
             connection.row_factory = sqlite3.Row
             connection.execute("PRAGMA foreign_keys = ON")
             connection.execute("PRAGMA busy_timeout = 5000")
+            # Mémoire personnelle : les lignes supprimées doivent cesser
+            # d'apparaître dans les pages libres et le journal WAL.
+            connection.execute("PRAGMA secure_delete = ON")
             yield connection
             connection.commit()
             self._tighten_database_permissions()

@@ -24,7 +24,9 @@ def consume_cloud_context_consent(
     request = TransmissionRequest(
         provider=provider,
         model=model,
-        purpose="generic",
+        # Le contexte du chat contient des extraits de documents personnels :
+        # journalisé comme contexte de profil, pas comme un envoi générique.
+        purpose="profile_context",
         payload=payload,
     )
     with ConsentGuard(storage_dir) as guard:
@@ -33,7 +35,7 @@ def consume_cloud_context_consent(
             grant.consent_id,
             provider=provider,
             model=model,
-            purpose="generic",
+            purpose="profile_context",
             request=request,
         )
     return receipt.transmission_id

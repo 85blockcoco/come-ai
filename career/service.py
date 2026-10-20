@@ -85,7 +85,7 @@ from .exploration import (
 )
 from .offer_qualification import qualify_offer
 from .scoring import classify_job_family, score_job
-from workspace_core import UserFacingError, extract_text
+from workspace_core import UserFacingError, extract_text, safe_error
 from .profile_import import (
     ALLOWED_PROFILE_SUFFIXES,
     MAX_PROFILE_IMPORT_BYTES,
@@ -1880,7 +1880,7 @@ class CareerService:
         ai_generator: Any | None = None,
         provider: str = "career",
         model: str = "career-summary",
-        purpose: str = "career_summary",
+        purpose: str = "job_application",
     ) -> dict[str, Any]:
         """Structured, factual summary of one offer.
 
@@ -1917,18 +1917,26 @@ class CareerService:
             return result
 
         result["mode"] = "ai"
-        payload_for_consent = {
-            "job_id": job.get("id"),
-            "title": job.get("title"),
-            "company": job.get("company"),
-        }
+        # Le prompt final est construit AVANT la décision de consentement :
+        # son empreinte est exactement ce qui est signé et consommé (aucune
+        # donnée au-delà de ce qui a été validé par l'utilisateur).
+        prompt = (
+            "Résume de façon structurée et factuelle l'offre suivante, sans inventer. "
+            "Retourne un JSON avec les clés: summary, missions, prerequisites, dates, relevance, official_url. "
+            f"Offre: {job}"
+        )
+        payload_for_consent: dict[str, Any] = {"prompt": prompt}
 
         allowed = False
         refusal_message: str | None = None
         consent_status: str | None = None
 
         guard = getattr(self, "consent_guard", None)
-        if guard is not None and consent_id:
+        if guard is None:
+            # Échec en absence d'option : sans garde-fou disponible, aucun
+            # contenu local ne quitte le disque. Le résumé local reste servi.
+            refusal_message = "Garde-fou de consentement indisponible ; aucun envoi cloud n'est possible."
+        elif consent_id:
             try:
                 decision = guard.check(
                     consent_id,
@@ -1959,8 +1967,33 @@ class CareerService:
                 else:
                     refusal_message = getattr(decision, "message", None)
         elif consent_external:
-            allowed = True
-            consent_status = "allowed"
+            # L'accord explicite de l'utilisateur ne court-circuite plus le garde :
+            # il devient un reçu unique signé sur l'empreinte du prompt exact,
+            # consommé immédiatement pour cette transmission.
+            try:
+                envelope = guard.grant(
+                    payload_for_consent,
+                    provider=provider,
+                    model=model,
+                    purpose=purpose,
+                    actor="come_ai_career_summary_ui",
+                )
+                consent_status = "allowed"
+            except Exception as error:
+                refusal_message = str(error)
+            else:
+                try:
+                    guard.consume(
+                        envelope.consent_id,
+                        provider=provider,
+                        model=model,
+                        purpose=purpose,
+                        payload=payload_for_consent,
+                    )
+                    allowed = True
+                except Exception as error:
+                    refusal_message = str(error)
+                    consent_status = getattr(error, "code", consent_status) or consent_status
         else:
             refusal_message = "Consentement cloud requis ; résumé local conservé."
 
@@ -1976,15 +2009,13 @@ class CareerService:
             result["mode"] = "local"
             return result
 
-        prompt = (
-            "Résume de façon structurée et factuelle l'offre suivante, sans inventer. "
-            "Retourne un JSON avec les clés: summary, missions, prerequisites, dates, relevance, official_url. "
-            f"Offre: {job}"
-        )
         try:
             generated = ai_generator(prompt)
         except Exception as error:
-            result["ai_error"] = f"Le fournisseur IA a échoué ; résumé local conservé. (repli local) {error}"
+            result["ai_error"] = (
+                "Le fournisseur IA a échoué ; résumé local conservé. (repli local) "
+                + safe_error(error)
+            )
             result["consent_status"] = consent_status
             result["mode"] = "local"
             return result

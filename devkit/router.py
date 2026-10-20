@@ -87,10 +87,17 @@ def create_developer_router(service_factory: Callable[[], DeveloperWorkshop]) ->
             raise HTTPException(400, "Le fichier local n’a pas pu être lu ou sauvegardé.") from error
 
     @router.get("/status")
-    async def status() -> dict[str, Any]:
+    async def status(request: Request) -> dict[str, Any]:
         workshop = service_factory()
         result = await action(workshop.status)
-        result["workshop_token"] = workshop.token
+        origin = request.headers.get("origin")
+        expected_origin = f"{request.url.scheme}://{request.url.netloc}"
+        # Le jeton n'est libéré que pour un navigateur de l'application elle-même :
+        # une page étrangère ne peut ni le lire ni le déduire, et un processus
+        # local non-navigateur ne le reçoit plus automatiquement.
+        if origin and not hmac.compare_digest(origin, expected_origin):
+            raise HTTPException(403, "Cet atelier n'est accessible que depuis cette application locale.")
+        result["workshop_token"] = workshop.token if (origin and hmac.compare_digest(origin, expected_origin)) else ""
         return result
 
     @router.get("/evolution")

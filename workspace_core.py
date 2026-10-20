@@ -146,7 +146,15 @@ class AppConfig:
 
     def ensure_directories(self) -> None:
         for path in (self.data_dir, self.output_dir, self.log_dir):
-            path.mkdir(parents=True, exist_ok=True)
+            path.mkdir(parents=True, exist_ok=True, mode=0o700)
+            try:
+                # Les documents importés et les rapports peuvent contenir des
+                # données personnelles : aucun accès groupe/autres même si le
+                # dossier existait déjà avec des droits plus larges.
+                path.chmod(0o700)
+            except OSError:
+                # Volume externe / montage read-only meta : ne pas bloquer l'app.
+                pass
 
     @property
     def has_gemini_key(self) -> bool:

@@ -8,7 +8,8 @@ def test_evolution_backlog_settings_persist_and_offline_forces_local_provider(tm
     app = create_app(tmp_path)
     try:
         with TestClient(app) as client:
-            status = client.get("/api/devkit/status").json()
+            status = client.get("/api/devkit/status", headers={"Origin": "http://testserver"}).json()
+            assert status["workshop_token"], "jeton attendu pour le navigateur local"
             headers = {"X-Workshop-Token": status["workshop_token"]}
             initial = client.get("/api/devkit/evolution")
             assert initial.status_code == 200

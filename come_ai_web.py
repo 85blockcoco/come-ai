@@ -7,6 +7,8 @@ model actions are routed through the controlled tools in ``workspace_core``.
 
 from __future__ import annotations
 
+import hmac
+import json
 import logging
 import re
 import threading
@@ -127,6 +129,52 @@ class UploadBodyLimitMiddleware:
             return message
 
         await self.app(scope, limited_receive, send)
+
+
+class CrossSiteWriteMiddleware:
+    """Reject cross-site writing requests (CSRF on unsafe methods).
+
+    A browser POST from a foreign origin always carries an Origin header, so a
+    simple form (no preflight required) cannot reach mutating endpoints
+    silently. Non-browser clients (curl, TestClient) send no Origin and stay
+    welcome. This complements the per-endpoint chat/devkit origin checks and
+    covers the multipart endpoints they did not protect.
+    """
+
+    UNSAFE_METHODS = "POST", "PUT", "PATCH", "DELETE"
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
+        if scope.get("type") != "http" or scope.get("method") not in self.UNSAFE_METHODS:
+            await self.app(scope, receive, send)
+            return
+        headers = dict(scope.get("headers", []))
+        origin = (headers.get(b"origin") or b"").decode("latin-1").strip()
+        if origin:
+            server_host = ""
+            for key in (b"host",):
+                server_host = (headers.get(key) or b"").decode("latin-1").strip()
+                if server_host:
+                    break
+            scheme = str(scope.get("scheme", "http"))
+            expected = f"{scheme}://{server_host}" if server_host else ""
+            if not expected or not hmac.compare_digest(origin.lower(), expected.lower()):
+                payload = json.dumps({"detail": "Cette action doit être lancée depuis cette application locale."}).encode("utf-8")
+                await send(
+                    {
+                        "type": "http.response.start",
+                        "status": 403,
+                        "headers": [
+                            (b"content-type", b"application/json; charset=utf-8"),
+                            (b"content-length", str(len(payload)).encode("ascii")),
+                        ],
+                    }
+                )
+                await send({"type": "http.response.body", "body": payload})
+                return
+        await self.app(scope, receive, send)
 
 
 @dataclass
@@ -367,6 +415,10 @@ def create_app(
         paths=("/api/v5/chat",),
         error_message="Conversation trop volumineuse (maximum 512 Ko).",
     )
+    # CSRF : tout POST/PUT/PATCH/DELETE avec Origin d'un autre site est refusé
+    # (les formulaires simples n'ont pas de preflight). Les clients locaux
+    # (curl, tests) sans Origin ne sont pas concernés.
+    app.add_middleware(CrossSiteWriteMiddleware)
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next: Any) -> Any:
