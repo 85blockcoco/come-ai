@@ -413,3 +413,19 @@ button, a, .career-tab { transition: background-color .16s ease, border-color .1
   .panel, .metric, .career-tabs, .career-loading, .career-message, .empty-state, .action-plan-item, .action-plan-skeleton { border: 1px solid CanvasText; }
   .career-tab.active, .primary-button { border: 1px solid CanvasText; }
 }
+
+/* Kit de candidature local (CVBOOST-05) : panneau prérempli par offre suivie. */
+.application-kit { margin-top: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); display: grid; gap: 12px; }
+.application-kit[hidden] { display: none; }
+.kit-heading { font-size: .95rem; margin: 0; }
+.kit-subheading { font-size: .82rem; margin: 0 0 6px; color: var(--accent-dark); }
+.application-kit-disclaimer { font-size: .76rem; color: var(--muted); margin: 0; }
+.application-kit-facts { display: grid; gap: 6px; }
+.application-kit-fact { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.application-kit-fact-label { flex: 0 0 120px; font-size: .74rem; color: var(--muted); }
+.application-kit-fact-value { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .78rem; overflow-wrap: anywhere; }
+.kit-copy-status { font-size: .72rem; color: var(--good); min-width: 0; }
+.application-kit-documents, .application-kit-texts, .application-kit-checks { display: grid; gap: 8px; padding-top: 4px; border-top: 1px dashed var(--border); }
+.application-kit-documents label, .application-kit-texts label { display: grid; gap: 5px; font-size: .78rem; }
+.application-kit-documents textarea, .application-kit-texts textarea { width: 100%; max-width: 100%; resize: vertical; }
+.kit-language-select { width: auto; min-width: 150px; max-width: 200px; }

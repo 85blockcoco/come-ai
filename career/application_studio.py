@@ -460,6 +460,130 @@ def _limit_draft(value: str) -> str:
     return cleaned
 
 
+KIT_TEXT_FIELDS: tuple[str, ...] = ("motivation_short", "availability")
+KIT_TEXT_LIMITS: dict[str, int] = {"motivation_short": 1_200, "availability": 400}
+
+
+def _kit_availability_text(data: dict[str, str], language: str) -> str:
+    """Availability is what the person declared, or an explicit placeholder.
+
+    The mini-intake field ``constraints`` carries the person's own declared
+    practical points (period, duration, mobility).  When it exists, the kit
+    quotes it verbatim and marks it "to re-read": never as a certainty.  When
+    it is empty, a bracketed placeholder keeps the unknown unknown.
+    """
+    if data["constraints"]:
+        prefix = {
+            "fr": "[À relire — déclaré dans ton mini-entretien : ",
+            "en": "[To review — as declared in your intake: ",
+            "it": "[Da rileggere — dichiarato nel tuo mini-entrevista: ",
+            "de": "[Zu prüfen — im Mini-Interview angegeben: ",
+        }[language]
+        return f"{prefix}{data['constraints']}]"
+    return {
+        "fr": "[Disponibilité à compléter — ex. : 6 mois à partir du 1er février]",
+        "en": "[Availability to complete — e.g. 6 months starting February 1st]",
+        "it": "[Disponibilità da completare — es. 6 mesi dal 1° febbraio]",
+        "de": "[Verfügbarkeit ergänzen – z. B. 6 Monate ab dem 1. Februar]",
+    }[language]
+
+
+def _build_local_kit_texts(data: dict[str, str], language: str) -> str:
+    """Short, factual motivation text reused by the local application kit.
+
+    Same rule as the CV/letter templates: facts already stored locally are
+    repeated, nothing is invented, and every missing fact stays a visible
+    bracketed placeholder the person can edit before use.
+    """
+    location = _offer_location(data)
+    location_part = f" ({location})" if location else ""
+    if language == "fr":
+        return (
+            "Bonjour,\n\n"
+            f"Je candidate au poste de {data['title']} au sein de {data['company']}{location_part}.\n"
+            f"Mon parcours : {data['education']}\n"
+            f"Mes expériences factuelles : {data['experience']}\n"
+            f"Compétences que je peux documenter : {data['skills']}\n"
+            f"Disponibilité : {data['availability']}\n\n"
+            "Je reste disponible pour tout échange utile.\n\n"
+            "Des salutations respectueuses,\n"
+            f"{data['name']}"
+        )
+    if language == "en":
+        return (
+            "Hello,\n\n"
+            f"I am applying for the {data['title']} position at {data['company']}{location_part}.\n"
+            f"My background: {data['education']}\n"
+            f"My factual experience: {data['experience']}\n"
+            f"Skills I can substantiate: {data['skills']}\n"
+            f"Availability: {data['availability']}\n\n"
+            "I remain available for any useful discussion.\n\n"
+            "Kind regards,\n"
+            f"{data['name']}"
+        )
+    if language == "it":
+        return (
+            "Buongiorno,\n\n"
+            f"mi candido per la posizione di {data['title']} presso {data['company']}{location_part}.\n"
+            f"Il mio percorso: {data['education']}\n"
+            f"Le mie esperienze fattuali: {data['experience']}\n"
+            f"Competenze che posso documentare: {data['skills']}\n"
+            f"Disponibilità: {data['availability']}\n\n"
+            "Resto a disposizione per qualsiasi scambio utile.\n\n"
+            "Cordiali saluti,\n"
+            f"{data['name']}"
+        )
+    return (
+        "Guten Tag,\n\n"
+        f"ich bewerbe mich auf die Position {data['title']} bei {data['company']}{location_part}.\n"
+        f"Mein Hintergrund: {data['education']}\n"
+        f"Meine tatsächlichen Erfahrungen: {data['experience']}\n"
+        f"Kenntnisse, die ich belegen kann: {data['skills']}\n"
+        f"Verfügbarkeit: {data['availability']}\n\n"
+        "Ich stehe für ein konkretes Gespräch gerne zur Verfügung.\n\n"
+        "Mit freundlichen Grüßen\n"
+        f"{data['name']}"
+    )
+
+
+def build_kit_texts(
+    profile: dict[str, Any], intake: dict[str, Any], job: dict[str, Any], language: Any
+) -> dict[str, str]:
+    """Local kit texts for one tracked offer: short motivation + availability.
+
+    Pure function, no network, no model: it reuses exactly the factual
+    sections of the local CV/letter templates so the kit and the documents
+    tell the same, reviewable story.
+    """
+    normalized_language = normalize_language(language)
+    data = _factual_sections(profile, intake, job, normalized_language)
+    data["availability"] = _kit_availability_text(data, normalized_language)
+    return {
+        "motivation_short": _text(
+            _build_local_kit_texts(data, normalized_language),
+            KIT_TEXT_LIMITS["motivation_short"],
+        ),
+        "availability": _text(data["availability"], KIT_TEXT_LIMITS["availability"]),
+    }
+
+
+def scan_kit_placeholders(texts: dict[str, Any]) -> list[str]:
+    """List every bracketed item the reader must still complete or re-check.
+
+    This is the local fact-check surface for the kit texts: nothing generated
+    here can hide an unfinished sentence — an unfilled fact always surfaces as
+    an explicit, editable marker.
+    """
+    markers: list[str] = []
+    for field in KIT_TEXT_FIELDS:
+        value = str(texts.get(field) or "") if isinstance(texts, dict) else ""
+        for match in re.findall(r"\[[^\[\]\n]{2,160}\]", value):
+            marker = match.strip()
+            if marker and marker not in markers:
+                markers.append(marker)
+    return markers[:8]
+
+
 def build_local_application_draft(
     profile: dict[str, Any], intake: dict[str, Any], job: dict[str, Any], language: Any
 ) -> ApplicationDraft:
