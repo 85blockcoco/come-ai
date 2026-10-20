@@ -1,5 +1,15 @@
 # HANDOFF CODEX — Mission : radar de relances des candidatures
 
+> **⚠️ MISSION ABSORBÉE (2026-10-20, fin de journée)** — cette mission fait
+> désormais partie du pack des dix missions en cours d'exécution par les
+> agents : voir `docs/agent_missions/CAREER_CV_BOOST_10_BUILD_PROMPTS_2026-10-20.md`,
+> **Mission 09** (« Tableau de bord des candidatures et relances ») qui
+> englobe bandes de compteurs, staleness et brouillons de relance (jamais
+> d'envoi). Ne pas lancer cette mission en doublon : les modifications
+> simultanées de `career/service.py` et `career_static/career.js` créeraient
+> des conflits. Le présent document reste valable comme **cadrage
+> fonctionnel détaillé** de la partie relances.
+
 Date : 2026-10-20 · Branche de travail demandée : `agent/career-followup-radar`
 Dépôt : `/Users/comedelavenne/AI-Excel-Agent` (branche `main` à jour, 1141 tests verts, ruff zéro erreur)
 

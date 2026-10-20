@@ -48,6 +48,7 @@ come_ai_web.create_app()      ← point d'entrée unique (uvicorn)
 ## Annexes
 
 - Exploitation quotidien : lancer avec `Lancer Côme AI V3.command`.
-- Tests d'acceptation par surface : `tests/` (1 137 tests).
+- Tests d'acceptation par surface : `tests/` (1 147 tests, base `main` à
+  l'intégration du lot CV Boost).
 - Historique des décisions de conduite : `docs/audits/`,
   `docs/agent-reports/`, `docs/archive/`.

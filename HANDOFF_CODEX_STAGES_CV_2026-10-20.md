@@ -1,5 +1,13 @@
 # MISSION CODEX — Stage Hunter élargi + candidature 1-clic + coach CV (2026-10-20)
 
+> **✅ MISSION LIVRÉE & FUSIONNÉE (2026-10-20)** — le candidat sur la branche
+> `codex/career-cv-boost` (commits `fd51bdd`, `7834e45`) a été relu, validé
+> (1145 tests verts) et fusionné dans `main` (fusion `e3c77f4`, 1147 tests
+> verts, tag `v1-cvboost-2026-10-20`). Les suites du chantier sont cadrées
+> par `docs/agent_missions/CAREER_CV_BOOST_10_BUILD_PROMPTS_2026-10-20.md`
+> (missions 01 à 09, en cours d'exécution par d'autres agents) ; l'intégration
+> finale est la Mission 10.
+
 ## 0. Contexte du dépôt (lis d'abord, dans cet ordre)
 
 1. `README.md` (règles produit), `CODEX_READY.md` (workflow), `docs/ARCHITECTURE.md`
