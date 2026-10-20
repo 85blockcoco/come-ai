@@ -7,7 +7,6 @@ Documentation: No public API; uses search HTML with structured data.
 
 from __future__ import annotations
 
-import json
 import re
 import socket
 import time
