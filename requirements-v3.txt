@@ -5,7 +5,7 @@
 # Noyau IA et données
 google-genai>=2.27,<3
 certifi>=2024.2
-pandas>=3.0,<4
+pandas>=3.0.6,<4
 numpy>=2.0,<3
 openpyxl>=3.1,<4
 
