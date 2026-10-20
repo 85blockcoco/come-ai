@@ -24,6 +24,7 @@ from typing import Any, Iterator
 
 from .models import (
     AVAILABILITY_STATES,
+    APPLICATION_STAGES,
     GENERIC_APPLICATION_STAGES,
     JOB_FAMILIES,
     PRIMARY_LOCATIONS,
@@ -46,6 +47,14 @@ from .application_studio import (
     render_application_html,
 )
 from .calendar_export import build_deadline_calendar_ics
+from .application_dashboard import (
+    CHECKLIST_EVENT_TYPE,
+    CHECKLIST_KEYS,
+    DEADLINE_FILTER_VALUES,
+    MAX_DASHBOARD_APPLICATIONS,
+    RECEIPT_FILTER_VALUES,
+    build_dashboard_payload,
+)
 from .application_prep import prepare_application, summarize_offer
 
 try:
@@ -3122,6 +3131,124 @@ class CareerService:
             record["approval_granted"] = bool(record["approval_granted"])
             records.append(record)
         return records
+
+    def application_dashboard(
+        self,
+        *,
+        stage: str = "",
+        receipt: str = "",
+        action_required: bool | None = None,
+        deadline: str = "",
+        query: str = "",
+    ) -> dict[str, Any]:
+        """CVBOOST-09 : projection déterministe des candidatures suivies.
+
+        Réutilise les événements et les états existants, sans migration et
+        sans réseau. Toute donnée imprévisible reste un inconnu affiché, jamais
+        un chiffre inventé ; une ligne SQLite n'est jamais un envoi.
+        """
+        normalized_stage = clean_text(stage, limit=80)
+        if normalized_stage and normalized_stage not in APPLICATION_STAGES:
+            raise UserFacingError("Ce statut de filtre est invalide.")
+        normalized_receipt = clean_text(receipt, limit=80)
+        if normalized_receipt and normalized_receipt not in RECEIPT_FILTER_VALUES[1:]:
+            raise UserFacingError("Ce filtre de réception est invalide.")
+        normalized_deadline = clean_text(deadline, limit=40)
+        if normalized_deadline and normalized_deadline not in DEADLINE_FILTER_VALUES[1:]:
+            raise UserFacingError("Ce filtre d’échéance est invalide.")
+        action_filter: bool | None = None
+        if action_required is not None:
+            action_filter = bool(action_required)
+        with self._lock, self._connection() as connection:
+            application_rows = connection.execute(
+                """
+                SELECT a.id AS application_id, a.job_id, a.stage, a.receipt_status,
+                       a.approval_granted, a.confirmation_reference,
+                       a.created_at AS application_created_at, a.updated_at AS application_updated_at,
+                       j.id AS joined_job_id, j.company, j.title, j.city, j.country, j.official_url,
+                       j.deadline_date, j.source_status, j.employment_type, j.role_level,
+                       j.requirements, j.languages_required, j.eligibility_requirement,
+                       j.description_original, j.job_family
+                FROM applications a JOIN jobs j ON a.job_id = j.id
+                ORDER BY a.updated_at DESC, a.id ASC
+                LIMIT ?
+                """,
+                (MAX_DASHBOARD_APPLICATIONS,),
+            ).fetchall()
+            total_applications = int(
+                connection.execute("SELECT COUNT(*) AS total FROM applications").fetchone()["total"]
+            )
+            events_by_application: dict[str, list[dict[str, Any]]] = {}
+            application_ids = [str(row["application_id"]) for row in application_rows]
+            if application_ids:
+                placeholders = ", ".join("?" for _ in application_ids)
+                event_rows = connection.execute(
+                    f"""
+                    SELECT application_id, event_type, detail, created_at
+                    FROM application_events
+                    WHERE application_id IN ({placeholders})
+                    ORDER BY created_at ASC
+                    """,
+                    application_ids,
+                ).fetchall()
+                for event_row in event_rows:
+                    events_by_application.setdefault(str(event_row["application_id"]), []).append(dict(event_row))
+            jobs_by_id: dict[str, dict[str, Any]] = {}
+            for row in application_rows:
+                job_id = str(row["job_id"])
+                if job_id in jobs_by_id:
+                    continue
+                job_row = connection.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+                jobs_by_id[job_id] = dict(job_row) if job_row else {}
+        context = self._scoring_context()
+        return build_dashboard_payload(
+            [dict(row) for row in application_rows],
+            events_by_application,
+            jobs_by_id,
+            context.get("profile") or {},
+            context.get("intake") or {},
+            today=date.today(),
+            now_iso=utc_now(),
+            total_applications=total_applications,
+            stage=normalized_stage,
+            receipt=normalized_receipt,
+            action_required=action_filter,
+            deadline=normalized_deadline,
+            query=query,
+        )
+
+    def set_application_checklist(self, application_id: str, checked: list[str]) -> dict[str, Any]:
+        """Enregistre l'état local de la checklist dans le journal existant.
+
+        Aucun changement de schéma : un événement ``checklist`` porte l'état
+        complet en JSON, le dernier événement faisant foi. Rien n'est envoyé,
+        nulle part.
+        """
+        cleaned = [clean_text(item, limit=80) for item in (checked or []) if clean_text(item, limit=80)]
+        unknown_keys = sorted(set(cleaned) - CHECKLIST_KEYS)
+        if unknown_keys:
+            raise UserFacingError("Cette case de checklist est inconnue : " + ", ".join(unknown_keys))
+        with self._lock, self._connection() as connection:
+            application = connection.execute(
+                "SELECT job_id FROM applications WHERE id = ?", (application_id,)
+            ).fetchone()
+            if not application:
+                raise UserFacingError("Cette candidature Career n’existe pas.")
+            detail = json.dumps(
+                {"items": {key: True for key in sorted(set(cleaned))}},
+                ensure_ascii=False,
+            )
+            self._application_event(
+                connection, application_id, str(application["job_id"]), CHECKLIST_EVENT_TYPE, detail
+            )
+            self._audit(connection, "application_checklist_updated", "application", application_id)
+        result = self.get_application(application_id)
+        result["checklist"] = {
+            "checked_keys": sorted(set(cleaned)),
+            "unknown": False,
+        }
+        return result
+
 
     def update_application_stage(self, application_id: str, stage: str, note: str = "") -> dict[str, Any]:
         normalized_stage = clean_text(stage, limit=80)
