@@ -203,14 +203,14 @@ def detect_sections(text: str) -> tuple[list[SectionReading], list[Finding]]:
     Returns:
         Tuple of (detected_sections, findings_for_missing_sections).
     """
-    normalized_text = _normalize(text)
-    lines = normalized_text.split("\n")
+    # Work with original lines for correct offset calculation
+    original_lines = text.split("\n")
+    normalized_lines = [_normalize(l) for l in original_lines]
     sections: list[SectionReading] = []
     found_section_titles: set[str] = set()
 
     # Scan for section headers (lines that look like headers)
-    for i, line in enumerate(lines):
-        norm_line = _normalize(line.strip())
+    for i, norm_line in enumerate(normalized_lines):
         if not norm_line or len(norm_line) > 80:
             continue
 
@@ -219,21 +219,24 @@ def detect_sections(text: str) -> tuple[list[SectionReading], list[Finding]]:
                 continue
             for kw in keywords:
                 if kw in norm_line and len(norm_line) < len(kw) + 20:
-                    # Found a section header
-                    start_offset = text.find(line)
+                    # Found a section header - use original line for offset
+                    original_line = original_lines[i]
+                    start_offset = text.find(original_line)
                     if start_offset == -1:
-                        start_offset = sum(len(l) + 1 for l in lines[:i])
+                        # Fallback: calculate from line lengths
+                        start_offset = sum(len(l) + 1 for l in original_lines[:i])
 
                     # Find end of section (next header or end of text)
                     end_offset = len(text)
-                    for j in range(i + 1, len(lines)):
-                        next_norm = _normalize(lines[j].strip())
+                    for j in range(i + 1, len(normalized_lines)):
+                        next_norm = normalized_lines[j]
                         for _, other_kws in SECTION_KEYWORDS.items():
                             for okw in other_kws:
                                 if okw in next_norm and len(next_norm) < len(okw) + 20:
-                                    end_offset = text.find(lines[j])
+                                    next_original = original_lines[j]
+                                    end_offset = text.find(next_original)
                                     if end_offset == -1:
-                                        end_offset = sum(len(l) + 1 for l in lines[:j])
+                                        end_offset = sum(len(l) + 1 for l in original_lines[:j])
                                     break
                             else:
                                 continue
