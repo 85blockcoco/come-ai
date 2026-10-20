@@ -269,6 +269,9 @@ details summary:focus-visible { border-radius: 5px; outline-offset: 4px; }
 .roadmap-panel p:not(.eyebrow) { color: var(--muted); line-height: 1.55; }
 .studio-panel, .application-draft-preview, .studio-history-panel { max-width: 1120px; margin-bottom: 16px; }
 .studio-consent { display: flex !important; gap: 8px; align-items: flex-start; padding: 10px; border: 1px solid #f0d6ac; border-radius: 9px; color: var(--warning) !important; background: var(--warning-soft); font-size: .76rem !important; font-weight: 500 !important; line-height: 1.4; }
+/* .studio-consent [hidden] : la règle ci-dessus doit laisser passer l'attribut hidden
+   (sinon la ligne de consentement cloud resterait visible en mode gabarit local). */
+.studio-consent[hidden] { display: none !important; }
 .studio-consent input { width: 16px; min-height: 16px; margin-top: 2px; accent-color: var(--accent); }
 .draft-checks { display: grid; gap: 6px; margin: 10px 0 14px; }
 .draft-check { padding: 8px 10px; border: 1px solid #f0d6ac; border-radius: 8px; color: var(--warning); background: var(--warning-soft); font-size: .74rem; line-height: 1.4; }
