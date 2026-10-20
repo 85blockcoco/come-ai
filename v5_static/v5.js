@@ -340,7 +340,27 @@ function renderSources(sources) {
 function renderMemoryResults(results) {
   elements.memoryResults.replaceChildren();
   if (!results.length) { const none = document.createElement("p"); none.className = "empty-state compact"; none.textContent = "Aucun passage trouvé."; elements.memoryResults.append(none); return; }
-  for (const result of results) { const card = document.createElement("article"); card.className = "memory-result"; const source = document.createElement("strong"); source.textContent = result.citation || result.source_title || "Source locale"; const excerpt = document.createElement("p"); excerpt.textContent = result.excerpt || ""; card.append(source, excerpt); elements.memoryResults.append(card); }
+  for (const result of results) {
+    const card = document.createElement("article"); card.className = "memory-result";
+    const label = result.citation || result.source_title || "Source locale";
+    const source = document.createElement("strong"); source.textContent = label;
+    const excerpt = document.createElement("p"); excerpt.textContent = result.excerpt || "";
+    const copyButton = document.createElement("button"); copyButton.type = "button"; copyButton.className = "secondary-button";
+    copyButton.textContent = "Copier le passage";
+    copyButton.setAttribute("aria-label", `Copier le passage de « ${label} »`);
+    const passageText = `${label}\n${result.excerpt || ""}`;
+    copyButton.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(passageText);
+        copyButton.textContent = "Copié ✓";
+      } catch (_error) {
+        text(elements.memoryActionStatus, "La copie automatique a été refusée par le navigateur : sélectionne le texte à la main.");
+      } finally {
+        setTimeout(() => { copyButton.textContent = "Copier le passage"; }, 1500);
+      }
+    });
+    card.append(source, excerpt, copyButton); elements.memoryResults.append(card);
+  }
 }
 
 function renderStorage(data) {
