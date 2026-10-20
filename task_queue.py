@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import sqlite3
 import threading
 import uuid
@@ -27,6 +26,14 @@ from datetime import datetime, timezone
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, TypeAlias
+
+from secret_redaction import (
+    DEFAULT_REPLACEMENT as _SECRET_REPLACEMENT,
+    is_sensitive_key as _shared_is_sensitive_key,
+    normalise_key as _shared_normalise_key,
+    redact_payload as _shared_redact_payload,
+    redact_text as _shared_redact_text,
+)
 
 
 # These limits are deliberately small enough for a local SQLite task ledger.
@@ -139,84 +146,32 @@ class TaskRecord:
         return self.status in TERMINAL_STATUSES
 
 
-_SENSITIVE_KEY_PARTS = frozenset(
-    {
-        "apikey",
-        "authorization",
-        "credential",
-        "cookie",
-        "password",
-        "passphrase",
-        "privatekey",
-        "secret",
-        "sessiontoken",
-        "token",
-    }
-)
-_SECRET_PATTERNS = (
-    # Gemini-style keys, without relying on any one provider being enabled.
-    re.compile(r"\bAIza[0-9A-Za-z_-]{20,}\b"),
-    # OpenRouter keys have a distinct hyphenated prefix and are not covered by
-    # the underscore-prefixed generic key rule below.
-    re.compile(r"\bsk-or-v1-[0-9A-Za-z_-]{24,}\b", re.IGNORECASE),
-    # Common API-key prefixes. The length avoids masking ordinary prose.
-    re.compile(r"\b(?:sk|rk|pk)_[A-Za-z0-9_-]{16,}\b", re.IGNORECASE),
-    # Headers and key=value fragments that can accidentally occur in errors.
-    re.compile(
-        r"\b(?:authorization|bearer|api[ _-]?key|token|password|secret)\s*"
-        r"(?:[:=]\s*|\s+)(?:Bearer\s+)?[A-Za-z0-9_./+=-]{8,}",
-        re.IGNORECASE,
-    ),
-)
-
-
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def _normalise_key(key: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", key.lower())
+    return _shared_normalise_key(key)
 
 
 def _is_sensitive_key(key: str) -> bool:
-    normalised = _normalise_key(key)
-    return any(part in normalised for part in _SENSITIVE_KEY_PARTS)
+    return _shared_is_sensitive_key(key)
 
 
 def redact_text(value: object, *, limit: int | None = None) -> str:
     """Redact likely credentials, then cap text without keeping a traceback."""
 
-    text = str(value)
-    for pattern in _SECRET_PATTERNS:
-        text = pattern.sub("[secret redacted]", text)
-    if limit is not None and len(text) > limit:
-        return text[: max(0, limit - 1)] + "…"
-    return text
+    return _shared_redact_text(value, limit=limit, replacement=_SECRET_REPLACEMENT)
 
 
 def redact_payload(value: Any) -> Any:
-    """Redact nested tool data using the same credential policy as task text.
+    """Redact nested tool data using the shared credential policy.
 
     Tool results can be dictionaries/lists rather than a single error string.
-    This traversal deliberately reuses ``redact_text`` and the existing
-    sensitive-key classifier; it introduces no second set of secret patterns.
+    This traversal delegates to ``secret_redaction`` : la liste des motifs est
+    figée en un seul endroit et testée d'un bloc.
     """
-    if isinstance(value, str):
-        return redact_text(value)
-    if isinstance(value, dict):
-        cleaned: dict[Any, Any] = {}
-        for key, item in value.items():
-            if isinstance(key, str) and _is_sensitive_key(key):
-                cleaned[redact_text(key)] = "[secret redacted]"
-            else:
-                safe_key = redact_text(key) if isinstance(key, str) else key
-                cleaned[safe_key] = redact_payload(item)
-        return cleaned
-    if isinstance(value, list):
-        return [redact_payload(item) for item in value]
-    if isinstance(value, tuple):
-        return tuple(redact_payload(item) for item in value)
-    return value
+    return _shared_redact_payload(value)
 
 
 def _coerce_enum(enum_type: type[StrEnum], value: StrEnum | str, label: str) -> StrEnum:

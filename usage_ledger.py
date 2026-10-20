@@ -38,6 +38,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+from secret_redaction import redact_text as _shared_redact_text
+
 
 DEFAULT_MAX_EVENTS = 50_000
 DEFAULT_LIST_LIMIT = 100
@@ -153,17 +155,6 @@ class UsageEvent:
 # than attempting to redact arbitrary prompt text after it has reached SQLite.
 _TAG_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@+\-]{0,127}$")
 _CURRENCY_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_\-]{0,11}$")
-_SECRET_PATTERNS = (
-    re.compile(r"\bAQ\.[0-9A-Za-z_-]{20,}"),
-    re.compile(r"\bsk-or-v1-[0-9A-Za-z_-]{24,}"),
-    re.compile(r"\bAIza[0-9A-Za-z_-]{20,}\b"),
-    re.compile(r"\b(?:sk|rk|pk)_[A-Za-z0-9_-]{16,}\b", re.IGNORECASE),
-    re.compile(
-        r"\b(?:authorization|bearer|api[ _-]?key|token|password|secret)\s*"
-        r"(?:[:=]\s*|\s+)(?:Bearer\s+)?[A-Za-z0-9_./+=-]{8,}",
-        re.IGNORECASE,
-    ),
-)
 
 
 def redact_text(value: object, *, limit: int = MAX_TAG_LENGTH) -> str:
@@ -171,17 +162,11 @@ def redact_text(value: object, *, limit: int = MAX_TAG_LENGTH) -> str:
 
     The function is public mostly for callers that need to display a safe
     validation message.  The ledger itself only persists compact tags, never
-    arbitrary text or prompts.
+    arbitrary text or prompts. La politique des motifs est partagée avec tout
+    le reste de l'application (``secret_redaction``) et testée d'un bloc.
     """
 
-    text = str(value)
-    for pattern in _SECRET_PATTERNS:
-        text = pattern.sub("[redacted]", text)
-    text = " ".join(text.split())
-    if len(text) > limit:
-        return text[: max(0, limit - 1)] + "…"
-    return text
-
+    return _shared_redact_text(value, limit=limit, replacement="[redacted]", squish_whitespace=True)
 
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
