@@ -44,6 +44,8 @@ consentement (`consent_guard/`).
 
 ## Allez plus loin
 
+- [`docs/ATELIER_AGENTS.md`](docs/ATELIER_AGENTS.md) —brancher OpenCode,
+  Codex, Gemini, Ollama et GitHub Education ensemble en boutique d'agents.
 - [`CODEX_READY.md`](CODEX_READY.md) — workflow et critères d'acceptation pour
   une mission d'agent automatisé.
 - [`docs/HYGIENE_DEPOT_2026-10-20.md`](docs/HYGIENE_DEPOT_2026-10-20.md) —
