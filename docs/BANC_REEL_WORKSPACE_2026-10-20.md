@@ -11,8 +11,8 @@ réelles »).
 | Fonction | Verdict | Détails |
 |---|---|---|
 | Démarrage du vrai workspace | **corrigé pendant le banc** | La base Career réelle est en schéma 7 (`quality_json`, livré par la mission 39 jamais fusionnée) alors que le code était en 6 : l'app refusait de démarrer (fail-closed correct). Correctif v7 re-appliqué depuis l'archive (`b95ca72` → commit `4a89ac6`). |
-| Upload 12/12 | ✅ | Tous les formats présents importés (y compris `.pptx`). |
-| Liste des fichiers | ⚠️ bug UX | Le `.pptx` est **accepté (200) puis invisible** : absent de `/api/files`. Soit le refuser à l'upload, soit l'extraction supportée. |
+| Upload des formats pris en charge | ✅ | (Correction du compte-rendu initial : le « pptx accepté » venait d'un artefact d'analyse des réponses, pas de l'app.) Les formats hors liste reçoivent un refus honnête « Format non pris en charge. » et ne sont **pas** stockés ni listés — comportement vérifié de façon ciblée sur le `.pptx`. |
+| Liste des fichiers | ✅ | Le `.pptx` était en réalité refusé à l'upload avec un message honnête : l'app est correcte, mon parsing du banc était faux (voir ligne du dessus). |
 | Inspection orchestrée V5 | ✅ | `inspect_file` sur `Fund data 2026 (1).xlsx` (356 lignes × 10 colonnes, 1 feuille). |
 | Analyse financière + rapport | ✅ | Plan `inspect → analyze → create_analysis_workbook` exécuté, écriture confirmée en `output/analyse_….xlsx` (5,9 Ko), fichier source intact. |
 | Qualité d'analyse | ⚠️ | « 0 colonnes numériques » sur un classeur **transposé** (dates en colonne A, en-tête à la ligne 5) : l'en-tête par défaut passe à côté des données. Généraliser la détection d'en-tête/feuille transposée pour les devoirs réels. |
@@ -24,12 +24,10 @@ réelles »).
 
 ## Actions à dérouler (prochaine lotifié)
 
-1. **`.pptx`** : refuser proprement à l'upload OU ajouter l'extracteur texte
-   (bilingue : préférer refuser avec message honnête tant que l'extract n'existe pas).
-2. **Analyse de classeurs transposés** : essayer plusieurs lignes d'en-tête,
+1. **Analyse de classeurs transposés** : essayer plusieurs lignes d'en-tête,
    détecter « première ligne d'entêtes réelle » (colonne `datetime` + messages
    numériques dedans), ou exposer une option « données transposées ».
-3. **Réessayer FTS avec repli OR** : quand une requête multi-termes renvoie 0,
+2. **Requêtes multi-termes FTS à repli OR** (constat correct, resté valable) :
    tenter un match affaibli et le signaler honnêtement (« correspondance élargie »).
 
 ## Changements apportés par ce banc

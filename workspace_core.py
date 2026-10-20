@@ -51,6 +51,11 @@ MAX_SPREADSHEET_ARCHIVE_ENTRIES = 20_000
 MAX_SPREADSHEET_UNCOMPRESSED_BYTES = 150 * 1024 * 1024
 MAX_ANALYSIS_ROWS = 100_000
 MAX_ANALYSIS_COLUMNS = 512
+# Workbooks produced by hand often carry a few context lines (titles, notes,
+# empty columns) before the real header row. When the default parse yields no
+# numeric column at all, we look for a plausible header row this deep, never
+# deeper: beyond that, the honest answer is that the sheet needs manual layout.
+HEADER_SEARCH_ROWS = 10
 MAX_TOOL_TURNS = 5
 # A complete task can need an initial model call plus five tool follow-ups.
 # The remaining calls are reserved for retries across all model fallbacks,
@@ -337,7 +342,16 @@ def read_table(path: Path, sheet_name: str | None = None, limit: int | None = No
             if suffix in {".xlsx", ".xlsm"}:
                 validate_spreadsheet_archive(path)
             frame = pd.read_excel(path, sheet_name=sheet_name or 0, nrows=effective_limit)
-            return frame.iloc[:, :MAX_ANALYSIS_COLUMNS]
+            frame = frame.iloc[:, :MAX_ANALYSIS_COLUMNS]
+            if frame.select_dtypes(include=["number"]).shape[1] == 0:
+                # The analysis only computes statistics on numeric-dtype
+                # columns, so this exact symptom (none at all) is what the
+                # repair addresses. A common cause is a metadata block above
+                # the real header row. Ordinary numeric tables are untouched.
+                repaired = _read_excel_with_detected_header(path, sheet_name, effective_limit)
+                if repaired is not None:
+                    return repaired
+            return frame
         if suffix in {".csv", ".tsv"}:
             separator = "\t" if suffix == ".tsv" else sniff_csv_separator(path)
             frame = pd.read_csv(path, sep=separator, nrows=effective_limit, encoding_errors="replace")
@@ -349,6 +363,117 @@ def read_table(path: Path, sheet_name: str | None = None, limit: int | None = No
         raise UserFacingError(
             "Impossible de lire ce tableau. Vérifie que le fichier est un Excel ou CSV valide."
         ) from error
+
+
+def _frame_has_numeric_column(frame: pd.DataFrame) -> bool:
+    return any(
+        not pd.to_numeric(frame[column], errors="coerce").dropna().empty
+        for column in frame.columns
+    )
+
+
+def _parses_as_number(value: str) -> bool:
+    try:
+        float(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _cell_is_value_like(cell: Any) -> bool:
+    """A datum cell: number, date or boolean—anything a data row is made of."""
+    if isinstance(cell, (bool, int, float)):
+        return True
+    if isinstance(cell, (datetime, pd.Timestamp)):
+        return True
+    return isinstance(cell, str) and _parses_as_number(cell)
+
+
+def detect_excel_header_offset(path: Path, sheet_name: str | None = None) -> int | None:
+    """
+    Zero-based index of a plausible header row deeper in the sheet, or None.
+
+    A row qualifies when at least half its cells are non-numeric labels and the
+    row just below is at least half numeric/datelike. Offset 0 candidates are
+    kept only for the repair path; they cannot beat the default parse because
+    the repair is only triggered when that parse found no numeric column.
+    """
+    try:
+        probe = pd.read_excel(path, sheet_name=sheet_name or 0, header=None, nrows=HEADER_SEARCH_ROWS + 1)
+    except Exception:
+        return None
+    return _scan_header_offset(probe)
+
+
+def _scan_header_offset(raw: pd.DataFrame) -> int | None:
+    if len(raw) < 2:
+        return None
+    best_offset: int | None = None
+    best_score = 0.0
+    for offset in range(0, min(HEADER_SEARCH_ROWS, len(raw) - 1)):
+        labels = raw.iloc[offset].dropna()
+        if len(labels) < 2:
+            continue
+        label_names = [str(label) for label in labels]
+        label_ratio = sum(1 for name in label_names if not _parses_as_number(name)) / len(label_names)
+        if label_ratio < 0.5:
+            continue
+        data_cells = raw.iloc[offset + 1].dropna()
+        if data_cells.empty:
+            continue
+        value_ratio = sum(1 for cell in data_cells if _cell_is_value_like(cell)) / len(data_cells)
+        if value_ratio < 0.5:
+            continue
+        score = label_ratio * 0.5 + value_ratio * 0.5
+        if score > best_score:
+            best_score = score
+            best_offset = offset
+    return best_offset
+
+
+def _read_excel_with_detected_header(path: Path, sheet_name: str | None, limit: int) -> pd.DataFrame | None:
+    """Rebuild the frame from a deeper header row, capped on data rows like read_table."""
+    try:
+        raw = pd.read_excel(
+            path,
+            sheet_name=sheet_name or 0,
+            header=None,
+            nrows=min(limit + HEADER_SEARCH_ROWS, MAX_ANALYSIS_ROWS + HEADER_SEARCH_ROWS),
+        )
+    except Exception:
+        return None
+    offset = _scan_header_offset(raw)
+    if offset is None:
+        return None
+    frame = raw.iloc[offset + 1:].reset_index(drop=True).iloc[:, :MAX_ANALYSIS_COLUMNS]
+    frame.columns = pd.Index(raw.iloc[offset, : frame.shape[1]].tolist())
+    frame = _numericize_object_columns(frame)
+    if not _frame_has_numeric_column(frame):
+        return None
+    return frame
+
+
+def _numericize_object_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    """Turn object columns made of int/float scalars into real numeric dtypes.
+
+    Only lossless conversions: if even one cell refuses to become a number
+    (text, dates), the column keeps its original values untouched.
+    """
+    for column in frame.columns:
+        series = frame[column]
+        if series.dtype != object:
+            continue
+        coerced = pd.to_numeric(series, errors="coerce")
+        if int(coerced.notna().sum()) == int(series.notna().sum()):
+            frame[column] = coerced
+    return frame
+
+
+def excel_header_note(path: Path, sheet_name: str | None = None) -> str:
+    offset = detect_excel_header_offset(path, sheet_name)
+    if offset is None:
+        return ""
+    return f"En-têtes détectés à la ligne {offset + 1} : des lignes de contexte précédaient le tableau."
 
 
 def sniff_csv_separator(path: Path) -> str:
@@ -559,6 +684,11 @@ class LocalTools:
             raise UserFacingError("La feuille demandée n’existe pas dans ce fichier.")
         frame = read_table(path, sheet)
         is_capped = len(frame) >= MAX_ANALYSIS_ROWS
+        header_note = (
+            excel_header_note(path, sheet)
+            if path.suffix.lower() in {".xlsx", ".xlsm", ".xls"}
+            else ""
+        )
         return {
             "file_id": file_id,
             "file": path.name,
@@ -574,6 +704,7 @@ class LocalTools:
                 "du fichier : ils ne constituent une tendance que si cet ordre est bien chronologique. "
                 "Ils ne constituent pas un conseil financier."
                 + (" L’analyse est limitée aux 100 000 premières lignes." if is_capped else "")
+                + (f" {header_note}" if header_note else "")
             ),
         }
 
