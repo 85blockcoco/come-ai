@@ -256,6 +256,7 @@ class ComeAITarget:
             search = next(event["result"] for event in result["tool_events"] if event["tool"] == "search_memory")
             self._trace.append({"component": "PersonalMemoryStore", "method": "search", "status": "returned", "result": self._stable(search)})
             observation["structured"]["count"] = search["count"]
+            observation["structured"]["note"] = search.get("note") or ""
             observation["citations"] = [{"source_id": hit["source_id"], "quote": hit["excerpt"],
                                          "label": hit["citation"]["label"], "line_start": hit["citation"]["line_start"],
                                          "line_end": hit["citation"]["line_end"]} for hit in search["results"]]
@@ -280,6 +281,9 @@ class ComeAITarget:
             observation["structured"]["output_files"] = sorted(path.name for path in workspace.config.output_dir.iterdir())
             observation["structured"]["report_status"] = next(
                 (event["status"] for event in result["events"] if event["tool"] == "create_analysis_workbook"), None)
+            analyze_event = next((event for event in result["events"] if event["tool"] == "analyze_table" and event["status"] == "done"), None)
+            observation["structured"]["numeric_columns"] = (
+                len(analyze_event["result"].get("numeric_statistics", {})) if analyze_event else 0)
             return observation
         if action == "invalid_file_id":
             result = self._call("LocalTools", "inspect_file", tools.inspect_file, file_id=data["file_id"])
