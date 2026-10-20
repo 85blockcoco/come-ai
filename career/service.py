@@ -95,7 +95,7 @@ from .profile_import import (
 from .profile_readiness import assess_profile_readiness
 
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 # The Stage Hunter brief lives in career_settings as one JSON value: no
 # schema migration, and it is exported with the rest of the local settings.
 STAGE_SEARCH_SETTING_KEY = "stage_search_brief"
@@ -414,6 +414,7 @@ class CareerService:
                         cv_markdown TEXT NOT NULL,
                         letter_markdown TEXT NOT NULL,
                         checks_json TEXT NOT NULL DEFAULT '[]',
+                        quality_json TEXT NOT NULL DEFAULT '{}',
                         profile_updated_at TEXT NOT NULL,
                         job_updated_at TEXT NOT NULL,
                         created_at TEXT NOT NULL
@@ -532,7 +533,7 @@ class CareerService:
 
     def _migrate(self, connection: sqlite3.Connection, version: int) -> None:
         """Migrate in-place without touching a person's existing Career data."""
-        if version < 1 or version > 5:
+        if version < 1 or version > 6:
             raise UserFacingError("La base Career locale ne peut pas être mise à jour automatiquement.")
         if version == 1:
             self._migrate_to_v2(connection)
@@ -548,6 +549,11 @@ class CareerService:
             version = 5
         if version == 5:
             self._migrate_to_v6(connection)
+            version = 6
+        if version == 6:
+            self._add_column_if_missing(
+                connection, "application_drafts", "quality_json", "TEXT NOT NULL DEFAULT '{}'"
+            )
 
     def _migrate_to_v2(self, connection: sqlite3.Connection) -> None:
         self._add_column_if_missing(connection, "candidate_profile", "contact_email", "TEXT NOT NULL DEFAULT ''")
