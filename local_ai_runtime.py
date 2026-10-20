@@ -11,6 +11,10 @@ from urllib.request import HTTPRedirectHandler, ProxyHandler, build_opener
 
 LOCAL_NETWORK_PROFILE = '(version 1) (allow default) (deny network*) (allow network-inbound (local ip "localhost:*")) (allow network-outbound (remote ip "localhost:*"))'
 
+# macOS Seatbelt launcher. Module constant so tests can point it at a
+# synthetic file and exercise the same isolation logic on any platform.
+SANDBOX_EXEC = Path("/usr/bin/sandbox-exec")
+
 
 class _NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):
@@ -48,9 +52,11 @@ def ensure_local_runtime(project_root: Path, *, installation_network: bool = Fal
                        OLLAMA_NUM_PARALLEL="1", OLLAMA_MAX_LOADED_MODELS="1",
                        OLLAMA_KEEP_ALIVE="5m")
     command = [str(binary), "serve"]
+    # Path of the macOS Seatbelt launcher. Kept as a module constant so tests
+    # can point it at a synthetic file on any platform.
     isolated = False
     if not installation_network:
-        sandbox = Path("/usr/bin/sandbox-exec")
+        sandbox = SANDBOX_EXEC
         if not sandbox.is_file():
             return {"running": False, "started": False, "reason": "Sandbox macOS indisponible ; lancement isolé refusé."}
         command = [str(sandbox), "-p", LOCAL_NETWORK_PROFILE, *command]
