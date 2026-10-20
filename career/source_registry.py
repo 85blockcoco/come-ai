@@ -136,4 +136,24 @@ CURATED_SOURCES: tuple[dict[str, str], ...] = (
         "provenance_url": "https://www.dataiku.com/careers/",
         "verified_at": "2026-10-18T12:41:15+00:00",
     },
+    {
+        # bunq's official careers site (bunq.com/careers redirects there) is
+        # hosted by Recruitee; the public tenant feed was demonstrated without
+        # credentials on 2026-10-20 (single documented feed resource).
+        "id": "registry:recruitee:bunq", "provider": "recruitee", "company": "bunq",
+        "board_token": "bunq", "public_url": "https://careers.bunq.com/",
+        "provenance_url": "https://www.bunq.com/careers",
+        "conditions": "Flux public Recruitee sans clé; une lecture légère par rafraîchissement; "
+                      "photographie temporelle sans promesse.",
+        "verified_at": "2026-10-20T10:30:00+00:00",
+    },
+    {
+        # jobs.experian.com (official Experian job site) exposes the public
+        # SmartRecruiters board referencing postings without any credential.
+        "id": "registry:smartrecruiters:experian", "provider": "smartrecruiters", "company": "Experian",
+        "company_identifier": "Experian", "public_url": "https://jobs.smartrecruiters.com/Experian",
+        "provenance_url": "https://jobs.experian.com/",
+        "conditions": "API posting publique sans clé, destination PUBLIC; pagination bornée côté client.",
+        "verified_at": "2026-10-20T10:30:00+00:00",
+    },
 )

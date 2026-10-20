@@ -32,6 +32,12 @@ SECOND_WAVE_VERIFIED_SOURCES = {
     ("Dataiku", "greenhouse", "dataiku"),
 }
 
+WAVE3_VERIFIED_SOURCES = {
+    # Connecteur Recruitee (neuf) et première source SmartRecruiters démontrée.
+    ("bunq", "recruitee", "bunq"),
+    ("Experian", "smartrecruiters", "Experian"),
+}
+
 
 def _token(source: dict[str, str]) -> str:
     return source.get("board_token") or source.get("company_identifier") or ""
@@ -41,6 +47,7 @@ def test_registry_contains_only_the_reviewed_source_expansion() -> None:
     observed = {(source["company"], source["provider"], _token(source)) for source in CURATED_SOURCES}
     assert NEW_VERIFIED_SOURCES <= observed
     assert SECOND_WAVE_VERIFIED_SOURCES <= observed
+    assert WAVE3_VERIFIED_SOURCES <= observed
 
 
 def test_registry_identifiers_are_unique_and_have_auditable_provenance() -> None:
@@ -68,6 +75,18 @@ def test_explicit_explorer_enables_registered_public_ats_connectors() -> None:
 
 def test_one_explicit_refresh_can_consult_the_whole_curated_registry() -> None:
     assert EXPLORATION_MAX_SOURCES >= len(CURATED_SOURCES)
+
+
+def test_every_connector_declares_known_conditions_and_official_documentation() -> None:
+    from career.connectors import CONNECTOR_SPECS
+
+    providers = {source["provider"] for source in CURATED_SOURCES}
+    documented = set(CONNECTOR_SPECS) | {"greenhouse"}
+    assert providers <= documented
+    for spec in CONNECTOR_SPECS.values():
+        assert spec.doc_verified is True
+        assert spec.known_conditions.strip()
+        assert spec.documentation_url.startswith("https://")
 
 
 def test_live_report_keeps_only_bounded_public_job_facts() -> None:

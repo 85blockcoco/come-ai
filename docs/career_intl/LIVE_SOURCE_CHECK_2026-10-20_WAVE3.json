@@ -1,0 +1,63 @@
+{
+  "checked_at_utc": "2026-10-20T18:55:36+00:00",
+  "criteria": {
+    "contract_types": [
+      "stage",
+      "cdd",
+      "cdi",
+      "vie"
+    ],
+    "domains": "tous les huit domaines déclarés des stages finance",
+    "minimum_stage_duration_months": 6,
+    "start_months": [
+      1,
+      2,
+      3
+    ]
+  },
+  "duplicates_across_new_sources": 0,
+  "limitations": [
+    "Photographie temporelle de flux publics; un employeur peut retirer une annonce ensuite.",
+    "Aucun profil ni CV lu: qualification sur critères, pas d'adéquation personnelle.",
+    "Le flux Recruitee renvoie sa page par défaut (le vendeur ignore la pagination): 20 offres mesurées pour bunq."
+  ],
+  "measured_variance": [
+    "Rafraîchissement quasi consécutif du même compte SmartRecruiters: dépassement du délai par requête observé une fois (code timeout), récupération confirmée dans un run isolé (12.98 s).",
+    "Le transport public-ATS envoie désormais Accept-Encoding: gzip; les mesures de latence ont été prises après ce changement (bunq: 3.46 s; Experian: 12.98 s)."
+  ],
+  "outcomes": [
+    {
+      "a_verifier": 2,
+      "company": "bunq",
+      "conformes": 0,
+      "erreurs": 0,
+      "exclues_criteres": 11,
+      "invalides": 0,
+      "latency_seconds": 3.457,
+      "provider": "recruitee",
+      "raw": 20,
+      "retenues_finance": 2,
+      "source_id": "registry:recruitee:bunq",
+      "stages_confirmes": 0,
+      "status": "success",
+      "valides": 20
+    },
+    {
+      "a_verifier": 1,
+      "company": "Experian",
+      "conformes": 0,
+      "erreurs": 0,
+      "exclues_criteres": 254,
+      "invalides": 0,
+      "latency_seconds": 12.98,
+      "provider": "smartrecruiters",
+      "raw": 365,
+      "retenues_finance": 1,
+      "source_id": "registry:smartrecruiters:experian",
+      "stages_confirmes": 0,
+      "status": "success",
+      "valides": 365
+    }
+  ],
+  "schema": "come-career-live-source-check-wave3/1"
+}
