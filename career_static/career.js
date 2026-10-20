@@ -955,7 +955,7 @@ function jobCard(job, mode = "discover", qualification = null) {
   actions.append(application);
   const editNote = make("button", "Note personnelle", "quiet-button");
   editNote.type = "button";
-  editNote.addEventListener("click", () => updateJobNote(job));
+  editNote.addEventListener("click", () => updateJobNote(job, card));
   actions.append(editNote);
   if (job.official_url) {
     const official = make("a", "Ouvrir l’offre officielle", "secondary-button external-link");
@@ -999,13 +999,12 @@ async function loadShortlist() {
 
 async function toggleShortlist(job) {
   try {
-    const note = job.shortlisted ? job.personal_note || "" : window.prompt("Note personnelle facultative pour cette offre :", job.personal_note || "");
-    if (note === null && !job.shortlisted) return;
+    // Aucune invite bloquante : la note optionnelle reste modifiable inline ensuite.
     await api(`/api/career/jobs/${encodeURIComponent(job.id)}/shortlist`, {
       method: "POST",
-      body: JSON.stringify({ shortlisted: !job.shortlisted, note: note ?? job.personal_note ?? "" }),
+      body: JSON.stringify({ shortlisted: !job.shortlisted, note: job.personal_note ?? "" }),
     });
-    setMessage(job.shortlisted ? "Offre retirée de la shortlist." : "Offre ajoutée à la shortlist.");
+    setMessage(job.shortlisted ? "Offre retirée de la shortlist." : "Offre ajoutée à la shortlist. Ajoute une note via « Note personnelle » si besoin.");
     await Promise.all([loadDashboard(), loadJobs(), loadShortlist(), refreshStageHunterIfVisible()]);
   } catch (error) { setMessage(error.message, true); }
 }
@@ -1017,14 +1016,53 @@ async function refreshStageHunterIfVisible() {
   await loadStageHunter().catch(() => {});
 }
 
-async function updateJobNote(job) {
-  const note = window.prompt("Note personnelle (locale) :", job.personal_note || "");
-  if (note === null) return;
-  try {
-    await api(`/api/career/jobs/${encodeURIComponent(job.id)}/note`, { method: "PATCH", body: JSON.stringify({ note }) });
-    setMessage("Note personnelle enregistrée.");
-    await Promise.all([loadJobs(), loadShortlist()]);
-  } catch (error) { setMessage(error.message, true); }
+// Éditeur de note inline (pas de dialogue bloquant) : accessible au clavier,
+// user stays in context, and the destructive-data typed confirmation remains
+// the only prompt of this file.
+function openNoteEditor(job, card, onSaved) {
+  const existing = card.querySelector(".job-note-editor");
+  if (existing) existing.remove();
+  const editor = make("form", "", "job-note-editor");
+  const label = make("label", "Note personnelle (locale)", "job-note-label");
+  const input = document.createElement("textarea");
+  input.rows = 3;
+  input.value = job.personal_note || "";
+  input.id = `job-note-${job.id}`;
+  input.maxLength = 2000;
+  label.htmlFor = input.id;
+  const save = make("button", "Enregistrer", "primary-button");
+  save.type = "submit";
+  const cancel = make("button", "Annuler", "quiet-button");
+  cancel.type = "button";
+  editor.append(label, input, cancel, save);
+  editor.addEventListener("submit", (event) => {
+    event.preventDefault();
+    editor.remove();
+    onSaved(input.value);
+  });
+  cancel.addEventListener("click", () => editor.remove());
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      editor.remove();
+    }
+  });
+  card.append(editor);
+  input.focus();
+}
+
+async function updateJobNote(job, card) {
+  if (!card) {
+    setMessage("Ouvre la note depuis la carte de l’offre.", true);
+    return;
+  }
+  openNoteEditor(job, card, async (note) => {
+    try {
+      await api(`/api/career/jobs/${encodeURIComponent(job.id)}/note`, { method: "PATCH", body: JSON.stringify({ note }) });
+      setMessage("Note personnelle enregistrée.");
+      await Promise.all([loadJobs(), loadShortlist()]);
+    } catch (error) { setMessage(error.message, true); }
+  });
 }
 
 async function createOrShowApplication(job) {
