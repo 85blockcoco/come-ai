@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import io
 from pathlib import Path
-from typing import BinaryIO
 
 from .models import DocumentInput, Finding, STATUS_RISK
 

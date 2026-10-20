@@ -5,7 +5,7 @@ Pure data structures — no business logic, no network, no LLM.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Literal
 
 

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from dataclasses import replace
 
 from .models import (
     CVAnalysisResult,
@@ -19,9 +18,7 @@ from .models import (
     ReadabilityScore,
     SectionReading,
     STATUS_INFO,
-    STATUS_OK,
     STATUS_RISK,
-    STATUS_UNKNOWN,
 )
 
 # ──────────────────────────────────────────────────────────────────────
@@ -206,8 +203,8 @@ def detect_sections(text: str) -> tuple[list[SectionReading], list[Finding]]:
     Returns:
         Tuple of (detected_sections, findings_for_missing_sections).
     """
-    normalized = _normalize(text)
-    lines = text.split("\n")
+    normalized_text = _normalize(text)
+    lines = normalized_text.split("\n")
     sections: list[SectionReading] = []
     found_section_titles: set[str] = set()
 
