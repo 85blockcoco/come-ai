@@ -1,0 +1,21 @@
+{
+  "schema_version": "career-matching-bench-thresholds/1",
+  "suite_version": "cvboost-08-suite-1",
+  "as_of": "2026-10-01",
+  "note": "Les limites correspondent a l'etat mesure actuel du code : un nouveau defaut fait echouer la porte, une correction la fait passer.",
+  "baseline": {
+    "cases": 118,
+    "hard_failures": 3,
+    "semantic_failures": 38,
+    "unstable_cases": 0,
+    "oracle_unresolved": 0,
+    "cases_passed": 80
+  },
+  "limits": {
+    "cases_min": 100,
+    "hard_failures_max": 3,
+    "semantic_failures_max": 38,
+    "unstable_cases_max": 0,
+    "oracle_unresolved_max": 0
+  }
+}
