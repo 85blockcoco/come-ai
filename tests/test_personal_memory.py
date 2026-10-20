@@ -72,8 +72,30 @@ def test_search_returns_local_excerpt_and_line_citation_without_fts_injection(tm
     }
 
     # Operators/punctuation are tokenised as literal terms, not passed through
-    # to SQLite FTS syntax.  This query cannot turn into a broad OR query.
-    assert store.search('analyse OR "inexistant"')["count"] == 0
+    # to SQLite FTS syntax. A zero AND match then falls back to the controlled
+    # OR widening (each term still quoted), and the response says so.
+    widened = store.search('analyse OR "inexistant"')
+    assert widened["count"] == 1
+    assert "élargie" in widened["note"]
+
+
+def test_search_strict_multi_term_has_no_widening_note(tmp_path: Path) -> None:
+    store = make_store(tmp_path)
+    store.import_text(
+        "Glide path et cible d'allocation performing.\nRelance più tard.",
+        title="Lecture pensions",
+    )
+
+    strict = store.search("glide path allocation")
+    relaxed = store.search("glide path inexistante")
+
+    assert strict["count"] == 1
+    assert "note" not in strict
+    assert relaxed["count"] == 1
+    assert "au moins un terme" in relaxed["note"]
+    # A single-term query can never widen: there is nothing to relax from.
+    assert store.search("inexistante")["count"] == 0
+    assert "note" not in store.search("inexistante")
 
 
 def test_explicit_file_imports_support_text_docx_and_pdf_without_storing_path(tmp_path: Path) -> None:

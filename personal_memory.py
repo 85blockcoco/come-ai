@@ -954,8 +954,52 @@ class PersonalMemoryStore:
                 """,
                 (fts_query, project, project, result_limit),
             ).fetchall()
+            relaxed_note = ""
+            if not rows and len(terms) > 1:
+                # Honest widening: no document contained every term, so we
+                # retry with "at least one term" and say so in the response
+                # instead of leaving the user with a bare zero.
+                or_query = " OR ".join(f'"{term}"' for term in terms)
+                rows = connection.execute(
+                    """
+                    SELECT
+                        c.id AS chunk_id,
+                        c.page_number,
+                        c.sheet_name,
+                        c.line_start,
+                        c.line_end,
+                        c.content,
+                        s.id AS source_id,
+                        s.title,
+                        s.category,
+                        s.source_type,
+                        bm25(memory_chunks_fts, 0.0, 0.0, 2.0, 1.0) AS relevance
+                    FROM memory_chunks_fts
+                    JOIN memory_chunks AS c ON c.id = memory_chunks_fts.chunk_id
+                    JOIN sources AS s ON s.id = c.source_id
+                    WHERE memory_chunks_fts MATCH ?
+                      AND (
+                        ? IS NULL
+                        OR EXISTS (
+                            SELECT 1 FROM source_projects AS sp
+                            WHERE sp.source_id = s.id AND sp.project_id = ?
+                        )
+                      )
+                    ORDER BY relevance ASC, s.imported_at DESC, c.ordinal ASC
+                    LIMIT ?
+                    """,
+                    (or_query, project, project, result_limit),
+                ).fetchall()
+                if rows:
+                    relaxed_note = (
+                        "Aucun document ne contenait tous les termes : "
+                        "correspondance élargie à au moins un terme."
+                    )
             results = [self._search_result_dict(row, terms) for row in rows]
-            return {"query": display_query, "count": len(results), "results": results}
+            result: dict[str, Any] = {"query": display_query, "count": len(results), "results": results}
+            if relaxed_note:
+                result["note"] = relaxed_note
+            return result
 
     def list_sources(
         self,

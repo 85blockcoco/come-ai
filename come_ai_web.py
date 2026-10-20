@@ -669,11 +669,14 @@ def create_app(
     async def memory_search(q: str, project_id: str | None = None) -> dict[str, Any]:
         def search() -> dict[str, Any]:
             result = _require_memory(runtime).search(q, project_id=project_id, limit=8)
-            return {
+            response: dict[str, Any] = {
                 "query": result["query"],
                 "count": result["count"],
                 "results": [_memory_result_to_response(item) for item in result["results"]],
             }
+            if result.get("note"):
+                response["note"] = result["note"]
+            return response
 
         return await run_in_threadpool(search)
 
