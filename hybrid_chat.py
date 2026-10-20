@@ -633,21 +633,7 @@ class HybridChatService:
     def ask(self, message: str, *, selected_file_ids: list[str] | None = None, history: list[dict[str, str]] | None = None,
             mode: str = "offline", provider: str = "auto", model: str = "auto", allow_write: bool = False,
             memory_project_id: str | None = None, allow_cloud_context: bool = False) -> dict[str, Any]:
-        if not isinstance(message, str) or not message.strip() or len(message) > MAX_MESSAGE_CHARS:
-            raise UserFacingError("Écris une demande de moins de 12 000 caractères.")
-        if isinstance(provider, str):
-            provider = provider.strip().casefold()
-            if provider in {"ollama_local", "local"}:
-                provider = "ollama"
-        if mode not in {"offline", "automatic", "performance"} or provider not in {"auto", "ollama", "gemini", "openrouter"}:
-            raise UserFacingError("Le mode ou le fournisseur demandé est invalide.")
-        if (not isinstance(model, str) or not MODEL_PATTERN.fullmatch(model) or SECRET_PATTERN.search(model)
-                or not isinstance(allow_write, bool) or not isinstance(allow_cloud_context, bool)):
-            raise UserFacingError("La sélection de modèle ou l’autorisation est invalide.")
-        # This refusal happens before catalogue inspection, key loading, metadata
-        # requests, local tools or any fallback decision.
-        if mode == "offline" and provider not in {"auto", "ollama"}:
-            raise UserFacingError("Le mode Hors ligne interdit tout fournisseur cloud.")
+        provider = self._validate_ask_inputs(message, mode, provider, model, allow_write, allow_cloud_context)
         started = time.monotonic()
         history = self._validate_history(history)
         events, citations, context = self._local_context(message, [] if selected_file_ids is None else selected_file_ids, allow_write, memory_project_id)
@@ -663,77 +649,127 @@ class HybridChatService:
             raise UserFacingError(
                 "Cette demande contient du contexte local (fichier, mémoire ou outil). Confirme sa transmission cloud pour cette demande, ou repasse en mode Hors ligne."
             )
+        memory_result = self._answer_memory_lookup(message, mode, started, events, citations)
+        if memory_result is not None:
+            return memory_result
+        arithmetic_result = self._answer_arithmetic(message, mode, started, events, citations)
+        if arithmetic_result is not None:
+            return arithmetic_result
+        task_result = self._answer_task_proposal(message, mode, started, events, citations,
+                                                 allow_write=allow_write, memory_project_id=memory_project_id)
+        if task_result is not None:
+            return task_result
+        return self._answer_remote(message, mode, provider, model, history, started,
+                                   events=events, citations=citations, context=context,
+                                   local_context_present=local_context_present)
+
+    def _validate_ask_inputs(self, message: str, mode: str, provider: str, model: str,
+                             allow_write: bool, allow_cloud_context: bool) -> str:
+        """Validate every ask() parameter; return the normalized provider."""
+        if not isinstance(message, str) or not message.strip() or len(message) > MAX_MESSAGE_CHARS:
+            raise UserFacingError("Écris une demande de moins de 12 000 caractères.")
+        if isinstance(provider, str):
+            provider = provider.strip().casefold()
+            if provider in {"ollama_local", "local"}:
+                provider = "ollama"
+        if mode not in {"offline", "automatic", "performance"} or provider not in {"auto", "ollama", "gemini", "openrouter"}:
+            raise UserFacingError("Le mode ou le fournisseur demandé est invalide.")
+        if (not isinstance(model, str) or not MODEL_PATTERN.fullmatch(model) or SECRET_PATTERN.search(model)
+                or not isinstance(allow_write, bool) or not isinstance(allow_cloud_context, bool)):
+            raise UserFacingError("La sélection de modèle ou l’autorisation est invalide.")
+        # This refusal happens before catalogue inspection, key loading, metadata
+        # requests, local tools or any fallback decision.
+        if mode == "offline" and provider not in {"auto", "ollama"}:
+            raise UserFacingError("Le mode Hors ligne interdit tout fournisseur cloud.")
+        return provider
+
+    def _answer_memory_lookup(self, message: str, mode: str, started: float,
+                              events: list[dict[str, Any]], citations: list[dict[str, Any]]) -> dict[str, Any] | None:
         folded = _fold(message)
         pure_memory_lookup = (any(term in folded for term in ("memoire", "memory"))
                               and re.search(r"\b(?:cherche|recherche|retrouve|find|search)\b", folded)
                               and not any(term in folded for term in ("resume", "summar", "analys", "explique", "explain", "synthese", "compare", "deduis")))
-        if pure_memory_lookup:
-            event = next((row for row in reversed(events) if row["tool"] == "search_memory"), None)
-            hits = event.get("result", {}).get("results", []) if event and event["status"] == "done" else []
-            if hits:
-                lines = [f"Mémoire locale consultée : {len(hits)} passage(s) retrouvé(s)."]
-                for hit in hits[:4]:
-                    citation = hit.get("citation", {})
-                    label = citation.get("label", hit.get("title", "Source locale")) if isinstance(citation, dict) else citation
-                    lines.append(f"\n{label}\n{hit.get('excerpt', '')}")
-                answer = _safe_text("\n".join(lines))
-            elif event and event["status"] == "done":
-                answer = "La mémoire locale a été consultée : aucun passage ne correspond à cette recherche."
-            else:
-                answer = "La mémoire locale n’est pas disponible. Aucun passage n’a été consulté."
-            result = {"answer": answer, "provider": "local_tools", "model": "local-memory-fts5", "mode": mode,
-                      "route_reason": "Recherche locale déterministe avec provenance : aucun modèle ni réseau nécessaires.",
-                      "tool_events": events, "citations": citations,
-                      "usage": {"generation_requests": 0, "input_tokens": None, "output_tokens": None, "total_tokens": None},
-                      "latency_seconds": round(time.monotonic() - started, 3), "remote_model_used": False,
-                      "verification": "deterministic_retrieval"}
-            self.ledger.record_execution(provider="local_tools", model="local-memory-fts5", mode=mode, task_kind="memory_search",
-                                         latency_ms=round(result["latency_seconds"] * 1000), verification_state="verified", fallback_state="not_used", retry_count=0)
-            self.last_execution = {key: result[key] for key in ("provider", "model", "mode", "route_reason", "usage", "latency_seconds", "remote_model_used")}
-            return result
+        if not pure_memory_lookup:
+            return None
+        event = next((row for row in reversed(events) if row["tool"] == "search_memory"), None)
+        hits = event.get("result", {}).get("results", []) if event and event["status"] == "done" else []
+        if hits:
+            lines = [f"Mémoire locale consultée : {len(hits)} passage(s) retrouvé(s)."]
+            for hit in hits[:4]:
+                citation = hit.get("citation", {})
+                label = citation.get("label", hit.get("title", "Source locale")) if isinstance(citation, dict) else citation
+                lines.append(f"\n{label}\n{hit.get('excerpt', '')}")
+            answer = _safe_text("\n".join(lines))
+        elif event and event["status"] == "done":
+            answer = "La mémoire locale a été consultée : aucun passage ne correspond à cette recherche."
+        else:
+            answer = "La mémoire locale n’est pas disponible. Aucun passage n’a été consulté."
+        result = {"answer": answer, "provider": "local_tools", "model": "local-memory-fts5", "mode": mode,
+                  "route_reason": "Recherche locale déterministe avec provenance : aucun modèle ni réseau nécessaires.",
+                  "tool_events": events, "citations": citations,
+                  "usage": {"generation_requests": 0, "input_tokens": None, "output_tokens": None, "total_tokens": None},
+                  "latency_seconds": round(time.monotonic() - started, 3), "remote_model_used": False,
+                  "verification": "deterministic_retrieval"}
+        self.ledger.record_execution(provider="local_tools", model="local-memory-fts5", mode=mode, task_kind="memory_search",
+                                     latency_ms=round(result["latency_seconds"] * 1000), verification_state="verified", fallback_state="not_used", retry_count=0)
+        self.last_execution = {key: result[key] for key in ("provider", "model", "mode", "route_reason", "usage", "latency_seconds", "remote_model_used")}
+        return result
+
+    def _answer_arithmetic(self, message: str, mode: str, started: float,
+                           events: list[dict[str, Any]], citations: list[dict[str, Any]]) -> dict[str, Any] | None:
         arithmetic = re.fullmatch(r"\s*(?:(?i:calcule|calculer|calculate|compute|évalue|evalue)\s*:?\s*)?([0-9+*/().%\s-]{1,200})\s*", message)
-        if arithmetic:
-            value = calculate_expression(arithmetic.group(1))
-            events.append({"tool": "calculate_expression", "status": "done", "result": {"value": value}})
-            result = {"answer": f"Résultat du calcul local : {value}", "provider": "local_tools", "model": "deterministic-arithmetic",
-                      "mode": mode, "route_reason": "Calcul numérique déterministe : aucun modèle ni réseau nécessaires.",
-                      "tool_events": events, "citations": citations,
-                      "usage": {"generation_requests": 0, "input_tokens": None, "output_tokens": None, "total_tokens": None},
-                      "latency_seconds": round(time.monotonic() - started, 3), "remote_model_used": False}
-            self.ledger.record_execution(provider="local_tools", model="deterministic-arithmetic", mode=mode, task_kind="arithmetic",
-                                         latency_ms=round(result["latency_seconds"] * 1000), verification_state="verified", fallback_state="not_used", retry_count=0)
-            self.last_execution = {key: result[key] for key in ("provider", "model", "mode", "route_reason", "usage", "latency_seconds", "remote_model_used")}
-            return result
-        if any(term in _fold(message) for term in ("cree une tache", "creer une tache", "ajoute une tache", "create a task", "add a task")):
-            task_title = _safe_text(message)[:240]
-            if allow_write and self.task_queue is not None:
-                record = self.task_queue.create_task(
-                    "orchestrator_plan",
-                    {
-                        "message": task_title,
-                        "selected_file_ids": [c["source_id"] for c in citations if isinstance(c, dict) and "source_id" in c][:4],
-                        "allow_write": True,
-                        "memory_project_id": memory_project_id,
-                    },
-                )
-                proposal = {"title": task_title, "task_id": record.id, "requires_confirmation": False, "created": True}
-                events.append({"tool": "create_task", "status": "done", "result": {"task_id": record.id, "kind": "orchestrator_plan"}})
-                answer = (f"Tâche enregistrée avec succès dans la file d’attente locale persistante (ID : {record.id}).\n"
-                          "Elle est prête pour exécution autonome en arrière-plan sans dépendre d’aucun quota externe.")
-            else:
-                proposal = {"title": task_title, "requires_confirmation": True, "created": False}
-                hint = " Pour l’inscrire directement dans la file d’exécution autonome, coche « Autoriser les modifications »." if not allow_write else " La file de tâches locale n’est pas configurée."
-                answer = "Proposition de tâche préparée, mais non enregistrée : " + proposal["title"] + "\n" + hint
-            result = {"answer": answer,
-                      "provider": "local_tools", "model": "task-proposal", "mode": mode,
-                      "route_reason": "File d’attente locale de tâches : création contrôlée avec persistance SQLite.",
-                      "tool_events": events, "citations": citations, "task_proposal": proposal,
-                      "usage": {"generation_requests": 0, "input_tokens": None, "output_tokens": None, "total_tokens": None},
-                      "latency_seconds": round(time.monotonic() - started, 3), "remote_model_used": False}
-            self.ledger.record_execution(provider="local_tools", model="task-proposal", mode=mode, task_kind="task_proposal",
-                                         latency_ms=round(result["latency_seconds"] * 1000), verification_state="verified" if proposal["created"] else "not_verified", fallback_state="not_used", retry_count=0)
-            self.last_execution = {key: result[key] for key in ("provider", "model", "mode", "route_reason", "usage", "latency_seconds", "remote_model_used")}
-            return result
+        if not arithmetic:
+            return None
+        value = calculate_expression(arithmetic.group(1))
+        events.append({"tool": "calculate_expression", "status": "done", "result": {"value": value}})
+        result = {"answer": f"Résultat du calcul local : {value}", "provider": "local_tools", "model": "deterministic-arithmetic",
+                  "mode": mode, "route_reason": "Calcul numérique déterministe : aucun modèle ni réseau nécessaires.",
+                  "tool_events": events, "citations": citations,
+                  "usage": {"generation_requests": 0, "input_tokens": None, "output_tokens": None, "total_tokens": None},
+                  "latency_seconds": round(time.monotonic() - started, 3), "remote_model_used": False}
+        self.ledger.record_execution(provider="local_tools", model="deterministic-arithmetic", mode=mode, task_kind="arithmetic",
+                                     latency_ms=round(result["latency_seconds"] * 1000), verification_state="verified", fallback_state="not_used", retry_count=0)
+        self.last_execution = {key: result[key] for key in ("provider", "model", "mode", "route_reason", "usage", "latency_seconds", "remote_model_used")}
+        return result
+
+    def _answer_task_proposal(self, message: str, mode: str, started: float,
+                              events: list[dict[str, Any]], citations: list[dict[str, Any]], *,
+                              allow_write: bool, memory_project_id: str | None) -> dict[str, Any] | None:
+        if not any(term in _fold(message) for term in ("cree une tache", "creer une tache", "ajoute une tache", "create a task", "add a task")):
+            return None
+        task_title = _safe_text(message)[:240]
+        if allow_write and self.task_queue is not None:
+            record = self.task_queue.create_task(
+                "orchestrator_plan",
+                {
+                    "message": task_title,
+                    "selected_file_ids": [c["source_id"] for c in citations if isinstance(c, dict) and "source_id" in c][:4],
+                    "allow_write": True,
+                    "memory_project_id": memory_project_id,
+                },
+            )
+            proposal = {"title": task_title, "task_id": record.id, "requires_confirmation": False, "created": True}
+            events.append({"tool": "create_task", "status": "done", "result": {"task_id": record.id, "kind": "orchestrator_plan"}})
+            answer = (f"Tâche enregistrée avec succès dans la file d’attente locale persistante (ID : {record.id}).\n"
+                      "Elle est prête pour exécution autonome en arrière-plan sans dépendre d’aucun quota externe.")
+        else:
+            proposal = {"title": task_title, "requires_confirmation": True, "created": False}
+            hint = " Pour l’inscrire directement dans la file d’exécution autonome, coche « Autoriser les modifications »." if not allow_write else " La file de tâches locale n’est pas configurée."
+            answer = "Proposition de tâche préparée, mais non enregistrée : " + proposal["title"] + "\n" + hint
+        result = {"answer": answer,
+                  "provider": "local_tools", "model": "task-proposal", "mode": mode,
+                  "route_reason": "File d’attente locale de tâches : création contrôlée avec persistance SQLite.",
+                  "tool_events": events, "citations": citations, "task_proposal": proposal,
+                  "usage": {"generation_requests": 0, "input_tokens": None, "output_tokens": None, "total_tokens": None},
+                  "latency_seconds": round(time.monotonic() - started, 3), "remote_model_used": False}
+        self.ledger.record_execution(provider="local_tools", model="task-proposal", mode=mode, task_kind="task_proposal",
+                                     latency_ms=round(result["latency_seconds"] * 1000), verification_state="verified" if proposal["created"] else "not_verified", fallback_state="not_used", retry_count=0)
+        self.last_execution = {key: result[key] for key in ("provider", "model", "mode", "route_reason", "usage", "latency_seconds", "remote_model_used")}
+        return result
+
+    def _answer_remote(self, message: str, mode: str, provider: str, model: str, history: list[dict[str, str]],
+                       started: float, *, events: list[dict[str, Any]], citations: list[dict[str, Any]],
+                       context: str, local_context_present: bool) -> dict[str, Any]:
         config = self._config()
         benchmark = self._benchmark_summary()
         classified = classify_task(message)
@@ -741,8 +777,8 @@ class HybridChatService:
         needs_cloud_capabilities = bool(classified.required_capabilities & {Capability.CODE, Capability.ANALYSIS, Capability.SPREADSHEETS, Capability.VISION})
         _, quotas = self._observations()
         routes, reason = self._route_plan(message, mode=mode, provider=provider, config=config, benchmark=benchmark,
-                                           task_kind=task_kind, needs_cloud_capabilities=needs_cloud_capabilities,
-                                           quotas=quotas, model=model)
+                                          task_kind=task_kind, needs_cloud_capabilities=needs_cloud_capabilities,
+                                          quotas=quotas, model=model)
         messages = self._messages(message, history, context, mode)
         failures: list[dict] = []
         for position, (selected_provider, selected_model) in enumerate(routes):
