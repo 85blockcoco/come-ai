@@ -3,7 +3,7 @@
 # présentes dans le venv ; elle ne contient aucune clé ni modèle local.
 
 # Noyau IA et données
-google-genai>=2.27,<3
+google-genai>=2.31.0,<3
 certifi>=2024.2
 pandas>=3.0,<4
 numpy>=2.0,<3
