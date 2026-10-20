@@ -15,10 +15,10 @@ from typing import Any, Protocol
 from .models import canonical_url, clean_text
 
 
-# The curated registry currently contains twenty-one reviewed sources. Twenty-
-# four keeps one explicit refresh able to cover all of them while preserving a
+# The curated registry currently contains twenty-five reviewed sources. Twenty-
+# eight keeps one explicit refresh able to cover all of them while preserving a
 # hard resource bound and a small margin for later reviewed additions.
-EXPLORATION_MAX_SOURCES = 24
+EXPLORATION_MAX_SOURCES = 28
 EXPLORATION_MAX_RESULTS = 150
 EXPLORATION_NETWORK_BUDGET_SECONDS = 60
 EXPLORATION_LAST_SETTING = "stage_explorer_last_result"

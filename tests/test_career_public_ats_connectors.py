@@ -49,14 +49,26 @@ def test_public_connectors_are_registered_but_disabled_by_default():
 
 def test_career_service_enables_public_ats_only_for_explicit_curated_exploration(tmp_path):
     service = CareerService(tmp_path)
-    assert set(service._exploration_connectors) == {"greenhouse", "lever", "ashby", "smartrecruiters"}
+    assert set(service._exploration_connectors) == {"greenhouse", "lever", "ashby", "smartrecruiters", "welcome_jungle", "jobteaser", "talent_com", "apec"}
     assert service._exploration_connectors["lever"].enabled is True
     assert service._exploration_connectors["ashby"].enabled is True
     assert service._exploration_connectors["smartrecruiters"].enabled is True
+    assert service._exploration_connectors["welcome_jungle"].enabled is True
+    assert service._exploration_connectors["jobteaser"].enabled is True
+    assert service._exploration_connectors["talent_com"].enabled is True
+    assert service._exploration_connectors["apec"].enabled is True
     # Direct construction remains opt-in: no source or import activates I/O.
     assert LeverConnector().enabled is False
     assert AshbyConnector().enabled is False
     assert SmartRecruitersConnector().enabled is False
+    from career.connectors.welcome_jungle import WelcomeJungleConnector
+    from career.connectors.jobteaser import JobTeaserConnector
+    from career.connectors.talent_com import TalentComConnector
+    from career.connectors.apec import ApecConnector
+    assert WelcomeJungleConnector().enabled is False
+    assert JobTeaserConnector().enabled is False
+    assert TalentComConnector().enabled is False
+    assert ApecConnector().enabled is False
 
 
 @pytest.mark.parametrize("connector_type,provider,fixture_key", [
