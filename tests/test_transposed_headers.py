@@ -39,6 +39,51 @@ def test_read_table_finds_deeper_header(tmp_path: Path) -> None:
     assert frame["alpha_fund"].dtype.kind in "if"
 
 
+def test_read_table_no_repair_when_noise_exceeds_search_depth(tmp_path: Path) -> None:
+    """11 lignes de contexte : au-delà de la fenêtre de recherche, aucun repli."""
+    path = tmp_path / "bruit.xlsx"
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    for index in range(1, 12):
+        sheet[f"A{index}"] = f"Contexte {index}"
+    sheet["A12"] = "mesure"
+    sheet["B12"] = 1.5
+    sheet["A13"] = 0.1
+    sheet["B13"] = 2.0
+    workbook.save(path)
+
+    frame = read_table(path)
+    # Fenêtre de 10 lignes dépassée (11 contextes) : l'analyse reste celle du
+    # parse par défaut, sans réparation hasardeuse.
+    assert len(frame.columns) == 2
+
+
+def test_read_table_keeps_text_column_untouched(tmp_path: Path) -> None:
+    """Une colonne non numérique reste intacte après la réparation d'en-tête."""
+    path = tmp_path / "mixte.xlsx"
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet["A1"] = "Fund code"
+    sheet["B1"] = 47309
+    sheet["A2"] = "Fonds"
+    sheet["B2"] = "nom_du_fond"          # texte sous une colonne numérique
+    sheet["A3"] = "date"
+    sheet["B3"] = "valeur"
+    sheet["A4"] = 5
+    sheet["B4"] = 10.5
+    sheet["A5"] = 6
+    sheet["B5"] = 11.5
+    workbook.save(path)
+
+    frame = read_table(path)
+
+    assert list(frame.columns) == ["date", "valeur"]
+    assert frame["valeur"].dtype.kind in "if"
+    # Les cellules sources ne sont jamais modifiées (colonne texte complète).
+    raw = openpyxl.load_workbook(path, read_only=True).active
+    assert raw["B2"].value == "nom_du_fond"
+
+
 def test_analyze_table_reports_numeric_stats_and_header_note(tmp_path: Path) -> None:
     from tests.test_come_ai_v3 import make_workspace
 
