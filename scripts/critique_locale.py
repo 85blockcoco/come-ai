@@ -52,6 +52,9 @@ def ask_local_model(*, question: str, text: str, url: str, model: str, timeout: 
         "system": SYSTEM_PROMPT,
         "prompt": f"Question : {question}\n\nTEXTE FOURNI :\n{text}\n",
         "stream": False,
+        # Le modèle local est un modèle « penseur » : sans cela il épuise son
+        # budget de jetons en réflexion avant de répondre (réponse vide).
+        "think": False,
         "options": {"temperature": 0.0, "num_predict": 160},
     }
     request = urllib.request.Request(
@@ -61,7 +64,7 @@ def ask_local_model(*, question: str, text: str, url: str, model: str, timeout: 
         method="POST",
     )
     with urllib.request.urlopen(request, timeout=timeout) as response:  # nosec - hôte local uniquement
-        body = json.loads(response.read(1 << 20).decode("utf-8"))
+        body = json.loads(response.read(8 << 20).decode("utf-8"))
     raw = str(body.get("response", "")).strip()
     verdict = "INCERTAIN"
     head = raw.split("\n", 1)[0].strip().upper()
