@@ -77,19 +77,20 @@ def test_coverage_is_documentary_and_excludes_contact_data() -> None:
 
 
 def test_ui_renders_the_precise_cv_plan() -> None:
-    source = (Path(__file__).resolve().parents[1] / "career_static/career.js").read_text(encoding="utf-8")
-    renderer = source.split("function renderStagePrep(prep) {", 1)[1].split(
-        "\nasync function loadStagePrep", 1
-    )[0]
-    assert "Plan précis pour ton CV" in renderer
-    assert "cv_action_plan" in renderer
-    assert "cv_coverage" in renderer
-    assert "Ce n’est pas une probabilité d’embauche" in renderer
-    assert "profile_evidence" in renderer
-    assert "suggested_change" in renderer
-    assert "Préparer dans le Studio" in renderer
-    assert "Mots-clés non étayés à vérifier" in renderer
-    assert "openStudioForJob(job, cvCoverage.target_language)" in renderer
+    source = (Path(__file__).resolve().parents[1] / "career_static/cv_plan.js").read_text(encoding="utf-8")
+    assert "Plan précis pour ton CV" in source
+    assert "cv_action_plan" in source
+    assert "cv_coverage" in source
+    assert "Ce n’est pas une probabilité d’embauche" in source
+    assert "profile_evidence" in source
+    assert "suggested_change" in source
+    assert "Préparer dans le Studio" in source
+    assert "Mots-clés non étayés à vérifier" in source
+    assert "couverture documentaire" in source
+    # L'accroche dans career.js reste une simple délégation au module statique.
+    hook = (Path(__file__).resolve().parents[1] / "career_static/career.js").read_text(encoding="utf-8")
+    assert "renderCvPlanSection(target, prep, job)" in hook
+    assert "openStudioForJob(job, cvCoverage.target_language)" in hook
 
 
 def test_studio_opening_stays_local_and_preselects_the_offer() -> None:

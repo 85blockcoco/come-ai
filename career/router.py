@@ -125,6 +125,12 @@ class ReceiptUnknownPayload(BaseModel):
     note: str = Field(default="", max_length=1_000)
 
 
+class ApplicationChecklistPayload(BaseModel):
+    """Cinq cases locales seulement ; rien n'est transitionné ni envoyé."""
+
+    checked: list[str] = Field(default_factory=list, max_length=10)
+
+
 class ResetPayload(BaseModel):
     confirmation: str = Field(min_length=1, max_length=100)
 
@@ -155,6 +161,27 @@ class ApplicationDraftPayload(BaseModel):
     language: str = Field(default="fr", min_length=2, max_length=16)
     mode: str = Field(default="local", max_length=12)
     consent_external: bool = False
+
+
+class ApplicationKitPayload(BaseModel):
+    """One explicit user action to open a local application kit for one offer."""
+
+    job_id: str = Field(min_length=8, max_length=80)
+    language: str = Field(default="fr", min_length=2, max_length=16)
+
+
+class ApplicationKitTextsPayload(BaseModel):
+    """Edited kit texts; each field stays optional so saves can be partial."""
+
+    motivation_short: str | None = Field(default=None, max_length=1_200)
+    availability: str | None = Field(default=None, max_length=400)
+
+
+class ApplicationDraftEditPayload(BaseModel):
+    """Reviewed CV/letter corrections saved before any local export."""
+
+    cv_markdown: str = Field(min_length=1, max_length=18_000)
+    letter_markdown: str = Field(min_length=1, max_length=18_000)
 
 
 class JobSummaryPayload(BaseModel):
@@ -499,9 +526,53 @@ def create_career_router(
     async def applications() -> Any:
         return await local(lambda: {"applications": service.list_applications()})
 
+    @router.post("/api/career/application-kits")
+    async def create_application_kit(payload: ApplicationKitPayload) -> Any:
+        """One user action: idempotent tracking + reusable local draft + kit."""
+        return await local(lambda: service.create_application_kit(payload.job_id, payload.language))
+
+    @router.get("/api/career/applications/{application_id}/kit")
+    async def application_kit(application_id: str, language: str = "fr") -> Any:
+        return await local(lambda: service.get_application_kit(application_id, language))
+
+    @router.patch("/api/career/applications/{application_id}/kit")
+    async def update_application_kit(application_id: str, payload: ApplicationKitTextsPayload) -> Any:
+        texts = {"motivation_short": payload.motivation_short, "availability": payload.availability}
+        return await local(lambda: service.update_kit_texts(application_id, texts))
+
+    @router.patch("/api/career/application-drafts/{draft_id}")
+    async def update_application_draft(draft_id: str, payload: ApplicationDraftEditPayload) -> Any:
+        return await local(
+            lambda: service.update_application_draft(draft_id, payload.cv_markdown, payload.letter_markdown)
+        )
+
     @router.post("/api/career/applications", status_code=201)
     async def create_application(payload: ApplicationCreatePayload) -> Any:
         return await local(lambda: service.create_application(payload.job_id))
+
+    # CVBOOST-09 : cette route de lecture doit rester enregistrée avant la
+    # route paramétrée /applications/{application_id} pour ne jamais être
+    # interprétée comme un identifiant de candidature.
+    @router.get("/api/career/applications/dashboard")
+    async def applications_dashboard(
+        stage: str = Query(default="", max_length=80),
+        receipt: str = Query(default="", max_length=80),
+        action_required: str = Query(default="", max_length=16),
+        deadline: str = Query(default="", max_length=40),
+        query: str = Query(default="", max_length=120),
+    ) -> Any:
+        if action_required and action_required not in {"true", "false"}:
+            raise HTTPException(status_code=422, detail="Le filtre de prochaine action doit valoir true ou false.")
+        action_filter: bool | None = (action_required == "true") if action_required else None
+        return await local(
+            lambda: service.application_dashboard(
+                stage=stage,
+                receipt=receipt,
+                action_required=action_filter,
+                deadline=deadline,
+                query=query,
+            )
+        )
 
     @router.get("/api/career/applications/{application_id}")
     async def application(application_id: str) -> Any:
@@ -524,6 +595,10 @@ def create_career_router(
     @router.post("/api/career/applications/{application_id}/receipt-unknown")
     async def receipt_unknown(application_id: str, payload: ReceiptUnknownPayload) -> Any:
         return await local(lambda: service.mark_receipt_unknown(application_id, payload.note))
+
+    @router.post("/api/career/applications/{application_id}/checklist")
+    async def application_checklist(application_id: str, payload: ApplicationChecklistPayload) -> Any:
+        return await local(lambda: service.set_application_checklist(application_id, payload.checked))
 
     @router.get("/api/career/interview-sessions")
     async def interview_sessions() -> Any:

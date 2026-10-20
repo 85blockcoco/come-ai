@@ -4,6 +4,7 @@ const state = {
   preferences: null,
   jobs: [],
   applications: [],
+  applicationDashboard: null,
   profileImports: [],
   activeProfileImport: null,
   intake: null,
@@ -17,6 +18,7 @@ const state = {
   stageDetailIndex: 0,
   coachSessions: [],
   activeCoachSession: null,
+  pendingKitApplicationId: "",
 };
 const $ = (selector) => document.querySelector(selector);
 const elements = {
@@ -67,6 +69,13 @@ const elements = {
   shortlistEmpty: $("#shortlist-empty"),
   applications: $("#applications-list"),
   applicationsEmpty: $("#applications-empty"),
+  applicationsCounters: $("#applications-counters"),
+  applicationsRadar: $("#applications-radar"),
+  applicationsHonesty: $("#applications-honesty"),
+  applicationsFilterStage: $("#applications-filter-stage"),
+  applicationsFilterReceipt: $("#applications-filter-receipt"),
+  applicationsFilterDeadline: $("#applications-filter-deadline"),
+  applicationsFilterAction: $("#applications-filter-action"),
   familyPreferences: $("#family-preferences"),
   locationPreferences: $("#location-preferences"),
   filters: $("#job-filters"),
@@ -258,6 +267,10 @@ function refreshView(viewName) {
 function showView(viewName, { focus = true, updateHash = true } = {}) {
   const selectedView = document.querySelector(`#view-${viewName}`);
   if (!selectedView) return;
+  if (viewName !== "applications") {
+    // Quitter l'onglet Candidatures referme le kit automatiquement ouvert.
+    state.pendingKitApplicationId = "";
+  }
   document.querySelectorAll(".career-tab").forEach((tab) => {
     const active = tab.dataset.view === viewName;
     tab.classList.toggle("active", active);
@@ -1080,6 +1093,7 @@ async function createOrShowApplication(job) {
 
 function applicationCard(application) {
   const card = make("article", "", "application-card");
+  card.dataset.applicationId = application.id;
   const header = make("div", "", "application-card-header");
   const title = make("div");
   title.append(make("h3", application.title), make("p", `${application.company}${application.city ? ` · ${application.city}` : ""}`, "job-company"));
@@ -1087,8 +1101,7 @@ function applicationCard(application) {
   card.append(header);
   const meta = make("p", "", "application-meta");
   meta.textContent = `Réception : ${application.receipt_status === "confirmed" ? "confirmée" : application.receipt_status === "unknown" ? "inconnue — ne pas renvoyer automatiquement" : "non déclarée"}.`;
-  card.append(meta);
-  if (application.confirmation_reference) card.append(make("p", `Référence : ${application.confirmation_reference}`, "application-meta"));
+  card.append(meta);  if (application.confirmation_reference) card.append(make("p", `Référence : ${application.confirmation_reference}`, "application-meta"));
   const actions = make("div", "", "application-actions");
   const select = document.createElement("select");
   const currentLabel = stageLabels[application.stage] || application.stage;
@@ -1099,6 +1112,14 @@ function applicationCard(application) {
   });
   select.setAttribute("aria-label", `Statut de ${application.title}`);
   actions.append(select);
+  const kitButton = make("button", "Ouvrir le kit de candidature", "secondary-button");
+  kitButton.type = "button";
+  const kitContainer = make("div", "", "application-kit");
+  kitContainer.dataset.applicationId = application.id;
+  kitContainer.dataset.jobId = application.job_id;
+  kitContainer.hidden = true;
+  kitButton.addEventListener("click", () => openApplicationKit(application, kitContainer));
+  actions.append(kitButton);
   const noteLabel = make("label", "Note de suivi (facultative)");
   const noteInput = document.createElement("input");
   noteInput.type = "text";
@@ -1154,15 +1175,219 @@ function applicationCard(application) {
   if (!application.approval_granted && application.receipt_status !== "confirmed") {
     card.append(make("p", "L’approbation locale pour cette offre précise est requise avant de consigner une réception confirmée.", "application-meta"));
   }
+  card.append(kitContainer);
   return card;
 }
 
-async function loadApplications() {
-  const payload = await api("/api/career/applications");
-  state.applications = payload.applications || [];
+const applicationChecklistItems = [
+  { key: "cv_reviewed", label: "CV relu pour cette offre" },
+  { key: "letter_customized", label: "Lettre personnalisée" },
+  { key: "documents_checked", label: "Documents vérifiés (PDF, formats)" },
+  { key: "deadline_verified", label: "Date limite vérifiée à la source" },
+  { key: "followup_planned", label: "Relance locale prévue" },
+];
+
+const radarBucketLabels = {
+  followup: "Relance",
+  deadline_close: "Échéance proche",
+  deadline_passed: "Échéance dépassée",
+  review: "Dossier à reprendre",
+  interview_preparation: "Entretien",
+};
+
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.classList.add("clipboard-fallback");
+  document.body.append(area);
+  area.select();
+  try { document.execCommand("copy"); } finally { area.remove(); }
+}
+
+function radarEntryText(entry) {
+  // Composante pure testée par gardes Node : textes honnêtes du radar.
+  const bucket = entry.bucket || "review";
+  const waiting = entry.waiting_days;
+  const dateText = entry.suggested_date || "";
+  let heading;
+  if (bucket === "deadline_close") heading = `Finalise : date limite connue — suggestion : ${dateText}.`;
+  else if (bucket === "deadline_passed") heading = "Échéance dépassée : vérifie l’offre avant de relancer.";
+  else if (bucket === "followup") {
+    heading = entry.status === "upcoming"
+      ? `Aucune relance conseillée avant le ${dateText}.`
+      : (waiting === null || waiting === undefined
+        ? "Relance suggérée : brouillon prêt, aucun e-mail envoyé."
+        : `${waiting} jours sans réponse : brouillon de relance prêt, aucun e-mail envoyé.`);
+  } else heading = "Reprise locale du dossier suggérée.";
+  const note = "Brouillon local à copier : Côme AI n’envoie aucun e-mail, aucun message ni candidature, jamais.";
+  return { heading, note };
+}
+
+function applicationFilterQuery() {
+  const params = new URLSearchParams();
+  const stage = elements.applicationsFilterStage?.value || "";
+  const receipt = elements.applicationsFilterReceipt?.value || "";
+  const deadline = elements.applicationsFilterDeadline?.value || "";
+  if (stage) params.set("stage", stage);
+  if (receipt) params.set("receipt", receipt);
+  if (deadline) params.set("deadline", deadline);
+  if (elements.applicationsFilterAction?.checked) params.set("action_required", "true");
+  const text = params.toString();
+  return text ? `?${text}` : "";
+}
+
+function renderApplicationCounters(dash) {
+  if (!elements.applicationsCounters) return;
+  elements.applicationsCounters.replaceChildren();
+  Object.entries(dash.counts_by_stage || {}).forEach(([stage, count]) => {
+    const item = make("button", `${stageLabels[stage] || stage} : ${count}`, "stage-counter");
+    item.type = "button";
+    item.setAttribute("role", "listitem");
+    item.setAttribute("aria-pressed", String(elements.applicationsFilterStage?.value === stage));
+    item.setAttribute("aria-label", `${stageLabels[stage] || stage} : ${count} candidatures`);
+    item.addEventListener("click", () => {
+      if (!elements.applicationsFilterStage) return;
+      elements.applicationsFilterStage.value = elements.applicationsFilterStage.value === stage ? "" : stage;
+      loadApplications();
+    });
+    elements.applicationsCounters.append(item);
+  });
+}
+
+function renderApplicationRadar(radar) {
+  if (!elements.applicationsRadar) return;
+  elements.applicationsRadar.replaceChildren();
+  if (!radar || !radar.length) {
+    elements.applicationsRadar.append(make("p", "Aucune relance en attente. Rien n’est envoyé automatiquement, jamais.", "empty-state compact-empty"));
+    return;
+  }
+  radar.forEach((entry) => {
+    const copy = radarEntryText(entry);
+    const card = make("article", "", "radar-entry");
+    const title = make("div", "", "radar-entry-title");
+    title.append(
+      make("h3", `${entry.title} — ${entry.company}`),
+      chip(radarBucketLabels[entry.bucket] || entry.bucket, entry.status === "due" ? "warning" : "")
+    );
+    card.append(title, make("p", copy.heading, "radar-entry-heading"));
+    if (entry.receipt_unknown) {
+      card.append(make("p", "Réception non confirmée : ne renvoie pas automatiquement.", "radar-entry-warning"));
+    }
+    if (entry.draft_ready && entry.draft) {
+      const copyButton = make("button", "Copier le brouillon de relance", "secondary-button");
+      copyButton.type = "button";
+      copyButton.setAttribute("aria-label", `Copier le brouillon de relance de ${entry.title} — aucun envoi automatique`);
+      copyButton.addEventListener("click", async () => {
+        try {
+          await copyTextToClipboard(entry.draft);
+          setMessage("Brouillon copié. Envoie-le toi-même : aucune relance n’est transmise par Côme AI.");
+        } catch (error) {
+          setMessage(error.message || "Copie impossible dans ce navigateur.", true);
+        }
+      });
+      card.append(copyButton);
+    }
+    card.append(make("p", copy.note, "radar-entry-note"));
+    elements.applicationsRadar.append(card);
+  });
+}
+
+function applicationPrepBlock(entry) {
+  const details = make("details", "", "prep-score");
+  const prep = entry.prep || {};
+  const incomplete = prep.score === null || prep.score === undefined;
+  details.append(make("summary", incomplete ? "Note de préparation : incomplète (facteurs inconnus)" : `Note de préparation : ${prep.score}/100`, "prep-score-summary"));
+  const body = make("div", "", "prep-score-body");
+  body.append(make("p", prep.formula || "", "prep-formula"));
+  Object.entries(prep.factors || {}).forEach(([name, factor]) => {
+    body.append(make("p", `${name} : ${factor.percent}/100 — ${factor.detail}`, "prep-factor"));
+    const missing = factor.quantifiable_missing || [];
+    if (missing.length) {
+      body.append(make("p", `Résultats mesurables à ajouter uniquement si vérifiables : ${missing.join(" · ")}`, "prep-factor-unknown"));
+    }
+  });
+  (prep.unknowns || []).forEach((unknown) => {
+    body.append(make("p", `Inconnu (${unknown.factor}) : ${unknown.reason}`, "prep-factor-unknown"));
+  });
+  body.append(make("p", prep.disclaimer || "", "prep-disclaimer"));
+  details.append(body);
+  return details;
+}
+
+function applicationChecklistBlock(application, checkedKeys) {
+  const details = make("details", "", "application-checklist");
+  details.append(make("summary", "Checklist locale (5 cases)"));
+  const list = make("div", "", "application-checklist-items");
+  const checked = () => applicationChecklistItems
+    .filter((item) => list.querySelector(`input[data-checkkey="${item.key}"]`)?.checked)
+    .map((item) => item.key);
+  applicationChecklistItems.forEach((item) => {
+    const label = make("label");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.dataset.checkkey = item.key;
+    box.checked = checkedKeys.includes(item.key);
+    box.addEventListener("change", async () => {
+      try {
+        await api(`/api/career/applications/${encodeURIComponent(application.id)}/checklist`, {
+          method: "POST",
+          body: JSON.stringify({ checked: checked() }),
+        });
+        setMessage("Checklist locale mise à jour (aucun envoi effectué).");
+      } catch (error) { setMessage(error.message, true); }
+    });
+    label.append(box, document.createTextNode(item.label));
+    list.append(label);
+  });
+  details.append(list);
+  return details;
+}
+
+function applicationTimelineBlock(entry) {
+  const details = make("details", "", "application-timeline");
+  details.append(make("summary", "Chronologie locale"));
+  (entry.timeline || []).forEach((event) => {
+    const when = event.at ? String(event.at).slice(0, 19).replace("T", " ") : "date inconnue";
+    details.append(make("p", `${when} · ${event.event_type}${event.detail ? ` — ${event.detail}` : ""}`, "timeline-event"));
+  });
+  return details;
+}
+
+function renderApplicationDashboard(dash) {
+  state.applicationDashboard = dash;
+  if (elements.applicationsHonesty && dash.honesty) elements.applicationsHonesty.textContent = dash.honesty;
+  renderApplicationCounters(dash);
+  renderApplicationRadar(dash.radar || []);
+  const byId = new Map((dash.entries || []).map((entry) => [entry.application_id, entry]));
   elements.applications.replaceChildren();
+  state.applications.forEach((application) => {
+    const entry = byId.get(application.id);
+    const card = applicationCard(application);
+    if (entry) {
+      card.append(
+        applicationPrepBlock(entry),
+        applicationChecklistBlock(application, entry.checklist?.checked_keys || []),
+        applicationTimelineBlock(entry),
+      );
+    }
+    elements.applications.append(card);
+  });
   elements.applicationsEmpty.hidden = state.applications.length > 0;
-  state.applications.forEach((application) => elements.applications.append(applicationCard(application)));
+}
+
+async function loadApplications() {
+  const suffix = applicationFilterQuery();
+  const [listing, dash] = await Promise.all([
+    api("/api/career/applications"),
+    api(`/api/career/applications/dashboard${suffix}`),
+  ]);
+  state.applications = listing.applications || [];
+  renderApplicationDashboard(dash);
+  await consumePendingKit();
 }
 
 const coachModeLabels = {
@@ -1450,12 +1675,21 @@ function renderStudioJobOptions(jobs) {
   if (state.pendingStudioJob && !jobs.some((job) => job.id === state.pendingStudioJob.id)) {
     elements.applicationDraftJob.append(new Option(`${state.pendingStudioJob.company} — ${state.pendingStudioJob.title}`, state.pendingStudioJob.id));
   }
-  const selected = state.pendingStudioJob?.id || current;
+  const selected = state.pendingStudioJob?.id || current || loadStudioPrefill().job_id;
   if ([...elements.applicationDraftJob.options].some((option) => option.value === selected)) {
     elements.applicationDraftJob.value = selected;
   }
+  const prefill = loadStudioPrefill();
   if (["fr", "en", "it", "de"].includes(state.pendingStudioLanguage)) {
     elements.applicationDraftLanguage.value = state.pendingStudioLanguage;
+  } else if (prefill.language) {
+    elements.applicationDraftLanguage.value = prefill.language;
+  }
+  const restoredFromStorage = !current && !state.pendingStudioJob && prefill.job_id && [...elements.applicationDraftJob.options].some((option) => option.value === selected);
+  if (restoredFromStorage) {
+    elements.applicationDraftMode.value = "local";
+    elements.applicationDraftConsent.checked = false;
+    updateDraftModeUI();
   }
 }
 
@@ -1464,6 +1698,7 @@ function openStudioForJob(job, language = "") {
   state.pendingStudioLanguage = ["fr", "en", "it", "de"].includes(language) ? language : "";
   elements.applicationDraftMode.value = "local";
   elements.applicationDraftConsent.checked = false;
+  if (typeof saveStudioPrefill === "function") saveStudioPrefill(job, state.pendingStudioLanguage, "local");
   updateDraftModeUI();
   showView("studio");
 }
@@ -1597,6 +1832,289 @@ async function markReceiptUnknown(application, note = "") {
   } catch (error) { setMessage(error.message, true); }
 }
 
+// ---------------------------------------------------------------------------
+// Kit de candidature local (CVBOOST-05)
+//
+// Prérempli depuis l'offre enregistrée : CV adapté, lettre, motivation courte,
+// disponibilité et champs à copier-coller (titre, entreprise, référence, URL
+// officielle). Tout texte reste modifiable avant export ; la copie presse-
+// papiers n'a lieu qu'après un clic explicite ; l'envoi reste strictement
+// manuel et aucune route d'envoi n'existe côté serveur.
+// ---------------------------------------------------------------------------
+
+function copyKitValue(value, statusNode) {
+  const text = String(value || "");
+  if (!text) {
+    if (statusNode) statusNode.textContent = "Rien à copier : ce champ est à compléter.";
+    return;
+  }
+  if (!navigator.clipboard || typeof navigator.clipboard.writeText !== "function") {
+    if (statusNode) statusNode.textContent = "Copie indisponible (CSP ou navigateur) : sélectionne le texte et copie-le avec Ctrl/Cmd+C.";
+    return;
+  }
+  navigator.clipboard.writeText(text).then(() => {
+    if (statusNode) statusNode.textContent = "Copié.";
+  }, () => {
+    if (statusNode) statusNode.textContent = "Copie refusée par le navigateur : sélectionne le texte et copie-le manuellement.";
+  });
+}
+
+function kitFactRow(labelKey, value, missingLabel) {
+  const labels = {
+    title: "Poste",
+    company: "Entreprise",
+    reference: "Référence offre",
+    official_url: "URL officielle",
+    deadline_date: "Date limite",
+  };
+  const display = value || missingLabel || "À compléter";
+  const row = make("div", "", "application-kit-fact");
+  row.append(
+    make("span", labels[labelKey] || labelKey, "application-kit-fact-label"),
+    make("code", display, "application-kit-fact-value"),
+  );
+  const status = make("span", "", "kit-copy-status");
+  const copy = make("button", "Copier", "quiet-button");
+  copy.type = "button";
+  copy.setAttribute("aria-label", `Copier ${labels[labelKey] || labelKey}`);
+  // La copie n'a lieu qu'après ce clic utilisateur explicite : jamais au
+  // chargement de la vue, jamais en boucle.
+  copy.addEventListener("click", () => copyKitValue(value, status));
+  row.append(copy, status);
+  return row;
+}
+
+function kitTextEditor(label, currentValue, maxLength, onSave) {
+  const form = make("form", "", "application-kit-editor");
+  const textLabel = make("label", label);
+  const textarea = document.createElement("textarea");
+  textarea.rows = label.startsWith("Motivation") ? 8 : 3;
+  textarea.maxLength = maxLength;
+  textarea.value = currentValue;
+  textLabel.append(textarea);
+  const actions = make("div", "", "inline-actions");
+  const status = make("span", "", "kit-copy-status");
+  const save = make("button", "Enregistrer ce texte", "secondary-button");
+  save.type = "submit";
+  actions.append(save, status);
+  form.append(textLabel, actions);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const value = textarea.value.trim();
+    if (!value) {
+      status.textContent = "Le texte est vide : rien à enregistrer.";
+      return;
+    }
+    save.disabled = true;
+    try {
+      await onSave(value);
+      status.textContent = "Enregistré localement (les versions précédentes restent dans l’historique du suivi).";
+    } catch (error) {
+      status.textContent = "";
+      setMessage(error.message, true);
+    } finally {
+      save.disabled = false;
+    }
+  });
+  return form;
+}
+
+const KIT_TEXT_LIMITS = { motivation_short: 1200, availability: 400 };
+
+async function saveKitTexts(application, patch, statusNode) {
+  await api(`/api/career/applications/${encodeURIComponent(application.id)}/kit`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+  if (statusNode) statusNode.textContent = "Enregistré localement.";
+}
+
+function renderApplicationKit(kit, container) {
+  container.replaceChildren();
+  container.hidden = false;
+  const application = kit.application || {};
+  container.append(make("h4", "Kit de candidature local", "kit-heading"));
+  container.append(make("p", `${kit.disclaimer || ""}`, "application-kit-disclaimer"));
+
+  const stageLine = make("p", "", "application-meta");
+  stageLine.textContent = `Suivi : ${stageLabels[application.stage] || application.stage} · réception : ${application.receipt_status === "confirmed" ? "confirmée" : application.receipt_status === "unknown" ? "inconnue" : "non déclarée"}.`;
+  container.append(stageLine);
+
+  const facts = kit.job || {};
+  const factsBlock = make("div", "", "application-kit-facts");
+  [
+    ["title", facts.title],
+    ["company", facts.company],
+    ["reference", facts.reference],
+    ["official_url", facts.official_url],
+    ["deadline_date", facts.deadline_date],
+  ].forEach(([key, value]) => factsBlock.append(kitFactRow(key, value, "À compléter (voir l’offre officielle)")));
+  if (facts.official_url) {
+    const link = make("a", "Ouvrir l’offre officielle conservée", "secondary-button external-link");
+    link.href = facts.official_url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    const linkRow = make("div", "", "application-kit-fact");
+    linkRow.append(link);
+    factsBlock.append(linkRow);
+  }
+  container.append(factsBlock);
+
+  const documents = make("section", "", "application-kit-documents");
+  documents.append(make("h5", "Documents du kit", "kit-subheading"));
+  const draft = kit.draft;
+  if (draft) {
+    const meta = make("p", "", "application-meta");
+    const mode = draft.generation_mode === "ai" ? `amélioré par ${draft.provider}` : "gabarit local factuel";
+    meta.textContent = `Dossier en ${draftLanguageLabels[draft.language] || draft.language} · ${mode} · créé le ${new Date(draft.created_at).toLocaleString("fr-FR")}.`;
+    documents.append(meta);
+    const cvLabel = make("label", "CV adapté (modifiable avant export)");
+    const cvArea = document.createElement("textarea");
+    cvArea.rows = 12;
+    cvArea.maxLength = 18000;
+    cvArea.value = draft.cv_markdown || "";
+    cvLabel.append(cvArea);
+    const letterLabel = make("label", "Lettre de motivation (modifiable avant export)");
+    const letterArea = document.createElement("textarea");
+    letterArea.rows = 12;
+    letterArea.maxLength = 18000;
+    letterArea.value = draft.letter_markdown || "";
+    letterLabel.append(letterArea);
+    const draftActions = make("div", "", "inline-actions");
+    const saveDraft = make("button", "Enregistrer les corrections du dossier", "secondary-button");
+    saveDraft.type = "button";
+    const draftStatus = make("span", "", "kit-copy-status");
+    saveDraft.addEventListener("click", async () => {
+      if (!cvArea.value.trim() || !letterArea.value.trim()) {
+        draftStatus.textContent = "Le CV et la lettre ne peuvent pas être vides.";
+        return;
+      }
+      saveDraft.disabled = true;
+      try {
+        await api(`/api/career/application-drafts/${encodeURIComponent(draft.id)}`, {
+          method: "PATCH",
+          body: JSON.stringify({ cv_markdown: cvArea.value, letter_markdown: letterArea.value }),
+        });
+        draftStatus.textContent = "Corrections enregistrées localement ; les exports utilisent cette version relue.";
+      } catch (error) {
+        draftStatus.textContent = "";
+        setMessage(error.message, true);
+      } finally {
+        saveDraft.disabled = false;
+      }
+    });
+    draftActions.append(saveDraft, draftStatus);
+    documents.append(cvLabel, letterLabel, draftActions);
+    const downloads = make("div", "", "inline-actions");
+    downloads.append(
+      draftDownloadLink(draft, "cv", "docx"),
+      draftDownloadLink(draft, "cv", "pdf"),
+      draftDownloadLink(draft, "letter", "docx"),
+      draftDownloadLink(draft, "letter", "pdf"),
+    );
+    documents.append(downloads);
+  } else {
+    documents.append(make("p", "Aucun dossier local n’est encore rattaché à ce suivi.", "application-meta"));
+    const create = make("button", "Créer le dossier local (CV + lettre)", "secondary-button");
+    create.type = "button";
+    create.addEventListener("click", async () => {
+      create.disabled = true;
+      try {
+        const refreshed = await api("/api/career/application-kits", {
+          method: "POST",
+          body: JSON.stringify({ job_id: application.job_id, language: kit.language || "fr" }),
+        });
+        renderApplicationKit(refreshed, container);
+        setMessage("Dossier local créé. Relis-le avant tout usage : l’envoi reste manuel.");
+      } catch (error) {
+        setMessage(error.message, true);
+      } finally {
+        create.disabled = false;
+      }
+    });
+    documents.append(create);
+  }
+  container.append(documents);
+
+  const texts = kit.kit_texts || {};
+  const textsBlock = make("section", "", "application-kit-texts");
+  textsBlock.append(make("h5", "Réponses types (à relire avant usage)", "kit-subheading"));
+  textsBlock.append(kitTextEditor(
+    "Motivation courte",
+    texts.motivation_short || "",
+    KIT_TEXT_LIMITS.motivation_short,
+    (value) => saveKitTexts(application, { motivation_short: value }),
+  ));
+  textsBlock.append(kitTextEditor(
+    "Disponibilité",
+    texts.availability || "",
+    KIT_TEXT_LIMITS.availability,
+    (value) => saveKitTexts(application, { availability: value }),
+  ));
+  container.append(textsBlock);
+
+  const factChecks = kit.fact_checks || {};
+  const warnings = make("section", "", "application-kit-checks");
+  warnings.append(make("h5", "Vérificateur de faits local", "kit-subheading"));
+  const placeholderList = make("ul", "", "job-reasons");
+  (factChecks.placeholders || []).forEach((marker) => placeholderList.append(make("li", `À compléter avant usage : ${marker}`)));
+  (factChecks.unverified_requirements || []).forEach((item) => {
+    placeholderList.append(make("li", `${item.requirement} — ${item.note}`));
+  });
+  if (placeholderList.children.length) warnings.append(placeholderList);
+  else warnings.append(make("p", "Aucun marqueur ouvert : le kit ne contient plus de champ à compléter signalé automatiquement.", "application-meta"));
+  const checksList = make("ul", "", "job-reasons blocked-list");
+  (kit.checks || []).forEach((line) => checksList.append(make("li", line)));
+  warnings.append(checksList);
+  container.append(warnings);
+}
+
+async function openApplicationKit(application, container) {
+  if (!container) return;
+  container.textContent = "Chargement du kit local…";
+  container.hidden = false;
+  try {
+    const kit = await api(`/api/career/applications/${encodeURIComponent(application.id)}/kit`);
+    renderApplicationKit(kit, container);
+  } catch (error) {
+    container.hidden = true;
+    setMessage(error.message, true);
+  }
+}
+
+async function showKitInApplications(kit) {
+  // Le kit est rouvert (avec des données fraîches) après chaque rendu de la
+  // liste des candidatures tant que l'utilisateur reste sur cette vue : un
+  // rechargement ou une mise à jour du suivi ne referme pas le kit ouvert.
+  state.pendingKitApplicationId = kit.application?.id || "";
+  showView("applications");
+  await loadApplications();
+}
+
+async function startApplicationKitFlow(jobId, language) {
+  try {
+    const kit = await api("/api/career/application-kits", {
+      method: "POST",
+      body: JSON.stringify({ job_id: jobId, language }),
+    });
+    setMessage("Kit de candidature prêt localement. L’envoi reste strictement manuel.");
+    await showKitInApplications(kit);
+  } catch (error) { setMessage(error.message, true); }
+}
+
+async function consumePendingKit() {
+  const applicationId = state.pendingKitApplicationId;
+  if (!applicationId) return;
+  const target = elements.applications.querySelector(
+    `.application-kit[data-application-id="${CSS.escape(applicationId)}"]`
+  );
+  if (target) {
+    await openApplicationKit({ id: applicationId }, target);
+    reveal(target, "start");
+  }
+}
+
+
 elements.profileForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
@@ -1682,6 +2200,18 @@ $("#reset-career-intake").addEventListener("click", async () => {
 });
 
 elements.applicationDraftMode.addEventListener("change", updateDraftModeUI);
+
+/* CVBOOST-03 : la préselection du Studio (offre, langue, gabarit local) reste
+   valable après un rechargement. Rien concernant le mode IA n'est persisté, et
+   le consentement cloud n'est jamais réactivé automatiquement. */
+elements.applicationDraftJob.addEventListener("change", () => {
+  const selectedJob = state.studioJobs.find((job) => job.id === elements.applicationDraftJob.value) || { id: elements.applicationDraftJob.value, company: "", title: "" };
+  if (typeof saveStudioPrefill === "function") saveStudioPrefill(selectedJob, elements.applicationDraftLanguage.value, "local");
+});
+elements.applicationDraftLanguage.addEventListener("change", () => {
+  const selectedJob = state.studioJobs.find((job) => job.id === elements.applicationDraftJob.value) || { id: elements.applicationDraftJob.value, company: "", title: "" };
+  if (typeof saveStudioPrefill === "function") saveStudioPrefill(selectedJob, elements.applicationDraftLanguage.value, "local");
+});
 
 elements.applicationDraftForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -2314,39 +2844,9 @@ function renderStagePrep(prep) {
     target.append(warnings);
   }
   const cvCoverage = prep.cv_coverage || {};
-  if ((prep.cv_action_plan || []).length || Number.isFinite(cvCoverage.requirements_total)) {
-    const plan = make("section", "", "stagehunter-prep-section stagehunter-cv-action-plan");
-    plan.append(make("h4", "Plan précis pour ton CV"));
-    plan.append(
-      make(
-        "p",
-        `${cvCoverage.supported || 0}/${cvCoverage.requirements_total || 0} exigences détectées sont étayées par ton profil · couverture documentaire ${cvCoverage.coverage_percent || 0} % · langue cible ${cvCoverage.target_language || "à confirmer"}.`,
-        "scoring-title",
-      ),
-    );
-    plan.append(make("p", "Ce n’est pas une probabilité d’embauche : c’est un contrôle des preuves actuellement présentes dans ton profil.", "scoring-disclaimer"));
-    const list = make("div", "", "stagehunter-cv-actions");
-    (prep.cv_action_plan || []).forEach((item) => {
-      const statusClass = item.status === "supported" ? "ready" : "action_required";
-      const row = make("article", "", `checklist-item checklist-${statusClass}`);
-      const copy = make("div");
-      copy.append(make("strong", `${item.action_label || "Action CV"} · ${item.section || "Section à déterminer"}`));
-      if (item.offer_reference) copy.append(make("p", `${item.offer_reference} · ${item.profile_reference || "profil à vérifier"}`, "application-meta"));
-      copy.append(make("p", `Exigence de l’offre : ${item.requirement || "non précisée"}`));
-      if (item.profile_evidence) copy.append(make("p", `Preuve déjà présente : « ${item.profile_evidence} »`));
-      if ((item.missing_keywords || []).length) copy.append(make("p", `Mots-clés non étayés à vérifier : ${item.missing_keywords.join(", ")}.`));
-      if (item.suggested_change) copy.append(make("p", `À faire : ${item.suggested_change}`));
-      if (item.evidence_quality === "needs_quantification") copy.append(make("p", "Amélioration possible : ajoute un résultat chiffré uniquement si tu peux le prouver ; sinon conserve la formulation actuelle.", "scoring-disclaimer"));
-      if (item.why) copy.append(make("p", item.why, "scoring-disclaimer"));
-      row.append(copy);
-      const apply = make("button", item.status === "supported" ? "Préparer dans le Studio" : "Compléter puis préparer", "quiet-button");
-      apply.type = "button";
-      apply.addEventListener("click", () => openStudioForJob(job, cvCoverage.target_language));
-      row.append(apply);
-      list.append(row);
-    });
-    plan.append(list);
-    target.append(plan);
+  if ((typeof renderCvPlanSection === "function") && ((prep.cv_action_plan || []).length || Number.isFinite(cvCoverage.requirements_total))) {
+    const planSection = renderCvPlanSection(target, prep, job);
+    if (planSection) target.append(planSection);
   }
   renderStagePrepList(target, "Exigences de l’offre (texte source conservé)", prep.requirements || [], (item) => make("li", `${item.text}`));
   if (prep.source_excerpt) {
@@ -2366,6 +2866,15 @@ function renderStagePrep(prep) {
   studio.type = "button";
   studio.addEventListener("click", () => openStudioForJob(job, cvCoverage.target_language));
   actions.append(studio);
+  const kitLanguage = make("select", "", "kit-language-select");
+  kitLanguage.setAttribute("aria-label", "Langue du kit de candidature");
+  ["fr", "en", "it", "de"].forEach((code) => kitLanguage.append(new Option(draftLanguageLabels[code], code)));
+  const kit = make("button", "Préparer le kit de candidature", "primary-button");
+  kit.type = "button";
+  // Un clic = un kit pour CETTE offre. Aucune boucle de candidature : le
+  // suivi et le brouillon local sont créés une fois puis réutilisés.
+  kit.addEventListener("click", () => startApplicationKitFlow(job.id, kitLanguage.value));
+  actions.append(kitLanguage, kit);
   target.append(actions);
 }
 
@@ -2504,6 +3013,17 @@ $("#stagehunter-prep-submit")?.addEventListener("click", () => {
 });
 
 document.querySelectorAll(".career-tab").forEach((tab) => tab.addEventListener("click", () => showView(tab.dataset.view)));
+
+(function fillApplicationStageFilter() {
+  const select = $("#applications-filter-stage");
+  if (!select || select.options.length > 1) return;
+  Object.entries(stageLabels).forEach(([value, label]) => select.append(new Option(label, value)));
+})();
+
+["applications-filter-stage", "applications-filter-receipt", "applications-filter-deadline"].forEach((id) => {
+  $(`#${id}`)?.addEventListener("change", () => loadApplications());
+});
+$("#applications-filter-action")?.addEventListener("change", () => loadApplications());
 document.querySelectorAll("[data-view-action]").forEach((action) => action.addEventListener("click", () => {
   showView(action.dataset.viewAction);
   const targetId = action.dataset.focusTarget;

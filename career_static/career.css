@@ -269,6 +269,9 @@ details summary:focus-visible { border-radius: 5px; outline-offset: 4px; }
 .roadmap-panel p:not(.eyebrow) { color: var(--muted); line-height: 1.55; }
 .studio-panel, .application-draft-preview, .studio-history-panel { max-width: 1120px; margin-bottom: 16px; }
 .studio-consent { display: flex !important; gap: 8px; align-items: flex-start; padding: 10px; border: 1px solid #f0d6ac; border-radius: 9px; color: var(--warning) !important; background: var(--warning-soft); font-size: .76rem !important; font-weight: 500 !important; line-height: 1.4; }
+/* .studio-consent [hidden] : la règle ci-dessus doit laisser passer l'attribut hidden
+   (sinon la ligne de consentement cloud resterait visible en mode gabarit local). */
+.studio-consent[hidden] { display: none !important; }
 .studio-consent input { width: 16px; min-height: 16px; margin-top: 2px; accent-color: var(--accent); }
 .draft-checks { display: grid; gap: 6px; margin: 10px 0 14px; }
 .draft-check { padding: 8px 10px; border: 1px solid #f0d6ac; border-radius: 8px; color: var(--warning); background: var(--warning-soft); font-size: .74rem; line-height: 1.4; }
@@ -409,4 +412,53 @@ button, a, .career-tab { transition: background-color .16s ease, border-color .1
 @media (forced-colors: active) {
   .panel, .metric, .career-tabs, .career-loading, .career-message, .empty-state, .action-plan-item, .action-plan-skeleton { border: 1px solid CanvasText; }
   .career-tab.active, .primary-button { border: 1px solid CanvasText; }
+}
+
+/* Kit de candidature local (CVBOOST-05) : panneau prérempli par offre suivie. */
+.application-kit { margin-top: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); display: grid; gap: 12px; }
+.application-kit[hidden] { display: none; }
+.kit-heading { font-size: .95rem; margin: 0; }
+.kit-subheading { font-size: .82rem; margin: 0 0 6px; color: var(--accent-dark); }
+.application-kit-disclaimer { font-size: .76rem; color: var(--muted); margin: 0; }
+.application-kit-facts { display: grid; gap: 6px; }
+.application-kit-fact { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.application-kit-fact-label { flex: 0 0 120px; font-size: .74rem; color: var(--muted); }
+.application-kit-fact-value { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .78rem; overflow-wrap: anywhere; }
+.kit-copy-status { font-size: .72rem; color: var(--good); min-width: 0; }
+.application-kit-documents, .application-kit-texts, .application-kit-checks { display: grid; gap: 8px; padding-top: 4px; border-top: 1px dashed var(--border); }
+.application-kit-documents label, .application-kit-texts label { display: grid; gap: 5px; font-size: .78rem; }
+.application-kit-documents textarea, .application-kit-texts textarea { width: 100%; max-width: 100%; resize: vertical; }
+.kit-language-select { width: auto; min-width: 150px; max-width: 200px; }
+
+/* CVBOOST-09 — tableau de bord des candidatures : compteurs, filtres, radar. */
+.application-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin: 12px 0 4px; padding: 12px; border: 1px solid #dce9e2; border-radius: 10px; background: var(--surface-muted); }
+.application-filters label { display: grid; gap: 4px; font-size: .74rem; color: var(--muted); }
+.application-filters select { min-width: 150px; min-height: 34px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 8px; background: #fff; color: var(--ink); font-size: .8rem; }
+.application-filter-check { display: flex !important; align-items: center; gap: 6px; min-height: 34px; }
+.application-filter-check input { width: auto; }
+.stage-counters { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+.stage-counter { min-height: 34px; padding: 5px 11px; border: 1px solid var(--border); border-radius: 17px; background: #fff; color: var(--ink); font-size: .76rem; cursor: pointer; }
+.stage-counter:hover, .stage-counter:focus-visible { border-color: var(--accent); background: var(--accent-soft); outline: none; }
+.followup-radar { display: grid; gap: 10px; margin: 14px 0; padding: 12px; border: 1px solid #f2d9b0; border-radius: 12px; background: var(--warning-soft); }
+.radar-entry { padding: 11px; border: 1px solid #ecd9bd; border-radius: 10px; background: #fff; }
+.radar-entry-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.radar-entry h3 { font-size: .88rem; line-height: 1.35; }
+.radar-entry-heading { margin: 7px 0 6px; color: var(--ink); font-size: .8rem; font-weight: 650; }
+.radar-entry-warning { margin: 4px 0; color: var(--danger); font-size: .74rem; font-weight: 650; }
+.radar-entry-note { margin: 6px 0 0; color: var(--muted); font-size: .72rem; line-height: 1.4; }
+.prep-score, .application-checklist, .application-timeline { margin-top: 10px; padding: 9px 11px; border: 1px solid #dce9e2; border-radius: 9px; background: var(--surface-soft); }
+.prep-score-summary, .application-checklist summary, .application-timeline summary { color: var(--accent-dark); cursor: pointer; font-size: .78rem; font-weight: 700; }
+.prep-score-body, .application-checklist-items { display: grid; gap: 6px; margin-top: 9px; }
+.prep-formula { color: var(--muted); font-size: .72rem; }
+.prep-factor, .prep-factor-unknown { font-size: .76rem; line-height: 1.4; }
+.prep-factor-unknown { color: var(--warning); }
+.prep-disclaimer { color: var(--faint); font-size: .7rem; }
+.application-checklist-items label { display: flex; align-items: flex-start; gap: 7px; font-size: .76rem; line-height: 1.35; }
+.application-checklist-items input { width: auto; flex-shrink: 0; margin-top: 2px; }
+.timeline-event { margin: 0; color: var(--muted); font-size: .72rem; line-height: 1.4; }
+.clipboard-fallback { position: absolute; inset-inline-start: -9999px; top: 0; }
+@media (max-width: 620px) {
+  .application-filters { align-items: stretch; }
+  .application-filters label { flex: 1 1 100%; }
+  .application-filters select { width: 100%; }
 }

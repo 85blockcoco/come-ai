@@ -24,6 +24,7 @@ from typing import Any, Iterator
 
 from .models import (
     AVAILABILITY_STATES,
+    APPLICATION_STAGES,
     GENERIC_APPLICATION_STAGES,
     JOB_FAMILIES,
     PRIMARY_LOCATIONS,
@@ -38,14 +39,27 @@ from .models import (
     validate_choice,
 )
 from .application_studio import (
+    KIT_TEXT_FIELDS,
+    KIT_TEXT_LIMITS,
+    MAX_DRAFT_CHARS,
     ApplicationDraft,
     build_ai_prompt,
+    build_kit_texts,
     build_local_application_draft,
     normalize_language,
     parse_ai_draft,
     render_application_html,
+    scan_kit_placeholders,
 )
 from .calendar_export import build_deadline_calendar_ics
+from .application_dashboard import (
+    CHECKLIST_EVENT_TYPE,
+    CHECKLIST_KEYS,
+    DEADLINE_FILTER_VALUES,
+    MAX_DASHBOARD_APPLICATIONS,
+    RECEIPT_FILTER_VALUES,
+    build_dashboard_payload,
+)
 from .application_prep import prepare_application, summarize_offer
 
 try:
@@ -1630,6 +1644,30 @@ class CareerService:
             self._audit(connection, f"application_draft_exported_{kind}_{export_format}", "application_draft", str(draft["id"]))
         return target
 
+    def update_application_draft(self, draft_id: str, cv_markdown: Any, letter_markdown: Any) -> dict[str, Any]:
+        """Apply one explicit user edit to a saved draft before any export.
+
+        The correction stays fully local: the same bounded, text-only parsing
+        powers the later DOCX/PDF exports, so the saved version is always what
+        the person last reviewed.
+        """
+        identifier = clean_text(draft_id, limit=80)
+        cv = clean_text(cv_markdown, limit=MAX_DRAFT_CHARS)
+        letter = clean_text(letter_markdown, limit=MAX_DRAFT_CHARS)
+        if not cv:
+            raise UserFacingError("Le CV corrigé ne peut pas être vide.")
+        if not letter:
+            raise UserFacingError("La lettre corrigée ne peut pas être vide.")
+        with self._lock, self._connection() as connection:
+            result = connection.execute(
+                "UPDATE application_drafts SET cv_markdown = ?, letter_markdown = ? WHERE id = ?",
+                (cv, letter, identifier),
+            )
+            if result.rowcount != 1:
+                raise UserFacingError("Ce brouillon de candidature n’existe pas.")
+            self._audit(connection, "application_draft_edited", "application_draft", identifier)
+        return self.get_application_draft(identifier)
+
     def get_preferences(self) -> dict[str, Any]:
         with self._lock, self._connection() as connection:
             rows = connection.execute(
@@ -3123,6 +3161,124 @@ class CareerService:
             records.append(record)
         return records
 
+    def application_dashboard(
+        self,
+        *,
+        stage: str = "",
+        receipt: str = "",
+        action_required: bool | None = None,
+        deadline: str = "",
+        query: str = "",
+    ) -> dict[str, Any]:
+        """CVBOOST-09 : projection déterministe des candidatures suivies.
+
+        Réutilise les événements et les états existants, sans migration et
+        sans réseau. Toute donnée imprévisible reste un inconnu affiché, jamais
+        un chiffre inventé ; une ligne SQLite n'est jamais un envoi.
+        """
+        normalized_stage = clean_text(stage, limit=80)
+        if normalized_stage and normalized_stage not in APPLICATION_STAGES:
+            raise UserFacingError("Ce statut de filtre est invalide.")
+        normalized_receipt = clean_text(receipt, limit=80)
+        if normalized_receipt and normalized_receipt not in RECEIPT_FILTER_VALUES[1:]:
+            raise UserFacingError("Ce filtre de réception est invalide.")
+        normalized_deadline = clean_text(deadline, limit=40)
+        if normalized_deadline and normalized_deadline not in DEADLINE_FILTER_VALUES[1:]:
+            raise UserFacingError("Ce filtre d’échéance est invalide.")
+        action_filter: bool | None = None
+        if action_required is not None:
+            action_filter = bool(action_required)
+        with self._lock, self._connection() as connection:
+            application_rows = connection.execute(
+                """
+                SELECT a.id AS application_id, a.job_id, a.stage, a.receipt_status,
+                       a.approval_granted, a.confirmation_reference,
+                       a.created_at AS application_created_at, a.updated_at AS application_updated_at,
+                       j.id AS joined_job_id, j.company, j.title, j.city, j.country, j.official_url,
+                       j.deadline_date, j.source_status, j.employment_type, j.role_level,
+                       j.requirements, j.languages_required, j.eligibility_requirement,
+                       j.description_original, j.job_family
+                FROM applications a JOIN jobs j ON a.job_id = j.id
+                ORDER BY a.updated_at DESC, a.id ASC
+                LIMIT ?
+                """,
+                (MAX_DASHBOARD_APPLICATIONS,),
+            ).fetchall()
+            total_applications = int(
+                connection.execute("SELECT COUNT(*) AS total FROM applications").fetchone()["total"]
+            )
+            events_by_application: dict[str, list[dict[str, Any]]] = {}
+            application_ids = [str(row["application_id"]) for row in application_rows]
+            if application_ids:
+                placeholders = ", ".join("?" for _ in application_ids)
+                event_rows = connection.execute(
+                    f"""
+                    SELECT application_id, event_type, detail, created_at
+                    FROM application_events
+                    WHERE application_id IN ({placeholders})
+                    ORDER BY created_at ASC
+                    """,
+                    application_ids,
+                ).fetchall()
+                for event_row in event_rows:
+                    events_by_application.setdefault(str(event_row["application_id"]), []).append(dict(event_row))
+            jobs_by_id: dict[str, dict[str, Any]] = {}
+            for row in application_rows:
+                job_id = str(row["job_id"])
+                if job_id in jobs_by_id:
+                    continue
+                job_row = connection.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+                jobs_by_id[job_id] = dict(job_row) if job_row else {}
+        context = self._scoring_context()
+        return build_dashboard_payload(
+            [dict(row) for row in application_rows],
+            events_by_application,
+            jobs_by_id,
+            context.get("profile") or {},
+            context.get("intake") or {},
+            today=date.today(),
+            now_iso=utc_now(),
+            total_applications=total_applications,
+            stage=normalized_stage,
+            receipt=normalized_receipt,
+            action_required=action_filter,
+            deadline=normalized_deadline,
+            query=query,
+        )
+
+    def set_application_checklist(self, application_id: str, checked: list[str]) -> dict[str, Any]:
+        """Enregistre l'état local de la checklist dans le journal existant.
+
+        Aucun changement de schéma : un événement ``checklist`` porte l'état
+        complet en JSON, le dernier événement faisant foi. Rien n'est envoyé,
+        nulle part.
+        """
+        cleaned = [clean_text(item, limit=80) for item in (checked or []) if clean_text(item, limit=80)]
+        unknown_keys = sorted(set(cleaned) - CHECKLIST_KEYS)
+        if unknown_keys:
+            raise UserFacingError("Cette case de checklist est inconnue : " + ", ".join(unknown_keys))
+        with self._lock, self._connection() as connection:
+            application = connection.execute(
+                "SELECT job_id FROM applications WHERE id = ?", (application_id,)
+            ).fetchone()
+            if not application:
+                raise UserFacingError("Cette candidature Career n’existe pas.")
+            detail = json.dumps(
+                {"items": {key: True for key in sorted(set(cleaned))}},
+                ensure_ascii=False,
+            )
+            self._application_event(
+                connection, application_id, str(application["job_id"]), CHECKLIST_EVENT_TYPE, detail
+            )
+            self._audit(connection, "application_checklist_updated", "application", application_id)
+        result = self.get_application(application_id)
+        result["checklist"] = {
+            "checked_keys": sorted(set(cleaned)),
+            "unknown": False,
+        }
+        return result
+
+
     def update_application_stage(self, application_id: str, stage: str, note: str = "") -> dict[str, Any]:
         normalized_stage = clean_text(stage, limit=80)
         if normalized_stage not in GENERIC_APPLICATION_STAGES:
@@ -3254,6 +3410,256 @@ class CareerService:
             )
             self._audit(connection, "application_receipt_unknown", "application", application_id)
         return self.get_application(application_id)
+
+    # ------------------------------------------------------------------
+    # Local application kit (CVBOOST-05)
+    #
+    # One explicit user action opens a pre-filled kit for ONE tracked offer:
+    # the idempotent tracker record, the latest local CV/letter draft in the
+    # requested language, and short reviewable texts (motivation, availability)
+    # plus the copy-paste fields (company, title, reference, official URL).
+    # Persistence uses the existing application_events rows with JSON payloads
+    # (event_type "kit_content"), so no schema change is needed.  Nothing here
+    # ever transmits an application: submitting remains a purely manual act by
+    # the person, outside this program.
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _kit_content_edits(detail: str) -> dict[str, str]:
+        """Read previously saved kit text edits from a JSON event payload."""
+        try:
+            parsed = json.loads(detail or "{}")
+        except json.JSONDecodeError:
+            return {}
+        if not isinstance(parsed, dict):
+            return {}
+        edits: dict[str, str] = {}
+        for field in KIT_TEXT_FIELDS:
+            value = parsed.get(field)
+            if isinstance(value, str) and value.strip():
+                edits[field] = value
+        return edits
+
+    @staticmethod
+    def _kit_unverified_requirements(profile: dict[str, Any], intake: dict[str, Any], job: dict[str, Any]) -> list[dict[str, str]]:
+        """Surface offer requirements with no supporting profile excerpt.
+
+        This reuses the deterministic preparation fact-checker: a requirement
+        is "non trouvé dans ton profil" until the profile itself proves it.
+        The kit never claims it is satisfied.
+        """
+        prep = prepare_application(profile or {}, intake or {}, job)
+        return [
+            {
+                "requirement": clean_text(item.get("requirement"), limit=300),
+                "note": clean_text(item.get("note"), limit=300),
+            }
+            for item in prep.get("unverified_elements", [])
+        ][:6]
+
+    def create_application_kit(self, job_id: str, language: Any) -> dict[str, Any]:
+        """Open (or reopen) the preparation kit for one explicitly chosen offer.
+
+        Idempotent by design: the tracker record is created only if absent
+        (``create_application``), and the local draft is created once per
+        (offer, language). Repeating the action reopens the same kit instead
+        of generating documents in a loop.
+        """
+        identifier = clean_text(job_id, limit=80)
+        normalized_language = normalize_language(language)
+        tracking = self.create_application(identifier)
+        created_tracking = bool(tracking.get("created"))
+        application_id = str(tracking["id"])
+        existing = None
+        with self._lock, self._connection() as connection:
+            existing = connection.execute(
+                """
+                SELECT id FROM application_drafts
+                WHERE job_id = ? AND language = ?
+                ORDER BY created_at DESC, application_drafts.rowid DESC LIMIT 1
+                """,
+                (identifier, normalized_language),
+            ).fetchone()
+        if existing:
+            result = self.get_application_kit(application_id, normalized_language)
+            result["created_tracking"] = created_tracking
+            result["created_draft"] = False
+            return result
+        draft = self.create_application_draft(identifier, normalized_language)
+        draft_id = str(draft["id"])
+        with self._lock, self._connection() as connection:
+            application = connection.execute(
+                "SELECT job_id FROM applications WHERE id = ?", (application_id,)
+            ).fetchone()
+            if not application:
+                raise UserFacingError("Cette candidature Career n’existe pas.")
+            self._application_event(
+                connection,
+                application_id,
+                str(application["job_id"]),
+                "kit_prepared",
+                json.dumps({"draft_id": draft_id, "language": normalized_language, "mode": "local"}, ensure_ascii=False),
+            )
+            self._audit(connection, "application_kit_prepared", "application", application_id)
+        result = self.get_application_kit(application_id, normalized_language)
+        result["created_tracking"] = created_tracking
+        result["created_draft"] = True
+        return result
+
+    def get_application_kit(self, application_id: str, language: Any) -> dict[str, Any]:
+        """Assemble the local kit for one tracked application (read-only)."""
+        identifier = clean_text(application_id, limit=80)
+        normalized_language = normalize_language(language)
+        with self._lock, self._connection() as connection:
+            application = connection.execute(
+                """
+                SELECT applications.*, jobs.company, jobs.title, jobs.city, jobs.country,
+                       jobs.official_url, jobs.source_id, jobs.deadline_date
+                FROM applications JOIN jobs ON jobs.id = applications.job_id
+                WHERE applications.id = ?
+                """,
+                (identifier,),
+            ).fetchone()
+            if not application:
+                raise UserFacingError("Cette candidature Career n’existe pas.")
+            job_id = str(application["job_id"])
+            # The fact-checker needs the full, immutable offer row: a join
+            # projection deliberately limited to display fields would strip
+            # the requirement text it must compare against the profile.
+            job_row = connection.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+            # Honor the explicitly requested language when a draft exists in
+            # it; otherwise fall back to the latest local draft for this offer.
+            draft_row = connection.execute(
+                """
+                SELECT application_drafts.*, jobs.company, jobs.title
+                FROM application_drafts JOIN jobs ON jobs.id = application_drafts.job_id
+                WHERE application_drafts.job_id = ? AND application_drafts.language = ?
+                ORDER BY application_drafts.created_at DESC, application_drafts.rowid DESC LIMIT 1
+                """,
+                (job_id, normalized_language),
+            ).fetchone()
+            if draft_row is None:
+                draft_row = connection.execute(
+                    """
+                    SELECT application_drafts.*, jobs.company, jobs.title
+                    FROM application_drafts JOIN jobs ON jobs.id = application_drafts.job_id
+                    WHERE application_drafts.job_id = ?
+                    ORDER BY application_drafts.created_at DESC, application_drafts.rowid DESC LIMIT 1
+                    """,
+                    (job_id,),
+                ).fetchone()
+            profile = self._row_dict(connection.execute("SELECT * FROM candidate_profile WHERE id = 1").fetchone())
+            intake_row = connection.execute("SELECT * FROM career_intake WHERE id = 1").fetchone()
+            content_rows = connection.execute(
+                """
+                SELECT detail FROM application_events
+                WHERE application_id = ? AND event_type = 'kit_content'
+                ORDER BY created_at ASC, rowid ASC
+                """,
+                (identifier,),
+            ).fetchall()
+        kit_language = normalize_language(str(draft_row["language"])) if draft_row else normalized_language
+        job = {
+            "id": job_id,
+            "company": clean_text(application["company"], limit=240),
+            "title": clean_text(application["title"], limit=300),
+            "city": clean_text(application["city"], limit=120),
+            "country": clean_text(application["country"], limit=120),
+            "official_url": clean_text(application["official_url"], limit=2_000),
+            "reference": clean_text(application["source_id"], limit=200),
+            "deadline_date": clean_text(application["deadline_date"], limit=32),
+        }
+        intake = self._serialize_intake_row(intake_row) if intake_row else {"answers": {}}
+        kit_texts = build_kit_texts(profile, intake, job, kit_language)
+        # Each saved edit is an event row storing a partial JSON delta; they
+        # replay in order so the possible last save wins per field only.
+        edits: dict[str, str] = {}
+        for row in content_rows:
+            edits.update(self._kit_content_edits(str(row["detail"])))
+        kit_texts.update(edits)
+        draft = self._serialize_application_draft(draft_row, include_content=True) if draft_row else None
+        unverified = self._kit_unverified_requirements(profile, intake, dict(job_row) if job_row else job)
+        return {
+            "application": {
+                "id": identifier,
+                "job_id": job_id,
+                "stage": clean_text(application["stage"], limit=80),
+                "receipt_status": clean_text(application["receipt_status"], limit=80),
+                "approval_granted": bool(application["approval_granted"]),
+                "created_at": clean_text(application["created_at"], limit=40),
+            },
+            "job": job,
+            "draft": draft,
+            "language": kit_language,
+            "kit_texts": {field: kit_texts.get(field, "") for field in KIT_TEXT_FIELDS},
+            "kit_edited": bool(edits),
+            "fact_checks": {
+                "placeholders": scan_kit_placeholders(kit_texts),
+                "unverified_requirements": unverified,
+            },
+            "checks": [
+                "Chaque texte du kit est généré localement, passe par le vérificateur de faits et reste modifiable avant tout export.",
+                "L’envoi est strictement manuel : ce kit ne transmet rien, ne poste rien et n’ouvre aucun client de messagerie.",
+                "Relis la référence et les coordonnées du destinataire dans l’offre officielle avant d’utiliser ce kit.",
+            ],
+            "disclaimer": (
+                "Kit de candidature local : honorifique, prérempli depuis l’offre enregistrée et ton profil. "
+                "Aucun envoi automatique ; la candidature est déposée par toi uniquement."
+            ),
+        }
+
+    def update_kit_texts(self, application_id: str, texts: dict[str, Any]) -> dict[str, Any]:
+        """Save one explicit edit of the kit texts as a JSON event row.
+
+        Partial updates are intentional: each edited field is validated and
+        stored, and previously saved fields stay untouched (event overlay).
+        """
+        identifier = clean_text(application_id, limit=80)
+        if not isinstance(texts, dict):
+            raise UserFacingError("Le contenu du kit à enregistrer est invalide.")
+        cleaned: dict[str, str] = {}
+        limits_labels = {"motivation_short": "motivation courte", "availability": "disponibilité"}
+        for field in KIT_TEXT_FIELDS:
+            if field not in texts or texts.get(field) is None:
+                continue
+            limit = KIT_TEXT_LIMITS[field]
+            raw_value = texts.get(field)
+            if not isinstance(raw_value, str) or not clean_text(raw_value, limit=limit):
+                raise UserFacingError(
+                    f"Le texte « {limits_labels[field]} » doit contenir du texte lisible."
+                )
+            if len(raw_value) > limit:
+                raise UserFacingError(
+                    f"Le texte « {limits_labels[field]} » dépasse la taille maximale ({limit} caractères)."
+                )
+            cleaned[field] = clean_text(raw_value, limit=limit)
+        if not cleaned:
+            raise UserFacingError("Aucun texte du kit à enregistrer.")
+        with self._lock, self._connection() as connection:
+            application = connection.execute(
+                "SELECT job_id FROM applications WHERE id = ?", (identifier,)
+            ).fetchone()
+            if not application:
+                raise UserFacingError("Cette candidature Career n’existe pas.")
+            # The kit language follows the same rule as the read path: the
+            # latest local draft for this offer, so saved texts and documents
+            # stay in one consistent language.
+            draft_row = connection.execute(
+                """
+                SELECT language FROM application_drafts WHERE job_id = ?
+                ORDER BY created_at DESC, rowid DESC LIMIT 1
+                """,
+                (str(application["job_id"]),),
+            ).fetchone()
+            self._application_event(
+                connection,
+                identifier,
+                str(application["job_id"]),
+                "kit_content",
+                json.dumps(cleaned, ensure_ascii=False),
+            )
+            self._audit(connection, "application_kit_texts_updated", "application", identifier)
+        return self.get_application_kit(identifier, str(draft_row["language"]) if draft_row else "fr")
 
     @staticmethod
     def _dashboard_action(

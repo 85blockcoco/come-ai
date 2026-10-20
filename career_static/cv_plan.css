@@ -1,0 +1,68 @@
+/* CVBOOST-03 — styles du « Plan précis pour ton CV ».
+   Réutilise exclusivement les tokens de career_static/career.css. */
+
+.cv-plan {
+  display: grid;
+  gap: 9px;
+  margin-top: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgb(255 255 255 / 92%);
+}
+
+.cv-plan h4 { font-size: .95rem; letter-spacing: -.01em; }
+.cv-plan-summary { color: #14532d; }
+
+/* Clarité des rangs : bloque = danger, obligatoire = accent, amélioration =
+   avertissement, préférence = neutre. */
+.cv-plan-item { display: grid; gap: 6px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
+.cv-plan-item:focus-within { border-color: var(--focus); box-shadow: 0 0 0 2px rgb(15 159 110 / 22%); }
+.cv-plan-item.cv-plan-rank-blocking { border-color: #e7b2ad; background: var(--danger-soft); }
+.cv-plan-item.cv-plan-rank-required { border-color: #cbead8; background: var(--surface-muted); }
+.cv-plan-item.cv-plan-rank-improvement { border-color: #ecd9b0; background: var(--warning-soft); }
+.cv-plan-item.cv-plan-rank-preference { border-color: var(--border); background: var(--surface-soft); }
+.cv-plan-item.cv-plan-item-reviewed { border-color: #a9d8bd; }
+
+.cv-plan-copy { display: grid; gap: 4px; min-width: 0; }
+.cv-plan-copy p, .cv-plan-title { overflow-wrap: anywhere; }
+.cv-plan-title { font-size: .84rem; line-height: 1.4; }
+.cv-plan-copy p { color: var(--muted); font-size: .74rem; line-height: 1.45; }
+.cv-plan-copy p.cv-plan-evidence { color: var(--accent-dark); }
+.cv-plan-copy p.cv-plan-missing { color: var(--warning); }
+
+.cv-plan-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.cv-plan-badge, .cv-plan-modality, .cv-plan-reviewed-badge { display: inline-flex; align-items: center; min-height: 20px; padding: 2px 8px; border-radius: 999px; font-size: .62rem; font-weight: 780; letter-spacing: .05em; line-height: 1.2; text-transform: uppercase; }
+.cv-plan-badge { color: var(--accent-dark); background: var(--accent-soft); }
+.cv-plan-rank-blocking .cv-plan-badge { color: var(--danger); background: var(--danger-soft); }
+.cv-plan-rank-improvement .cv-plan-badge { color: var(--warning); background: #fff8ec; }
+.cv-plan-rank-preference .cv-plan-badge { color: var(--faint); background: #f0f5f2; }
+.cv-plan-modality { color: var(--muted); background: #f0f5f2; letter-spacing: 0; font-weight: 650; text-transform: none; }
+.cv-plan-reviewed-badge { color: #fff; background: var(--accent); letter-spacing: 0; }
+
+.cv-plan-filters { display: flex; flex-wrap: wrap; gap: 7px; }
+.cv-plan-filter { min-height: 32px; padding: 6px 11px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); background: #fff; font-size: .73rem; font-weight: 720; }
+.cv-plan-filter:hover { color: var(--accent-dark); border-color: #a9d8bd; background: var(--accent-soft); }
+.cv-plan-filter:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.cv-plan-filter[aria-pressed="true"] { color: #fff; background: var(--accent); border-color: var(--accent); }
+.cv-plan-filter[aria-pressed="true"]:hover { color: #fff; background: var(--accent-dark); }
+
+.cv-plan-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.cv-plan-empty { margin: 0; }
+.cv-plan-live { margin: 0; color: var(--muted); font-size: .7rem; }
+
+.cv-plan-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.cv-plan-actions .quiet-button, .cv-plan-actions .secondary-button { min-height: 34px; }
+.cv-plan-actions button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.cv-plan-coverage-help summary { color: var(--accent); cursor: pointer; font-size: .72rem; font-weight: 780; }
+.cv-plan-coverage-help-body ul { margin: 6px 0 0 16px; }
+
+/* Mac 13 pouces serré et mobile : les actions passent en pile pleine largeur. */
+@media (max-width: 760px) {
+  .cv-plan { padding: 12px; }
+  .cv-plan-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+  .cv-plan-filter { min-height: 38px; }
+  .cv-plan-actions { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .cv-plan-actions button { width: 100%; min-height: 40px; }
+  .cv-plan-head { row-gap: 4px; }
+}
