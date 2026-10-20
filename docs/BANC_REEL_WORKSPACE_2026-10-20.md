@@ -22,18 +22,26 @@ réelles »).
 | Career sur la vraie base | ✅ | `/api/career/health` + `/api/career/jobs` (121 offres réelles locales) verts après le correctif v7. |
 | Chat cloud non testé | n/a | `allow_cloud_context` jamais coché pendant le banc : aucune donnée de devoir n'a été transmise à un fournisseur. |
 
-## Actions à dérouler (prochaine lotifié)
+## Actions déroulées le jour même (tests verts)
 
-1. **Analyse de classeurs transposés** : essayer plusieurs lignes d'en-tête,
-   détecter « première ligne d'entêtes réelle » (colonne `datetime` + messages
-   numériques dedans), ou exposer une option « données transposées ».
-2. **Requêtes multi-termes FTS à repli OR** (constat correct, resté valable) :
-   tenter un match affaibli et le signaler honnêtement (« correspondance élargie »).
+1. **Analyse de classeurs transposés** ✅ commit `d29ea74` : quand l'analyse
+   par défaut ne voit aucune colonne numérique (symptôme exact du banc),
+   `read_table` cherche une ligne d'en-têtes plausible jusqu'à 10 lignes,
+   reconstruit le tableau (conversion numérique uniquement sans perte) et
+   ajoute « En-têtes détectés à la ligne N… ». Vérifié sur le vrai fichier
+   du devoir : en-têtes ligne 5, 116 lignes, facteurs numériques analysés.
+2. **Requêtes multi-termes FTS à repli OR** ✅ commit `db3483e` : zéro résultat
+   strict multi-termes → tentative « au moins un terme » (termes tous cités,
+   aucune injection FTS possible) + note « correspondance élargie », transmise
+   par l'endpoint `/api/v5/memory/search`. Les requêtes à 0 du banc renvoient
+   désormais des résultats explicites quand le corpus contient au moins un terme.
 
 ## Changements apportés par ce banc
 
 - Commit `4a89ac6` : `SCHEMA_VERSION` 6→7 + migration `quality_json`
   (bases de données v7 opensafely → v6 d'applis plus anciennes toujours migrées).
+- Lot d'amélioration direct (commits `d29ea74`, `db3483e`, 4 tests adjoutés,
+  (4 tests ajoutés, suite : 1137 passed).
 - Le banc a servi l'app réelle (uvicorn non lancé, TestClient create_app) :
   imports dans `data/`, rapport dans `output/`, index dans `memory_data/` —
   tous dossiers gitignorés ; rien n'a été committé de personnel.
