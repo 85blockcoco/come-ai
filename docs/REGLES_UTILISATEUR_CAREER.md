@@ -39,11 +39,20 @@ doit respecter ces règles ; la relecture et l'intégration les vérifient.
   informations qu'on n'a pas réellement lues est un faux positif. Une exigence
   non prouvable reste non prouvable (cohérence avec le lot CV Boost).
 
-## R3 — Cibles géographiques (à confirmer avec l'utilisateur)
+## R3 — Cibles géographiques (confirmé par l'utilisateur le 2026-10-20)
 
-La liste exacte des pays/régions cibles est en cours de collecte. En attendant,
-règle de repli : tout lieu hors de France est éligible ; les cibles déclarées
-passent en tête, le reste reste visible mais classé plus bas.
+> « partout ailleurs que la France. »
+
+- Tout lieu de travail **hors de France** est éligible ; pas de liste
+  restrictive de pays.
+- Mesure immédiate appliquée à ses données réelles le 2026-10-20 : la
+  destination « Paris » a été **désactivée** dans ses préférences (serveur
+  local, `priority: 0`) — les cinq autres destinations européennes et
+  « Autres villes européennes » restent actives.
+- Reste à faire côté code (après intégration des lots agents) : le classement
+  doit devenir **sensible aux préférences** et **exclure/déclasser la France**
+  (voir R1) — tant que le classement reste « preference-free », cette
+  correction des données ne suffit pas à elle seule.
 
 ## Traçabilité
 
