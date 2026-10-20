@@ -31,7 +31,7 @@ Python : `.venv/bin/python` (3.12)
 ## 4. Commandes de pré-vol (à exécuter par Codex)
 ```bash
 cd /Users/comedelavenne/AI-Excel-Agent
-.venv/bin/python -m pytest -q                          # attendu : 1147 passed (baseline main au soir du 2026-10-20)
+.venv/bin/python -m pytest -q                          # attendu : 1153 passed (baseline main après fusion des outils intégrateur)
 .venv/bin/python -m py_compile come_ai_web.py hybrid_chat.py career/service.py career/router.py career/application_prep.py
 PYTHONPATH=/Users/comedelavenne/AI-Excel-Agent .venv/bin/python scripts/live_source_check.py  # attendu : 21/21 sources
 .venv/bin/python -c "from come_ai_web import create_app; print('IMPORT OK')"
@@ -80,7 +80,7 @@ PYTHONPATH=/Users/comedelavenne/AI-Excel-Agent .venv/bin/python scripts/live_sou
 ## 8. Critères d'acceptation du rendu final (Codex)
 - UI : carte + tri + fiche détaillée + résumé IA avec consentement.
 - Backend : endpoint summary + consent_guard câblé.
-- Tests verts (≥ 1147 passed).
+- Tests verts (≥ 1153 passed).
 - Rapport avec métriques réelles (aucune donnée personnelle).
 - Live source check : 21/21 sources, 0 échec.
 

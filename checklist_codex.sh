@@ -98,12 +98,26 @@ run_profile_tests() {
 run_secrets() {
   echo "=== 5. Aucun secret tracké ==="
   cd "$MAIN_ROOT"
-  MATCHES=$(git ls-files | grep -iE '\.env$|\.db$|secret|key|token|password' | grep -v test_hybrid_secret_guards || true)
-  if [ -n "$MATCHES" ]; then
-    echo "$MATCHES" >&2
+  # a. par nom : un .env ou une base de données trackée est TOUJOURS fautif.
+  BAD_FILES=$(git ls-files | grep -iE '\.env$|\.db$|\.sqlite2?$|\.sqlite3$' || true)
+  # b. par contenu : motifs de secrets à haute confiance. Les modules
+  #    detecteurs (regex) et les fixtures synthétiques de tests contiennent
+  #    des MOTIFS, jamais de vraies clés : ils sont autorisés. Les journaux
+  #    bruts d'audit (docs/audit_v2/raw/) citent des identifiants de tests
+  #    pytest à clés factices (AAAA…, yyyy…) ce sont des preuves d'audit
+  #    historiques valides, pas des fuites.
+  ALLOWED_DETECTORS="devkit/credentials.py|secret_redaction.py|scripts/audit_integration.py|^tests/|^docs/audit_v2/"
+  SECRET_LEAKS=$(git grep -I -lE '(sk-[A-Za-z0-9]{20,}|AIza[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{20,}|xoxb-[A-Za-z0-9-]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)' -- . 2>/dev/null | grep -vE "$ALLOWED_DETECTORS" || true)
+  # c. signal (non bloquant) : noms évocateurs, pour revue humaine.
+  EVOCATIVE=$(git ls-files | grep -iE 'secret|key|token|password' || true)
+  if [ -n "$BAD_FILES" ] || [ -n "$SECRET_LEAKS" ]; then
+    { echo "$BAD_FILES"; echo "$SECRET_LEAKS"; } >&2
     fail "fichiers sensibles trackés"
   else
     ok "aucun secret tracké"
+  fi
+  if [ -n "$EVOCATIVE" ]; then
+    warn "noms évocateurs (revue humaine) : $(echo "$EVOCATIVE" | tr '\n' ' ')"
   fi
 }
 
@@ -148,10 +162,10 @@ run_fingerprint() {
 run_lint() {
   echo "=== 10. Lint (ruff) ==="
   cd "$MAIN_ROOT"
-  if [ -x "$ROOT/.venv/bin/ruff" ]; then
-    $ROOT/.venv/bin/ruff check . || fail "ruff check en échec"
+  if "$VENV_PY" -m ruff --version > /dev/null 2>&1; then
+    "$VENV_PY" -m ruff check . || fail "ruff check en échec"
   else
-    warn "ruff absent du venv — étape ignorée"
+    warn "ruff indisponible via $VENV_PY -m ruff — étape ignorée"
   fi
 }
 

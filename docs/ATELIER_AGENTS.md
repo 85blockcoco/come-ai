@@ -152,7 +152,7 @@ relecteur vérifie, dans l'ordre :
    confirmation typée unique.
 4. **Validation locale sur un worktree jetable** (dans le worktree de la
    branche, jamais sur le dossier principal) :
-   `.venv/bin/python -m pytest -q` vert total (baseline 1147 + tests du lot),
+   `.venv/bin/python -m pytest -q` vert total (baseline 1153 + tests du lot),
    `.venv/bin/ruff check .` zéro erreur, `git diff --check` propre.
 5. **Fusion** : uniquement après CI GitHub verte sur la PR ; fusion `--no-ff`
    avec un message qui résume le lot ; tag de jalon pour un lot majeur.
