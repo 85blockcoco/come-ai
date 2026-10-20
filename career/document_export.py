@@ -228,7 +228,7 @@ def write_pdf(*, markdown: str, title: str, language: str, target: Path) -> None
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import inch
-    from reportlab.platypus import ListFlowable, ListItem, Paragraph, SimpleDocTemplate, Spacer
+    from reportlab.platypus import ListFlowable, ListItem, Paragraph, SimpleDocTemplate
 
     temporary, descriptor = _atomic_target(target)
     try:

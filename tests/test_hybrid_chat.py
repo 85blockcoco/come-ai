@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import socket
 from urllib.error import HTTPError
 from urllib.request import ProxyHandler

@@ -206,8 +206,10 @@ def _parse_patch(patch: str, root: Path) -> tuple[dict[str, bytes | None], dict[
             match = _HUNK.fullmatch(lines[index])
             if not match:
                 raise PatchError("Entête de bloc invalide.")
-            old_start = int(match[1]); old_count = int(match[2] or "1")
-            new_start = int(match[3]); new_count = int(match[4] or "1")
+            old_start = int(match[1])
+            old_count = int(match[2] or "1")
+            new_start = int(match[3])
+            new_count = int(match[4] or "1")
             old_offset = old_start if old_count == 0 else old_start - 1
             new_offset = new_start if new_count == 0 else new_start - 1
             if old_offset < cursor or old_offset > len(original):

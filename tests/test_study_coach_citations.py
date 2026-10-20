@@ -273,7 +273,7 @@ def test_integrity_check_detects_a_tampered_reference() -> None:
     document = document_from_text(FINANCE_COURSE, title="Finance")
     syllabus = build_syllabus(document)
     reference = syllabus.notions[0].source_refs[0]
-    start, end = reference.locator["char_start"], reference.locator["char_end"]
+    start = reference.locator["char_start"]
 
     assert reference.matches_text(document.text)
     assert not SourceRef(

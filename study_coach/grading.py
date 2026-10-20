@@ -380,7 +380,6 @@ def grade_numeric(question: Question, answer: Any) -> Correction:
 def grade_open(question: Question, answer: Any) -> Correction:
     _require_sourced(question)
     given = clean_text(answer, limit=4_000)
-    checkpoints = list(question.reference_points)
     if not given:
         return _correction(
             question,
@@ -459,7 +458,7 @@ def grade_progressive(question: Question, answer: Any) -> Correction:
         status=status,
         validation="deterministe",
         score=round(ratio, 4),
-        explanation=f"Question progressive. " + " | ".join(details),
+        explanation="Question progressive. " + " | ".join(details),
         expected_answer={
             step.id: (step.expected.to_dict() if isinstance(step.expected, NumericAnswer) else step.expected)
             for step in question.steps

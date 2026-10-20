@@ -311,7 +311,6 @@ def step_10(data_dir: Path, session_id: str) -> dict[str, Any]:
 
 def _interactive_session(coach: StudyCoach, syllabus: Any) -> None:
     """Run an interactive review session where the user answers questions."""
-    from .models import ReviewSession
     
     rule("MODE INTERACTIF · Session de révision")
     print("Commandes: 'q' pour quitter, 's' pour passer, 'a' pour abandonner la session")
@@ -414,7 +413,7 @@ def main(argv: list[str] | None = None) -> int:
             session = step_3(coach, syllabus)
             step_4_to_7(coach, syllabus, session)
             step_7_open_question(coach, syllabus)
-            report = step_8(coach, session)
+            step_8(coach, session)
             interrupted_id, answered = step_8b_interrupt(coach, syllabus)
             coach.close()
 

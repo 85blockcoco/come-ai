@@ -1,5 +1,4 @@
 """Fictional projects exercise staging, test gates and conflict-safe recovery."""
-from pathlib import Path
 
 import pytest
 

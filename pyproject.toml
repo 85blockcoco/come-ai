@@ -1,0 +1,48 @@
+# Configuration centralisée du projet Côme AI (outils de qualité).
+# Remplace pytest.ini (pytest.ini avait priorité et rendait cette config inopérante).
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "evals/tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "slow: tests lents (hors boucle rapide)",
+    "integration: tests d'intégration multi-composants",
+    "js: tests nécessitant un runtime Node (garde-fous statiques des UI)",
+    "sandbox: tests nécessitant le sandbox macOS (sandbox-exec)",
+]
+filterwarnings = [
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",
+]
+
+[tool.ruff]
+line-length = 140
+target-version = "py312"
+exclude = [
+    ".venv",
+    ".devkit",
+    ".local-ai",
+    "BASE_SHA_VALIDÉ",
+    "career_data",
+    "memory_data",
+    "state",
+    "logs",
+]
+
+[tool.ruff.lint]
+# Démarrage conservateur : vraies erreurs (syntaxe, noms non définis), pycodestyle minimal.
+select = ["E4", "E7", "E9", "F"]
+ignore = [
+    "E741",  # noms de variables ambiguës — style, pas de risque
+    "E722",  # except Exception généraux — dette connue (cf. audit), non bloquante
+    "E731",  # assignation de lambda — style, pas de risque
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Fixtures/évals tolérants : erreurs de nommage attendues dans du code généré
+"evals/*" = ["F"]
+
+[tool.mypy]
+python_version = "3.12"
+# Phase 1 : observation (trop d'erreurs pour verrouiller immédiatement — voir audit)
+ignore_missing_imports = true
+check_untyped_defs = true

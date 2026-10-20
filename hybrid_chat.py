@@ -736,7 +736,6 @@ class HybridChatService:
             return result
         config = self._config()
         benchmark = self._benchmark_summary()
-        failed_cases = {item["name"] for item in benchmark.get("cases", []) if not item["passed"]}
         classified = classify_task(message)
         task_kind = classified.kind.value
         needs_cloud_capabilities = bool(classified.required_capabilities & {Capability.CODE, Capability.ANALYSIS, Capability.SPREADSHEETS, Capability.VISION})

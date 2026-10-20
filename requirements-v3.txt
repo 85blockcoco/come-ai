@@ -10,6 +10,12 @@ numpy>=2.0,<3
 openpyxl>=3.1,<4
 XlsxWriter>=3.2,<4
 
+# Lecture des clés depuis .env (evals + devkit l'importent directement)
+python-dotenv>=1.0,<2
+
+# Outils de qualité (développement)
+ruff>=0.9,<1
+
 # Documents et anciens classeurs
 pypdf>=5.0,<7
 xlrd>=2.0.1,<3

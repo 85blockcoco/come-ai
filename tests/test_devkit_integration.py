@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import time
 import zipfile
 from pathlib import Path
@@ -14,7 +13,6 @@ from come_ai_web import create_app
 from devkit.exporting import KitError, source_fingerprint, build_issue_bundle, export_snapshot
 from devkit.proposals import CodeProposal, propose_in_isolation
 from devkit.patching import PatchError, PatchWorkspace
-from devkit.service import DeveloperWorkshop
 
 
 def fixture_project(path: Path) -> Path:

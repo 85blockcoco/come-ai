@@ -139,7 +139,7 @@ def _read_source(root: Path, relative_path: str) -> bytes:
             if attributes.st_size > MAX_FILE_BYTES:
                 raise KitError("Un fichier source dépasse la limite de taille du kit.")
             content = handle.read(MAX_FILE_BYTES + 1)
-    except OSError as exc:
+    except OSError:
         raise KitError("Un fichier source n'est pas accessible.") from None
     if len(content) > MAX_FILE_BYTES:
         raise KitError("Un fichier source dépasse la limite de taille du kit.")

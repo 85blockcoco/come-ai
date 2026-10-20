@@ -6,7 +6,6 @@ import json
 import socket
 from datetime import date
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 

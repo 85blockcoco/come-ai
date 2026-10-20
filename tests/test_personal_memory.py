@@ -256,7 +256,7 @@ def test_delete_behaviour_keeps_original_files_and_requires_explicit_orphan_purg
     assert store.list_sources()[0]["id"] == keep_source["source_id"]
 
     purge_project = store.create_project("À purger")["project"]
-    purge_source = store.import_text("Texte temporaire distinct", title="Temporaire", project_id=purge_project["id"])
+    store.import_text("Texte temporaire distinct", title="Temporaire", project_id=purge_project["id"])
     purged = store.delete_project(purge_project["id"], delete_orphan_sources=True)
     assert purged["orphan_sources_deleted"] == 1
     assert {source["id"] for source in store.list_sources()} == {keep_source["source_id"]}

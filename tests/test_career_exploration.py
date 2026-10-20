@@ -13,7 +13,7 @@ import pytest
 from career.discovery import DiscoveryPayload, GreenhouseBoard, GreenhouseJobBoardConnector, PublicSourceError
 from career.exploration import EXPLORATION_MAX_SOURCES, classify_internship
 from career.service import CareerService
-from career.stage_search import STAGE_DOMAINS, default_brief, validate_brief
+from career.stage_search import STAGE_DOMAINS, validate_brief
 
 
 def source(token: str = "fiction", company: str = "Finance Synthétique") -> dict:

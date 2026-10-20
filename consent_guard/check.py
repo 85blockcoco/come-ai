@@ -71,7 +71,7 @@ def check_request(
     lines.append(f"Objectif      : {request.purpose}")
     lines.append(f"Empreinte     : {request.digest}")
     lines.append(f"Taille        : {request.size} octets sérialisés")
-    lines.append(f"Usage unique  : oui (une seule transmission par accord)")
+    lines.append("Usage unique  : oui (une seule transmission par accord)")
     lines.append(f"Si accordé maintenant, expiration : {expires_at}")
     lines.append("Contenu       : non affiché, non mémorisé, jamais journalisé")
     return True, lines, summary

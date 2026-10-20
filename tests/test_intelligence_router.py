@@ -14,7 +14,9 @@ class Catalogue:
 def test_verified_same_provider_fallback_respects_budget_and_records_real_calls(tmp_path):
     calls = []
     class Adapter:
-        def __init__(self, settings): self.model = settings.model; self.last_usage = {}
+        def __init__(self, settings):
+            self.model = settings.model
+            self.last_usage = {}
         def propose(self, context):
             calls.append(self.model)
             self.last_usage = {"generation_requests": 1, "latency_ms": 2, "input_tokens": None, "output_tokens": None, "total_tokens": None}
@@ -39,11 +41,13 @@ def test_auth_and_quota_never_rotate_models(tmp_path, status, category):
     class Adapter:
         last_usage = {}
         def propose(self, context):
-            calls.append(True); self.last_usage = {"generation_requests": 1, "latency_ms": 1}
+            calls.append(True)
+            self.last_usage = {"generation_requests": 1, "latency_ms": 1}
             raise ProviderUnavailable("fictitious refusal", category, http_status=status)
     router = RoutedCorrectionProvider(tmp_path, ProviderSettings("gemini", "auto", True, True), catalog=Catalogue(), factory=lambda root, cfg: Adapter())
     router.remaining_requests = 3
-    with pytest.raises(ProviderUnavailable): router.propose(ProposalContext({}, {"core.py": "value = 1\n"}))
+    with pytest.raises(ProviderUnavailable):
+        router.propose(ProposalContext({}, {"core.py": "value = 1\n"}))
     assert len(calls) == 1
 
 

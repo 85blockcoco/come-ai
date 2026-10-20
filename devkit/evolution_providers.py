@@ -23,7 +23,6 @@ import ssl
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError

@@ -11,7 +11,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from workspace_core import AppConfig, AgentService, UserFacingError, Workspace, direct_local_inspection
+from workspace_core import AppConfig, AgentService, Workspace, direct_local_inspection
 
 
 class WorkspaceApp(tk.Tk):

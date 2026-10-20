@@ -53,7 +53,6 @@ from .errors import (
     CODE_ENVELOPE_MISMATCH,
     CODE_EXPIRED_CONSENT,
     CODE_REVOKED_CONSENT,
-    CODE_UNKNOWN_CONSENT,
     ConsentRefusal,
 )
 from .guard import ConsentGuard, fallback_notice, transmit

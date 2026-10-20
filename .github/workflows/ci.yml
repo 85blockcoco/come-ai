@@ -1,0 +1,35 @@
+# CI Côme AI — suite hors ligne complète (aucune clé requise).
+# Active dès qu'un remote GitHub est rattaché : le dépôt n'en a pas encore.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install ruff
+        run: pip install "ruff>=0.9,<1"
+      - name: Lint
+        run: ruff check .
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          pip install -r requirements-v3.txt
+      - name: Run offline test suite
+        run: python -m pytest -q

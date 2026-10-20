@@ -14,7 +14,6 @@ import os
 import random
 import re
 import shutil
-import statistics
 import time
 import urllib.error
 import urllib.parse
@@ -22,7 +21,7 @@ import urllib.request
 import uuid
 import zipfile
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 from xml.etree import ElementTree as ET

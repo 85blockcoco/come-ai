@@ -28,7 +28,6 @@ from .models import (
     clean_text,
     content_words,
     normalize_text,
-    unit_label,
     utc_now,
 )
 from .numeric import extract_numeric_facts, split_sentences
@@ -436,7 +435,6 @@ def _collect_notions(document: StudyDocument, excerpts: _ExcerptFactory) -> tupl
         produced = 0
         for block in blocks:
             references = excerpts.refs(block.start, block.end)
-            ref = references[0]
             candidates = _candidates_for_block(block, section.title)
             for candidate in candidates:
                 statement = clean_text(candidate["statement"], limit=800)
