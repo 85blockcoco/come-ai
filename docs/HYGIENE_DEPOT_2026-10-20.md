@@ -28,7 +28,7 @@
 ## Branches supprimées (justification)
 
 1. **28 fusionnées dans `main`** — aucun contenu unique.
-2. **Branches au contenu prouvé absorbé** (`git cherry main <branche>` → 0 commit `+` avec patch-id identique) — 32 supprimées ce critère + les 7 déclarées éteintes par `HANDOFF_AGENT_CODEX.md §4`.
+2. **Branches au contenu prouvé absorbé** (`git cherry main <branche>` → 0 `patch-id` identique) — 32 supprimées ce critère + les 7 déclarées éteintes par `HANDOFF_AGENT_CODEX.md §4` (désormais `docs/archive/HANDOFF_AGENT_CODEX.md`).
 3. **~205 missions agents scratch** (agent/c50-*, c50v2-*, c60-*, mission-*, opencode/*…) : livrables intégrés dans `main` via les branches d'intégration ; récupérables via le bundle si besoin.
 
 ## Recommandations restantes

@@ -21,7 +21,7 @@ s’ouvre depuis le bouton Career Agent ou sur `/career`. Son flux normal reste
 local (profil, OCR, découverte contrôlée, score explicable, entretien, CV et
 lettre) ; une amélioration par modèle ne peut partir qu’après une confirmation
 explicite dans le Studio. Son guide est disponible dans
-[`README_CAREER_AGENT_PHASE1.md`](README_CAREER_AGENT_PHASE1.md).
+[`docs/archive/README_CAREER_AGENT_PHASE1.md`](docs/archive/README_CAREER_AGENT_PHASE1.md).
 
 ## Ce que V3 livre
 
