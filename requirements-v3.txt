@@ -17,7 +17,7 @@ ruff>=0.9,<1
 
 # Documents et anciens classeurs
 pypdf>=5.0,<7
-xlrd>=2.0.1,<3
+xlrd>=2.0.2,<3
 
 # Interface web locale et tests hors ligne
 fastapi>=0.115,<1
