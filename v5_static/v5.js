@@ -36,7 +36,10 @@ async function api(path, options = {}) {
     ...options,
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.detail || "L’action locale n’a pas pu aboutir.");
+  if (!response.ok) {
+    const suffix = body.error_id ? ` (référence ${body.error_id})` : "";
+    throw new Error((body.detail || "L’action locale n’a pas pu aboutir.") + suffix);
+  }
   return body;
 }
 
@@ -48,7 +51,7 @@ function text(node, value) { node.textContent = value == null ? "" : String(valu
 function activateView(id) {
   document.querySelectorAll(".view").forEach((view) => { view.hidden = view.id !== id; view.classList.toggle("active", view.id === id); });
   document.querySelectorAll(".nav-item[data-view-target]").forEach((button) => { const active = button.dataset.viewTarget === id; button.classList.toggle("active", active); if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current"); });
-  if (id === "memoryView") refreshMemory();
+  if (id === "memoryView") { refreshMemory(); refreshStorage(); }
 }
 
 function addMessage(kind, content, meta = "") {
@@ -253,7 +256,8 @@ async function pollTask() {
   try {
     const task = await api(`/api/v5/tasks/${encodeURIComponent(state.taskId)}`); renderTask(task);
     if (["completed", "failed", "cancelled"].includes(task.status)) { state.taskId = null; clearTimeout(state.taskTimer); setTaskBusy(false); loadOverview(); return; }
-    state.taskTimer = setTimeout(pollTask, 650);
+    // Onglet en arrière-plan : ralentir le polling au lieu de sonner toutes les 650 ms.
+    state.taskTimer = setTimeout(pollTask, document.hidden ? 2500 : 650);
   } catch (error) { state.taskId = null; setTaskBusy(false); addMessage("error", error.message); }
 }
 
@@ -301,7 +305,8 @@ async function pollMemoryIndexTask() {
       await Promise.all([refreshMemory(), loadOverview()]);
       return;
     }
-    state.memoryIndexTimer = setTimeout(pollMemoryIndexTask, 650);
+    // Même politique de ralentissement en arrière-plan.
+    state.memoryIndexTimer = setTimeout(pollMemoryIndexTask, document.hidden ? 2500 : 650);
   } catch (error) {
     state.memoryIndexTaskId = null; setMemoryIndexBusy(false); text(elements.memoryActionStatus, error.message);
   }
@@ -360,11 +365,17 @@ async function refreshStorage() {
   catch (error) { renderStorage({ available: false, detail: error.message }); }
 }
 
-async function refreshMemory() {
+async function refreshMemory(includeStorage = true) {
   try {
-    const [health, projectsData, sourcesData, storageData] = await Promise.all([api("/api/v5/memory/health"), api("/api/v5/memory/projects"), api("/api/v5/memory/sources"), api("/api/v5/memory/storage")]);
+    // L'inventaire disque (/memory/storage) est coûteux : ne le lancer que
+    // pour la vue Mémoire, pas au démarrage de l'Assistant.
+    const calls = [api("/api/v5/memory/health"), api("/api/v5/memory/projects"), api("/api/v5/memory/sources")];
+    if (includeStorage) calls.push(api("/api/v5/memory/storage"));
+    const [health, projectsData, sourcesData, storageData] = await Promise.all(calls);
     state.memoryAvailable = Boolean(health.available); text(elements.memoryHealth, health.available ? `${health.source_count || 0} source(s), ${health.chunk_count || 0} extrait(s), index FTS5 local.` : health.detail || "Mémoire indisponible."); elements.metricMemory.textContent = health.source_count || 0;
-    renderProjects(projectsData.projects || []); renderSources(sourcesData.sources || []); renderStorage(storageData); updateSelectedFile();
+    renderProjects(projectsData.projects || []); renderSources(sourcesData.sources || []);
+    if (storageData) renderStorage(storageData);
+    updateSelectedFile();
   } catch (error) { text(elements.memoryHealth, error.message); }
 }
 
@@ -386,4 +397,11 @@ elements.memorySearchForm.addEventListener("submit", async (event) => { event.pr
 elements.refreshMemory.addEventListener("click", refreshMemory);
 elements.refreshStorage.addEventListener("click", refreshStorage);
 
-Promise.all([refreshFiles(), refreshOutputs(), loadOverview(), loadIntelligence(), refreshMemory()]);
+Promise.all([refreshFiles(), refreshOutputs(), loadOverview(), loadIntelligence(), refreshMemory(false)]);
+
+// Fenêtre de retour : reprendre le polling immédiatement après la pause d'onglet caché.
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) return;
+  if (state.taskId) { clearTimeout(state.taskTimer); pollTask(); }
+  if (state.memoryIndexTaskId) { clearTimeout(state.memoryIndexTimer); pollMemoryIndexTask(); }
+});

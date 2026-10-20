@@ -1,7 +1,7 @@
 :root {
   --ink: #172321;
   --muted: #526b61;
-  --faint: #7b8c86;
+  --faint: #62726b;
   --canvas: #f8faf9;
   --panel: #ffffff;
   --border: #d6e3dc;
@@ -308,7 +308,7 @@ footer { margin: 18px 3px 0; color: var(--muted); font-size: .72rem; line-height
 /* Stage Hunter: the five-step journey reuses the existing Career visual
    language; only the layout of the new blocks is defined here. */
 .stagehunter-domains { display: flex; flex-wrap: wrap; gap: 7px 14px; }
-.stagehunter-domain { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--text); }
+.stagehunter-domain { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--ink); }
 .stagehunter-domain input { width: 16px; min-height: 16px; accent-color: var(--accent); }
 .stagehunter-ranking { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 9px; }
 .stagehunter-weight { display: flex; align-items: center; justify-content: space-between; gap: 9px; font-size: .78rem; color: var(--muted); }
@@ -317,11 +317,28 @@ footer { margin: 18px 3px 0; color: var(--muted); font-size: .72rem; line-height
 .stagehunter-terms-block strong { font-size: .8rem; }
 .stagehunter-howto { margin: 10px 0; padding-left: 20px; color: var(--muted); font-size: .78rem; line-height: 1.55; }
 .stagehunter-howto li { margin: 4px 0; }
-.stagehunter-howto strong { color: var(--text); font-weight: 640; }
+.stagehunter-howto strong { color: var(--ink); font-weight: 640; }
 .stagehunter-match { margin-bottom: 14px; }
 .stage-match-block { margin-bottom: 8px; padding: 10px 12px; border: 1px solid #c9ded2; border-radius: 10px; background: var(--surface-muted); }
 .stage-match-header { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
 .stage-match-header .scoring-title { margin: 0; }
+/* Carte des offres par ville — "Résumé de présence", tiré du classement actif. */
+.stagehunter-map { margin: 12px 0 4px; padding: 11px 12px; border: 1px solid #c9ded2; border-radius: 10px; background: var(--surface-muted); }
+.stagehunter-map-title { margin: 0 0 7px; font-size: .8rem; font-weight: 640; color: var(--muted); }
+.stagehunter-map-list { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 7px 10px; }
+.stagehunter-map-list li { padding: 4px 10px; font-size: .78rem; color: var(--ink); border-radius: 999px; border: 1px solid #c9ded2; background: #fff; }
+/* Fiche détaillée d'une offre. */
+.stagehunter-detail { margin-top: 10px; padding: 12px; border: 1px solid #c9ded2; border-radius: 10px; background: var(--surface-muted); font-size: .84rem; }
+.stagehunter-detail > p { margin: 6px 0; }
+.detail-row { display: flex; align-items: baseline; gap: 6px; padding: 7px 10px; border-radius: 8px; background: #fff; border: 1px solid #dfece4; }
+.detail-row strong { min-width: 118px; font-size: .78rem; color: var(--muted); font-weight: 600; overflow-wrap: anywhere; }
+.detail-row a { color: var(--accent-dark); text-decoration: underline; overflow-wrap: anywhere; }
+.detail-reasons { margin: 7px 0 0; padding-left: 20px; color: var(--muted); font-size: .78rem; line-height: 1.55; }
+.detail-reasons li { margin: 3px 0; }
+.stagehunter-detail .scoring-title { margin: 10px 0 4px; font-size: .8rem; color: var(--muted); }
+.stagehunter-detail .fixed-period-note { margin: 8px 0; color: var(--muted); font-size: .78rem; }
+.stagehunter-match.is-selected { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 10px; }
+.stagehunter-detail:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .stagehunter-prep { margin-top: 10px; padding: 12px; border: 1px solid #c9ded2; border-radius: 10px; background: var(--surface-muted); }
 .stagehunter-prep-section { margin: 10px 0; }
 .stagehunter-prep-section h4 { margin: 0 0 5px; font-size: .85rem; }

@@ -68,7 +68,10 @@ def create_developer_router(service_factory: Callable[[], DeveloperWorkshop]) ->
         workshop = service_factory()
         origin = request.headers.get("origin")
         expected_origin = f"{request.url.scheme}://{request.url.netloc}"
+        fetch_site = request.headers.get("sec-fetch-site", "").strip().lower()
         if origin and origin != expected_origin:
+            raise HTTPException(403, "Cette action doit être lancée depuis l’atelier local.")
+        if fetch_site == "cross-site":
             raise HTTPException(403, "Cette action doit être lancée depuis l’atelier local.")
         if not hmac.compare_digest(request.headers.get("x-workshop-token", ""), workshop.token):
             raise HTTPException(403, "Recharge l’atelier avant de lancer cette action.")
@@ -92,12 +95,16 @@ def create_developer_router(service_factory: Callable[[], DeveloperWorkshop]) ->
         result = await action(workshop.status)
         origin = request.headers.get("origin")
         expected_origin = f"{request.url.scheme}://{request.url.netloc}"
-        # Le jeton n'est libéré que pour un navigateur de l'application elle-même :
+        fetch_site = request.headers.get("sec-fetch-site", "").strip().lower()
+        # Le jeton ne part que vers un navigateur de l'application elle-même :
         # une page étrangère ne peut ni le lire ni le déduire, et un processus
-        # local non-navigateur ne le reçoit plus automatiquement.
+        # local non-navigateur (curl, script) ne le reçoit plus. Les GET
+        # same-origin n'envoyent pas toujours Origin, mais un navigateur
+        # moderne envoie Sec-Fetch-Site: same-origin sur toutes ses requêtes.
+        browser_local = (origin and hmac.compare_digest(origin, expected_origin)) or fetch_site == "same-origin"
         if origin and not hmac.compare_digest(origin, expected_origin):
             raise HTTPException(403, "Cet atelier n'est accessible que depuis cette application locale.")
-        result["workshop_token"] = workshop.token if (origin and hmac.compare_digest(origin, expected_origin)) else ""
+        result["workshop_token"] = workshop.token if browser_local else ""
         return result
 
     @router.get("/evolution")

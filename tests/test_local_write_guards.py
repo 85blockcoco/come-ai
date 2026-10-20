@@ -44,8 +44,19 @@ def test_foreign_origin_writes_are_rejected_before_reaching_endpoints(tmp_path: 
     # un endpoint de mutation depuis un site tiers.
     assert client.post("/api/files/upload", data={"x": "1"}, headers=foreign).status_code == 403
     assert client.post("/api/v5/memory/projects", json={"name": "piège"}, headers=foreign).status_code == 403
+    # Un navigateur moderne marque sans-Origin cross-site via Sec-Fetch-Site.
+    assert client.post("/api/v5/memory/projects", json={"name": "piège"},
+                       headers={"Sec-Fetch-Site": "cross-site"}).status_code == 403
     # GET n'est pas concerné.
     assert client.get("/api/health", headers=foreign).status_code == 200
+
+
+def test_same_origin_sec_fetch_site_is_admitted(tmp_path: Path) -> None:
+    app = create_app(tmp_path, agent_override=_NoopAgent())
+    client = TestClient(app)
+    # Navigateur moderne same-origin sans Origin explicite (GET-like POST).
+    assert client.post("/api/v5/memory/projects", json={"name": "mémoire fidédèle"},
+                       headers={"Sec-Fetch-Site": "same-origin"}).status_code not in (403, 400)
 
 
 def test_same_origin_and_local_clients_are_not_blocked(tmp_path: Path) -> None:

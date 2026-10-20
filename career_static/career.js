@@ -163,7 +163,8 @@ async function api(url, options = {}) {
   }
   if (!response.ok) {
     const detail = typeof body.detail === "string" ? body.detail : "L’action Career n’a pas abouti.";
-    throw new Error(detail);
+    const suffix = body.error_id ? ` (référence ${body.error_id})` : "";
+    throw new Error(detail + suffix);
   }
   return body;
 }
@@ -2007,6 +2008,7 @@ function renderStageMatches(payload) {
   empty.hidden = sorted.length > 0;
   sorted.forEach((match) => {
     const wrapper = make("div", "", "stagehunter-match");
+    if (match.job?.id) wrapper.dataset.jobId = match.job.id;
     if (match.stage_match || match.qualification) {
       const displayedMatch = {
         ...(match.stage_match || {
@@ -2043,10 +2045,18 @@ async function loadStageDetail(jobId) {
   empty.hidden = true;
   state.stageDetailIndex = state.stageMatches.findIndex((m) => m.job?.id === jobId);
   container.textContent = "Chargement…";
+  // Montrer immédiatement où va le résultat : la fiche est en bas de la vue,
+  // sans feedback le bouton paraît mort (surtout sur mobile).
+  document.querySelectorAll(".stagehunter-match.is-selected")
+    .forEach((node) => node.classList.remove("is-selected"));
+  const target = document.querySelector(`.stagehunter-match[data-job-id="${CSS.escape(jobId)}"]`);
+  target?.classList.add("is-selected");
+  reveal(container, "start");
   try {
     const prep = await api(`/api/career/jobs/${encodeURIComponent(jobId)}/prep`);
     container.replaceChildren();
     const job = prep.job || {};
+    try { container.focus({ preventScroll: true }); } catch (_) { /* focus non essentiel */ }
     const fields = [
       ["Entreprise", job.company],
       ["Titre", job.title],
@@ -2059,6 +2069,8 @@ async function loadStageDetail(jobId) {
       ["Pertinence", prep.stage_match?.score],
       ["Lien officiel", job.official_url],
     ];
+    container.id = container.id || "stagehunter-detail";
+    container.setAttribute("tabindex", "-1");
     fields.forEach(([label, value]) => {
       if (value === null || value === undefined || value === "") return;
       const row = make("div", "", "detail-row");
@@ -2118,12 +2130,13 @@ async function loadStageDetail(jobId) {
           container.append(make("p", "Résumé IA (consentement cloud)", "scoring-title"));
           container.append(box);
         } catch (error) {
-          container.append(make("p", "Résumé IA indisponible ; repli local conservé.", "fixed-period-note"));
+          container.append(make("p", error?.message ? `Résumé IA indisponible : ${error.message} (repli local conservé).` : "Résumé IA indisponible ; repli local conservé.", "fixed-period-note"));
         }
       });
       container.append(aiButton);
     } catch (error) {
-      // Le résumé est optionnel : la fiche reste utilisable.
+      // Le résumé est optionnel : la fiche reste utilisable, mais l'échec est affiché.
+      container.append(make("p", error?.message ? `Extraction locale indisponible : ${error.message}` : "Extraction locale indisponible.", "fixed-period-note"));
     }
   } catch (error) {
     container.replaceChildren();

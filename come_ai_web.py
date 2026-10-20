@@ -152,6 +152,12 @@ class CrossSiteWriteMiddleware:
             return
         headers = dict(scope.get("headers", []))
         origin = (headers.get(b"origin") or b"").decode("latin-1").strip()
+        fetch_site = (headers.get(b"sec-fetch-site") or b"").decode("latin-1").strip().lower()
+        # Un navigateur moderne marque toute requête d'un autre site comme
+        # cross-site même quand Origin est absent (anciens formulaires).
+        if fetch_site == "cross-site":
+            await self._reject(send)
+            return
         if origin:
             server_host = ""
             for key in (b"host",):
@@ -161,20 +167,24 @@ class CrossSiteWriteMiddleware:
             scheme = str(scope.get("scheme", "http"))
             expected = f"{scheme}://{server_host}" if server_host else ""
             if not expected or not hmac.compare_digest(origin.lower(), expected.lower()):
-                payload = json.dumps({"detail": "Cette action doit être lancée depuis cette application locale."}).encode("utf-8")
-                await send(
-                    {
-                        "type": "http.response.start",
-                        "status": 403,
-                        "headers": [
-                            (b"content-type", b"application/json; charset=utf-8"),
-                            (b"content-length", str(len(payload)).encode("ascii")),
-                        ],
-                    }
-                )
-                await send({"type": "http.response.body", "body": payload})
+                await self._reject(send)
                 return
         await self.app(scope, receive, send)
+
+    @staticmethod
+    async def _reject(send: Any) -> None:
+        payload = json.dumps({"detail": "Cette action doit être lancée depuis cette application locale."}).encode("utf-8")
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 403,
+                "headers": [
+                    (b"content-type", b"application/json; charset=utf-8"),
+                    (b"content-length", str(len(payload)).encode("ascii")),
+                ],
+            }
+        )
+        await send({"type": "http.response.body", "body": payload})
 
 
 @dataclass
@@ -423,7 +433,15 @@ def create_app(
     @app.middleware("http")
     async def security_headers(request: Request, call_next: Any) -> Any:
         response = await call_next(request)
-        response.headers["Cache-Control"] = "no-store"
+        path = request.url.path
+        # Les assets statiques sont versionnés par la livraison locale (pas de
+        # HTML fragment modifiable par l'utilisateur) : autoriser un cache
+        # court évite de re-télécharger career.js (~110 Ko) à chaque visite.
+        # Le HTML, les API et les exports restent strictement no-store.
+        if path.startswith(("/static/", "/v5-static/", "/career-static/")) and not path.endswith((".html", "/")):
+            response.headers["Cache-Control"] = "public, max-age=3600"
+        else:
+            response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["X-Frame-Options"] = "DENY"
