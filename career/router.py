@@ -125,6 +125,12 @@ class ReceiptUnknownPayload(BaseModel):
     note: str = Field(default="", max_length=1_000)
 
 
+class ApplicationChecklistPayload(BaseModel):
+    """Cinq cases locales seulement ; rien n'est transitionné ni envoyé."""
+
+    checked: list[str] = Field(default_factory=list, max_length=10)
+
+
 class ResetPayload(BaseModel):
     confirmation: str = Field(min_length=1, max_length=100)
 
@@ -544,6 +550,30 @@ def create_career_router(
     async def create_application(payload: ApplicationCreatePayload) -> Any:
         return await local(lambda: service.create_application(payload.job_id))
 
+    # CVBOOST-09 : cette route de lecture doit rester enregistrée avant la
+    # route paramétrée /applications/{application_id} pour ne jamais être
+    # interprétée comme un identifiant de candidature.
+    @router.get("/api/career/applications/dashboard")
+    async def applications_dashboard(
+        stage: str = Query(default="", max_length=80),
+        receipt: str = Query(default="", max_length=80),
+        action_required: str = Query(default="", max_length=16),
+        deadline: str = Query(default="", max_length=40),
+        query: str = Query(default="", max_length=120),
+    ) -> Any:
+        if action_required and action_required not in {"true", "false"}:
+            raise HTTPException(status_code=422, detail="Le filtre de prochaine action doit valoir true ou false.")
+        action_filter: bool | None = (action_required == "true") if action_required else None
+        return await local(
+            lambda: service.application_dashboard(
+                stage=stage,
+                receipt=receipt,
+                action_required=action_filter,
+                deadline=deadline,
+                query=query,
+            )
+        )
+
     @router.get("/api/career/applications/{application_id}")
     async def application(application_id: str) -> Any:
         return await local(lambda: service.get_application(application_id))
@@ -565,6 +595,10 @@ def create_career_router(
     @router.post("/api/career/applications/{application_id}/receipt-unknown")
     async def receipt_unknown(application_id: str, payload: ReceiptUnknownPayload) -> Any:
         return await local(lambda: service.mark_receipt_unknown(application_id, payload.note))
+
+    @router.post("/api/career/applications/{application_id}/checklist")
+    async def application_checklist(application_id: str, payload: ApplicationChecklistPayload) -> Any:
+        return await local(lambda: service.set_application_checklist(application_id, payload.checked))
 
     @router.get("/api/career/interview-sessions")
     async def interview_sessions() -> Any:
