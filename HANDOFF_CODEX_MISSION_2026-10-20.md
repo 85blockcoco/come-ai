@@ -1,7 +1,7 @@
 # HANDOFF CODEX — Mission : radar de relances des candidatures
 
 Date : 2026-10-20 · Branche de travail demandée : `agent/career-followup-radar`
-Dépôt : `/Users/comedelavenne/AI-Excel-Agent` (branche `main` à jour, 1139 tests verts, ruff zéro erreur)
+Dépôt : `/Users/comedelavenne/AI-Excel-Agent` (branche `main` à jour, 1141 tests verts, ruff zéro erreur)
 
 ## Contexte du produit (à lire AVANT tout code)
 
@@ -76,7 +76,7 @@ Nouvelle méthode publique `application_followup_digest(*, stale_after_days: int
 
 ```bash
 ./checklist_codex.sh                 # lint + contrôles portables
-.venv/bin/python -m pytest -q        # DOIT être 1139 + tes tests = vert total
+.venv/bin/python -m pytest -q        # DOIT être 1141 + tes tests = vert total
 ```
 
 ## Interdits (rappel du projet)

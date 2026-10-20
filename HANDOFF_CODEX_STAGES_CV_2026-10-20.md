@@ -87,7 +87,7 @@ voulu international) doit voir **plus d'offres pertinentes** sans bruit.
 
 ```bash
 ./checklist_codex.sh                      # lint + contrôles
-.venv/bin/python -m pytest -q             # 100 % vert (baseline : 1139 passed)
+.venv/bin/python -m pytest -q             # 100 % vert (baseline : 1141 passed)
 ```
 
 + tests nouveaux obligatoires (fixtures synthétiques uniquement) :
