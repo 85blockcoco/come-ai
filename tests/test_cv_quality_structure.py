@@ -13,7 +13,6 @@ from career.cv_quality import (
     DocumentInput,
     STATUS_RISK,
     STATUS_INFO,
-    STATUS_OK,
 )
 from career.cv_quality.models import Finding
 from career.cv_quality.structure import (
@@ -34,7 +33,7 @@ from career.cv_quality.structure import (
 
 MINIMAL_CV = """
 Jean Dupont
-jean.dupont@email.fr
+test.user@example.com
 +33 6 12 34 56 78
 
 Expérience
