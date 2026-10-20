@@ -129,5 +129,38 @@ gh pr create --fill                    # 5. PR → CI
 gh pr merge --merge                    # 6. fusion après CI verte
 ```
 
+## Check-list de relecture d'un lot « Career » (rôle du relecteur)
+
+Avant d'accepter un lot qui touche `career/` ou `career_static/`, le
+relecteur vérifie, dans l'ordre :
+
+1. **Périmètre** : le diff ne touche que les fichiers annoncés par la mission
+   (`git diff main...<branche> --stat`) ; tout fichier hors périmètre = refus.
+2. **Interdits fonctionnels** (grep sur le diff ajouté) :
+   - `SCHEMA_VERSION` non modifié (aucune migration de schéma sauf mission dédiée) ;
+   - aucune chaîne `window.prompt` ajoutée (garde statique
+     `tests/test_career_v5_ux_guards.py`) ;
+   - aucun appel réseau ajouté (`requests`, `httpx`, `urllib`, sockets)
+     hors mission connecteur bornée ;
+   - aucune chaîne ressemblant à un secret (`sk-`, `AIza`,
+     `BEGIN PRIVATE KEY`) ;
+   - **aucun envoi automatique** à un employeur (`automated_submission = false`
+     maintenu, pas d'envoi d'e-mail, pas de clic robotisé) ;
+   - aucune donnée personnelle réelle dans les fixtures (tout est synthétique).
+3. **Comportement** : les nouvelles routes sont en GET quand elles ne font
+   que lire ; les écritures restent derrière confirmation ; suppression =
+   confirmation typée unique.
+4. **Validation locale sur un worktree jetable** (dans le worktree de la
+   branche, jamais sur le dossier principal) :
+   `.venv/bin/python -m pytest -q` vert total (baseline 1147 + tests du lot),
+   `.venv/bin/ruff check .` zéro erreur, `git diff --check` propre.
+5. **Fusion** : uniquement après CI GitHub verte sur la PR ; fusion `--no-ff`
+   avec un message qui résume le lot ; tag de jalon pour un lot majeur.
+6. **Après fusion** : relancer la suite sur `main` et noter le nouveau
+   baseline dans les handoffs restants.
+
+Un tool d'audit automatisant ces contrôles est en préparation par l'agent
+intégrateur (Mission 10, phase 1) : `scripts/audit_integration.py`.
+
 Historique des décisions produit : `docs/audits/`, `docs/agent-reports/`,
 `docs/archive/` (anciens handoffs).
