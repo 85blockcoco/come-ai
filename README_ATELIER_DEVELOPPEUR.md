@@ -13,8 +13,9 @@ cd ~/AI-Excel-Agent
 Le kit copie le code autorisé, puis vérifie la syntaxe Python, les versions
 installées, `pip check`, tous les tests de `tests/`, le smoke test V3 et la
 syntaxe JavaScript avec Node s’il est disponible. Les scripts historiques
-`agent.py`, `agent_v2.py` et `test_gemini.py` sont exclus. Les tests utilisent
-des fixtures fictives, sans les documents de l’application.
+`agent.py`, `agent_v2.py` et `test_gemini.py` (retirés du dépôt) restent
+exclus de sa copie. Les tests utilisent des fixtures fictives, sans les
+documents de l’application.
 
 Rapports : `.devkit/diagnostics/latest.md` et `latest.json`, avec historique
 daté, erreurs utiles, états passed/failed/blocked/skipped, nombre de tests,

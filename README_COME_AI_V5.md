@@ -188,7 +188,6 @@ fournisseur et utilisent des données temporaires :
 ```bash
 cd ~/AI-Excel-Agent
 .venv/bin/python -m pytest -q
-.venv/bin/python test_v3_offline.py
 .venv/bin/python -m pip check
 ```
 

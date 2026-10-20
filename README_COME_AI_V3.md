@@ -11,9 +11,10 @@ dans le navigateur **sur ce Mac uniquement**. Son interface est servie sur
 `http://127.0.0.1:8765` : elle n’est ni publiée sur Internet, ni partagée avec
 un tiers par défaut.
 
-Les anciens fichiers `agent.py`, `agent_v2.py`, `app_v3.py` et
-`README_V3.md` ont été conservés. La nouvelle interface web démarre via
-`run_come_ai_v3.py` et n’écrase jamais un fichier source.
+Les anciens fichiers `agent.py`, `agent_v2.py` et `app_v3.py` ont été retirés
+du dépôt (2026-10-20) : code mort, aucun raccourci ni test ne les utilisait.
+La nouvelle interface web démarre via `run_come_ai_v3.py` et n’écrase jamais
+un fichier source.
 
 Une extension indépendante **Côme AI Career 4.1** est également incluse. Elle
 s’ouvre depuis le bouton Career Agent ou sur `/career`. Son flux normal reste
@@ -196,7 +197,6 @@ prompts ou extraits à un serveur Ollama distant.
 ```bash
 cd ~/AI-Excel-Agent
 .venv/bin/python -m pytest -q
-.venv/bin/python test_v3_offline.py
 ```
 
 La suite couvre notamment :
