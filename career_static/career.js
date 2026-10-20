@@ -4,6 +4,7 @@ const state = {
   preferences: null,
   jobs: [],
   applications: [],
+  applicationDashboard: null,
   profileImports: [],
   activeProfileImport: null,
   intake: null,
@@ -67,6 +68,13 @@ const elements = {
   shortlistEmpty: $("#shortlist-empty"),
   applications: $("#applications-list"),
   applicationsEmpty: $("#applications-empty"),
+  applicationsCounters: $("#applications-counters"),
+  applicationsRadar: $("#applications-radar"),
+  applicationsHonesty: $("#applications-honesty"),
+  applicationsFilterStage: $("#applications-filter-stage"),
+  applicationsFilterReceipt: $("#applications-filter-receipt"),
+  applicationsFilterDeadline: $("#applications-filter-deadline"),
+  applicationsFilterAction: $("#applications-filter-action"),
   familyPreferences: $("#family-preferences"),
   locationPreferences: $("#location-preferences"),
   filters: $("#job-filters"),
@@ -1157,12 +1165,214 @@ function applicationCard(application) {
   return card;
 }
 
-async function loadApplications() {
-  const payload = await api("/api/career/applications");
-  state.applications = payload.applications || [];
+const applicationChecklistItems = [
+  { key: "cv_reviewed", label: "CV relu pour cette offre" },
+  { key: "letter_customized", label: "Lettre personnalisée" },
+  { key: "documents_checked", label: "Documents vérifiés (PDF, formats)" },
+  { key: "deadline_verified", label: "Date limite vérifiée à la source" },
+  { key: "followup_planned", label: "Relance locale prévue" },
+];
+
+const radarBucketLabels = {
+  followup: "Relance",
+  deadline_close: "Échéance proche",
+  deadline_passed: "Échéance dépassée",
+  review: "Dossier à reprendre",
+  interview_preparation: "Entretien",
+};
+
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.classList.add("clipboard-fallback");
+  document.body.append(area);
+  area.select();
+  try { document.execCommand("copy"); } finally { area.remove(); }
+}
+
+function radarEntryText(entry) {
+  // Composante pure testée par gardes Node : textes honnêtes du radar.
+  const bucket = entry.bucket || "review";
+  const waiting = entry.waiting_days;
+  const dateText = entry.suggested_date || "";
+  let heading;
+  if (bucket === "deadline_close") heading = `Finalise : date limite connue — suggestion : ${dateText}.`;
+  else if (bucket === "deadline_passed") heading = "Échéance dépassée : vérifie l’offre avant de relancer.";
+  else if (bucket === "followup") {
+    heading = entry.status === "upcoming"
+      ? `Aucune relance conseillée avant le ${dateText}.`
+      : (waiting === null || waiting === undefined
+        ? "Relance suggérée : brouillon prêt, aucun e-mail envoyé."
+        : `${waiting} jours sans réponse : brouillon de relance prêt, aucun e-mail envoyé.`);
+  } else heading = "Reprise locale du dossier suggérée.";
+  const note = "Brouillon local à copier : Côme AI n’envoie aucun e-mail, aucun message ni candidature, jamais.";
+  return { heading, note };
+}
+
+function applicationFilterQuery() {
+  const params = new URLSearchParams();
+  const stage = elements.applicationsFilterStage?.value || "";
+  const receipt = elements.applicationsFilterReceipt?.value || "";
+  const deadline = elements.applicationsFilterDeadline?.value || "";
+  if (stage) params.set("stage", stage);
+  if (receipt) params.set("receipt", receipt);
+  if (deadline) params.set("deadline", deadline);
+  if (elements.applicationsFilterAction?.checked) params.set("action_required", "true");
+  const text = params.toString();
+  return text ? `?${text}` : "";
+}
+
+function renderApplicationCounters(dash) {
+  if (!elements.applicationsCounters) return;
+  elements.applicationsCounters.replaceChildren();
+  Object.entries(dash.counts_by_stage || {}).forEach(([stage, count]) => {
+    const item = make("button", `${stageLabels[stage] || stage} : ${count}`, "stage-counter");
+    item.type = "button";
+    item.setAttribute("role", "listitem");
+    item.setAttribute("aria-pressed", String(elements.applicationsFilterStage?.value === stage));
+    item.setAttribute("aria-label", `${stageLabels[stage] || stage} : ${count} candidatures`);
+    item.addEventListener("click", () => {
+      if (!elements.applicationsFilterStage) return;
+      elements.applicationsFilterStage.value = elements.applicationsFilterStage.value === stage ? "" : stage;
+      loadApplications();
+    });
+    elements.applicationsCounters.append(item);
+  });
+}
+
+function renderApplicationRadar(radar) {
+  if (!elements.applicationsRadar) return;
+  elements.applicationsRadar.replaceChildren();
+  if (!radar || !radar.length) {
+    elements.applicationsRadar.append(make("p", "Aucune relance en attente. Rien n’est envoyé automatiquement, jamais.", "empty-state compact-empty"));
+    return;
+  }
+  radar.forEach((entry) => {
+    const copy = radarEntryText(entry);
+    const card = make("article", "", "radar-entry");
+    const title = make("div", "", "radar-entry-title");
+    title.append(
+      make("h3", `${entry.title} — ${entry.company}`),
+      chip(radarBucketLabels[entry.bucket] || entry.bucket, entry.status === "due" ? "warning" : "")
+    );
+    card.append(title, make("p", copy.heading, "radar-entry-heading"));
+    if (entry.receipt_unknown) {
+      card.append(make("p", "Réception non confirmée : ne renvoie pas automatiquement.", "radar-entry-warning"));
+    }
+    if (entry.draft_ready && entry.draft) {
+      const copyButton = make("button", "Copier le brouillon de relance", "secondary-button");
+      copyButton.type = "button";
+      copyButton.setAttribute("aria-label", `Copier le brouillon de relance de ${entry.title} — aucun envoi automatique`);
+      copyButton.addEventListener("click", async () => {
+        try {
+          await copyTextToClipboard(entry.draft);
+          setMessage("Brouillon copié. Envoie-le toi-même : aucune relance n’est transmise par Côme AI.");
+        } catch (error) {
+          setMessage(error.message || "Copie impossible dans ce navigateur.", true);
+        }
+      });
+      card.append(copyButton);
+    }
+    card.append(make("p", copy.note, "radar-entry-note"));
+    elements.applicationsRadar.append(card);
+  });
+}
+
+function applicationPrepBlock(entry) {
+  const details = make("details", "", "prep-score");
+  const prep = entry.prep || {};
+  const incomplete = prep.score === null || prep.score === undefined;
+  details.append(make("summary", incomplete ? "Note de préparation : incomplète (facteurs inconnus)" : `Note de préparation : ${prep.score}/100`, "prep-score-summary"));
+  const body = make("div", "", "prep-score-body");
+  body.append(make("p", prep.formula || "", "prep-formula"));
+  Object.entries(prep.factors || {}).forEach(([name, factor]) => {
+    body.append(make("p", `${name} : ${factor.percent}/100 — ${factor.detail}`, "prep-factor"));
+    const missing = factor.quantifiable_missing || [];
+    if (missing.length) {
+      body.append(make("p", `Résultats mesurables à ajouter uniquement si vérifiables : ${missing.join(" · ")}`, "prep-factor-unknown"));
+    }
+  });
+  (prep.unknowns || []).forEach((unknown) => {
+    body.append(make("p", `Inconnu (${unknown.factor}) : ${unknown.reason}`, "prep-factor-unknown"));
+  });
+  body.append(make("p", prep.disclaimer || "", "prep-disclaimer"));
+  details.append(body);
+  return details;
+}
+
+function applicationChecklistBlock(application, checkedKeys) {
+  const details = make("details", "", "application-checklist");
+  details.append(make("summary", "Checklist locale (5 cases)"));
+  const list = make("div", "", "application-checklist-items");
+  const checked = () => applicationChecklistItems
+    .filter((item) => list.querySelector(`input[data-checkkey="${item.key}"]`)?.checked)
+    .map((item) => item.key);
+  applicationChecklistItems.forEach((item) => {
+    const label = make("label");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.dataset.checkkey = item.key;
+    box.checked = checkedKeys.includes(item.key);
+    box.addEventListener("change", async () => {
+      try {
+        await api(`/api/career/applications/${encodeURIComponent(application.id)}/checklist`, {
+          method: "POST",
+          body: JSON.stringify({ checked: checked() }),
+        });
+        setMessage("Checklist locale mise à jour (aucun envoi effectué).");
+      } catch (error) { setMessage(error.message, true); }
+    });
+    label.append(box, document.createTextNode(item.label));
+    list.append(label);
+  });
+  details.append(list);
+  return details;
+}
+
+function applicationTimelineBlock(entry) {
+  const details = make("details", "", "application-timeline");
+  details.append(make("summary", "Chronologie locale"));
+  (entry.timeline || []).forEach((event) => {
+    const when = event.at ? String(event.at).slice(0, 19).replace("T", " ") : "date inconnue";
+    details.append(make("p", `${when} · ${event.event_type}${event.detail ? ` — ${event.detail}` : ""}`, "timeline-event"));
+  });
+  return details;
+}
+
+function renderApplicationDashboard(dash) {
+  state.applicationDashboard = dash;
+  if (elements.applicationsHonesty && dash.honesty) elements.applicationsHonesty.textContent = dash.honesty;
+  renderApplicationCounters(dash);
+  renderApplicationRadar(dash.radar || []);
+  const byId = new Map((dash.entries || []).map((entry) => [entry.application_id, entry]));
   elements.applications.replaceChildren();
+  state.applications.forEach((application) => {
+    const entry = byId.get(application.id);
+    const card = applicationCard(application);
+    if (entry) {
+      card.append(
+        applicationPrepBlock(entry),
+        applicationChecklistBlock(application, entry.checklist?.checked_keys || []),
+        applicationTimelineBlock(entry),
+      );
+    }
+    elements.applications.append(card);
+  });
   elements.applicationsEmpty.hidden = state.applications.length > 0;
-  state.applications.forEach((application) => elements.applications.append(applicationCard(application)));
+}
+
+async function loadApplications() {
+  const suffix = applicationFilterQuery();
+  const [listing, dash] = await Promise.all([
+    api("/api/career/applications"),
+    api(`/api/career/applications/dashboard${suffix}`),
+  ]);
+  state.applications = listing.applications || [];
+  renderApplicationDashboard(dash);
 }
 
 const coachModeLabels = {
@@ -2504,6 +2714,17 @@ $("#stagehunter-prep-submit")?.addEventListener("click", () => {
 });
 
 document.querySelectorAll(".career-tab").forEach((tab) => tab.addEventListener("click", () => showView(tab.dataset.view)));
+
+(function fillApplicationStageFilter() {
+  const select = $("#applications-filter-stage");
+  if (!select || select.options.length > 1) return;
+  Object.entries(stageLabels).forEach(([value, label]) => select.append(new Option(label, value)));
+})();
+
+["applications-filter-stage", "applications-filter-receipt", "applications-filter-deadline"].forEach((id) => {
+  $(`#${id}`)?.addEventListener("change", () => loadApplications());
+});
+$("#applications-filter-action")?.addEventListener("change", () => loadApplications());
 document.querySelectorAll("[data-view-action]").forEach((action) => action.addEventListener("click", () => {
   showView(action.dataset.viewAction);
   const targetId = action.dataset.focusTarget;

@@ -606,8 +606,32 @@
 
         <section id="view-applications" class="career-view" tabindex="-1" hidden aria-labelledby="applications-title">
           <section class="panel jobs-panel">
-            <div class="panel-heading"><div><p class="eyebrow">Suivre mes démarches</p><h2 id="applications-title">Candidatures</h2></div><button class="primary-button" type="button" data-view-action="studio">Préparer un dossier</button></div>
+            <div class="panel-heading"><div><p class="eyebrow">Suivre mes démarches</p><h2 id="applications-title">Candidatures</h2></div><div class="inline-actions"><a class="secondary-button link-button" href="/api/career/deadlines.ics">Export calendrier (.ics)</a><button class="primary-button" type="button" data-view-action="studio">Préparer un dossier</button></div></div>
             <p class="panel-help">Career Agent ne soumet rien au site d’une entreprise. « Réception confirmée » est réservé à une preuve que tu as reçue après un dépôt manuel.</p>
+            <p id="applications-honesty" class="panel-help"></p>
+            <div id="applications-counters" class="stage-counters" role="list"></div>
+            <div class="application-filters">
+              <label for="applications-filter-stage">État</label>
+              <select id="applications-filter-stage">
+                <option value="">Tous les états</option>
+              </select>
+              <label for="applications-filter-receipt">Réception</label>
+              <select id="applications-filter-receipt">
+                <option value="">Toutes les réceptions</option>
+                <option value="not_submitted">Non déclarée</option>
+                <option value="unknown">Inconnue</option>
+                <option value="confirmed">Confirmée</option>
+              </select>
+              <label for="applications-filter-deadline">Échéance</label>
+              <select id="applications-filter-deadline">
+                <option value="">Toutes les échéances</option>
+                <option value="next_7_days">Dans les 7 jours</option>
+                <option value="passed">Dépassée</option>
+                <option value="unset">Inconnue</option>
+              </select>
+              <label class="application-filter-check"><input type="checkbox" id="applications-filter-action"> À traiter seulement</label>
+            </div>
+            <section id="applications-radar" class="followup-radar" aria-live="polite" aria-label="Radar de relances suggérées (brouillons locaux, aucun envoi automatique)"></section>
             <div id="applications-list" class="application-list"></div>
             <p id="applications-empty" class="empty-state">Crée un suivi depuis une offre enregistrée ou depuis ta shortlist.</p>
           </section>
