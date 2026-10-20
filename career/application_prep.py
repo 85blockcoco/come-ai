@@ -20,6 +20,7 @@ MAX_REQUIREMENTS = 40
 MAX_TEXT_LENGTH = 400
 MAX_MATCHED = 20
 MAX_IMPROVEMENTS = 8
+MAX_CV_ACTIONS = 12
 MAX_LETTER_POINTS = 6
 MAX_SOURCE_EXCERPT = 4_000
 
@@ -54,6 +55,14 @@ _EXPLICIT_REQUIREMENT_MARKERS = (
 # a phone number or a LinkedIn URL.
 PROFILE_FIELDS: tuple[str, ...] = ("skills", "experience", "education", "languages", "eligibility")
 
+_CV_SECTION_LABELS: dict[str, str] = {
+    "skills": "Compétences",
+    "experience": "Expériences",
+    "education": "Formation",
+    "languages": "Langues",
+    "eligibility": "Informations complémentaires",
+}
+
 # Words that are too generic to prove anything on their own: a requirement
 # matching only on "expérience" or "connaissance" would create a false sense
 # of correspondence.  Specific tokens (excel, anglais, lbo…) stay decisive.
@@ -86,9 +95,12 @@ _GENERIC_TOKENS: frozenset[str] = frozenset(
         "skills",
         "ability",
         "abilities",
+        "advanced",
         "strong",
         "good",
         "excellent",
+        "proficiency",
+        "data",
         "years",
         "year",
         "profil",
@@ -237,26 +249,32 @@ def _profile_text(profile: dict[str, Any]) -> str:
 
 def _find_evidence(profile: dict[str, Any], tokens: list[str]) -> tuple[str, str, list[str]] | None:
     """Return a verbatim profile excerpt supporting the requirement, if any."""
-    normalized_tokens = {normalized_text(token) for token in tokens}
-    for field in PROFILE_FIELDS:
+    normalized_tokens = list(dict.fromkeys(normalized_text(token) for token in tokens))
+    candidates: list[tuple[tuple[int, int, int, int], str, str, list[str]]] = []
+    for field_index, field in enumerate(PROFILE_FIELDS):
         field_value = clean_text(profile.get(field), limit=6_000)
         if not field_value:
             continue
         normalized_field = normalized_text(field_value)
-        matched = sorted(
+        matched = [
             token for token in normalized_tokens if f" {token} " in f" {normalized_field} "
-        )
+        ]
         if not matched:
             continue
-        for segment in _segments(field_value):
+        for segment_index, segment in enumerate(_segments(field_value)):
             normalized_segment = normalized_text(segment)
             hits = [token for token in matched if f" {token} " in f" {normalized_segment} "]
             if hits:
                 # The excerpt must be a real, verbatim slice of the field.
                 excerpt = clean_text(segment, limit=300)
                 if normalized_text(excerpt) in normalized_field:
-                    return field, excerpt, hits[:6]
-    return None
+                    first_hit = min(normalized_tokens.index(token) for token in hits)
+                    score = (first_hit, -len(hits), field_index, segment_index)
+                    candidates.append((score, field, excerpt, hits[:6]))
+    if not candidates:
+        return None
+    _, field, excerpt, hits = min(candidates, key=lambda candidate: candidate[0])
+    return field, excerpt, hits
 
 
 def prepare_application(
@@ -310,6 +328,83 @@ def prepare_application(
                 }
             )
     matched = matched[:MAX_MATCHED]
+
+    cv_action_plan: list[dict[str, Any]] = []
+    for index, item in enumerate(matched[:MAX_CV_ACTIONS], start=1):
+        section = _CV_SECTION_LABELS.get(item["profile_field"], "Profil")
+        evidence = clean_text(item["evidence"], limit=300)
+        requirement = clean_text(item["requirement"], limit=300)
+        cv_action_plan.append(
+            {
+                "id": f"supported-{index}",
+                "priority": "high" if index <= 3 else "medium",
+                "status": "supported",
+                "action_type": "move_up" if item["profile_field"] in {"skills", "languages"} else "rephrase",
+                "action_label": "Mettre en avant" if item["profile_field"] in {"skills", "languages"} else "Reformuler fidèlement",
+                "section": section,
+                "offer_reference": f"Exigence détectée n°{index}",
+                "profile_reference": f"Profil local · {section}",
+                "requirement": requirement,
+                "profile_evidence": evidence,
+                "matched_on": list(item.get("matched_on") or []),
+                "suggested_change": (
+                    f"Dans la rubrique « {section} », rends plus visible cet élément déjà présent, "
+                    f"sans modifier les faits : « {evidence} ». Adapte seulement l’ordre et la formulation "
+                    "à la langue de l’offre."
+                ),
+                "why": f"Cette preuve locale correspond à l’exigence de l’offre : « {requirement} ».",
+                "fact_safe": True,
+                "evidence_quality": (
+                    "needs_quantification"
+                    if item["profile_field"] == "experience" and not re.search(r"\d", evidence)
+                    else "documented"
+                ),
+            }
+        )
+    remaining_slots = max(0, MAX_CV_ACTIONS - len(cv_action_plan))
+    for index, item in enumerate(unverified[:remaining_slots], start=1):
+        requirement = clean_text(item["requirement"], limit=300)
+        cv_action_plan.append(
+            {
+                "id": f"needs-evidence-{index}",
+                "priority": "high" if index <= 3 else "medium",
+                "status": "needs_evidence",
+                "action_type": "verify_before_adding",
+                "action_label": "Ne pas ajouter sans preuve",
+                "section": "À déterminer",
+                "offer_reference": f"Exigence détectée non étayée n°{index}",
+                "profile_reference": "Aucune preuve trouvée dans le profil local",
+                "requirement": requirement,
+                "profile_evidence": "",
+                "matched_on": [],
+                "missing_keywords": _tokens(requirement)[:6],
+                "suggested_change": (
+                    "Ne l’ajoute pas au CV maintenant. Si tu possèdes réellement cet acquis, renseigne "
+                    "d’abord une preuve précise et vérifiable dans ton profil (contexte, action, résultat) ; "
+                    "sinon laisse-le absent."
+                ),
+                "why": f"Aucune preuve correspondante n’a été trouvée dans le profil pour : « {requirement} ».",
+                "fact_safe": True,
+                "evidence_quality": "missing",
+            }
+        )
+    total_requirements = len(requirements)
+    supported_count = len(matched)
+    target_language = clean_text(
+        job.get("language") or job.get("language_code") or job.get("detected_language"), limit=40
+    ) or "à confirmer"
+    cv_coverage = {
+        "requirements_total": total_requirements,
+        "supported": supported_count,
+        "to_verify": len(unverified),
+        "coverage_percent": round((supported_count / total_requirements) * 100) if total_requirements else 0,
+        "target_language": target_language,
+        "label": "Couverture documentaire du CV",
+        "disclaimer": (
+            "Ce pourcentage mesure uniquement les exigences détectées et étayées par ton profil ; "
+            "ce n’est ni une probabilité d’embauche ni une note du recruteur."
+        ),
+    }
 
     improvements: list[dict[str, str]] = []
     if not profile_blob:
@@ -392,6 +487,8 @@ def prepare_application(
         "source_excerpt": clean_text(job.get("description_original"), limit=MAX_SOURCE_EXCERPT),
         "matched_elements": matched,
         "unverified_elements": unverified,
+        "cv_action_plan": cv_action_plan,
+        "cv_coverage": cv_coverage,
         "cv_improvements": improvements,
         "letter_points": letter_points,
         "uncertainty": uncertainty,
