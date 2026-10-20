@@ -10,6 +10,8 @@ const state = {
   applicationDrafts: [],
   activeApplicationDraft: null,
   studioJobs: [],
+  pendingStudioJob: null,
+  pendingStudioLanguage: "",
   discoverySources: [],
   stageMatches: [],
   stageDetailIndex: 0,
@@ -1445,7 +1447,25 @@ function renderStudioJobOptions(jobs) {
     const location = [job.city, job.country].filter(Boolean).join(", ");
     elements.applicationDraftJob.append(new Option(`${job.company} — ${job.title}${location ? ` (${location})` : ""}`, job.id));
   });
-  if (jobs.some((job) => job.id === current)) elements.applicationDraftJob.value = current;
+  if (state.pendingStudioJob && !jobs.some((job) => job.id === state.pendingStudioJob.id)) {
+    elements.applicationDraftJob.append(new Option(`${state.pendingStudioJob.company} — ${state.pendingStudioJob.title}`, state.pendingStudioJob.id));
+  }
+  const selected = state.pendingStudioJob?.id || current;
+  if ([...elements.applicationDraftJob.options].some((option) => option.value === selected)) {
+    elements.applicationDraftJob.value = selected;
+  }
+  if (["fr", "en", "it", "de"].includes(state.pendingStudioLanguage)) {
+    elements.applicationDraftLanguage.value = state.pendingStudioLanguage;
+  }
+}
+
+function openStudioForJob(job, language = "") {
+  state.pendingStudioJob = job;
+  state.pendingStudioLanguage = ["fr", "en", "it", "de"].includes(language) ? language : "";
+  elements.applicationDraftMode.value = "local";
+  elements.applicationDraftConsent.checked = false;
+  updateDraftModeUI();
+  showView("studio");
 }
 
 function renderDraftHistory() {
@@ -2293,6 +2313,41 @@ function renderStagePrep(prep) {
     prep.uncertainty.forEach((item) => warnings.append(make("li", item)));
     target.append(warnings);
   }
+  const cvCoverage = prep.cv_coverage || {};
+  if ((prep.cv_action_plan || []).length || Number.isFinite(cvCoverage.requirements_total)) {
+    const plan = make("section", "", "stagehunter-prep-section stagehunter-cv-action-plan");
+    plan.append(make("h4", "Plan précis pour ton CV"));
+    plan.append(
+      make(
+        "p",
+        `${cvCoverage.supported || 0}/${cvCoverage.requirements_total || 0} exigences détectées sont étayées par ton profil · couverture documentaire ${cvCoverage.coverage_percent || 0} % · langue cible ${cvCoverage.target_language || "à confirmer"}.`,
+        "scoring-title",
+      ),
+    );
+    plan.append(make("p", "Ce n’est pas une probabilité d’embauche : c’est un contrôle des preuves actuellement présentes dans ton profil.", "scoring-disclaimer"));
+    const list = make("div", "", "stagehunter-cv-actions");
+    (prep.cv_action_plan || []).forEach((item) => {
+      const statusClass = item.status === "supported" ? "ready" : "action_required";
+      const row = make("article", "", `checklist-item checklist-${statusClass}`);
+      const copy = make("div");
+      copy.append(make("strong", `${item.action_label || "Action CV"} · ${item.section || "Section à déterminer"}`));
+      if (item.offer_reference) copy.append(make("p", `${item.offer_reference} · ${item.profile_reference || "profil à vérifier"}`, "application-meta"));
+      copy.append(make("p", `Exigence de l’offre : ${item.requirement || "non précisée"}`));
+      if (item.profile_evidence) copy.append(make("p", `Preuve déjà présente : « ${item.profile_evidence} »`));
+      if ((item.missing_keywords || []).length) copy.append(make("p", `Mots-clés non étayés à vérifier : ${item.missing_keywords.join(", ")}.`));
+      if (item.suggested_change) copy.append(make("p", `À faire : ${item.suggested_change}`));
+      if (item.evidence_quality === "needs_quantification") copy.append(make("p", "Amélioration possible : ajoute un résultat chiffré uniquement si tu peux le prouver ; sinon conserve la formulation actuelle.", "scoring-disclaimer"));
+      if (item.why) copy.append(make("p", item.why, "scoring-disclaimer"));
+      row.append(copy);
+      const apply = make("button", item.status === "supported" ? "Préparer dans le Studio" : "Compléter puis préparer", "quiet-button");
+      apply.type = "button";
+      apply.addEventListener("click", () => openStudioForJob(job, cvCoverage.target_language));
+      row.append(apply);
+      list.append(row);
+    });
+    plan.append(list);
+    target.append(plan);
+  }
   renderStagePrepList(target, "Exigences de l’offre (texte source conservé)", prep.requirements || [], (item) => make("li", `${item.text}`));
   if (prep.source_excerpt) {
     const source = make("details", "", "stagehunter-prep-section");
@@ -2309,7 +2364,7 @@ function renderStagePrep(prep) {
   const actions = make("div", "", "job-actions");
   const studio = make("button", "Ouvrir l’Application Studio", "secondary-button");
   studio.type = "button";
-  studio.addEventListener("click", () => showView("studio"));
+  studio.addEventListener("click", () => openStudioForJob(job, cvCoverage.target_language));
   actions.append(studio);
   target.append(actions);
 }
