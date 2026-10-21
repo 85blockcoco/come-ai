@@ -1,7 +1,7 @@
 # CVBOOST-11 — Filtre pays côté connecteurs (Zéro France)
 
-**Branche** : `agent/cvboost-11-geo-filter` (worktree dédié `/Users/comedelavenne/AI-Excel-Agent-cvboost-11-geo-filter`)
-**Base** : `main` (tag `v3-cvboost-sources-2026-10-20`, SHA `3a0d1ee`)
+**Branche** : `worker/cvboost-11-1792590637` (worktree dédié `/Users/comedelavenne/AI-Excel-Agent-worker-cvboost-11-1792590637`), rebasée sur `agent/cvboost-11-geo-filter`
+**Base** : `main` (SHA `a054c97`), 1374 tests verts
 **Date** : 2026-10-21
 **Auteur** : Agent Mission 11
 
@@ -26,7 +26,7 @@ rejetait l'offre au moment de la qualifier. Le filtre est désormais poussé
 | `career/connectors/jobteaser.py` | Idem |
 | `career/connectors/talent_com.py` | Idem |
 | `career/connectors/apec.py` | Idem |
-| `tests/test_connectors_geo_filter.py` | **Nouveau** — 33 tests synthétiques (aucun socket ouvert) |
+| `tests/test_connectors_geo_filter.py` | **Nouveau** — 36 tests synthétiques (aucun socket ouvert) |
 | `docs/agent-reports/CVBOOST-11-GEO_FILTER.md` | Ce rapport |
 
 Fichiers de test existants mis à jour (conséquence assumée du changement de
@@ -138,6 +138,33 @@ applicable aux formes réelles que publient les sources.
 
 ---
 
+## 2.6 Les deux parcours réels de la personne
+
+Un connecteur filtré ne suffit pas : le brief est relu depuis la base locale
+et la liste des pays doit y survivre. Les deux parcours que la personne
+utilise sont donc vérifiés de bout en bout, avec un board synthétique
+publishant une offre française et une offre britannique.
+
+| Parcours | Point d'entrée | Offre FR stockée ? | Compteur source |
+|---|---|---|---|
+| Boards personnels (`discover_opportunities`) | `career/service.py` → `discover_ranked(board, selection_brief=brief)` | **non** | `country_excluded_count=1`, `excluded_by_country={"FR": 1}` |
+| Explorateur (`explore_internships`) | `career/service.py` → `discover_internships(descriptor, selection_brief=brief)` | **non** | `country_excluded_count=1`, `excluded_by_country={"FR": 1}` |
+
+Les deux parcours lisent `get_stage_search()["brief"]`, donc
+`validate_brief()` — et donc `countries_exclude` — alimente les connecteurs
+sans que `career/service.py` ni `career/router.py` soient modifiés. Un brief
+enregistré avant cette mission (donc sans la clé `countries_exclude`) reste
+protégé : `validate_brief()` retombe alors sur `excluded_countries`, que
+`get_stage_search()` Initialise à `["France"]`.
+
+La preuve que l'écart est **côté source** et non postérieur à l'import :
+`health_check()` reports `country_excluded_count=1` et
+`excluded_by_country={"FR": 1}`, et la ligne française est absente de la
+table locale. Le contre-test (`excluded_countries: []`) fait bien revenir
+l'offre française : l'annulation demandée par la personne reste possible.
+
+---
+
 ## 3. Métriques : `excluded_by_country` par connecteur
 
 ### 3.1 Trois exécutions réelles (2026-10-21)
@@ -213,7 +240,7 @@ malformée).
 
 ## 4. Tests
 
-`tests/test_connectors_geo_filter.py` — 33 tests synthétiques, aucun socket
+`tests/test_connectors_geo_filter.py` — 36 tests synthétiques, aucun socket
 ouvert :
 
 | Cas couvert | Test |
@@ -243,6 +270,9 @@ ouvert :
 | 600 offres, aucune France survivante | `test_no_french_offer_survives_six_hundred_synthetic_offers` |
 | Point d'entrée : défaut / transmission / annulation | `test_discover_stage_offers_{excludes_france_by_default,forwards_the_default_exclusion_list,can_bring_france_back}` |
 | Pays inconnu | `test_unknown_country_wording_excludes_nothing` |
+| Parcours « boards personnels » : aucune offre FR stockée | `test_personal_board_flow_never_stores_a_french_offer` |
+| Parcours « explorateur » : aucune offre FR affichée | `test_explorer_flow_never_shows_a_french_offer` |
+| Annulation via le brief : la France revient | `test_emptied_country_exclusion_brings_france_back_through_the_brief` |
 
 ---
 
@@ -283,7 +313,9 @@ classement.
   périmètre). L'interface continue donc à piloter l'exclusion par
   `excluded_countries`, que `validate_brief()` relaie désormais vers
   `countries_exclude` : vider « France » dans l'interface désactive bien le
-  filtre source. La Mission 13 pourra ajouter `preferred_countries` /
+  filtre source — vérifié de bout en bout par
+  `test_emptied_country_exclusion_brings_france_back_through_the_brief`.
+  La Mission 13 pourra ajouter `preferred_countries` /
   `excluded_countries` au modèle de requête si le périmètre est rouvert.
 * La qualification (`career/offer_qualification.py`) n'a pas été modifiée :
   la source-side filter est *en plus* de l'exclusion de qualification, pas
@@ -294,12 +326,18 @@ classement.
 ## 7. Commandes de validation
 
 ```
-.venv/bin/python -m pytest -q                            → 1400 passed, 1 skipped
-.venv/bin/python -m pytest -q tests/test_connectors_geo_filter.py → 33 passed
+.venv/bin/python -m pytest -q                            → 1409 passed, 1 skipped
+.venv/bin/python -m pytest -q tests/test_connectors_geo_filter.py → 36 passed
 .venv/bin/python -m ruff check .                         → All checks passed!
 git diff --check                                          → propre
 ./checklist_codex.sh                                     → TOUT VERT
 ```
 
-La suite complète passe de **1367** tests (base `main`) à **1400** :
-1367 inchangés + 33 nouveaux. Aucune régression.
+La suite complète passe de **1374** tests (base `main` `a054c97`) à **1410** :
+1374 inchangés + 36 nouveaux. Aucune régression.
+
+Le seul test ignoré (`tests/test_offer_summary_exhaustiveness.py`) est la
+garde « exhaustivité » : il exige la base privée `career_data/career.sqlite3`,
+absente d'un worktree neuf (elle n'est jamais versionnée). Sur le worktree
+qui porte cette base, le test s'exécute et passe. Ce n'est pas une
+régression de la mission.

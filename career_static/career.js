@@ -2518,6 +2518,136 @@ function renderStageTerms(payload) {
   target.append(make("p", "Ces termes sont des repères locaux pour tes recherches manuelles sur les sites officiels : aucune requête n’est envoyée depuis ici.", "fixed-period-note"));
 }
 
+function formatStageDate(value) {
+  if (!value) return "À vérifier";
+  const text = String(value).trim();
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(text) ? `${text}T12:00:00Z` : text;
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) return text;
+  return parsed.toLocaleDateString("fr-FR", {day:"numeric", month:"short", year:"numeric", timeZone:"UTC"});
+}
+
+function stageContractLabel(value) {
+  const normalized = String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return {
+    internship: "Stage", stage: "Stage", intern: "Stage",
+    fixed_term: "CDD", cdd: "CDD", fixed_term_contract: "CDD",
+    permanent: "CDI", cdi: "CDI", permanent_contract: "CDI",
+    vie: "VIE", v_i_e: "VIE",
+    apprenticeship: "Alternance — hors critères", alternance: "Alternance — hors critères",
+    ambiguous: "À vérifier", unknown: "À vérifier",
+  }[normalized] || (value ? String(value) : "À vérifier");
+}
+
+function stageOfferFactValue(job, qualification, key) {
+  const facts = qualification && Object.keys(qualification).length
+    ? qualification : (job.qualification_facts || {});
+  if (key === "contract") return stageContractLabel(facts.contract_type || job.employment_type);
+  if (key === "location") return [job.city || facts.city, job.country || facts.country].filter(Boolean).join(", ") || "À vérifier";
+  if (key === "publication") return formatStageDate(job.posted_date || facts.posted_date);
+  if (key === "start") {
+    if (job.start_date || facts.start_date) return formatStageDate(job.start_date || facts.start_date);
+    if (Number.isInteger(facts.start_month) && facts.start_month >= 1 && facts.start_month <= 12) {
+      const month = new Date(Date.UTC(2000, facts.start_month - 1, 1)).toLocaleDateString("fr-FR", {month:"long", timeZone:"UTC"});
+      return `${month} · année à vérifier`;
+    }
+    return "À vérifier";
+  }
+  if (key === "end") return formatStageDate(job.end_date || facts.end_date);
+  if (key === "duration") {
+    if (Number.isFinite(Number(job.duration_months)) && Number(job.duration_months) > 0) return `${Number(job.duration_months)} mois`;
+    const minimum = Number(facts.duration_min_months);
+    const maximum = Number(facts.duration_max_months);
+    if (Number.isFinite(minimum) && minimum > 0) {
+      return Number.isFinite(maximum) && maximum > 0 && maximum !== minimum
+        ? `${minimum} à ${maximum} mois` : `${minimum} mois`;
+    }
+    return "À vérifier";
+  }
+  if (key === "deadline") return formatStageDate(job.deadline_date);
+  if (key === "language") return job.languages_required || facts.language || "À vérifier";
+  return "À vérifier";
+}
+
+function stageRequirementSnippets(job) {
+  const source = [job.requirements, job.languages_required, job.eligibility_requirement]
+    .filter(Boolean).join("\n");
+  if (!source) return [];
+  return [...new Set(source.split(/\n+|[;•]+/).map((item) => item.trim()).filter(Boolean))].slice(0, 4);
+}
+
+function stageOfferOverview(job, qualification) {
+  const panel = make("section", "", "stage-offer-overview");
+  const factDefinitions = [
+    ["Contrat", "contract", "briefcase"], ["Localisation", "location", "pin"],
+    ["Publication", "publication", "calendar"], ["Début", "start", "play"],
+    ["Fin", "end", "finish"], ["Durée", "duration", "clock"],
+    ["Candidater avant", "deadline", "deadline"], ["Langue", "language", "language"],
+  ];
+  const grid = make("dl", "", "stage-offer-facts");
+  const missing = [];
+  factDefinitions.forEach(([label, key, icon]) => {
+    const value = stageOfferFactValue(job, qualification, key);
+    const fact = make("div", "", `stage-offer-fact${value === "À vérifier" ? " is-missing" : ""}`);
+    fact.dataset.icon = icon;
+    fact.append(make("dt", label), make("dd", value));
+    grid.append(fact);
+    if (value === "À vérifier" || value.includes("année à vérifier")) missing.push(label.toLowerCase());
+  });
+  panel.append(grid);
+
+  const trust = make("div", "", "stage-offer-trust");
+  if (job.official_url && job.source_name && job.source_name !== "manual") {
+    trust.append(chip("Source officielle liée", "good"));
+    trust.append(make("span", `${job.source_name} · vérifiée ${formatVerification(job.last_verified_at)}`));
+  } else if (job.official_url) {
+    trust.append(chip("Lien fourni · origine à vérifier", "warning"));
+  } else {
+    trust.append(chip("Lien officiel manquant", "warning"));
+  }
+  const knownCount = factDefinitions.length - missing.length;
+  trust.append(make("span", `${knownCount}/${factDefinitions.length} informations essentielles renseignées`));
+  panel.append(trust);
+
+  const requirements = stageRequirementSnippets(job);
+  if (requirements.length) {
+    const block = make("div", "", "stage-offer-requirements");
+    block.append(make("strong", "Prérequis repérés dans l’offre"));
+    const list = make("ul");
+    requirements.forEach((item) => list.append(make("li", item)));
+    block.append(list);
+    panel.append(block);
+  }
+  if (missing.length) {
+    panel.append(make("p", `Informations manquantes : ${missing.join(", ")}. Elles restent à vérifier et ne sont jamais inventées.`, "stage-offer-missing"));
+  }
+  return panel;
+}
+
+function renderStageResultSummary(matches) {
+  const target = $("#stagehunter-result-summary");
+  if (!target) return;
+  target.replaceChildren();
+  const counts = {conforming:0, to_verify:0, non_conforming:0, sourced:0};
+  matches.forEach((match) => {
+    const status = (match.stage_match || match.qualification || {}).qualification_status
+      || (match.qualification || {}).target_status || "to_verify";
+    counts[status] = (counts[status] || 0) + 1;
+    if (match.job?.official_url && match.job?.source_name && match.job.source_name !== "manual") counts.sourced += 1;
+  });
+  const items = [
+    [matches.length, "offres affichées", ""], [counts.conforming, "conformes", "good"],
+    [counts.to_verify, "à vérifier", "warning"], [counts.non_conforming, "non conformes", "danger"],
+    [counts.sourced, "avec source officielle liée", ""],
+  ];
+  items.forEach(([value, label, tone]) => {
+    const item = make("div", "", `stagehunter-summary-item${tone ? ` ${tone}` : ""}`);
+    item.append(make("strong", String(value)), make("span", label));
+    target.append(item);
+  });
+  target.hidden = matches.length === 0;
+}
+
 function stageMatchBlock(stageMatch) {
   const profileScoring = stageMatch._profileScoring || null;
   const block = make("section", "", "stage-match-block");
@@ -2606,6 +2736,7 @@ function renderStageMatches(payload) {
     return direction === "asc" ? stageMatchScore(a) - stageMatchScore(b) : stageMatchScore(b) - stageMatchScore(a);
   });
   renderStageMap(sorted);
+  renderStageResultSummary(sorted);
   empty.hidden = sorted.length > 0;
   sorted.forEach((match) => {
     const wrapper = make("div", "", "stagehunter-match");
@@ -2621,6 +2752,13 @@ function renderStageMatches(payload) {
       wrapper.append(stageMatchBlock(displayedMatch));
     }
     const card = jobCard(match.job, "discover", match.qualification);
+    card.classList.add("stagehunter-offer-card");
+    const chips = card.querySelector(".job-chips");
+    const qualificationFacts = {
+      ...(match.job?.qualification_facts || {}),
+      ...(match.qualification || {}),
+    };
+    chips?.after(stageOfferOverview(match.job || {}, qualificationFacts));
     const actions = card.querySelector(".job-actions");
     const prep = make("button", "Préparer cette candidature", "secondary-button");
     prep.type = "button";
@@ -2654,49 +2792,62 @@ async function loadStageDetail(jobId) {
   target?.classList.add("is-selected");
   reveal(container, "start");
   try {
+    const selectedMatch = state.stageMatches.find((match) => match.job?.id === jobId) || {};
     const prep = await api(`/api/career/jobs/${encodeURIComponent(jobId)}/prep`);
     container.replaceChildren();
-    const job = prep.job || {};
+    // The preparation endpoint deliberately exposes a bounded job subset.
+    // Merge it over the already-loaded local offer so the detail view keeps
+    // dates, location and qualification evidence without another fetch.
+    const job = {...(selectedMatch.job || {}), ...(prep.job || {})};
     try { container.focus({ preventScroll: true }); } catch (_) { /* focus non essentiel */ }
-    const fields = [
-      ["Entreprise", job.company],
-      ["Titre", job.title],
-      ["Lieu", [job.city, job.country].filter(Boolean).join(", ")],
-      ["Début annoncé", job.start_date || prep.qualification?.start_date || prep.qualification?.start_month],
-      ["Fin annoncée", job.end_date || prep.qualification?.end_date],
-      ["Durée", job.duration_months != null ? `${job.duration_months} mois` : (prep.qualification?.duration_min_months != null ? `${prep.qualification.duration_min_months} à ${prep.qualification.duration_max_months} mois` : "non précisée")],
-      ["Date de candidature", job.deadline_date],
-      ["Date de publication", job.posted_date],
-      ["Pertinence", prep.stage_match?.score],
-      ["Lien officiel", job.official_url],
-    ];
     container.id = container.id || "stagehunter-detail";
     container.setAttribute("tabindex", "-1");
-    fields.forEach(([label, value]) => {
-      if (value === null || value === undefined || value === "") return;
-      const row = make("div", "", "detail-row");
-      row.append(make("strong", `${label} : `));
-      if (label === "Lien officiel") {
-        const link = document.createElement("a");
-        link.href = value;
-        link.textContent = value;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
-        row.append(link);
-      } else {
-        row.append(document.createTextNode(String(value)));
-      }
-      container.append(row);
-    });
-    if ((prep.stage_match?.reasons || []).length) {
+    const hero = make("header", "", "stage-detail-hero");
+    const heading = make("div");
+    heading.append(make("p", job.company || "Entreprise à vérifier", "stage-detail-company"));
+    heading.append(make("h4", job.title || "Intitulé à vérifier"));
+    heading.append(make("p", [job.city, job.country].filter(Boolean).join(", ") || "Localisation à vérifier", "stage-detail-location"));
+    hero.append(heading);
+    if (job.official_url) {
+      const official = make("a", "Voir l’offre officielle ↗", "primary-button external-link");
+      official.href = job.official_url;
+      official.target = "_blank";
+      official.rel = "noopener noreferrer";
+      hero.append(official);
+    }
+    container.append(hero);
+    const qualification = {
+      ...(job.qualification_facts || {}),
+      ...(selectedMatch.qualification || {}),
+      ...(prep.qualification || {}),
+    };
+    container.append(stageOfferOverview(job, qualification));
+    const stageMatch = prep.stage_match || selectedMatch.stage_match || {};
+    if (Number.isFinite(stageMatch.score)) {
+      container.append(make("p", `Pertinence calculée localement : ${stageMatch.score}/100. Cette note aide au tri et ne prédit pas une embauche.`, "detail-score-callout"));
+    }
+    if ((stageMatch.reasons || []).length) {
+      container.append(make("p", "Pourquoi cette offre est classée ici", "scoring-title"));
       const list = make("ul", "", "detail-reasons");
-      prep.stage_match.reasons.slice(0, 5).forEach((reason) => list.append(make("li", reason)));
+      stageMatch.reasons.slice(0, 5).forEach((reason) => list.append(make("li", reason)));
       container.append(list);
+    }
+    if ((prep.requirements || []).length) {
+      container.append(make("p", "Compétences et prérequis cités dans l’annonce", "scoring-title"));
+      const requirements = make("ul", "", "detail-requirements");
+      prep.requirements.slice(0, 10).forEach((item) => {
+        const text = item?.text || String(item || "");
+        const source = item?.source ? ` · source : ${item.source}` : "";
+        requirements.append(make("li", `${text}${source}`));
+      });
+      container.append(requirements);
+    } else {
+      container.append(make("p", "Compétences et prérequis non structurés : relis l’annonce officielle avant de candidater.", "stage-offer-missing"));
     }
     // Résumé structuré (local déterministe) + IA optionnelle avec consentement.
     try {
       const summary = await api(`/api/career/jobs/${encodeURIComponent(jobId)}/summary`);
-      if (summary?.missions?.length) {
+      if (summary?.missions?.length && !(prep.requirements || []).length) {
         const title = make("p", "Missions / prérequis extraits", "scoring-title");
         container.append(title);
         const list = make("ul", "", "detail-reasons");
@@ -2756,6 +2907,57 @@ function renderStagePrepSelect() {
 }
 
 let stageHunterResultMode = "auto";
+let stageHunterProgressTimer = null;
+let stageHunterProgressStartedAt = 0;
+
+function updateStageHunterProgress(value, label, detail) {
+  const container = $("#stagehunter-progress");
+  const bar = $("#stagehunter-progress-bar");
+  const fill = bar?.querySelector(".stagehunter-progress-fill");
+  if (!container || !bar || !fill) return;
+  const bounded = Math.max(0, Math.min(100, Math.round(value)));
+  container.hidden = false;
+  bar.setAttribute("aria-valuenow", String(bounded));
+  fill.style.width = `${bounded}%`;
+  $("#stagehunter-progress-percent").textContent = `${bounded} %`;
+  if (label) $("#stagehunter-progress-label").textContent = label;
+  if (detail) $("#stagehunter-progress-detail").textContent = detail;
+}
+
+function startStageHunterProgress() {
+  if (stageHunterProgressTimer) clearInterval(stageHunterProgressTimer);
+  stageHunterProgressStartedAt = Date.now();
+  const container = $("#stagehunter-progress");
+  container?.classList.remove("is-complete", "is-error");
+  updateStageHunterProgress(6, "Préparation de la recherche…", "Progression estimée : les sources répondent à des vitesses différentes. Le nombre exact de sources sera affiché à la fin.");
+  stageHunterProgressTimer = setInterval(() => {
+    const elapsed = Math.max(0, Math.floor((Date.now() - stageHunterProgressStartedAt) / 1000));
+    const value = Math.min(92, 10 + Math.log2(elapsed + 1) * 18);
+    const label = elapsed < 4 ? "Connexion aux sources publiques…"
+      : elapsed < 12 ? "Lecture et normalisation des annonces…"
+      : elapsed < 25 ? "Qualification des contrats, dates et localisations…"
+      : "Classement local des offres pertinentes…";
+    updateStageHunterProgress(value, label, `En cours depuis ${elapsed} s · progression estimée. Les résultats exacts ne sont connus qu’à la fin.`);
+  }, 500);
+}
+
+function finishStageHunterProgress(success, result = null) {
+  if (stageHunterProgressTimer) clearInterval(stageHunterProgressTimer);
+  stageHunterProgressTimer = null;
+  const container = $("#stagehunter-progress");
+  if (!container) return;
+  const elapsed = Math.max(0, Math.round((Date.now() - stageHunterProgressStartedAt) / 1000));
+  container.classList.toggle("is-complete", success);
+  container.classList.toggle("is-error", !success);
+  if (success) {
+    const summary = result?.summary || {};
+    const attempted = Number.isFinite(summary.sources_attempted) ? summary.sources_attempted : "?";
+    const retained = Number.isFinite(summary.retained_count) ? summary.retained_count : "?";
+    updateStageHunterProgress(100, "Recherche terminée", `${attempted} sources consultées · ${retained} offres retenues · ${elapsed} s. Les détails et les éventuels échecs sont affichés ci-dessous.`);
+  } else {
+    updateStageHunterProgress(100, "Recherche interrompue", `La recherche a échoué après ${elapsed} s. Les offres déjà enregistrées sont intactes.`);
+  }
+}
 
 function renderStageExploration(payload) {
   const status = $("#stagehunter-explore-status");
@@ -2990,8 +3192,10 @@ $("#stagehunter-explore")?.addEventListener("click", async () => {
   const button = $("#stagehunter-explore");
   button.disabled = true;
   button.textContent = "Exploration en cours…";
+  startStageHunterProgress();
   try {
     const result = await api("/api/career/stage-search/explore", {method:"POST", body:JSON.stringify({force:false})});
+    finishStageHunterProgress(true, result);
     stageHunterResultMode = "explore";
     renderStageExploration(result);
     renderExplorationMatches(result);
@@ -3001,6 +3205,7 @@ $("#stagehunter-explore")?.addEventListener("click", async () => {
     const succeeded = (result.summary?.sources_succeeded || 0) + (result.summary?.sources_cached || 0);
     setMessage(failed && !succeeded ? "Les sources n’ont pas pu être lues. Aucun résultat n’a été inventé ; consulte le rapport de recherche." : result.summary?.partial ? "Exploration partielle terminée. Consulte les sources et les limites avant de choisir une offre." : "Exploration terminée sur les sources du registre. Aucun dépôt de candidature n’a été effectué.", Boolean(failed && !succeeded));
   } catch (error) {
+    finishStageHunterProgress(false);
     setMessage(error.message, true);
     $("#stagehunter-explore-status").textContent = "L’exploration a échoué. Tes offres et candidatures déjà enregistrées sont conservées.";
   } finally {
