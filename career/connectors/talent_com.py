@@ -449,6 +449,8 @@ class TalentComConnector:
             excluded_count=excluded,
             relevant_count=relevant,
             filtered_criteria_count=filtered,
+            country_excluded_count=_HEALTH.excluded_count,
+            excluded_by_country=dict(_HEALTH.excluded_by_country),
         )
 
     def _normalise_one(self, source: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:

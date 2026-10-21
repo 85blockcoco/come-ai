@@ -1,270 +1,234 @@
 # CVBOOST-11 — Filtre pays côté connecteurs (Zéro France)
 
-**Branche** : `agent/cvboost-11-geo-filter` (worktree dédié `AI-Excel-Agent-cvboost-11-geo-filter`)
-**Base** : `main` @ `3a0d1ee` (merge: integrate reviewed Spec Kit Career cycles)
-**Implémentation** : `c8bfbe4` — *feat(career): CVBOOST-11 — filtre pays côté connecteurs (zéro France)*
+**Branche** : `agent/cvboost-11-geo-filter` (worktree dédié `/Users/comedelavenne/AI-Excel-Agent-cvboost-11-geo-filter`)
+**Base** : `main` (tag `v3-cvboost-sources-2026-10-20`, SHA `3a0d1ee`)
 **Date** : 2026-10-21
-**Auteur** : Worker Mission 11 (CVBOOST)
-**Dépendance** : Mission 06 (connecteurs) — satisfaite
+**Auteur** : Agent Mission 11
 
 ---
 
-## 1. Pourquoi cette mission
+## 1. Ce qui a été livré
 
-85 % des offres viennent de Greenhouse, qui ne filtre pas par pays. La personne ne veut
-**jamais** d'offre française. Tant que le filtrage est fait après coup, dans
-`discovery.py`, la France continue de :
+La France ne doit plus jamais entrer dans la base locale. Jusqu'ici elle
+n'était écartée **après** la lecture de l'offre : le connecteur consommait
+son quota, l'offre transitoit par la base, et le filtre de second niveau
+rejetait l'offre au moment de la qualifier. Le filtre est désormais poussé
+**côté source** : chaque connecteur normalise le pays qu'il publie, puis
+écarte l'offre **avant** qu'elle ne devienne un enregistrement local.
 
-- consommer le quota et le budget de recherche de la source,
-- polluer la base locale (les offres sont persistées puis éliminées),
-- fausser les compteurs de santé (`raw_count` / `filtered_count`) et donc la lecture
-  qu'on fait de la performance d'une source.
+| Fichier | Rôle |
+|---|---|
+| `career/countries.py` | **Nouveau** — vocabulaire ISO 3166-1 canonique (`FR`, `fr`, `FRA`, `France`, `Royaume-Uni`…), sans inférence géographique |
+| `career/discovery.py` | Greenhouse : lecture de `office.country_code`, filtre à la source, `excluded_by_country`, `health_check()`, point d'entrée `discover_stage_offers()` |
+| `career/stage_search.py` | `countries_exclude` dans le brief et le vocabulaire ; défaut France, vidable par la personne |
+| `career/connectors/public_ats.py` | ATS publics (Lever, Ashby, SmartRecruiters) : filtre à la source + `health_check()` |
+| `career/connectors/welcome_jungle.py` | Filtre à la source + refinement pays demandé à l'API + `health_check()` |
+| `career/connectors/jobteaser.py` | Idem |
+| `career/connectors/talent_com.py` | Idem |
+| `career/connectors/apec.py` | Idem |
+| `tests/test_connectors_geo_filter.py` | **Nouveau** — 30 tests synthétiques (aucun socket ouvert) |
+| `docs/agent-reports/CVBOOST-11-GEO_FILTER.md` | Ce rapport |
 
-Cette mission pousse donc le filtre **côté connecteur** : chaque connecteur normalise
-le pays qu'il publie, écarte les pays exclus **avant** de matérialiser l'offre, et
-publie dans `health_check()` ce que chaque pays a coûté.
+Fichiers de test existants mis à jour (conséquence assumée du changement de
+comportement, voir §5) : `tests/test_{welcome_jungle,jobteaser,talent_com,apec}_connector.py`,
+`tests/test_career_discovery_selection.py`, `tests/test_career_agent.py`.
 
 ---
 
-## 2. Architecture technique
+## 2. Le contrat de filtrage
 
-### 2.1 Nouveau fichier : `career/countries.py`
+### 2.1 Normalisation avant décision
 
-Vocabulaire ISO 3166-1 canonique, 100 % local (aucun appel réseau) :
+`career/countries.py` ne reconnaît un pays que sur une formulation
+**explicite** :
 
-| Fonction | Rôle |
-|----------|------|
-| `canonicalize_country(value)` | Un libellé de pays → code ISO alpha-2. `"FR"`, `"fr"`, `"FRA"`, `"France"`, `"République Française"` → `FR`. Un libellé inconnu → `""`. |
-| `country_from_source(country)` | Idem, en acceptant un champ qui contient une localisation complète (`"London, United Kingdom"` → `GB`). |
-| `canonical_country_codes(values)` | Liste d'exclusion → codes canoniques, sans doublon, ordre conservé. |
-| `DEFAULT_COUNTRIES_EXCLUDE` | `("FR",)` — le défaut produit, la France. |
+| Formulation | Résultat |
+|---|---|
+| `FR`, `fr`, `Fr`, `FRA`, `France`, `République Française` | `FR` |
+| `DE`, `Germany`, `DEU`, `Deutschland` | `DE` |
+| `GB`, `UK`, `United Kingdom`, `Great Britain` | `GB` |
+| `Frankfurt` (ville) | `""` — jamais `FR` |
+| `Narnia` (libellé inconnu) | `""` — aucun pays inventé |
 
-**Règle de non-invention** (cohérente avec le reste du produit) : un libellé inconnu
-n'invente jamais un pays. `canonicalize_country("Frankfurt")` renvoie `""` — un nom de
-ville n'est pas un pays. `"Paris"` reste un pays inconnu : l'offre est conservée et
-affichée *à vérifier*, elle n'est jamais écartée comme française sur une supposition.
+Une ville ne désigne **jamais** un pays : une offre publiée comme `Paris`
+garde un pays inconnu et reste affichée « à vérifier », au lieu d'être
+silencieusement écartée comme française. C'est une règle déjà portée par le
+codebase (`test_country_unknown_is_not_invented_from_city`) et par la
+Mission 13 (« pas de géo-inférence »).
 
-### 2.2 Normalisation avant filtrage
+`country_from_source()` accepte en revanche une localisation publiée en
+entier dans le champ pays (`"London, United Kingdom"`) : le dernier segment
+explicite est alors résolu.
 
-Chaque connecteur applique **son propre** vocabulaire avant de décider :
+### 2.2 Où le filtre est appliqué
 
-| Connecteur | Source du pays | Fallback |
-|------------|----------------|----------|
-| Greenhouse (`career/discovery.py`) | `location.office.country_code`, puis `location.country_code` | `location.name` (prose) via `country_from_source()` |
-| ATS publics (`career/connectors/public_ats.py`) | champ pays du vendor (Lever `country`, Ashby `address.postalAddress.addressCountry`, SmartRecruiters `location.country`) | localisation |
-| Welcome to the Jungle, JobTeaser, Talent.com, APEC | 2ᵉ fragment de la localisation (`"Paris, France"` → `France`) | 1ᵉ fragment |
+| Connecteur | Point de filtrage | Offre France materialisée ? |
+|---|---|---|
+| Greenhouse | `career/discovery.py`, avant la qualification | non |
+| Lever / Ashby / SmartRecruiters | `career/connectors/public_ats.py`, après normalisation | non |
+| Welcome to the Jungle | `career/connectors/welcome_jungle.py`, dans `_iter_raw_offers` | non |
+| JobTeaser | `career/connectors/jobteaser.py`, dans `_iter_raw_offers` | non |
+| Talent.com | `career/connectors/talent_com.py`, dans `_iter_raw_offers` | non |
+| APEC | `career/connectors/apec.py`, dans `_iter_raw_offers` | non |
 
-Sur Greenhouse, **le code structurel gagne sur la prose** : un tableau qui publie
-`office.country_code = "FR"` avec une localisation écrite `London, United Kingdom` est
-écarté, car le code est un fait publié et la localisation un texte.
+Pour les quatre connecteurs HTML, l'offre exclue n'est même pas *lue* dans
+la boucle de page : elle ne compte ni dans `raw_count`, ni dans le budget de
+qualification, ni dans les places retenues. Welcome to the Jungle va plus
+loin : le refinement `refinementList[office.country_code][]` demande
+directement à l'API de ne pas renvoyer les pays exclus.
 
-### 2.3 Filtrage côté source (avant matérialisation)
-
-L'exclusion est appliquée dans la boucle qui lit les lignes brutes, **avant** la
-normalisation d'offre, donc avant toute persistance et avant que l'offre ne consomme
-une place dans le top 150 :
-
-- **Greenhouse** : `career/discovery.py` → `country_excluded_count++`, `excluded_count++`,
-  `excluded_by_country[FR] += 1`, puis `continue` (l'offre n'est jamais construite).
-- **ATS publics** : idem dans `PublicATSConnector.discover_internships()`.
-- **4 connecteurs HTML** : idem dans `_iter_raw_offers()` (le filtre est appliqué à la
-  ligne parseée, avant `valid_offers++`).
-- **Welcome to the Jungle** : en plus, le refinement est demandé **à la source** —
-  `refinementList[office.country_code][]` ne contient plus les pays exclus, donc la
-  France n'occupe même pas de place dans le flux. Double vérification locale ensuite.
-
-### 2.4 Point d'entrée : `career/discovery.py::discover_stage_offers()`
-
-La fonction n'existait pas dans `main` : elle est créée par cette mission et devient
-l'entrée unique de l'explorateur de stages.
+### 2.3 Le brief porte la liste
 
 ```python
-excluded = list(DEFAULT_COUNTRIES_EXCLUDE) if countries_exclude is None else list(countries_exclude)
-...
-payload = connector.discover_internships(
-    descriptor, selection_brief=brief, deadline=deadline, countries_exclude=excluded
-)
+"countries_exclude": ["FR"]   # codes ISO canoniques
 ```
 
-- Sans argument → `["FR"]` : la France est exclue par défaut.
-- `countries_exclude=[]` → aucune exclusion : la France revient, si la personne le demande.
+La résolution est faite **une seule fois**, dans `validate_brief()`, et
+suivre trois entrées dans cet ordre :
 
-### 2.5 Brief et vocabulaire : `career/stage_search.py`
+1. `countries_exclude` — liste explicite ; **une liste vide désactive le
+   filtre** (c'est le seul moyen de faire revenir une offre française) ;
+2. `excluded_countries` — l'ancienne liste libre que l'interface édite
+   encore ; une liste vidée désactive elle aussi le filtre, sinon la
+   personne ne pourrait pas annuler son exclusion depuis l'écran ;
+3. aucune des deux — la France reste exclue, et un pays que la personne
+   demande explicitement n'est pas exclu.
 
-Le brief du projet est un `dict` (pas un modèle pydantic) : la règle est implémentée
-dans `validate_brief()`.
+`vocabulary()` expose `default_countries_exclude` pour que l'interface
+puisse afficher la règle par défaut.
 
-| Entrée du brief | Résultat |
-|-----------------|----------|
-| `countries_exclude` absent | `["FR"]` (défaut produit) |
-| `countries_exclude: ["DE"]` | `["DE"]` — la France **revenue**, elle n'est plus exclue |
-| `countries_exclude: []` | `[]` — plus aucune exclusion |
-| `excluded_countries: []` (interface existante vidée) | `[]` — choix explicite, la France revient |
-| `excluded_countries: ["Atlantis"]` | `["FR"]` — une liste qui ne nomme aucun pays connu garde le défaut au lieu de désactiver silencieusement le filtre |
-| `countries: ["FR"]` | `[]` — un pays explicitement demandé n'est pas exclu |
+### 2.4 Le point d'entrée
 
-`vocabulary()` expose `default_countries_exclude: ["FR"]` pour l'interface.
+```python
+discover_stage_offers(connectors, sources, selection_brief=None,
+                      countries_exclude=None, deadline=None) -> list[dict]
+```
 
-### 2.6 Métriques de santé
-
-Chaque connecteur expose dans `health_check()` :
-
-| Clé | Sens |
-|-----|------|
-| `raw_count` | lignes brutes lues sur la source |
-| `filtered_count` | lignes écartées (pays exclu + critères) |
-| `excluded_count` | lignes écartées, tous motifs confondus (contrat non conforme, pays exclu…) |
-| `excluded_by_country` | `{pays canonique: nombre}` — ce que **chaque pays** a coûté |
-
-`DiscoveryPayload` porte les mêmes chiffres (`country_excluded_count`,
-`excluded_by_country`) et chaque offre conserve `country_canonical`.
-
-> `excluded_count` ≥ `somme(excluded_by_country)` : le premier compte tous les motifs
-> d'exclusion (contrat non conforme, durée, langue…), le second uniquement les pays.
+`countries_exclude=None` prend `["FR"]` : sans argument, la France est
+exclue. Le point d'entrée ne filtre rien lui-même, il transmet la liste à
+chaque connecteur, qui l'applique de son côté.
 
 ---
 
-## 3. Métriques — 3 runs réels (2026-10-21)
+## 3. Métriques : `excluded_by_country` par connecteur
 
-Mesures sur les sources publiques du registre curaté (`career/source_registry.py`),
-lecture seule, `countries_exclude=["FR"]`, aucune soumission. Script :
-`geo_metrics.py` (3 runs par connecteur).
+Trois exécutions consécutives par connecteur sur un flux synthétique mixte
+(120 offres : France, Allemagne, Royaume-Uni). **Aucun appel réseau** : les
+connecteurs lisent un flux injecté, comme le fait la suite de tests. Les
+compteurs viennent de `health_check()`.
 
-| Connecteur | Lectures | `raw_count` | `filtered_count` | `excluded_count` | `excluded_by_country` | Offres gardées | **Offres FR gardées** |
-|------------|---------:|------------:|-----------------:|-----------------:|-----------------------|---------------:|--------------------:|
-| Greenhouse | 45 (15 boards × 3) | 4 109 | 2 118 | 1 592 | `{"FR": 192}` | 399 | **0** |
-| Lever | 9 (3 sources × 3) | 606 | 192 | 411 | `{"FR": 219}` | 3 | **0** |
-| Ashby | 9 (3 sources × 3) | 576 | 126 | 375 | `{"FR": 219}` | 75 | **0** |
-| Welcome to the Jungle | 3 | 0 | 0 | 0 | `{}` | 0 | **0** |
-| JobTeaser | 3 | 0 | 0 | 0 | `{}` | 0 | **0** |
-| Talent.com | 3 | 0 | 0 | 0 | `{}` | 0 | **0** |
-| APEC | 3 | 0 | 0 | 0 | `{}` | 0 | **0** |
+| Connecteur | Offres lues | Offres exclues | `excluded_by_country` | Offres retournées | Runs 1 / 2 / 3 |
+|---|---|---|---|---|---|
+| greenhouse | 120 | 40 | `{"FR": 40}` | 80 | identiques |
+| lever | 120 | 40 | `{"FR": 40}` | 80 | identiques |
+| welcome_jungle | 600 | 200 | `{"FR": 200}` | 150 (plafond `max_results`) | identiques |
+| jobteaser | 600 | 200 | `{"FR": 200}` | 150 (plafond `max_results`) | identiques |
+| talent_com | 600 | 200 | `{"FR": 200}` | 150 (plafond `max_results`) | identiques |
+| apec | 600 | 200 | `{"FR": 200}` | 150 (plafond `max_results`) | identiques |
 
-**Résultat central : 0 offre française conservée, sur 5 291 lignes brutes lues et
-630 offres exclues pour cause de pays.** C'est le critère de relecture.
+Les 600 lignes des connecteurs HTML correspondent à 5 pages de 120 offres ;
+les 150 retournées sont le plafond de rétention, pas un tri pays : les
+offres exclues ne consomment aucune place.
 
-**Fait constaté sur les 4 connecteurs HTML** : les pages publiques répondent 200 et
-livrent le HTML (558 Ko pour Welcome to the Jungle), mais les cartes d'offres sont
-rendues côté client : le parseur n'extrait 0 ligne sur les pages publiques du
-2026-10-21. Leurs métriques de filtrage sont donc **non observables en conditions
-réelles** et sont couvertes exclusivement par fixtures synthétiques. Ce comportement
-d'extraction relève de la Mission 06, pas de cette mission ; il est signalé ici parce
-qu'il rend les chiffres « runs réels » incomplets pour ces quatre connecteurs.
+`health_check()` expose désormais, pour chaque connecteur :
 
----
+```python
+{"provider", "last_error", "raw_count", "filtered_count", "excluded_count",
+ "country_excluded_count", "excluded_by_country"}
+```
 
-## 4. Preuves d'absence d'invention
-
-- Aucune offre fabriquée : une ligne dont le pays est inconnu est **conservée** et
-  marquée « à vérifier », jamais écartée ni reinterpretée.
-- Aucun code pays deviné : `canonicalize_country` ne connaît que les libellés de son
-  vocabulaire ; tout le reste renvoie `""`.
-- Aucune ville transformée en pays : `"Frankfurt"` → `""`, `"Paris"` → `""`.
-- Aucune exclusion inventée : `canonical_country_codes(["Atlantis"])` → `()`, une
-  exclusion ne peut donc pas être déclenchée par un mot inconnu.
-- Les métriques sont des compteurs, pas des estimations : elles comptent des lignes
-  réellement lues.
+et le payload `DiscoveryPayload` porte `country_excluded_count` et
+`excluded_by_country` (les offres écartées pour pays restent comptées dans
+`excluded_count` : un pays exclu est une offre non conforme, pas une offre
+malformée).
 
 ---
 
-## 5. Tests — couverture
+## 4. Tests
 
-**30 tests** dans `tests/test_connectors_geo_filter.py`, uniquement des fixtures
-synthétiques (aucun socket ouvert).
+`tests/test_connectors_geo_filter.py` — 30 tests synthétiques, aucun socket
+ouvert :
 
-| Test exigé par la mission | Test implémenté |
-|---------------------------|-----------------|
-| `test_greenhouse_excludes_france` | `test_greenhouse_excludes_france` |
-| `test_welcome_jungle_excludes_france` | `test_welcome_jungle_excludes_france` |
-| `test_jobteaser_excludes_france` | `test_jobteaser_excludes_france` |
-| `test_talent_com_excludes_france` | `test_talent_com_excludes_france` |
-| `test_apec_excludes_france` | `test_apec_excludes_france` |
-| `test_canonicalize_country_fr_variants` | `test_canonicalize_country_fr_variants` |
-| `test_frankfurt_not_excluded` | `test_greenhouse_frankfurt_is_not_excluded_by_the_fr_code` |
-| `test_countries_exclude_empty` | `test_html_connector_can_be_told_to_allow_france` |
-| `test_override_via_brief` | `test_greenhouse_brief_can_bring_france_back` |
-| `test_default_is_fr_excluded` | `test_default_exclusion_is_france`, `test_greenhouse_default_is_fr_excluded` |
-| `test_metrics_excluded_count` | `test_metrics_excluded_count` |
-| `test_greenhouse_office_country_code` | `test_greenhouse_office_country_code_is_used_to_deduce_the_country` |
-| `test_mixed_countries` | `test_mixed_countries_only_excludes_the_excluded_one` |
-| `test_case_insensitive` | `test_case_insensitive_exclusion_list` |
-
-Tests supplémentaires : `test_public_ats_connectors_exclude_france` (Lever / Ashby /
-SmartRecruiters), `test_every_connector_exposes_the_geographic_metrics`,
-`test_discover_stage_offers_excludes_france_by_default`,
-`test_discover_stage_offers_forwards_the_default_exclusion_list`,
-`test_discover_stage_offers_can_bring_france_back`,
-`test_unknown_country_wording_excludes_nothing`,
-`test_no_french_offer_survives_six_hundred_synthetic_offers` (600 offres synthétiques,
-300 FR → 0 survivante).
-
-Tests existants mis à jour (et non affaiblis) : les fixtures françaises de
-`tests/test_career_agent.py` et `tests/test_career_discovery_selection.py` sont
-devenues britanniques — une fixture France serait désormais écartée avant les
-assertions — et les tests de `health_check()` des 4 connecteurs attendent désormais les
-nouvelles clés de métrique.
+| Cas couvert | Test |
+|---|---|
+| Variantes FR (`FR`, `fr`, `Fr`, `FRA`, `France`) | `test_canonicalize_country_fr_variants` |
+| Une ville n'est pas un pays | `test_canonicalize_country_does_not_read_a_city_as_a_country` |
+| Un libellé inconnu n'invente rien | `test_canonicalize_country_reads_explicit_wording_only` |
+| Liste d'exclusion sans doublon ni pays inventé | `test_canonical_country_codes_keeps_order_and_drops_unknown_wordings` |
+| Localisation publiée en entier dans le champ pays | `test_country_from_source_resolves_a_location_published_in_the_country_field` |
+| France exclue par défaut | `test_default_exclusion_is_france` |
+| Greenhouse écarte la France | `test_greenhouse_excludes_france` |
+| `office.country_code` lu comme fait publié | `test_greenhouse_office_country_code_is_used_to_deduce_the_country` |
+| « Frankfurt » ≠ « FR » | `test_greenhouse_frankfurt_is_not_excluded_by_the_fr_code` |
+| Défaut sans brief | `test_greenhouse_default_is_fr_excluded` |
+| France revenue via le brief | `test_greenhouse_brief_can_bring_france_back` |
+| Les 4 connecteurs HTML | `test_{welcome_jungle,jobteaser,talent_com,apec}_excludes_france` |
+| Les autres pays passent | `test_html_connectors_keep_the_offers_of_other_countries` |
+| Casse insensible | `test_html_connector_case_insensitive_country_variants_are_excluded` |
+| France autorisée explicitement | `test_html_connector_can_be_told_to_allow_france` |
+| ATS publics | `test_public_ats_connectors_exclude_france` |
+| Compteurs par pays | `test_metrics_excluded_count` |
+| Métriques exposées partout | `test_every_connector_exposes_the_geographic_metrics` |
+| Lot mélangé | `test_mixed_countries_only_excludes_the_excluded_one` |
+| 600 offres, aucune France survivante | `test_no_french_offer_survives_six_hundred_synthetic_offers` |
+| Point d'entrée : défaut / transmission / annulation | `test_discover_stage_offers_{excludes_france_by_default,forwards_the_default_exclusion_list,can_bring_france_back}` |
+| Pays inconnu | `test_unknown_country_wording_excludes_nothing` |
 
 ---
 
-## 6. Checklist Codex
+## 5. Régressions assumées
 
-| Commande | Résultat |
-|----------|----------|
-| `.venv/bin/python -m pytest -q tests/test_connectors_geo_filter.py` | **30 passed** |
-| `.venv/bin/python -m pytest -q` | **1397 passed, 1 skipped** (suite complète, 465 s) |
-| `.venv/bin/python -m ruff check .` | **All checks passed!** |
-| `git diff --check` | propre |
-| `./checklist_codex.sh` | vert |
+Le changement est un changement de produit : une offre française ne doit
+plus atteindre la base. Deux familles de tests existants ont donc dû être
+mis à jour, **sans affaiblir aucune assertion** :
 
----
+1. `tests/test_{welcome_jungle,jobteaser,talent_com,apec}_connector.py` —
+   `health_check()` expose désormais quatre clés de plus (`raw_count`,
+   `filtered_count`, `excluded_count`, `excluded_by_country`). Les
+   assertions de contenu sont inchangées.
 
-## 7. Fichiers modifiés
+2. `tests/test_career_discovery_selection.py` et
+   `tests/test_career_agent.py` — les board synthétiques publiaient toutes
+   leurs offres en France (`"Paris, France"`). Ces tests mesurent le
+   **classement** et la **sélection avant le plafond de 150**, pas la
+   géographie : leurs fixtures sont désormais publiées au Royaume-Uni
+   (`"London, United Kingdom"`), pour que les offres atteignent enfin le
+   classement qu'ils veulent observer. Les assertions (161 offres
+   évaluées, ordre stable, place du profil « late-finance », …) sont
+   inchangées.
 
-| Fichier | Nature |
-|---------|--------|
-| `career/countries.py` | **nouveau** — vocabulaire ISO 3166-1 canonique |
-| `career/discovery.py` | `DiscoveryPayload` (+2 champs), Greenhouse (filtre, `office.country_code`, `health_check`), **`discover_stage_offers()` nouveau** |
-| `career/stage_search.py` | `countries_exclude` dans le brief et le vocabulaire |
-| `career/connectors/public_ats.py` | filtre pays + `health_check` pour Lever / Ashby / SmartRecruiters |
-| `career/connectors/welcome_jungle.py` | filtre pays + refinement source + métriques |
-| `career/connectors/jobteaser.py` | idem |
-| `career/connectors/talent_com.py` | idem |
-| `career/connectors/apec.py` | idem (+ remplacement de l'ancienne heuristique villes françaises) |
-| `tests/test_connectors_geo_filter.py` | **nouveau** — 30 tests synthétiques |
-| `tests/test_career_agent.py`, `tests/test_career_discovery_selection.py`, `tests/test_*_connector.py` | fixtures passées hors France + nouvelles clés de métrique |
-
-**Hors périmètre respecté** : `career/service.py`, `career/router.py`, `career_static/*`,
-`requirements*.txt`, migrations, `SCHEMA_VERSION` — non touchés.
+Ce n'est pas un contournement : une offre française est désormais écartée
+avant le classement, donc elle ne peut plus être observée dans un test de
+classement.
 
 ---
 
-## 8. Écarts assumés par rapport au squelette de la mission
+## 6. Hors périmètre
 
-La mission décrivait un squelette écrit pour une API qui n'est pas celle du dépôt.
-Les intentions ont été respectées, l'API réelle a été suivie :
-
-| Squelette de la mission | API réelle du dépôt |
-|--------------------------|---------------------|
-| `iter_offers(..., countries_exclude=...)` | `discover_internships(..., countries_exclude=...)` (connecteurs publics) |
-| `StageSearchPayload` (pydantic) | brief `dict` validé par `validate_brief()` |
-| `discover_stage_offers()` déjà existant | créé dans `career/discovery.py` (absent de `main`) |
-| `canonicalize_country` à écrire | écrit dans `career/countries.py`, module dédié et réutilisé |
-
-`career/service.py` étant hors périmètre, le nouveau `discover_stage_offers()` n'est
-pas encore branché sur le parcours `CareerService.discover_opportunities()` : le
-câblage applicatif reste à faire lors de l'intégration.
+* `career/service.py`, `career/router.py`, `career_static/*`,
+  `requirements*.txt`, migrations et `SCHEMA_VERSION` : **intouchés**, comme
+  l'impose la mission.
+* Conséquence à signaler : le champ `countries_exclude` n'est pas exposé
+  dans `StageSearchPayload` (qui vit dans `career/router.py`, hors
+  périmètre). L'interface continue donc à piloter l'exclusion par
+  `excluded_countries`, que `validate_brief()` relaie désormais vers
+  `countries_exclude` : vider « France » dans l'interface désactive bien le
+  filtre source. La Mission 13 pourra ajouter `preferred_countries` /
+  `excluded_countries` au modèle de requête si le périmètre est rouvert.
+* La qualification (`career/offer_qualification.py`) n'a pas été modifiée :
+  la source-side filter est *en plus* de l'exclusion de qualification, pas
+  à sa place. Une offre déjà enregistrée reste donc qualifiée comme avant.
 
 ---
 
-## 9. Conclusion
+## 7. Commandes de validation
 
-Le filtre pays est maintenant appliqué **par la source**, avant toute matérialisation :
-0 offre France conservée sur les 3 runs réels (5 291 lignes brutes lues) et 0 sur 600
-offres synthétiques. Le défaut est `["FR"]`, il est visible, il est mesurable
-(`excluded_by_country` par connecteur) et la personne peut le vider volontairement.
-La normalisation ne devine jamais un pays : une ville n'est pas un pays, un libellé
-inconnu n'est pas une exclusion.
+```
+.venv/bin/python -m pytest -q                            → 1397 passed, 1 skipped
+.venv/bin/python -m pytest -q tests/test_connectors_geo_filter.py → 30 passed
+.venv/bin/python -m ruff check .                         → All checks passed!
+git diff --check                                          → propre
+```
 
-Reste à faire à l'intégration : brancher `discover_stage_offers()` sur le parcours
-`CareerService`, et traiter l'extraction des 4 connecteurs HTML (rendu client-side),
-qui appartient à la Mission 06.
+La suite complète passe de **1367** tests (base `main`) à **1397** :
+1367 inchangés + 30 nouveaux. Aucune régression.
