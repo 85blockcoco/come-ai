@@ -20,10 +20,10 @@ import urllib.request
 from typing import Any, Callable, Protocol
 
 from ..discovery import DiscoveryPayload, PublicSourceError, _location_parts, source_html_to_text
-from ..exploration import EXPLORATION_MAX_RESULTS, criteria_admit, ranking_key, classify_internship
-from ..offer_qualification import qualify_offer
+from ..exploration import EXPLORATION_MAX_RESULTS, admit_offer, ranking_key
 from ..scoring import classify_job_family
-from ..stage_search import default_brief, score_brief_match, validate_brief
+from ..source_fields import attach_source_material
+from ..stage_search import default_brief, validate_brief
 from ..models import clean_text
 
 
@@ -179,34 +179,20 @@ class PublicATSConnector:
                     invalid += 1
                     continue
                 evaluated += 1
-                classification = classify_internship(job)
-                qualification = qualify_offer(
-                    job,
-                    allowed_contract_types=brief.get("contract_types"),
-                    allowed_start_months=brief.get("start_months"),
-                    minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
-                    excluded_countries=brief.get("excluded_countries"),
-                    excluded_cities=brief.get("excluded_cities"),
-                    require_known_location=brief.get("require_known_location", False),
-                ).to_dict()
-                job["qualification"] = qualification
-                target = qualification["target_status"]
+                # The admission layer decides; the connector only transmits.
+                verdict = admit_offer(job, brief)
+                target = verdict["target_status"]
                 confirmed += int(target == "conforming")
                 uncertain += int(target == "to_verify")
                 excluded += int(target == "non_conforming")
-                if target == "non_conforming":
+                if verdict["status"] == "excluded":
                     continue
-                if (not job.get("official_url") or
-                        (qualification["contract_type"] == "unknown" and not classification.get("evidence"))):
-                    filtered += 1
-                    continue
-                match = score_brief_match(brief, job)
-                if not criteria_admit(match, job, brief):
+                if verdict["status"] != "admitted":
                     filtered += 1
                     continue
                 relevant += 1
-                job["internship_classification"] = classification
-                ranked.append((ranking_key(job, match), {"job": job, "match": match}))
+                job = verdict["job"]
+                ranked.append((ranking_key(job, verdict["match"]), {"job": job, "match": verdict["match"]}))
         selected = heapq.nsmallest(self.max_results, ranked, key=lambda item: item[0])
         return DiscoveryPayload(
             jobs=tuple(item[1]["job"] for item in selected), verified_at=self.clock(),
@@ -256,9 +242,25 @@ class LeverConnector(PublicATSConnector):
 
     def _normalise_one(self, source: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:
         categories = raw.get("categories") if isinstance(raw.get("categories"), dict) else {}
-        return _common_job(self.provider, source, raw.get("id"), raw.get("text"),
+        job = _common_job(self.provider, source, raw.get("id"), raw.get("text"),
                            raw.get("hostedUrl"), raw.get("applyUrl"), raw.get("descriptionPlain"),
                            categories.get("location"), raw.get("country"), categories.get("commitment"), "")
+        # Every published field is transmitted under its own name; the
+        # description itself is transmitted as ``description_original``.
+        return attach_source_material(job, self.provider, {
+            "id": raw.get("id"),
+            "text": raw.get("text"),
+            "createdAt": raw.get("createdAt"),
+            "updatedAt": raw.get("updatedAt"),
+            "hostedUrl": raw.get("hostedUrl"),
+            "applyUrl": raw.get("applyUrl"),
+            "country": raw.get("country"),
+            "workplaceType": raw.get("workplaceType"),
+            "categories": categories,
+            "openingPlain": raw.get("openingPlain"),
+            "additionalPlain": raw.get("additionalPlain"),
+            "lists": raw.get("lists"),
+        })
 
 
 class AshbyConnector(PublicATSConnector):
@@ -292,9 +294,25 @@ class AshbyConnector(PublicATSConnector):
         country = postal.get("addressCountry")
         job_url = raw.get("jobUrl")
         fallback_id = urllib.parse.urlsplit(str(job_url or "")).path.rstrip("/").rsplit("/", 1)[-1]
-        return _common_job(self.provider, source, raw.get("id") or fallback_id, raw.get("title"),
+        job = _common_job(self.provider, source, raw.get("id") or fallback_id, raw.get("title"),
                            job_url, raw.get("applyUrl"), raw.get("descriptionPlain"),
                            location, country, raw.get("employmentType"), raw.get("publishedAt"))
+        return attach_source_material(job, self.provider, {
+            "id": raw.get("id"),
+            "title": raw.get("title"),
+            "publishedAt": raw.get("publishedAt"),
+            "employmentType": raw.get("employmentType"),
+            "workplaceType": raw.get("workplaceType"),
+            "isRemote": raw.get("isRemote"),
+            "isListed": raw.get("isListed"),
+            "department": raw.get("department"),
+            "team": raw.get("team"),
+            "secondaryLocations": raw.get("secondaryLocations"),
+            "location": raw.get("location"),
+            "address": address,
+            "jobUrl": raw.get("jobUrl"),
+            "applyUrl": raw.get("applyUrl"),
+        })
 
 
 class SmartRecruitersConnector(PublicATSConnector):
@@ -339,10 +357,52 @@ class SmartRecruitersConnector(PublicATSConnector):
         # The documented list response's `ref` is an official API detail URL;
         # a human apply link is used when a source supplies one directly.
         official_url = raw.get("applyUrl") or raw.get("ref")
-        return _common_job(self.provider, source, raw.get("id"), raw.get("name"), official_url,
-                           raw.get("applyUrl"), raw.get("description"), location.get("city"),
+        sections = _smartrecruiters_sections(raw)
+        description = _smartrecruiters_description(sections) or raw.get("description")
+        job = _common_job(self.provider, source, raw.get("id"), raw.get("name"), official_url,
+                           raw.get("applyUrl"), description, location.get("city"),
                            location.get("country"), contract.get("label"), raw.get("releasedDate"),
                            company_name=company.get("name"))
+        return attach_source_material(job, self.provider, {
+            "id": raw.get("id"),
+            "name": raw.get("name"),
+            "requisitionId": raw.get("requisitionId"),
+            "postedDate": raw.get("postedDate"),
+            "releasedDate": raw.get("releasedDate"),
+            "location": location,
+            "typeOfEmployment": contract,
+            "department": raw.get("department"),
+            "company": company,
+            "applyUrl": raw.get("applyUrl"),
+            "ref": raw.get("ref"),
+            "jobAd.sections": sections,
+        })
+
+
+def _smartrecruiters_sections(raw: dict[str, Any]) -> dict[str, Any]:
+    """Return the published sections of a SmartRecruiters advertisement."""
+    job_ad = raw.get("jobAd")
+    if not isinstance(job_ad, dict):
+        return {}
+    sections = job_ad.get("sections")
+    return sections if isinstance(sections, dict) else {}
+
+
+def _smartrecruiters_description(sections: dict[str, Any]) -> str:
+    """Compose the description from the published sections, in published order.
+
+    The sections are the prerequisites of the advertisement; they are read as
+    published, never summarised or rewritten.
+    """
+    parts: list[str] = []
+    for name in ("companyDescription", "jobDescription", "qualifications", "additionalInformation"):
+        value = sections.get(name)
+        if not isinstance(value, str) or not value.strip():
+            continue
+        text = source_html_to_text(value)
+        if text:
+            parts.append(text)
+    return "\n\n".join(parts)
 
 
 def _common_job(provider: str, source: dict[str, Any], job_id: Any, title: Any, official_url: Any,

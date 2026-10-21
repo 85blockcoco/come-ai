@@ -1,0 +1,26 @@
+{
+  "label": "synthetic APEC cards; shaped after the public search markup, not copied from a live page",
+  "provider": "apec",
+  "cards": [
+    {
+      "title": "Stage Analyste Financier Synthetic",
+      "company": "Synthetic Banque",
+      "location": "Londres, Royaume-Uni",
+      "contract_type": "STAGE",
+      "url": "https://www.apec.fr/emploi/stage-analyste-financier-synthetic-londres",
+      "description": "<p>Stage de 6 mois en analyse financière. Master Finance requis. Durée : 6 mois.</p>",
+      "attributes": {"data-offer-id": "synthetic-offer-001"},
+      "time": "2026-10-08T09:00:00Z"
+    },
+    {
+      "title": "Stage Contradiction Synthetic",
+      "company": "Synthetic Banque",
+      "location": "Londres, Royaume-Uni",
+      "contract_type": "STAGE",
+      "url": "https://www.apec.fr/emploi/stage-contradiction-synthetic-londres",
+      "description": "<p>Ce poste est en CDI, pas un stage. La source le publie pourtant comme un stage.</p>",
+      "attributes": {"data-offer-id": "synthetic-offer-002"},
+      "time": "2026-10-09T09:00:00Z"
+    }
+  ]
+}

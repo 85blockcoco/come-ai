@@ -1,0 +1,26 @@
+{
+  "label": "synthetic Talent.com cards; shaped after the public search markup, not copied from a live page",
+  "provider": "talent_com",
+  "cards": [
+    {
+      "title": "Synthetic Financial Analyst Intern",
+      "company": "Synthetic Group",
+      "location": "London, United Kingdom",
+      "contract_type": "Internship",
+      "url": "https://www.talent.com/job/financial-analyst-intern-london",
+      "description": "<p>Financial planning and analysis internship. Six-month duration. Bachelor's degree minimum.</p>",
+      "attributes": {"data-job-id": "synthetic-job-001", "data-rank": "1"},
+      "time": "2026-10-06T15:57:18Z"
+    },
+    {
+      "title": "Synthetic Contradicting Intern",
+      "company": "Synthetic Group",
+      "location": "London, United Kingdom",
+      "contract_type": "Internship",
+      "url": "https://www.talent.com/job/contradicting-intern-london",
+      "description": "<p>This is a permanent position (CDI), not an internship. The board publishes it as an internship.</p>",
+      "attributes": {"data-job-id": "synthetic-job-002", "data-rank": "2"},
+      "time": "2026-10-07T15:57:18Z"
+    }
+  ]
+}

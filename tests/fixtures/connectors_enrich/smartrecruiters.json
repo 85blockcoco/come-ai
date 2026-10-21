@@ -1,0 +1,53 @@
+{
+  "label": "synthetic SmartRecruiters payload; shaped after the public posting API, not copied from a live board",
+  "provider": "smartrecruiters",
+  "payload": {
+    "limit": 10,
+    "offset": 0,
+    "totalFound": 2,
+    "content": [
+      {
+        "id": "synthetic-sr-001",
+        "name": "Synthetic Finance Intern",
+        "requisitionId": "REQ-8842",
+        "postedDate": "2026-10-03T08:00:00Z",
+        "releasedDate": "2026-10-01T09:00:00Z",
+        "location": {"city": "London", "region": "London", "country": "GB"},
+        "typeOfEmployment": {"id": "7", "label": "Internship"},
+        "department": {"id": "12", "label": "Corporate Finance"},
+        "company": {"identifier": "syntheticboard", "name": "Synthetic Group"},
+        "applyUrl": "https://careers.smartrecruiters.com/SyntheticGroup/743999999999",
+        "ref": "https://api.smartrecruiters.com/api-v1/companies/syntheticboard/postings/synthetic-sr-001",
+        "jobAd": {
+          "sections": {
+            "companyDescription": "<p>Synthetic Group is a synthetic employer used by the tests.</p>",
+            "jobDescription": "<p>Join our Corporate Finance team for a six-month placement.</p>",
+            "qualifications": "<ul><li>Bachelor's degree in Finance or Economics</li><li>Excel mastery</li></ul>",
+            "additionalInformation": "<p>Start date: 2 March 2027. Duration: 6 months.</p>"
+          }
+        }
+      },
+      {
+        "id": "synthetic-sr-002",
+        "name": "Synthetic Contradicting Intern",
+        "requisitionId": "REQ-8843",
+        "postedDate": "2026-10-04T08:00:00Z",
+        "releasedDate": "2026-10-02T09:00:00Z",
+        "location": {"city": "London", "region": "London", "country": "GB"},
+        "typeOfEmployment": {"id": "7", "label": "Internship"},
+        "department": {"id": "12", "label": "Corporate Finance"},
+        "company": {"identifier": "syntheticboard", "name": "Synthetic Group"},
+        "applyUrl": "https://careers.smartrecruiters.com/SyntheticGroup/743999999998",
+        "ref": "https://api.smartrecruiters.com/api-v1/companies/syntheticboard/postings/synthetic-sr-002",
+        "jobAd": {
+          "sections": {
+            "companyDescription": "<p>Synthetic Group is a synthetic employer used by the tests.</p>",
+            "jobDescription": "<p>This is a permanent position (CDI), not an internship. The board publishes it as an internship.</p>",
+            "qualifications": "<ul><li>Bachelor's degree in Finance or Economics</li></ul>",
+            "additionalInformation": ""
+          }
+        }
+      }
+    ]
+  }
+}

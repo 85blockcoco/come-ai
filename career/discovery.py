@@ -30,8 +30,8 @@ from workspace_core import UserFacingError
 from .models import canonical_url, clean_text, normalized_text
 from .scoring import classify_job_family
 from .stage_search import default_brief, score_brief_match, validate_brief
-from .exploration import classify_internship, criteria_admit
-from .offer_qualification import qualify_offer
+from .exploration import admit_offer
+from .source_fields import attach_source_material
 
 
 GREENHOUSE_HOST = "boards-api.greenhouse.io"
@@ -296,6 +296,21 @@ def _location_parts(value: Any, *, preserve_multi_locations: bool = False) -> tu
     return clean_text(location, limit=160), ""
 
 
+def _iso_date(value: Any) -> str:
+    """Return the date of an ISO 8601 timestamp published by the source.
+
+    A timestamp the source did not label as a date, or a malformed one, is
+    not a date: the calendar stays unknown instead of being invented.
+    """
+    text = clean_text(value, limit=80)
+    if not text:
+        return ""
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).date().isoformat()
+    except ValueError:
+        return ""
+
+
 def _explicit_employment_type(raw: dict[str, Any]) -> str:
     """Read only named ATS contract metadata and explicitly recognized values.
 
@@ -412,7 +427,7 @@ class GreenhouseJobBoardConnector:
                 location = raw.get("location") if isinstance(raw.get("location"), dict) else {}
                 city, country = _location_parts(location.get("name"), preserve_multi_locations=internships_only)
                 description = source_html_to_text(raw.get("content"))
-                job = {
+                job = attach_source_material({
                     "company": board.company,
                     "title": title,
                     "source_name": "greenhouse",
@@ -421,14 +436,16 @@ class GreenhouseJobBoardConnector:
                     "city": city,
                     "country": country,
                     # ``updated_at`` is source maintenance metadata, not a
-                    # posting or internship date.  We deliberately leave the
-                    # calendar unknown unless the ATS exposes it structurally.
-                    "posted_date": "",
-                    "deadline_date": "",
+                    # posting date.  ``first_published`` is the date the
+                    # board itself published the posting, so it is the only
+                    # field used for the publication date.
+                    "posted_date": _iso_date(raw.get("first_published")),
+                    "deadline_date": _iso_date(raw.get("application_deadline")),
                     "start_date": "",
                     "end_date": "",
                     "duration_months": None,
                     "source_status": "open",
+                    "source_verified": True,
                     "employment_type": _explicit_employment_type(raw) if internships_only else "",
                     "role_level": "",
                     "requirements": "",
@@ -436,48 +453,52 @@ class GreenhouseJobBoardConnector:
                     "eligibility_requirement": "",
                     "description_original": description,
                     "job_family": classify_job_family(title, description),
-                }
+                }, "greenhouse", {
+                    "id": raw.get("id"),
+                    "requisition_id": raw.get("requisition_id"),
+                    "internal_job_id": raw.get("internal_job_id"),
+                    "first_published": raw.get("first_published"),
+                    "updated_at": raw.get("updated_at"),
+                    "application_deadline": raw.get("application_deadline"),
+                    "company_name": raw.get("company_name"),
+                    "language": raw.get("language"),
+                    "location": location.get("name"),
+                    "offices": raw.get("offices"),
+                    "departments": raw.get("departments"),
+                    "education": raw.get("education"),
+                    "metadata": raw.get("metadata"),
+                })
                 evaluated_count += 1
-                match = score_brief_match(brief, job)
+                score = None
+                status_rank = 0
+                education_rank = 2
                 if internships_only:
-                    classification = classify_internship(job)
-                    qualification = qualify_offer(
-                        {**job, "source_verified": True},
-                        allowed_contract_types=brief.get("contract_types"),
-                        allowed_start_months=brief.get("start_months"),
-                        minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
-                        excluded_countries=brief.get("excluded_countries"),
-                        excluded_cities=brief.get("excluded_cities"),
-                        require_known_location=brief.get("require_known_location", False),
-                    ).to_dict()
-                    job["qualification"] = qualification
-                    target = qualification["target_status"]
+                    # The admission layer decides; the connector transmits.
+                    verdict = admit_offer(job, brief, source_verified=True)
+                    target = verdict["target_status"]
                     confirmed_count += int(target == "conforming")
                     uncertain_count += int(target == "to_verify")
                     excluded_count += int(target == "non_conforming")
-                    if target == "non_conforming":
+                    if verdict["status"] == "excluded":
                         continue
-                    if qualification["contract_type"] == "unknown" and not classification.get("evidence"):
+                    if verdict["status"] != "admitted":
                         filtered_criteria_count += 1
                         continue
-                    if not criteria_admit(match, job, brief):
-                        filtered_criteria_count += 1
-                        continue
-                    job["internship_classification"] = classification
-                    relevant_count += 1
+                    job = verdict["job"]
+                    score = verdict["match"]["score"]
+                    education_rank = (verdict["match"].get("education_access") or {}).get("priority_rank", 2)
+                    status_rank = {"conforming": 0, "to_verify": 1}.get(target, 0)
                 else:
-                    relevant_count += 1
-                score = match["score"]
+                    match = score_brief_match(brief, job)
+                    score = match["score"]
+                    education_rank = (match.get("education_access") or {}).get("priority_rank", 2)
+                relevant_count += 1
                 # Source identities, not arrival order or generated database
                 # IDs, break ties. The content digest resolves conflicting
                 # duplicate identities without depending on feed ordering.
                 digest = hashlib.sha256(
                     json.dumps(job, sort_keys=True, ensure_ascii=False).encode("utf-8")
                 ).hexdigest()
-                status_rank = {"conforming": 0, "to_verify": 1}.get(
-                    (job.get("qualification") or {}).get("target_status"), 0
-                )
-                education_rank = (match.get("education_access") or {}).get("priority_rank", 2)
                 key = (status_rank, -(int(score) if score is not None else 0), education_rank, job_id, canonical, digest)
                 yield key, job
 
