@@ -22,9 +22,9 @@
     "tests/test_qualification_snapshot_persistence.py"
   ],
   "branch": "agent/spec-sk10-candidate-profile",
-  "commit": "0502c4b",
-  "output": "SK-10 livré : pipeline local document → faits proposés avec provenance exacte (page, offsets, citation) → décision explicite de la personne → profil actif. Modèle career/candidate_profile.py (5 statuts, transitions, acteur humain obligatoire), construction career/profile_builder.py (réutilise Mission 01), table candidate_facts (schéma v9, migration additive), 7 endpoints, UI d'approbation champ par champ, script d'essai manuel hors dépôt, 38 tests synthétiques.",
-  "logs": "pytest -q tests/test_candidate_profile.py → 38 passed\npytest -q → 1462 passed, 1 skipped (base 1424 + 38 nouveaux)\npytest -q sur clone frais du commit poussé → 1462 passed, 1 skipped\nruff check . → All checks passed\ngit diff --check → propre\n./checklist_codex.sh → TOUT VERT\nnode --check career_static/js/profile-builder.js → OK\npush: agent/spec-sk10-candidate-profile → 0502c4b (remote), tentative précédente conservée au tag spec-sk10-candidate-profile-v1 (2909b04)",
+  "commit": "ac72b82",
+  "output": "SK-10 livré : pipeline local document → faits proposés avec provenance exacte (page, offsets, citation) → décision explicite de la personne → profil actif. Modèle career/candidate_profile.py (5 statuts, machine à états, acteur humain obligatoire), construction career/profile_builder.py (réutilise Mission 01), table candidate_facts (schéma v9, migration additive), 7 endpoints, UI d'approbation champ par champ, script d'essai manuel hors dépôt, 39 tests synthétiques.",
+  "logs": "pytest -q tests/test_candidate_profile.py → 39 passed\npytest -q → 1463 passed, 1 skipped (base 1424 + 39 nouveaux)\npytest -q sur clone frais du commit poussé → 1462 passed, 1 skipped\nruff check . → All checks passed\ngit diff --check → propre\n./checklist_codex.sh → TOUT VERT\nnode --check career_static/js/profile-builder.js → OK\npush: agent/spec-sk10-candidate-profile → ac72b82 (remote), tentative précédente conservée au tag spec-sk10-candidate-profile-v1 (2909b04)",
   "guarantees": [
     "Aucun fait n'est approuvé automatiquement : l'insertion SQL écrit le littéral 'proposed' et apply_decision() exige actor='user' (OCR compris).",
     "Chaque fait garde sa source exacte : page + offsets + citation vérifiable au caractère près.",
