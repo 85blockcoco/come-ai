@@ -2,9 +2,11 @@
 
 ## Status
 
-Release candidate isolated on `integration/speckit-career-rc`, based on
-`main@c2e731d63b2cea36260d379a4b2a0adc42870341`.  `main`, the original Spec
-Kit worktree and the dirty primary checkout were not modified.
+Release candidate isolated on `integration/speckit-career-rc`.  It was first
+built from `main@c2e731d63b2cea36260d379a4b2a0adc42870341`, then refreshed
+without conflict from the newer `main@bc5db69700146cac8c241bfdd9aa038a0df12860`
+after that branch advanced during validation.  `main`, the original Spec Kit
+worktree and the dirty primary checkout were not modified by this integration.
 
 ## State recovered
 
@@ -106,16 +108,20 @@ March, and the three new controls were present in the served HTML.
 
 ## Validation
 
-- Combined Career, qualification, migration, Explorer and application-eval
-  targeted suite: 184 passed.
+- Before the final main refresh, the combined Career, qualification, migration,
+  Explorer and application-eval targeted suite passed 184 tests.
+- After integrating the newer main (including CV quality and four connector
+  lots), the combined targeted suite passed 277 tests.
 - Isolated real-handler evaluation: 22 passed; its Career evidence imports a
   synthetic job, reads it through the production HTTP router and applies the
   production qualifier under explicit criteria.
 - Static checks: Python compile, `node --check`, Ruff and `git diff --check`
   pass.
-- Full-suite final result: 1283 passed, 1 skipped, 0 failed in 106.58 seconds.
-  The skip is the private-corpus exhaustivity guard described above; the real
-  121-offer aggregate was measured separately from an isolated SQLite backup.
+- Full-suite result before the main refresh: 1283 passed, 1 skipped, 0 failed.
+- Final full-suite result on current main plus this RC: 1367 passed, 1 skipped,
+  0 failed in 91.89 seconds.  The skip is the private-corpus exhaustivity guard
+  described above; the real 121-offer aggregate was measured separately from
+  an isolated SQLite backup.
 
 ## Delegation
 
