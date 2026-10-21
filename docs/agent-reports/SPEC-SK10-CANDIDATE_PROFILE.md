@@ -205,11 +205,13 @@ retourné par le serveur.
 
 | Commande | Résultat |
 |----------|----------|
+| `./checklist_codex.sh` | **TOUT VERT** (seules alertes : worktrees mémoire / study-coach absents du worktree dédié) |
 | `.venv/bin/python -m pytest -q tests/test_candidate_profile.py` | **37 passed** |
 | `.venv/bin/python -m pytest -q tests/test_cv_quality_structure.py` | **39 passed** (aucune régression du parser) |
 | `.venv/bin/python -m pytest -q` (suite complète) | **1461 passed, 1 skipped** (base 1424 + 37 nouveaux) |
 | `.venv/bin/python -m ruff check .` | **All checks passed** |
 | `git diff --check` | propre |
+| Clone frais du commit poussé | **1461 passed, 1 skipped** |
 
 > Le worktree n'a pas de `.venv` propre : la validation utilise le Python du dépôt principal
 > (`/Users/comedelavenne/AI-Excel-Agent/.venv/bin/python`), en pointant sur le code du worktree
