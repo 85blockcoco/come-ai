@@ -156,6 +156,8 @@ def _attach_qualification_presentation(match: dict[str, Any], qualification: dic
         else:
             match["label"] = "Informations obligatoires à vérifier"
     return match
+
+
 def _requirement_ids_of(job: dict[str, Any]) -> list[str]:
     """Return the requirement identifiers of the current snapshot of an offer.
 
@@ -3431,7 +3433,7 @@ class CareerService:
         job_id = str(result.get("id") or "")
         current = offer_intelligence_store.load_current(connection, job_id)
         if current is None:
-            result["offer_intelligence"] = None if full else None
+            result["offer_intelligence"] = None
             result["offer_intelligence_summary"] = None
             result["offer_intelligence_version"] = None
             result["offer_intelligence_current"] = False
