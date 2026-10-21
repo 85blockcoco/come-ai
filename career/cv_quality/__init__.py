@@ -25,13 +25,16 @@ from .models import (
     Finding,
     Provenance,
     ReadabilityScore,
+    SalaryEvidence,
+    SalaryPeriodicity,
+    SalaryType,
     SectionReading,
     STATUS_INFO,
     STATUS_OK,
     STATUS_RISK,
     STATUS_UNKNOWN,
 )
-from .parser import extract_text_from_bytes, extract_text_from_file
+from .parser import extract_salary, extract_text_from_bytes, extract_text_from_file
 from .structure import analyze_cv
 
 __all__ = [
@@ -46,6 +49,11 @@ __all__ = [
     "ExperienceEntry",
     "ReadabilityScore",
     "Provenance",
+    # Salary extraction
+    "SalaryEvidence",
+    "SalaryType",
+    "SalaryPeriodicity",
+    "extract_salary",
     # Status constants
     "STATUS_OK",
     "STATUS_INFO",
