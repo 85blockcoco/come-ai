@@ -2,7 +2,7 @@
 
 **Mission** : SK-10 — Transformer le CV importé en **profil structuré contrôlé par l'utilisateur** : des faits proposés automatiquement, chacun avec sa source exacte (page, offsets, citation), que la personne approuve, refuse, corrige ou suspend champ par champ.
 
-**Branche** : `worker/cvboost-31-1792614191`
+**Branche** : `worker/cvboost-31-1792614191` (branche créée par l'orchestrateur pour cette mission)
 **Worktree** : `/Users/comedelavenne/AI-Excel-Agent-worker-cvboost-31-1792614191`
 **Base** : `main` (`f5b22f2`)
 
@@ -213,7 +213,26 @@ Couverture :
 
 ---
 
-## 9. Limites assumées
+## 9. Vrais essais utilisateur (séparés des fixtures Git)
+
+Les essais ci-dessous ont été menés **hors du dépôt**, dans un dossier temporaire, contre l'application réelle (`create_app` + `uvicorn` sur `127.0.0.1`). Rien de ce qui suit n'est versionné : les fixtures Git restent synthétiques et rejouables.
+
+| Essai | Résultat |
+|-------|----------|
+| `GET /career` | 200, la page contient le panneau « Profil candidat » |
+| `GET /career-static/js/profile-builder.js` | 200, le script est bien servi depuis le sous-dossier |
+| `GET /api/career/candidate-profile` (profil vide) | 200, `total: 0`, compteurs à zéro |
+| `POST /api/career/candidate-profile/text` (CV de démonstration) | 201, 13 faits proposés, **0 approuvé**, 0 utilisable |
+| `PATCH .../facts/{id}` avec `status: approved` | 200, `approved: 1`, `usable: 1`, profil actif `skills: "Excel"` |
+| `POST /api/career/candidate-profile/document` (upload) | 201, document source enregistré, provenance conservée |
+| `GET /api/career/candidate-profile/export` | 200, JSON portable avec la provenance de chaque fait |
+| `DELETE /api/career/candidate-profile` | 200, profil vidé |
+
+Les essais ont confirmé deux points qu'aucun test unitaire ne peut voir seul : le sous-dossier `career_static/js/` est bien servi par le montage statique, et le profil actif ne contient que le fait approuvé.
+
+---
+
+## 10. Limites assumées
 
 - L'extraction reste heuristique et **locale** : elle propose, elle ne décide pas. Un fait mal découpé se corrige en un clic, ou se refuse.
 - Un fait `proposed` corrigé reste `proposed` : il faut l'approuver explicitement. C'est volontaire.
@@ -222,7 +241,7 @@ Couverture :
 
 ---
 
-## 10. Ce qui a été vérifié, et comment
+## 11. Ce qui a été vérifié, et comment
 
 | Critère de réussite | Preuve |
 |----------------------|--------|
