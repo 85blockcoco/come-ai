@@ -623,6 +623,10 @@ Français natif, anglais C1
     assert draft["has_local_file"] is True
     assert draft["suggestions"]["values"]["skills"] == "Excel, Python, analyse financière"
     assert draft["suggestions"]["values"]["experience"] == "Stage en analyse financière"
+    assert draft["cv_quality"]["status"] == "action_required"
+    assert draft["cv_quality"]["risk_count"] >= 1
+    assert all("source_excerpt" not in action for action in draft["cv_quality"]["actions"])
+    assert "note de recrutement" in draft["cv_quality"]["disclaimer"]
     assert not source.exists()
     stored_sources = list(service.documents_dir.glob("profile_*"))
     assert len(stored_sources) == 1

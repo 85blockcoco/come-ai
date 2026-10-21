@@ -185,6 +185,9 @@ details summary:focus-visible { border-radius: 5px; outline-offset: 4px; }
 .compact-heading h3 { margin-top: 3px; font-size: .94rem; }
 .profile-import-warnings { display: grid; gap: 6px; margin: 10px 0; }
 .profile-import-warning { padding: 8px 9px; border: 1px solid #f0d6ac; border-radius: 8px; color: var(--warning); background: var(--warning-soft); font-size: .74rem; line-height: 1.4; }
+.profile-import-quality { padding: 12px; border: 1px solid #d8e8df; border-radius: 11px; background: #f8fcfa; }
+.profile-import-quality h4 { margin: 0 0 5px; font-size: .84rem; color: var(--accent-dark); }
+.profile-import-quality-actions { margin: 8px 0; padding-left: 20px; font-size: .76rem; line-height: 1.45; }
 .profile-import-field { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: start; padding: 10px; border: 1px solid #dce9e2; border-radius: 9px; background: #fff; }
 .profile-import-field > input[type="checkbox"] { width: 16px; height: 16px; margin-top: 5px; accent-color: var(--accent); }
 .profile-import-field-content { display: grid; gap: 7px; }
@@ -399,6 +402,26 @@ footer { margin: 18px 3px 0; color: var(--muted); font-size: .72rem; line-height
 .stagehunter-prep-section { margin: 10px 0; }
 .stagehunter-prep-section h4 { margin: 0 0 5px; font-size: .85rem; }
 .stagehunter-prep-actions { align-items: end; }
+.stagehunter-sprint { display: grid; gap: 14px; margin-top: 14px; }
+.sprint-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.sprint-stat { padding: 11px; border: 1px solid #d8e8df; border-radius: 11px; background: #fff; }
+.sprint-stat strong { display: block; color: var(--accent-dark); font-size: 1.08rem; font-variant-numeric: tabular-nums; }
+.sprint-stat span { color: var(--muted); font-size: .68rem; line-height: 1.3; }
+.sprint-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(260px, .85fr); gap: 14px; align-items: start; }
+.sprint-queue, .sprint-cv { display: grid; gap: 9px; }
+.sprint-card { padding: 12px; border: 1px solid #d8e8df; border-radius: 12px; background: #fff; }
+.sprint-card.is-ready { border-color: #a9d8bd; background: var(--good-soft); }
+.sprint-card.is-review { border-color: #ecd2a7; background: var(--warning-soft); }
+.sprint-card h4 { margin: 2px 0 4px; font-size: .88rem; line-height: 1.35; }
+.sprint-card-company { color: var(--accent-dark); font-size: .7rem; font-weight: 800; letter-spacing: .035em; text-transform: uppercase; }
+.sprint-card-meta { color: var(--muted); font-size: .7rem; line-height: 1.4; }
+.sprint-card ul, .sprint-cv ul { margin: 7px 0; padding-left: 18px; color: #365a4b; font-size: .72rem; line-height: 1.45; }
+.sprint-cv { padding: 13px; border: 1px solid #c9ded2; border-radius: 12px; background: var(--surface-muted); }
+.sprint-cv h4 { margin: 0; color: var(--accent-dark); font-size: .86rem; }
+.sprint-priority { padding: 9px; border-radius: 9px; background: #fff; }
+.sprint-priority strong { font-size: .76rem; }
+.sprint-priority p { margin-top: 3px; color: var(--muted); font-size: .69rem; line-height: 1.4; }
+.sprint-disclaimer { color: var(--muted); font-size: .68rem; line-height: 1.45; }
 
 :focus-visible { outline: 3px solid color-mix(in srgb, var(--focus) 62%, white); outline-offset: 2px; }
 button, a, input, select, textarea, summary { -webkit-tap-highlight-color: transparent; }
@@ -423,10 +446,12 @@ button, a, .career-tab { transition: background-color .16s ease, border-color .1
   .panel-heading { align-items: flex-start; }
   .stagehunter-result-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .stage-offer-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sprint-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 680px) {
   .career-shell { width: min(100% - 24px, 760px); padding-top: 15px; }
   .career-topbar, .career-intro, .job-card-header, .application-card-header, .panel-heading { align-items: flex-start; flex-direction: column; }
+  .sprint-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .top-actions { justify-content: flex-start; }
   .stagehunter-result-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .stage-offer-facts { grid-template-columns: 1fr; }

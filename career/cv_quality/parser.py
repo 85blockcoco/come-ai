@@ -7,6 +7,7 @@ Reuses pypdf (PDF) and python-docx (DOCX) if available.
 from __future__ import annotations
 
 import io
+from dataclasses import dataclass
 from pathlib import Path
 
 from .models import DocumentInput, Finding, STATUS_RISK
@@ -24,6 +25,105 @@ try:
     HAS_DOCX = True
 except ImportError:  # pragma: no cover
     HAS_DOCX = False
+
+
+@dataclass(frozen=True, slots=True)
+class VisualBlock:
+    """One positioned text fragment extracted from a visually laid-out page."""
+
+    text: str
+    x0: float
+    top: float
+    x1: float
+    bottom: float
+    page: int = 0
+
+
+def reconstruct_reading_order(
+    blocks: list[VisualBlock], *, line_tolerance: float = 6.0
+) -> str:
+    """Rebuild logical lines top-to-bottom and left-to-right within a band."""
+
+    pages: list[str] = []
+    for page_number in sorted({block.page for block in blocks}):
+        page_blocks = sorted(
+            (block for block in blocks if block.page == page_number),
+            key=lambda block: (block.top, block.x0),
+        )
+        bands: list[list[VisualBlock]] = []
+        for block in page_blocks:
+            if not block.text.strip():
+                continue
+            if bands and abs(bands[-1][0].top - block.top) <= line_tolerance:
+                bands[-1].append(block)
+            else:
+                bands.append([block])
+        lines: list[str] = []
+        for band in bands:
+            ordered = sorted(band, key=lambda block: block.x0)
+            first_text = ordered[0].text.strip()
+            if (
+                len(ordered) > 1
+                and first_text.upper() == first_text
+                and first_text.casefold()
+                in {
+                    "experience",
+                    "education",
+                    "skills",
+                    "languages",
+                    "projects",
+                    "certifications",
+                    "expérience",
+                    "formation",
+                    "compétences",
+                    "langues",
+                    "projets",
+                }
+            ):
+                lines.append(first_text)
+                lines.append(" ".join(block.text.strip() for block in ordered[1:]))
+                continue
+            parts: list[str] = []
+            previous: VisualBlock | None = None
+            for block in ordered:
+                if previous is not None and block.x0 - previous.x1 > 45:
+                    parts.append("|")
+                parts.append(block.text.strip())
+                previous = block
+            lines.append(" ".join(parts))
+        pages.append("\n".join(lines))
+    return "\n\n".join(pages)
+
+
+def _extract_positioned_page(page: object, page_number: int) -> str:
+    blocks: list[VisualBlock] = []
+    page_height = float(getattr(page, "mediabox").height)
+
+    def visitor(text: str, _cm: object, tm: list[float], _font: object, size: float) -> None:
+        x0 = float(tm[4])
+        base_top = page_height - float(tm[5])
+        for line_index, raw_line in enumerate(text.splitlines()):
+            cleaned = raw_line.strip()
+            if not cleaned:
+                continue
+            top = base_top + line_index * float(size)
+            width = max(float(size) * 0.45 * len(cleaned), 1.0)
+            blocks.append(
+                VisualBlock(
+                    text=cleaned,
+                    x0=x0,
+                    top=top,
+                    x1=x0 + width,
+                    bottom=top + float(size),
+                    page=page_number,
+                )
+            )
+
+    try:
+        page.extract_text(visitor_text=visitor)
+    except TypeError:
+        return ""
+    return reconstruct_reading_order(blocks)
 
 
 def extract_text_from_bytes(data: bytes, filetype: str, filename: str | None = None) -> DocumentInput:
@@ -121,9 +221,14 @@ def _extract_pdf(data: bytes) -> tuple[str, int]:
         reader = pypdf.PdfReader(io.BytesIO(data))
         page_count = len(reader.pages)
         texts = []
-        for page in reader.pages:
+        for page_number, page in enumerate(reader.pages):
             try:
-                page_text = page.extract_text()
+                page_text = _extract_positioned_page(page, page_number)
+                legacy_text = page.extract_text() or ""
+                if not page_text or (
+                    len(page_text.splitlines()) < 0.4 * len(legacy_text.splitlines())
+                ):
+                    page_text = legacy_text
                 if page_text:
                     texts.append(page_text)
             except Exception:

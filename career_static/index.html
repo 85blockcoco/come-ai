@@ -438,6 +438,18 @@
             <p id="stagehunter-brief-note" class="fixed-period-note"></p>
           </section>
 
+          <section class="panel stagehunter-pipeline-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Cycle complet</p>
+                <h3>Offre → qualification → CV adapté → kit → suivi</h3>
+              </div>
+              <button id="stagehunter-pipeline-refresh" class="secondary-button" type="button">Actualiser</button>
+            </div>
+            <p class="fixed-period-note">Vue locale dérivée des données existantes. Aucun envoi automatique.</p>
+            <div id="stagehunter-pipeline" class="stagehunter-pipeline" aria-live="polite" hidden></div>
+          </section>
+
           <section class="panel">
             <p class="eyebrow">Étape B</p>
             <h3>Trouver des offres réelles</h3>
@@ -498,6 +510,18 @@
             <div id="stagehunter-result-summary" class="stagehunter-result-summary" aria-live="polite"></div>
             <div id="stagehunter-matches" class="job-list"></div>
             <p id="stagehunter-matches-empty" class="empty-state">Aucune offre enregistrée pour l’instant. Passe à l’étape B pour en importer.</p>
+          </section>
+
+          <section class="panel stagehunter-sprint-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Candidatures express</p>
+                <h3>Transformer mes meilleures offres en plan d’action</h3>
+              </div>
+              <button id="stagehunter-sprint-build" class="primary-button" type="button">Construire ma liste express</button>
+            </div>
+            <p class="fixed-period-note">Priorisation et conseils CV calculés localement à partir de tes offres et de ton profil. Aucun envoi automatique : tu gardes la validation et le dépôt final.</p>
+            <div id="stagehunter-sprint" class="stagehunter-sprint" aria-live="polite" hidden></div>
           </section>
 
           <section class="panel">

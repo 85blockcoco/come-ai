@@ -457,6 +457,22 @@ function renderProfileImportDraft(profileImport) {
   [...new Set([...(profileImport.ocr_warnings || []), ...(profileImport.suggestions?.warnings || [])])].forEach((warning) => {
     elements.profileImportWarnings.append(make("p", warning, "profile-import-warning"));
   });
+  const cvQuality = profileImport.cv_quality;
+  if (cvQuality) {
+    const quality = make("section", "", "profile-import-quality");
+    quality.append(make("h4", "Diagnostic CV local"));
+    const summary = cvQuality.risk_count
+      ? `${cvQuality.risk_count} risque${cvQuality.risk_count > 1 ? "s" : ""} structurel${cvQuality.risk_count > 1 ? "s" : ""} prioritaire${cvQuality.risk_count > 1 ? "s" : ""}.`
+      : "Aucun risque structurel détecté automatiquement — une relecture humaine reste nécessaire.";
+    quality.append(make("p", summary, "profile-import-field-meta"));
+    if ((cvQuality.actions || []).length) {
+      const actions = make("ol", "", "profile-import-quality-actions");
+      cvQuality.actions.forEach((action) => actions.append(make("li", action.message)));
+      quality.append(actions);
+    }
+    quality.append(make("p", cvQuality.disclaimer || "", "profile-import-field-meta"));
+    elements.profileImportWarnings.append(quality);
+  }
   elements.profileImportApplyForm.replaceChildren();
   const values = profileImport.suggestions?.values || {};
   const evidence = profileImport.suggestions?.evidence || {};
@@ -2023,6 +2039,23 @@ function renderApplicationKit(kit, container) {
       draftDownloadLink(draft, "letter", "pdf"),
     );
     documents.append(downloads);
+    const targetedArtifacts = kit.artifacts || {};
+    if (Object.keys(targetedArtifacts).length) {
+      const artifactList = make("ul", "", "job-reasons variant-specific");
+      [
+        ["cv", "CV ciblé DOCX"],
+        ["cover_letter", "Lettre ciblée DOCX"],
+        ["prep_sheet", "Fiche de préparation"],
+      ].forEach(([key, label]) => {
+        if (targetedArtifacts[key]) {
+          artifactList.append(make("li", `${label} — ${targetedArtifacts[key]}`));
+        }
+      });
+      documents.append(
+        make("p", `Variante générée : ${kit.variant_label || kit.variant}`, "application-meta"),
+        artifactList,
+      );
+    }
   } else {
     documents.append(make("p", "Aucun dossier local n’est encore rattaché à ce suivi.", "application-meta"));
     const create = make("button", "Créer le dossier local (CV + lettre)", "secondary-button");
@@ -2076,6 +2109,12 @@ function renderApplicationKit(kit, container) {
   const checksList = make("ul", "", "job-reasons blocked-list");
   (kit.checks || []).forEach((line) => checksList.append(make("li", line)));
   warnings.append(checksList);
+  if (placeholderList.children.length) {
+    const profileAction = make("button", "Ajouter preuve au profil", "secondary-button");
+    profileAction.type = "button";
+    profileAction.addEventListener("click", () => showView("profile"));
+    warnings.append(profileAction);
+  }
   container.append(warnings);
 }
 
@@ -2101,11 +2140,11 @@ async function showKitInApplications(kit) {
   await loadApplications();
 }
 
-async function startApplicationKitFlow(jobId, language) {
+async function startApplicationKitFlow(jobId, language, variant = "") {
   try {
     const kit = await api("/api/career/application-kits", {
       method: "POST",
-      body: JSON.stringify({ job_id: jobId, language }),
+      body: JSON.stringify({ job_id: jobId, language, variant }),
     });
     setMessage("Kit de candidature prêt localement. L’envoi reste strictement manuel.");
     await showKitInApplications(kit);
@@ -3021,6 +3060,204 @@ function renderStageApplications() {
   state.applications.forEach((application) => target.append(applicationCard(application)));
 }
 
+function sprintReadinessLabel(value) {
+  return {
+    prepare_now: "Prête à préparer",
+    profile_to_complete: "Profil à compléter",
+    offer_to_verify: "Offre à vérifier",
+    candidate_to_verify: "Compatibilité candidat à vérifier",
+  }[value] || "À vérifier";
+}
+
+function renderApplicationSprint(payload) {
+  const target = $("#stagehunter-sprint");
+  if (!target) return;
+  target.replaceChildren();
+  target.hidden = false;
+  const stats = payload.stats || {};
+  const statsBlock = make("div", "", "sprint-stats");
+  [
+    [stats.selected || 0, "offres dans la file"],
+    [stats.prepare_now || 0, "prêtes à préparer"],
+    [stats.profile_to_complete || 0, "profils à renforcer"],
+    [stats.offer_to_verify || 0, "offres à vérifier"],
+    [stats.candidate_to_verify || 0, "compatibilités à vérifier"],
+  ].forEach(([value, label]) => {
+    const item = make("article", "", "sprint-stat");
+    item.append(make("strong", String(value)), make("span", label));
+    statsBlock.append(item);
+  });
+  target.append(statsBlock);
+
+  const grid = make("div", "", "sprint-grid");
+  const queue = make("div", "", "sprint-queue");
+  queue.append(make("h4", "Ordre de préparation conseillé"));
+  if (!(payload.queue || []).length) {
+    queue.append(make("p", "Aucune offre admissible dans les résultats actuels. Relance la recherche ou vérifie tes critères.", "empty-state"));
+  }
+  (payload.queue || []).forEach((item, index) => {
+    const card = make("article", "", `sprint-card ${item.readiness === "prepare_now" ? "is-ready" : "is-review"}`);
+    card.append(make("p", `#${index + 1} · ${item.company}`, "sprint-card-company"));
+    card.append(make("h4", item.title));
+    card.append(make("p", `${item.location} · langue ${item.language} · correspondance ${item.match_score}/100 · CV ${item.coverage_percent} %`, "sprint-card-meta"));
+    card.append(chip(sprintReadinessLabel(item.readiness), item.readiness === "prepare_now" ? "good" : "warning"));
+    if ((item.candidate_warnings || []).length) {
+      const warnings = make("ul", "", "blocked-list");
+      item.candidate_warnings.forEach((warning) => warnings.append(make("li", warning)));
+      card.append(warnings);
+    }
+    const actionsList = make("ul");
+    (item.next_actions || []).slice(0, 3).forEach((action) => actionsList.append(make("li", action)));
+    card.append(actionsList);
+    const actions = make("div", "", "job-actions");
+    if (item.official_url) {
+      const official = make("a", "Ouvrir la source officielle ↗", "secondary-button external-link");
+      official.href = item.official_url;
+      official.target = "_blank";
+      official.rel = "noopener noreferrer";
+      actions.append(official);
+    }
+    const prepare = make("button", "Préparer", "primary-button");
+    prepare.type = "button";
+    prepare.addEventListener("click", () => loadStagePrep(item.job_id));
+    const detail = make("button", "Voir le détail", "secondary-button");
+    detail.type = "button";
+    detail.addEventListener("click", () => loadStageDetail(item.job_id));
+    const kit = make("button", "Créer le kit local", "secondary-button");
+    kit.type = "button";
+    kit.title = "Prépare localement le CV et la lettre ; aucun dépôt n’est effectué.";
+    kit.addEventListener("click", () => {
+      const language = String(item.language || "").toLowerCase();
+      const languageCode = ["fr", "en", "it", "de"].find((code) => language === code || language.startsWith(`${code}-`));
+      if (!languageCode) {
+        setMessage("La langue de cette offre doit être confirmée avant de créer le kit.", true);
+        loadStagePrep(item.job_id);
+        return;
+      }
+      startApplicationKitFlow(item.job_id, languageCode, item.recommended_variant || "");
+    });
+    actions.append(prepare, kit, detail);
+    if (!item.tracking) {
+      const track = make("button", "Créer le suivi", "secondary-button");
+      track.type = "button";
+      track.addEventListener("click", async () => {
+        track.disabled = true;
+        try {
+          await api("/api/career/applications", {method: "POST", body: JSON.stringify({job_id: item.job_id})});
+          setMessage("Suivi local créé. Aucun envoi n’a été effectué.");
+          await Promise.all([loadApplications(), loadDashboard(), loadApplicationSprint()]);
+        } catch (error) {
+          setMessage(error.message, true);
+        } finally {
+          track.disabled = false;
+        }
+      });
+      actions.append(track);
+    } else {
+      actions.append(make("span", `Suivi : ${stageLabels[item.tracking.stage] || item.tracking.stage}`, "sprint-card-meta"));
+    }
+    card.append(actions);
+    queue.append(card);
+  });
+
+  const cv = make("aside", "", "sprint-cv");
+  const verification = payload.verification_summary || [];
+  if (verification.length) {
+    cv.append(make("h4", "Vérifications groupées"));
+    cv.append(make("p", "Confirme ces faits sur les pages officielles pour débloquer plusieurs dossiers à la fois.", "sprint-card-meta"));
+    const verificationList = make("ul");
+    verification.slice(0, 8).forEach((item) => verificationList.append(make("li", `${item.field} · ${item.offer_count} offre(s)`)));
+    cv.append(verificationList);
+  }
+  cv.append(make("h4", "Priorités CV à fort impact"));
+  const priorities = payload.cv_advice?.priorities || [];
+  if (!priorities.length) cv.append(make("p", "Aucun manque récurrent détecté sur cette file. Relis malgré tout chaque offre et chaque document.", "sprint-card-meta"));
+  priorities.slice(0, 8).forEach((priority) => {
+    const block = make("div", "", "sprint-priority");
+    block.append(make("strong", `${priority.keyword} · ${priority.offer_count} offre(s)`));
+    block.append(make("p", priority.advice));
+    cv.append(block);
+  });
+  const strengths = payload.cv_advice?.strengths || [];
+  if (strengths.length) {
+    cv.append(make("h4", "Preuves déjà présentes à remonter"));
+    const list = make("ul");
+    strengths.slice(0, 8).forEach((strength) => list.append(make("li", `${strength.keyword} · repéré dans ${strength.offer_count} correspondance(s)`)));
+    cv.append(list);
+  }
+  grid.append(queue, cv);
+  target.append(grid, make("p", payload.disclaimer || "Aucun envoi automatique.", "sprint-disclaimer"));
+  reveal(target, "start");
+}
+
+async function loadApplicationSprint() {
+  const target = $("#stagehunter-sprint");
+  if (!target) return;
+  target.hidden = false;
+  target.replaceChildren(make("p", "Construction locale de la file…"));
+  try {
+    renderApplicationSprint(await api("/api/career/application-sprint?limit=20"));
+  } catch (error) {
+    target.replaceChildren(make("p", error.message, "scoring-disclaimer"));
+  }
+}
+
+function renderApplicationPipeline(payload) {
+  const target = $("#stagehunter-pipeline");
+  if (!target) return;
+  target.replaceChildren();
+  target.hidden = false;
+  const pipeline = payload.pipeline || [];
+  if (!pipeline.length) {
+    target.append(make("p", "Aucune offre dans le pipeline.", "empty-state"));
+    return;
+  }
+  const list = make("div", "", "pipeline-list");
+  pipeline.forEach((item) => {
+    const row = make("article", "", "pipeline-row");
+    row.append(
+      make("h4", `${item.company} — ${item.title}`),
+      make(
+        "p",
+        `Stade : ${item.stage} · Variante : ${item.variant_label || "non sélectionnée"} · Score : ${item.match_score || 0}`,
+        "application-meta",
+      ),
+    );
+    const actions = make("div", "", "job-actions");
+    const prepare = make("button", "Préparer", "secondary-button");
+    prepare.type = "button";
+    prepare.addEventListener("click", () => loadStagePrep(item.job_id));
+    actions.append(prepare);
+    if (!item.tracking_stage) {
+      const track = make("button", "Créer le suivi", "primary-button");
+      track.type = "button";
+      track.addEventListener("click", async () => {
+        await api("/api/career/applications", {
+          method: "POST",
+          body: JSON.stringify({ job_id: item.job_id }),
+        });
+        await loadApplicationPipeline();
+      });
+      actions.append(track);
+    }
+    row.append(actions);
+    list.append(row);
+  });
+  target.append(list);
+}
+
+async function loadApplicationPipeline() {
+  const target = $("#stagehunter-pipeline");
+  if (!target) return;
+  target.hidden = false;
+  target.replaceChildren(make("p", "Chargement du pipeline…"));
+  try {
+    renderApplicationPipeline(await api("/api/career/application-pipeline"));
+  } catch (error) {
+    target.replaceChildren(make("p", error.message, "scoring-disclaimer"));
+  }
+}
+
 function renderStagePrepList(target, title, items, renderItem) {
   if (!items.length) return;
   const section = make("section", "", "stagehunter-prep-section");
@@ -3028,6 +3265,54 @@ function renderStagePrepList(target, title, items, renderItem) {
   const list = make("ul", "", "job-reasons");
   items.forEach((item) => list.append(renderItem(item)));
   section.append(list);
+  target.append(section);
+}
+
+function renderVariantFitAnalysis(target, prep) {
+  const coverage = prep.coverage || {};
+  const section = make("section", "", "stagehunter-prep-section variant-specific");
+  section.append(make("h4", "Variante CV recommandée"));
+  const recommendation = make(
+    "p",
+    prep.recommended_variant_label || "Variante à confirmer",
+    "application-meta",
+  );
+  recommendation.title = prep.variant_rationale || "Classification locale déterministe";
+  section.append(recommendation);
+  if (prep.variant_rationale) {
+    section.append(make("p", prep.variant_rationale, "scoring-disclaimer"));
+  }
+
+  const coverageList = make("ul", "", "job-reasons");
+  coverageList.append(
+    make(
+      "li",
+      `Couverture obligatoire : ${Number(coverage.mandatory_pct || 0).toFixed(1)} % (${coverage.mandatory_covered || 0}/${coverage.mandatory_total || 0})`,
+    ),
+    make(
+      "li",
+      `Couverture préférée : ${Number(coverage.preferred_pct || 0).toFixed(1)} % (${coverage.preferred_covered || 0}/${coverage.preferred_total || 0})`,
+    ),
+  );
+  section.append(coverageList);
+
+  const gaps = prep.gaps || [];
+  if (gaps.length) {
+    section.append(make("h5", "CV actuel → CV adapté"));
+    const list = make("ul", "", "job-reasons");
+    gaps.forEach((gap) => {
+      const citation = gap.provenance || {};
+      const source = citation.source || citation.filename || "aucune preuve disponible";
+      const quote = citation.quote ? ` — « ${citation.quote} »` : "";
+      list.append(
+        make(
+          "li",
+          `${gap.requirement} · ${gap.current_state} → ${gap.adapted_state} · Source : ${source}${quote}`,
+        ),
+      );
+    });
+    section.append(list);
+  }
   target.append(section);
 }
 
@@ -3058,6 +3343,7 @@ function renderStagePrep(prep) {
     prep.uncertainty.forEach((item) => warnings.append(make("li", item)));
     target.append(warnings);
   }
+  renderVariantFitAnalysis(target, prep);
   const cvCoverage = prep.cv_coverage || {};
   if ((typeof renderCvPlanSection === "function") && ((prep.cv_action_plan || []).length || Number.isFinite(cvCoverage.requirements_total))) {
     const planSection = renderCvPlanSection(target, prep, job);
@@ -3084,12 +3370,26 @@ function renderStagePrep(prep) {
   const kitLanguage = make("select", "", "kit-language-select");
   kitLanguage.setAttribute("aria-label", "Langue du kit de candidature");
   ["fr", "en", "it", "de"].forEach((code) => kitLanguage.append(new Option(draftLanguageLabels[code], code)));
+  const kitVariant = make("select", "", "kit-variant-select variant-specific");
+  kitVariant.setAttribute("aria-label", "Variante CV ciblée");
+  const variantCoverage = prep.variant_coverage || {};
+  [
+    ["m_a", "M&A / Investment Banking"],
+    ["markets", "Markets / Quant"],
+    ["corporate_finance", "Corporate Finance / FP&A"],
+  ].forEach(([id, label]) => {
+    const percentage = Number(variantCoverage[id]);
+    const comparison = Number.isFinite(percentage) ? ` — ${percentage.toFixed(1)} % obligatoire` : "";
+    kitVariant.append(new Option(`${label}${comparison}`, id));
+  });
+  kitVariant.value = prep.recommended_variant || "m_a";
+  kitVariant.title = prep.variant_rationale || "Sélection manuelle possible";
   const kit = make("button", "Préparer le kit de candidature", "primary-button");
   kit.type = "button";
   // Un clic = un kit pour CETTE offre. Aucune boucle de candidature : le
   // suivi et le brouillon local sont créés une fois puis réutilisés.
-  kit.addEventListener("click", () => startApplicationKitFlow(job.id, kitLanguage.value));
-  actions.append(kitLanguage, kit);
+  kit.addEventListener("click", () => startApplicationKitFlow(job.id, kitLanguage.value, kitVariant.value));
+  actions.append(kitLanguage, kitVariant, kit);
   target.append(actions);
 }
 
@@ -3232,6 +3532,9 @@ $("#stagehunter-prep-submit")?.addEventListener("click", () => {
   }
   loadStagePrep(jobId);
 });
+
+$("#stagehunter-sprint-build")?.addEventListener("click", () => loadApplicationSprint());
+$("#stagehunter-pipeline-refresh")?.addEventListener("click", () => loadApplicationPipeline());
 
 document.querySelectorAll(".career-tab").forEach((tab) => tab.addEventListener("click", () => showView(tab.dataset.view)));
 
