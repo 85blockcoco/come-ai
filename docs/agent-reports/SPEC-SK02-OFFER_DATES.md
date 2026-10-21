@@ -1,27 +1,41 @@
 # SPEC SK-02 — Dates, échéances et durées avec preuves (CVBOOST-23)
 
-**Branche** : `worker/cvboost-23-1792597737` (worktree dédié) + `agent/spec-sk02-offer-dates` (branche registre)
+**Branche** : `worker/cvboost-24-1792601094` (worktree dédié, poussée sur `origin`)
 **Base** : `main` local (`a054c97`)
 **Date** : 2026-10-21
 **Auteur** : Agent Mission 23 (worker)
+
+> **Tour de finalisation.** Ce tour reprend le travail des tours précédents de
+> la mission (`cvboost-23-1792597737`, `cvboost-23-1792599866`,
+> `cvboost-23-1792600748`), dont les worktrees ont été nettoyés par
+> l'orchestrateur avant leur fin : les commits ont été récupérés depuis les
+> objets git, et le travail est **poussé sur `origin`** pour survivre à un
+> nouveau nettoyage. Ce tour ajoute une **passe de couverture** (§ 8) et
+> **99 cas de référence** supplémentaires.
 
 ---
 
 ## 1. Ce qui a été livré
 
 ```
-career/offer_dates.py                 # module d'analyse temporelle multilingue (1502 l.)
-tests/test_offer_dates.py             # 270 tests
-tests/fixtures/offer_dates/en.json    # 21 cas synthétiques
-tests/fixtures/offer_dates/fr.json    # 16 cas synthétiques
-tests/fixtures/offer_dates/de.json    # 15 cas synthétiques
-tests/fixtures/offer_dates/it.json    # 15 cas synthétiques
-tests/fixtures/offer_dates/es.json    # 15 cas synthétiques
+career/offer_dates.py                        # module d'analyse temporelle multilingue
+tests/test_offer_dates.py                    # contrat, offsets, déterminisme, pièges
+tests/test_offer_dates_invariants.py         # invariants de corpus (les 5 langues)
+tests/fixtures/offer_dates/en.json           # 21 cas synthétiques
+tests/fixtures/offer_dates/fr.json           # 16 cas synthétiques
+tests/fixtures/offer_dates/de.json           # 15 cas synthétiques
+tests/fixtures/offer_dates/it.json           # 15 cas synthétiques
+tests/fixtures/offer_dates/es.json           # 15 cas synthétiques
+tests/fixtures/offer_dates/ext_en.json       # 32 cas de référence
+tests/fixtures/offer_dates/ext_fr.json       # 22 cas de référence
+tests/fixtures/offer_dates/ext_de.json       # 16 cas de référence
+tests/fixtures/offer_dates/ext_it.json       # 14 cas de référence
+tests/fixtures/offer_dates/ext_es.json       # 15 cas de référence
 docs/agent-reports/SPEC-SK02-OFFER_DATES.md   # ce rapport
 ```
 
-**82 fixtures synthétiques** (aucune offre réelle, aucune personne réelle, aucun réseau),
-**270 tests**, module **pur, déterministe, hors ligne** : pas d'horloge, pas de
+**181 fixtures synthétiques** (aucune offre réelle, aucune personne réelle, aucun réseau),
+**1654 tests** sur le module, module **pur, déterministe, hors ligne** : pas d'horloge, pas de
 hasard, pas de réseau, pas de modèle. Le même texte donne toujours les mêmes
 faits, dans le même ordre.
 
@@ -174,13 +188,13 @@ sources : une description qui annonce un début en janvier et un champ
 
 | Mesure demandée | Résultat | Preuve |
 |------------------|----------|--------|
-| Zéro échéance seule classée comme début | ✅ 0 cas | `absent: ["start"]` sur toutes les fixtures `deadline` (5 langues) |
-| Zéro borne maximale utilisée comme preuve de durée minimale | ✅ 0 cas | `duration_max` ≠ `duration_min` dans les 5 fixtures `up to` / `bis zu` / `fino a` / `hasta` / `jusqu'à` |
-| ≥ 95 % des faits explicitement libellés correctement classés | ✅ **100 %** (82/82 cas du corpus, 81 faits attendus) | `test_the_corpus_is_classified_at_least_95_percent` |
+| Zéro échéance seule classée comme début | ✅ 0 cas | `absent: ["start"]` sur **toutes** les fixtures `deadline` (5 langues) + invariant de corpus `test_a_deadline_is_never_typed_as_a_start` |
+| Zéro borne maximale utilisée comme preuve de durée minimale | ✅ 0 cas | `duration_max` ≠ `duration_min` sur tout le corpus (invariant `test_a_bound_is_never_used_as_its_opposite`) |
+| ≥ 95 % des faits explicitement libellés correctement classés | ✅ **100 %** (181/181 cas du corpus) | `test_the_corpus_is_classified_at_least_95_percent` |
 | Tous les autres cas = `unknown` ou `contradictory` | ✅ | `precision="unknown"` pour les dates non résolubles ; `contradictions` pour les conflits ; sinon **aucun** fait (pas de `fact_type` deviné) |
-| Aucun jour inventé (`day=null` si non explicite) | ✅ 0 cas | `test_no_day_is_invented_anywhere_in_the_corpus` + règle de précision |
-| 8 `fact_type` extraits | ✅ 8 | `deadline` 20, `start` 19, `published` 11, `end` 7, `duration_exact` 5, `duration_min` 5, `duration_max` 5, `duration_range` 5 sur le corpus |
-| 5 langues supportées | ✅ 5 | 15 à 21 fixtures par langue |
+| Aucun jour inventé (`day=null` si non explicite) | ✅ 0 cas | `test_no_day_is_invented` + invariant de corpus `test_no_day_is_invented` |
+| 8 `fact_type` extraits | ✅ 8 | les 8 types sont couverts par le corpus (181 cas) |
+| 5 langues supportées | ✅ 5 | 30 à 53 fixtures par langue |
 | Offsets exacts + quote + precision + confidence + contradictions | ✅ | `test_quotes_are_the_exact_source_span` sur tout le corpus |
 
 ### Répartition du corpus (82 cas, 77 faits extraits)
@@ -199,14 +213,14 @@ expressions sans date calendaire (« Starting ASAP », « Beginn: sofort », …
 ## 7. Tests
 
 ```bash
-$ .venv/bin/python -m pytest -q tests/test_offer_dates.py
-270 passed
+$ .venv/bin/python -m pytest -q tests/test_offer_dates.py tests/test_offer_dates_invariants.py
+1654 passed
 
-$ .venv/bin/python -m ruff check .
+$ .venv/bin/python -m ruff check $(git ls-files '*.py')
 All checks passed!
 
 $ .venv/bin/python -m pytest -q
-1643 passed, 1 skipped        # suite complète, aucune régression
+3027 passed, 1 skipped        # suite complète, aucune régression
 
 $ git diff --check
 # (vide) — aucun problème de whitespace
@@ -214,8 +228,8 @@ $ git diff --check
 
 Couverture :
 
-- 82 fixtures synthétiques paramétrées × 3 contrôles (contrat exact, offsets
-  exacts, déterminisme) ;
+- 181 fixtures synthétiques paramétrées × 3 contrôles (contrat exact, offsets
+  exacts, déterminisme) + 6 invariants de corpus ;
 - les 10 pièges obligatoires, dans les 5 langues quand ils s'y traduisent ;
 - contradictions mutuelles (dates, durées, sources croisées) ;
 - garde-fous API (type invalide, langue inconnue, texte vide) ;
@@ -253,6 +267,56 @@ différents. Les deux écarts assumés restants (précision des durées, garde
 « ouverture des candidatures ») sont documentés ci-dessus.
 
 Le commit du tour précédent reste accessible : `git show 3b18eec`.
+
+---
+
+## 8 bis. Passe de couverture (tour de finalisation)
+
+Un corpus de référence indépendant de **99 cas** (FR 22, EN 32, DE 16, IT 14,
+ES 15) a été écrit pour confronter le module à des formulations que le
+corpus initial ne touchait pas. Résultat : **52 divergences** au départ, dont
+une vingtaine de formulations **non lues du tout**. Corrections apportées :
+
+| Langue | Formulation | Avant | Après |
+|---------|-------------|-------|-------|
+| DE | « Bewerbungen bis zum 15. November 2025 » | classé `end` (le marqueur « bis zum » était plus proche) | `deadline` |
+| DE | « Vertragsdauer: 6 Monate » | aucun fait | `duration_exact` |
+| DE | « Einsatzbeginn am 01.09.2026 » / « Beginnendatum: 01.03.2027 » | aucun fait | `start` |
+| DE | « Die Stelle ist ab 1. Oktober 2026 zu besetzen » | aucun fait | `start` |
+| DE | « Der Vertrag läuft bis 30. Juni 2027 » / « Die Ausschreibung ist bis 30. April 2026 online » | aucun fait | `end` |
+| DE | « Befristeter Vertrag über 12 Monate » | aucun fait | `duration_exact` |
+| IT | « Durata del contratto: 24 mesi » / « Contratto a termine di 12 mesi » | aucun fait | `duration_exact` |
+| IT | « Durata massima: 18 mesi » | `duration_exact` | `duration_max` |
+| IT | « Tra 3 e 6 mesi » | aucun fait (« tra » lu comme un repère temporel) | `duration_range` |
+| IT | « Periodo di prova: 3 mesi » | aucun fait | `duration_exact` |
+| ES | « Fecha límite: 15 de noviembre de 2025 » / « Plazo de solicitud: … » | aucun fait | `deadline` |
+| ES | « Solicitar antes del 15 de marzo de 2027 » / « Candidaturas hasta 15 de abril de 2026 » | aucun fait | `deadline` |
+| ES | « Duración del contrato: 6 meses » / « Prácticas de 6 meses » / « El contrato dura 18 meses » | aucun fait | `duration_exact` |
+| ES | « Máxima duración: 12 meses » | `duration_exact` | `duration_max` |
+| ES | « Comienza el 01/03/2027 » | aucun fait | `start` (ambiguë) |
+| FR | « Débutant le 1er mars 2027 » | aucun fait (mot composé) | `start` |
+| FR | « Durée maximale : 12 mois » / « limitée à 18 mois » | `duration_exact` | `duration_max` |
+| FR | « Au moins 6 mois d'expérience » | `duration_min` (apostrophe non reconnue) | **aucun fait** (piège de l'expérience) |
+| EN | « The contract runs until 31 December 2027. » | aucun fait | `end` |
+| EN | « This is a 2-year assignment. » | aucun fait | `duration_exact` |
+| EN | « The assignment is open from 3 to 6 months. » | aucun fait | `duration_range` |
+
+Les trois corrections de fond :
+
+1. **vocabulaire par langue élargi** — marqueurs composés (`Vertragsdauer`,
+   `Einsatzbeginn`, `Débutant`, `Bewerbungen bis zum`), fins de contrat
+   (`läuft bis`, `bis … online`), bornes de durée séparées de leur nom
+   (`Máxima duración:`) ;
+2. **un intervalle est borné par lui-même** — « from 3 to 6 months » et
+   « tra 3 e 6 mesi » ne sont plus lus comme des repères temporels ; seule la
+   piège de l'expérience continue de s'appliquer ;
+3. **apostrophe française reconnue** — « d'expérience » est détecté comme
+   expérience (le motif ne reconnaissait que « de expérience »).
+
+La **détection** et la **citation** ont été séparées : la détection accepte
+la phrase complète (« Durée du contrat : 6 mois »), la citation reste
+l'ancre stricte (« contract », « duration »), ce qui préserve des citations
+courtes et vérifiables.
 
 ---
 
@@ -322,11 +386,17 @@ $ ./checklist_codex.sh
 ```
 A career/offer_dates.py
 A tests/test_offer_dates.py
+A tests/test_offer_dates_invariants.py
 A tests/fixtures/offer_dates/en.json
 A tests/fixtures/offer_dates/fr.json
 A tests/fixtures/offer_dates/de.json
 A tests/fixtures/offer_dates/it.json
 A tests/fixtures/offer_dates/es.json
+A tests/fixtures/offer_dates/ext_en.json
+A tests/fixtures/offer_dates/ext_fr.json
+A tests/fixtures/offer_dates/ext_de.json
+A tests/fixtures/offer_dates/ext_it.json
+A tests/fixtures/offer_dates/ext_es.json
 A docs/agent-reports/SPEC-SK02-OFFER_DATES.md
 ```
 
@@ -337,12 +407,14 @@ composant du dépôt.
 
 ## 13. Conclusion
 
-✅ Module `career/offer_dates.py` : analyseur temporel multilingue **FR/EN/DE/IT/ES**  
-✅ **8** `fact_type`, offsets exacts, quote verbatim, precision, confidence, contradictions mutuelles  
-✅ Les **10 pièges obligatoires** sont couverts, dans les 5 langues  
-✅ **82 fixtures synthétiques** + **270 tests**, 100 % du corpus correctement classé  
-✅ Zéro jour inventé, zéro échéance classes comme début, zéro maximum utilisé comme minimum  
-✅ Ruff propre, suite complète verte (1643 tests), `git diff --check` propre  
+✅ Module `career/offer_dates.py` : analyseur temporelle multilingue **FR/EN/DE/IT/ES**
+✅ **8** `fact_type`, offsets exacts, quote verbatim, precision, confidence, contradictions mutuelles
+✅ Les **10 pièges obligatoires** sont couverts, dans les 5 langues
+✅ **181 fixtures synthétiques** + **1654 tests**, 100 % du corpus correctement classé
+✅ Zéro jour inventé, zéro échéance classée comme début, zéro maximum utilisé comme minimum
+✅ Passe de couverture sur les formulations allemandes, italiennes, espagnoles et françaises (§ 8)
+✅ Ruff propre, suite complète verte (3027 tests), `git diff --check` propre
+✅ Branche poussée sur `origin` : le travail survit au nettoyage des worktrees
 ✅ Rapport livré
 
 **Prêt pour relecture et intégration.**
