@@ -679,13 +679,16 @@ def test_a_corrected_fact_replaces_its_line_in_the_profile(tmp_path):
     assert "Power BI\n" not in skills
 
 
-def test_an_approved_contact_fact_fills_the_empty_profile_field(tmp_path):
+def test_an_approved_contact_fact_is_persisted_in_the_local_profile(tmp_path):
+    """The value is written in the profile itself, and it survives a restart."""
     service = CareerService(tmp_path)
     result = service.build_candidate_facts(text=CV_SYNTHETIQUE, filename="cv_synthetique.txt")
     contact = [item for item in result["facts"] if item["kind"] == "contact"][0]
     service.decide_candidate_fact(contact["id"], "approve")
     service.apply_candidate_facts([contact["id"]])
     assert service.get_profile()["contact_email"] == "camille.exemple@example.test"
+    reopened = CareerService(tmp_path)
+    assert reopened.get_profile()["contact_email"] == "camille.exemple@example.test"
 
 
 def test_a_contact_fact_never_replaces_a_value_written_by_the_person(tmp_path):

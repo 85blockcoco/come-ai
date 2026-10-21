@@ -3,7 +3,7 @@
 **Mission** : CVBOOST-31 — SK-10
 **Branche** : `worker/cvboost-31-1792617672` → reprise sur `agent/spec-sk10-candidate-profile`
 **Base** : `main` (`f5b22f2` — merge(career): ATS diagnostics and targeted CV variants pipeline)
-**Suite** : 1481 tests verts (1462 avant mission, +19 tests adversariaux), 1 skip préexistant
+**Suite** : 1482 tests verts (1463 avant mission, +19 tests adversariaux), 1 skip préexistant
 **Lint** : `ruff check .` → All checks passed · `git diff --check` → propre
 
 ---
@@ -22,6 +22,12 @@ autres ont servi de contre-épreuve.
 
 **Aucune v3 n'a été créée** : les corrections sont faites dans les modules
 existants de la livraison canonique.
+
+> **Note de fusion** — pendant ce travail, la branche de mission a avancé
+> (`ac72b82` : application des faits de contact approuvés au profil, c'est-à-dire
+> D2 ci-dessous). Le travail a été **rebasesé sur cette tête** au lieu de
+> l'écraser : la branche `agent/spec-sk10-candidate-profile` avance par
+> fast-forward, sans force-push, et le correctif de contact y est conservé.
 
 Cette tentative apporte ce que la livraison précédente ne contenait pas :
 
@@ -86,6 +92,9 @@ disparaître.
 et `languages`. L'e-mail du CV disparaissait, et la réponse affirmait pourtant
 « appliqué : 1 ».
 
+> Ce défaut a été corrigé entre-temps sur la branche de mission (`ac72b82`).
+> La correction est conservée et complétée ici.
+
 **Correction** : les champs de contact sont persistés, et le résultat distingue
 `applied` (faits présents dans le profil), `written` (faits qui y ont réellement
 écrit) et `ignored` (faits sans place dans les champs, comme une date).
@@ -139,7 +148,7 @@ alors que la machine à états l'autorise.
 | `career/profile_builder.py` | Pipeline : texte extrait → faits proposés (réutilise `career.cv_quality`) |
 | `career_static/js/profile-builder.js` | UI d'approbation champ par champ |
 | `scripts/candidate_profile_manual_check.py` | Essai manuel hors dépôt : lit un vrai CV, n'approuve rien, refuse un fichier du dépôt |
-| `tests/test_candidate_profile.py` | 57 tests (modèle, builder, service, HTTP, garde-fous UI, script manuel, campagne adversariale) |
+| `tests/test_candidate_profile.py` | 58 tests (modèle, builder, service, HTTP, garde-fous UI, script manuel, campagne adversariale) |
 | `tests/fixtures/candidate_profile/cv_synthetique.txt` | Fixture synthétique (CV complet) |
 | `tests/fixtures/candidate_profile/cv_ocr_synthetique.txt` | Fixture synthétique (lecture OCR plate) |
 | `tests/fixtures/candidate_profile/expected_facts.json` | Faits attendus du CV synthétique (golden file) |
@@ -446,13 +455,13 @@ Avant la correction D1, l'étape « Profil après rejet » renvoyait
 
 ```bash
 ./checklist_codex.sh                                   # → TOUT VERT
-.venv/bin/python -m pytest -q tests/test_candidate_profile.py   # 57 passed
-.venv/bin/python -m pytest -q                           # 1481 passed, 1 skipped
+.venv/bin/python -m pytest -q tests/test_candidate_profile.py   # 58 passed
+.venv/bin/python -m pytest -q                           # 1482 passed, 1 skipped
 .venv/bin/python -m ruff check .                       # All checks passed
 git diff --check                                       # propre
 ```
 
-Détail de la suite : 38 tests de la livraison reprise + **19 tests adversariaux**
+Détail de la suite : 39 tests de la livraison reprise + **19 tests adversariaux**
 — apply réversible (6), contacts appliqués (2), honnêteté du résultat d'apply
 (1), migration v10 (1), filtre de statut (1), export multi-documents (1),
 provenance verbatim (2), bornage par rubrique (1), ligne partagée (1),

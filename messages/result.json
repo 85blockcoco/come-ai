@@ -1,38 +1,31 @@
 {
   "status": "done",
-  "files_created": [
+  "order_id": "cvboost-31-1792617672",
+  "branch": "agent/spec-sk10-candidate-profile",
+  "worker_branch": "worker/cvboost-31-1792617672",
+  "base_commit": "1cf6d16",
+  "commit": "a52bae3",
+  "files_created": [],
+  "files_modified": [
     "career/candidate_profile.py",
     "career/profile_builder.py",
-    "career_static/js/profile-builder.js",
-    "scripts/candidate_profile_manual_check.py",
-    "tests/test_candidate_profile.py",
-    "tests/fixtures/candidate_profile/cv_synthetique.txt",
-    "tests/fixtures/candidate_profile/cv_ocr_synthetique.txt",
-    "tests/fixtures/candidate_profile/expected_facts.json",
-    "docs/agent-reports/SPEC-SK10-CANDIDATE_PROFILE.md"
-  ],
-  "files_modified": [
     "career/service.py",
-    "career/router.py",
-    "career/cv_quality/parser.py",
-    "career/cv_quality/__init__.py",
-    "career_static/index.html",
-    "career_static/career.js",
-    "career_static/career.css",
+    "career_static/js/profile-builder.js",
+    "docs/agent-reports/SPEC-SK10-CANDIDATE_PROFILE.md",
+    "tests/test_candidate_profile.py",
     "tests/test_qualification_snapshot_persistence.py"
   ],
-  "branch": "agent/spec-sk10-candidate-profile",
-  "commit": "ac72b82",
-  "branch_head": "1f1ac26 (ce commit de rapport inclus)",
-  "output": "SK-10 livré : pipeline local document → faits proposés avec provenance exacte (page, offsets, citation) → décision explicite de la personne → profil actif. Modèle career/candidate_profile.py (5 statuts, machine à états, acteur humain obligatoire), construction career/profile_builder.py (réutilise Mission 01), table candidate_facts (schéma v9, migration additive), 7 endpoints, UI d'approbation champ par champ, script d'essai manuel hors dépôt, 39 tests synthétiques.",
-  "logs": "pytest -q tests/test_candidate_profile.py → 39 passed\npytest -q → 1463 passed, 1 skipped (base 1424 + 39 nouveaux)\npytest -q sur clone frais du commit poussé → 1462 passed, 1 skipped\nruff check . → All checks passed\ngit diff --check → propre\n./checklist_codex.sh → TOUT VERT\nnode --check career_static/js/profile-builder.js → OK\npush: agent/spec-sk10-candidate-profile → ac72b82 (remote), tentative précédente conservée au tag spec-sk10-candidate-profile-v1 (2909b04)",
+  "output": "SK-10 (profil candidat avec preuves approuvées) reprise, auditée et durcie : 6 défauts réels reproduits puis corrigés dans les modules existants (aucune v3). D1 (bloquant) : un fait appliqué au profil puis rejeté, mis de côté, rouvert ou supprimé continuait d'y figurer et justifiait donc encore une candidature — le service retient désormais le champ et la ligne exacte écrits par chaque fait (candidate_facts.applied_field / applied_line, schéma v10) et toute décision retire la ligne, une correction la remplace, une ligne partagée change de main au lieu de disparaître. D2 : un fait de contact approuvé n'était jamais écrit dans le profil (corrigé en amont par ac72b82, conservé et complété ici : le résultat distingue applied / written / ignored). D3 : au-delà de 60 faits d'un même type la boucle de bornage interrompait tout, effaçant les rubriques Langues, Formation et Expérience du bilan de relecture — une rubrique à son plafond est désormais sautée. D4 : la citation n'était pas le passage annoncé par les offsets (source[start:end] ≠ quote sur une ligne à espaces répétés) — les offsets sont calculés sur le texte brut et la citation est verbatim. D5 : un DOCX annonçait une page « exacte » alors qu'il n'a pas d'information de page, et un import OCR pouvait être relu au lieu de la lecture montrée à la personne — un DOCX reste « estimated », l'OCR garde sa lecture stockée. D6 : l'interface ne permettait pas de corriger un fait déjà approuvé. La migration v9 → v10 répare les profils construits par la version précédente. 19 tests adversariaux ajoutés (58 au total pour SK-10), essai réel contre un serveur uvicorn local, suite complète 1482 verts + 1 skip préexistant, ruff clean, git diff --check propre.",
+  "logs": "RECHERCHE PRÉALABLE (mission « consolider l'existant, pas créer v3 ») : trois implémentations parallèles de SK-10 existaient — la livraison canonique agent/spec-sk10-candidate-profile (0502c4b), reprise par cherry-pick propre (base identique) ; worker/cvboost-31-1792614191 et worker/cvboost-31-1792615600, deux implémentations indépendantes écartées (structure divergente, moins de garanties). La branche de mission a avancé pendant le travail (ac72b82 corrige D2) : le travail a été rebasé sur cette tête (fast-forward, aucun force-push) au lieu de l'écraser.\nCAMPAGNE ADVERSARIALE : 6 scénarios reproduits à la main avant correction, puis figés en tests.\nDÉFAUT 1 (bloquant, critère 5 « faits non approuvés ≠ justifier une candidature ») : build → approve → apply → reject laissait la compétence dans le champ skills du profil, donc dans le brouillon de candidature. Reproduit, puis corrigé : le service mémorise le champ et la ligne exacte écrits par chaque fait ; un rejet, une mise de côté, une réouverture ou une suppression retire la ligne ; une correction la remplace ; une ligne partagée entre deux faits change de main au lieu de disparaître ; une ligne écrite à la main par la personne n'est jamais retirée ; la migration v10 répare les profils déjà construits.\nDÉFAUT 2 (moyen) : un fait de contact approuvé n'était jamais persisté dans le profil (l'e-mail du CV disparaissait alors que la réponse affirmait « appliqué : 1 »).\nDÉFAUT 3 (moyen) : 60 faits d'un même type tuaient toutes les autres rubriques du bilan de relecture (break au lieu de skip).\nDÉFAUT 4 (moyen) : la citation stockée n'était pas le passage annoncé par les offsets (espaces répétés : source[start:end] ≠ quote) — le critère 2 n'était pas tenu.\nDÉFAUT 5 (moyen) : page « exacte » annoncée pour un DOCX (aucune information de page) et relecture OCR divergente possible.\nDÉFAUT 6 (mineur) : « Corriger » absent pour un fait approuvé, alors que la machine à états l'autorise.\nÉPREUVE RÉELLE (serveur uvicorn local, données hors dépôt, CV synthétique, aucun envoi externe) : POST /api/career/candidate-profile/proposals → HTTP 201, 17 faits tous proposed ; offsets 453–461 et citation « Power BI » ; PATCH approve → approved/usable ; POST apply → appliqués 1, écrits 1, ignorés 0, skills « Power BI » ; PATCH reject → rejected ; GET /api/career/profile → skills « » (le fait rejeté ne justifie plus rien — avant correction : « Power BI ») ; GET active → 0 fait utilisable, 16 en attente ; GET export → come-ai-candidate-profile/1, source_documents [« cv-hors-depot.txt »] ; GET /career et /career-static/js/profile-builder.js → HTTP 200 ; GET /api/career/health → local_only true, ocr_auto_approved false, les 5 statuts.\npytest -q tests/test_candidate_profile.py → 58 passed\npytest -q → 1482 passed, 1 skipped (base 1463 + 19 nouveaux)\nruff check . → All checks passed\ngit diff --check → propre\n./checklist_codex.sh lint + secrets → TOUT VERT",
   "guarantees": [
     "Aucun fait n'est approuvé automatiquement : l'insertion SQL écrit le littéral 'proposed' et apply_decision() exige actor='user' (OCR compris).",
-    "Chaque fait garde sa source exacte : page + offsets + citation vérifiable au caractère près.",
-    "Un fait proposed/rejected/suspended n'entre ni dans le matching (_scoring_context) ni dans les brouillons de candidature (_application_context).",
-    "Suppression par fait, export portable JSON, export Données perso et reset local prennent en compte les faits.",
+    "Chaque fait garde sa source exacte : page + offsets + citation, et la citation EST source[start:end] (vérifié sur un document à espaces répétés).",
+    "Un fait proposed/rejected/suspended n'entre ni dans le matching (_scoring_context) ni dans les brouillons de candidature (_application_context), même après avoir été appliqué : sa ligne est retirée du profil.",
+    "Une ligne écrite à la main par la personne n'est jamais retirée par une décision de fait.",
+    "La page n'est annoncée « exacte » que quand elle est prouvée (DOCX et OCR restent estimés).",
+    "Suppression par fait, export portable JSON (avec tous les documents d'origine), export Données perso et reset local prennent en compte les faits.",
     "Fixtures 100 % synthétiques ; le script d'essai manuel refuse un document situé dans le dépôt."
   ],
-  "review_notes": "La branche contenait déjà une tentative SK-10 (commit 2448d28 + docs 2909b04, conservée au tag spec-sk10-candidate-profile-v1). Ses points forts (machine à états, acteur humain, faits de contact, golden file, script manuel) ont été repris ; cette version ajoute le branchement réel au matching et à la candidature, la preuve structurale de non-approbation, la provenance de page exacte et la migration additive du schéma.",
+  "review_notes": "Branche de mission fast-forwardée sur 1cf6d16 (la correction de contact ac72b82 y est conservée et complétée) ; le commit de cette tentative est a52bae3. Le rapport docs/agent-reports/SPEC-SK10-CANDIDATE_PROFILE.md décrit les 6 défauts (avec reproduction, cause et correction), les garanties, les preuves de test et le déroulé de l'essai réel. Le verrou de SK-11 tient : un fait non approuvé ne justifie rien, même après avoir été appliqué puis revenu.",
   "error": null
 }
