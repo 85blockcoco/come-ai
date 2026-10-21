@@ -367,6 +367,15 @@ def test_service_applies_only_approved_facts_to_the_profile(tmp_path):
     assert proposed["label"] in applied["profile"]["skills"]
 
 
+def test_an_approved_contact_fact_fills_an_empty_profile_field(tmp_path):
+    service = CareerService(tmp_path)
+    result = service.build_candidate_facts(text=CV_SYNTHETIQUE, filename="cv_synthetique.txt")
+    contact = [fact for fact in result["facts"] if fact["kind"] == "contact"][0]
+    service.decide_candidate_fact(contact["id"], "approve")
+    applied = service.apply_candidate_facts([contact["id"]])
+    assert applied["profile"]["contact_email"] == "camille.exemple@example.test"
+
+
 def test_facts_survive_a_restart_of_the_local_service(tmp_path):
     service = CareerService(tmp_path)
     result = service.build_candidate_facts(text=CV_SYNTHETIQUE, filename="cv_synthetique.txt")

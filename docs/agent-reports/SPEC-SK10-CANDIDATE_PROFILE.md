@@ -3,7 +3,7 @@
 **Mission** : CVBOOST-31 — SK-10
 **Branche** : `worker/cvboost-31-1792614464` → reprise sur `agent/spec-sk10-candidate-profile`
 **Base** : `main` (`f5b22f2` — merge(career): ATS diagnostics and targeted CV variants pipeline)
-**Suite** : 1462 tests verts (1424 avant mission, +38 nouveaux), 1 skip préexistant
+**Suite** : 1463 tests verts (1424 avant mission, +39 nouveaux), 1 skip préexistant
 **Lint** : `ruff check .` → All checks passed · `git diff --check` → propre
 
 ---
@@ -66,7 +66,7 @@ tests (section 6).
 | `career/profile_builder.py` | Pipeline : texte extrait → faits proposés (réutilise `career.cv_quality`) |
 | `career_static/js/profile-builder.js` | UI d'approbation champ par champ |
 | `scripts/candidate_profile_manual_check.py` | Essai manuel hors dépôt : lit un vrai CV, n'approuve rien, refuse un fichier du dépôt |
-| `tests/test_candidate_profile.py` | 38 tests (modèle, builder, service, HTTP, garde-fous UI, script manuel) |
+| `tests/test_candidate_profile.py` | 39 tests (modèle, builder, service, HTTP, garde-fous UI, script manuel) |
 | `tests/fixtures/candidate_profile/cv_synthetique.txt` | Fixture synthétique (CV complet) |
 | `tests/fixtures/candidate_profile/cv_ocr_synthetique.txt` | Fixture synthétique (lecture OCR plate) |
 | `tests/fixtures/candidate_profile/expected_facts.json` | Faits attendus du CV synthétique (golden file) |
@@ -325,14 +325,14 @@ Retour à consigner hors dépôt : `docs/agent-reports/SPEC-SK10-ESSAIS-<date>.m
 
 ```bash
 ./checklist_codex.sh                                   # → TOUT VERT
-.venv/bin/python -m pytest -q tests/test_candidate_profile.py   # 38 passed
-.venv/bin/python -m pytest -q                           # 1462 passed, 1 skipped
+.venv/bin/python -m pytest -q tests/test_candidate_profile.py   # 39 passed
+.venv/bin/python -m pytest -q                           # 1463 passed, 1 skipped
 .venv/bin/python -m ruff check .                       # All checks passed
 git diff --check                                       # propre
 ```
 
-Détail de la suite : 38 nouveaux tests —
-modèle et statuts (10), construction des propositions (7), service local (12),
+Détail de la suite : 39 nouveaux tests —
+modèle et statuts (10), construction des propositions (7), service local (13),
 séparation matching / candidature (4), API HTTP (3), garde-fous d'interface (2),
 essai manuel hors dépôt (2).
 

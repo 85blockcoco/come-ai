@@ -1,0 +1,37 @@
+{
+  "status": "done",
+  "files_created": [
+    "career/candidate_profile.py",
+    "career/profile_builder.py",
+    "career_static/js/profile-builder.js",
+    "scripts/candidate_profile_manual_check.py",
+    "tests/test_candidate_profile.py",
+    "tests/fixtures/candidate_profile/cv_synthetique.txt",
+    "tests/fixtures/candidate_profile/cv_ocr_synthetique.txt",
+    "tests/fixtures/candidate_profile/expected_facts.json",
+    "docs/agent-reports/SPEC-SK10-CANDIDATE_PROFILE.md"
+  ],
+  "files_modified": [
+    "career/service.py",
+    "career/router.py",
+    "career/cv_quality/parser.py",
+    "career/cv_quality/__init__.py",
+    "career_static/index.html",
+    "career_static/career.js",
+    "career_static/career.css",
+    "tests/test_qualification_snapshot_persistence.py"
+  ],
+  "branch": "agent/spec-sk10-candidate-profile",
+  "commit": "0502c4b",
+  "output": "SK-10 livré : pipeline local document → faits proposés avec provenance exacte (page, offsets, citation) → décision explicite de la personne → profil actif. Modèle career/candidate_profile.py (5 statuts, transitions, acteur humain obligatoire), construction career/profile_builder.py (réutilise Mission 01), table candidate_facts (schéma v9, migration additive), 7 endpoints, UI d'approbation champ par champ, script d'essai manuel hors dépôt, 38 tests synthétiques.",
+  "logs": "pytest -q tests/test_candidate_profile.py → 38 passed\npytest -q → 1462 passed, 1 skipped (base 1424 + 38 nouveaux)\npytest -q sur clone frais du commit poussé → 1462 passed, 1 skipped\nruff check . → All checks passed\ngit diff --check → propre\n./checklist_codex.sh → TOUT VERT\nnode --check career_static/js/profile-builder.js → OK\npush: agent/spec-sk10-candidate-profile → 0502c4b (remote), tentative précédente conservée au tag spec-sk10-candidate-profile-v1 (2909b04)",
+  "guarantees": [
+    "Aucun fait n'est approuvé automatiquement : l'insertion SQL écrit le littéral 'proposed' et apply_decision() exige actor='user' (OCR compris).",
+    "Chaque fait garde sa source exacte : page + offsets + citation vérifiable au caractère près.",
+    "Un fait proposed/rejected/suspended n'entre ni dans le matching (_scoring_context) ni dans les brouillons de candidature (_application_context).",
+    "Suppression par fait, export portable JSON, export Données perso et reset local prennent en compte les faits.",
+    "Fixtures 100 % synthétiques ; le script d'essai manuel refuse un document situé dans le dépôt."
+  ],
+  "review_notes": "La branche contenait déjà une tentative SK-10 (commit 2448d28 + docs 2909b04, conservée au tag spec-sk10-candidate-profile-v1). Ses points forts (machine à états, acteur humain, faits de contact, golden file, script manuel) ont été repris ; cette version ajoute le branchement réel au matching et à la candidature, la preuve structurale de non-approbation, la provenance de page exacte et la migration additive du schéma.",
+  "error": null
+}

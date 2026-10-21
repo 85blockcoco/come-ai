@@ -1687,7 +1687,14 @@ class CareerService:
             )
             merged = merge_usable_facts(profile, facts)
             changed: dict[str, str] = {}
-            for field_name in ("education", "experience", "skills", "languages"):
+            for field_name in (
+                "education",
+                "experience",
+                "skills",
+                "languages",
+                "contact_email",
+                "contact_phone",
+            ):
                 new_value = str(merged.get(field_name, ""))
                 if new_value != str(profile.get(field_name, "")):
                     changed[field_name] = self._clean_profile_editable_value(field_name, new_value)
