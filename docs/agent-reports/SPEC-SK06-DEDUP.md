@@ -201,11 +201,15 @@ apparu ont été corrigés dans le **module**, pas dans les attentes (voir §1,
 | Commande | Résultat |
 |----------|----------|
 | `.venv/bin/python -m pytest -q tests/test_job_deduplication.py` | **163 passed** |
-| `.venv/bin/python -m pytest -q` (suite complète) | **1536 passed, 1 skipped** (base 1373 + 163 nouveaux, **zéro régression**) |
+| `.venv/bin/python -m pytest -q` (suite complète, sur `main` f5b22f2) | **1587 passed, 1 skipped** (base main 1424 + 163 nouveaux, **zéro régression**) |
 | `.venv/bin/python -m ruff check .` | **All checks passed** |
 | `git diff --check` | **propre** |
 | 500 offres dédupliquées | **< 200 ms** (seuil du lot A) |
+| Les 64 tests du lot B (non suivi) rejoués contre le module consolidé | **64 passed** |
 
+> Le `main` a avancé de `a054c97` à `f5b22f2` pendant la mission : la
+> branche a été **rebasée sur le `main` courant** (rebase propre, aucun
+> conflit) et la suite complète a été rejouée verte après rebase.
 > Le worktree de mission n'a pas de `.venv` (le dossier est ignoré par git) :
 > la validation utilise le venv du dépôt principal, qui exécute le code du
 > worktree (`cwd` = worktree). `checklist_codex.sh` accepte `MAIN_ROOT` et
