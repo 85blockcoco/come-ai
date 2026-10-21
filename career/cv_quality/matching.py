@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable, Sequence
 
 from .models import CVAnalysisResult, MatchAction, MatchActionCode, MatchEvidence, MatchResult
+from ..models import normalized_text
 from ..offer_requirements.extract import analyze_offer
 
 # ──────────────────────────────────────────────────────────────────────
@@ -337,6 +338,9 @@ CLAUSE_SEPARATORS = frozenset(
         "et", "ou", "mais", "avec", "ainsi", "puis", "donc", "en", "pour",
         "dans", "sur", "par", "aussi", "dont", "selon", "car", "ni", "ni",
         "chez", "vers", "depuis", "pendant", "malgre", "hormis",
+        # English conjunctions: a proof never crosses them either, so an
+        # English CV yields the same tight evidence as a French one.
+        "and", "or", "but", "with", "then", "also", "while", "whereas",
     }
 )
 
@@ -346,10 +350,23 @@ MAX_EXTENSION = 40
 #: Characters that close a clause.
 CLAUSE_DELIMITERS = ",;:|!?("
 
+#: Canonical reason carried by every ``DO_NOT_ADD`` action: what is absent
+#: from the CV is never added to it.  The specific cause of the absence is
+#: appended to this sentence, never replaces it.
+NO_EVIDENCE_REASON = "Aucune preuve dans le CV, ne pas ajouter sans preuve"
+
 #: Words of a requirement that ask for a quantified result.
 QUANTIFICATION_CUES: tuple[str, ...] = (
     "equipe", "budget", "chiffre", "effectif", "encadrer", "diriger",
     "manager", "gestion d equipe", "chef d equipe",
+)
+
+#: Offer fields the CVBOOST-02 contract reads as structured requirements.
+STRUCTURED_REQUIREMENT_FIELDS: tuple[str, ...] = (
+    "requirements",
+    "languages_required",
+    "eligibility_requirement",
+    "role_level",
 )
 
 #: A quantified result: a number with a unit or a counted noun.
@@ -411,6 +428,60 @@ def _is_negated(text: str) -> bool:
 def _is_quantified(text: str) -> bool:
     """True when the text carries a number with a unit."""
     return bool(QUANTIFIED_EVIDENCE.search(text))
+
+
+def _asks_for_numbers(text: str) -> bool:
+    """True when the requirement asks for a quantified result.
+
+    The cues are matched on whole words: ``manager`` does not answer to
+    ``management``.  The mission's example — « expérience management » in the
+    offer, « gère une équipe de 10 personnes » in the CV — must produce a
+    QUANTIFY action, not a plain HIGHLIGHT.
+    """
+    tokens = _tokens(text)
+    return any(_keyword_present(cue, tokens) for cue in QUANTIFICATION_CUES)
+
+
+def _structured_lines(value: Any) -> list[str]:
+    """Return the non-empty lines of a structured offer field."""
+    if isinstance(value, str):
+        raw_lines: list[Any] = value.splitlines()
+    elif isinstance(value, (list, tuple)):
+        raw_lines = list(value)
+    else:
+        return []
+    lines: list[str] = []
+    for raw in raw_lines:
+        line = str(raw).strip().strip("•-–*▪●➤·‣◦ ").strip()
+        if line:
+            lines.append(line)
+    return lines
+
+
+def _unextracted_requirements(offer: Any, extracted: Sequence[str]) -> list[str]:
+    """Return the structured requirement lines the contract did not extract.
+
+    The contract (CVBOOST-02) ignores any statement shorter than four
+    characters — ``SQL``, ``VBA``, ``M&A`` — and a requirement that never
+    reaches the matcher cannot be covered.  The engine says so instead of
+    letting the offer look fully handled.
+    """
+    if not isinstance(offer, dict):
+        return []
+    extracted_keys = [normalized_text(text) for text in extracted]
+    missing: list[str] = []
+    for field in STRUCTURED_REQUIREMENT_FIELDS:
+        for line in _structured_lines(offer.get(field)):
+            key = normalized_text(line)
+            if not key:
+                continue
+            if any(
+                key == other or key.startswith(other) or other.startswith(key)
+                for other in extracted_keys
+            ):
+                continue
+            missing.append(line)
+    return missing
 
 
 def _line_bounds(source: str, offset: int) -> tuple[int, int]:
@@ -721,6 +792,12 @@ def match_cv_to_offer(
     analysis = analyze_offer(offer)
     requirements = list(analysis.get("requirements", []))
 
+    for missing in _unextracted_requirements(offer, [r["text"] for r in requirements]):
+        warnings.append(
+            f"Exigence non extraite par le contrat d'exigences : « {missing} » — "
+            "elle ne peut pas être couverte (texte trop court pour le contrat ?)."
+        )
+
     if not source.strip():
         warnings.append("Texte du CV indisponible : aucune preuve ne peut être citée.")
         for requirement in requirements:
@@ -730,7 +807,7 @@ def match_cv_to_offer(
                     requirement_text=requirement["text"],
                     cv_evidence_text=None,
                     cv_evidence_offset=None,
-                    reason="Aucune preuve dans le CV, ne pas ajouter sans preuve",
+                    reason=NO_EVIDENCE_REASON,
                     confidence=0.0,
                 )
             )
@@ -908,7 +985,7 @@ def _match_language(
             requirement_text=requirement_text,
             cv_evidence_text=None,
             cv_evidence_offset=None,
-            reason=f"Langue {language} non mentionnée dans le CV",
+            reason=f"{NO_EVIDENCE_REASON} : la langue {language} n'y est pas mentionnée",
             confidence=0.9,
         )
 
@@ -931,8 +1008,8 @@ def _match_language(
             cv_evidence_text=None,
             cv_evidence_offset=None,
             reason=(
-                f"La langue {language} est mentionnée dans un contexte d'enseignement, "
-                "pas comme niveau déclaré"
+                f"{NO_EVIDENCE_REASON} : la langue {language} est mentionnée dans un contexte "
+                "d'enseignement, pas comme niveau déclaré"
             ),
             confidence=0.85,
         )
@@ -995,7 +1072,10 @@ def _match_language(
                 requirement_text=requirement_text,
                 cv_evidence_text=None,
                 cv_evidence_offset=None,
-                reason=f"Niveau de langue {declared_level} inférieur au niveau exigé {required_level}",
+                reason=(
+                    f"{NO_EVIDENCE_REASON} : le CV ne prouve pas le niveau de langue exigé "
+                    f"({declared_level} déclaré, {required_level} exigé)"
+                ),
                 confidence=0.85,
             )
 
@@ -1040,7 +1120,7 @@ def _match_education(
             requirement_text=requirement_text,
             cv_evidence_text=None,
             cv_evidence_offset=None,
-            reason=f"Niveau d'études {required_level} non attesté dans le CV",
+            reason=f"{NO_EVIDENCE_REASON} : le niveau d'études {required_level} n'est pas attesté",
             confidence=0.8,
         )
 
@@ -1087,7 +1167,10 @@ def _match_education(
         requirement_text=requirement_text,
         cv_evidence_text=None,
         cv_evidence_offset=None,
-        reason=f"Niveau d'études {cv_level} inférieur au niveau exigé {required_level}",
+        reason=(
+            f"{NO_EVIDENCE_REASON} : le CV ne prouve pas le niveau d'études exigé "
+            f"({cv_level} détenu, {required_level} exigé)"
+        ),
         confidence=0.9,
     )
 
@@ -1111,7 +1194,7 @@ def _match_contract(
             requirement_text=requirement_text,
             cv_evidence_text=None,
             cv_evidence_offset=None,
-            reason=f"Le CV exclut explicitement le contrat « {contract} »",
+            reason=f"{NO_EVIDENCE_REASON} : le CV exclut explicitement le contrat « {contract} »",
             confidence=0.9,
         )
     if declared is None:
@@ -1121,7 +1204,7 @@ def _match_contract(
             requirement_text=requirement_text,
             cv_evidence_text=None,
             cv_evidence_offset=None,
-            reason=f"Type de contrat « {contract} » non déclaré dans le CV",
+            reason=f"{NO_EVIDENCE_REASON} : le type de contrat « {contract} » n'est pas déclaré",
             confidence=0.8,
         )
     if declared != contract:
@@ -1133,7 +1216,10 @@ def _match_contract(
             requirement_text=requirement_text,
             cv_evidence_text=None,
             cv_evidence_offset=None,
-            reason=f"Type de contrat incompatible : CV « {declared} », offre « {contract} »",
+            reason=(
+                f"{NO_EVIDENCE_REASON} : type de contrat incompatible "
+                f"(CV « {declared} », offre « {contract} »)"
+            ),
             confidence=0.9,
         )
     evidence_text = source[proof[0]: proof[1]] if proof else None
@@ -1222,7 +1308,10 @@ def _match_skill(
                 requirement_text=requirement_text,
                 cv_evidence_text=None,
                 cv_evidence_offset=None,
-                reason=f"Homonyme détecté : le CV mentionne « {homonym} », pas « {concept.id} »",
+                reason=(
+                f"{NO_EVIDENCE_REASON} : homonyme détecté "
+                f"(le CV mentionne « {homonym} », pas « {concept.id} »)"
+            ),
                 confidence=0.85,
             )
 
@@ -1231,7 +1320,7 @@ def _match_skill(
             requirement_text=requirement_text,
             cv_evidence_text=None,
             cv_evidence_offset=None,
-            reason="Aucune preuve dans le CV, ne pas ajouter sans preuve",
+            reason=NO_EVIDENCE_REASON,
             confidence=0.95,
         )
 
@@ -1242,7 +1331,7 @@ def _match_skill(
             requirement_text=requirement_text,
             cv_evidence_text=None,
             cv_evidence_offset=None,
-            reason="Aucune preuve dans le CV, ne pas ajouter sans preuve",
+            reason=NO_EVIDENCE_REASON,
             confidence=0.9,
         )
 
@@ -1254,7 +1343,7 @@ def _match_skill(
             requirement_text=requirement_text,
             cv_evidence_text=None,
             cv_evidence_offset=None,
-            reason="Aucune preuve dans le CV, ne pas ajouter sans preuve",
+            reason=NO_EVIDENCE_REASON,
             confidence=0.95,
         )
 
@@ -1293,7 +1382,7 @@ def _match_skill(
         requirement_text=requirement_text,
         cv_evidence_text=None,
         cv_evidence_offset=None,
-        reason="Aucune preuve dans le CV, ne pas ajouter sans preuve",
+        reason=NO_EVIDENCE_REASON,
         confidence=0.95,
     )
 
@@ -1305,7 +1394,7 @@ def _skill_action(
     offset: int,
 ) -> MatchAction:
     """Build the action of a proved skill (HIGHLIGHT or QUANTIFY)."""
-    asks_for_numbers = any(cue in requirement_text.lower() for cue in QUANTIFICATION_CUES)
+    asks_for_numbers = _asks_for_numbers(requirement_text)
     has_numbers = _is_quantified(evidence_text)
 
     if asks_for_numbers and not has_numbers:
