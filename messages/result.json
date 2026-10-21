@@ -1,0 +1,17 @@
+{
+  "status": "done",
+  "files_created": [
+    "career/job_deduplication.py",
+    "career/discovery.py",
+    "tests/test_job_deduplication.py",
+    "tests/fixtures/job_deduplication/README.md",
+    "tests/fixtures/job_deduplication/pairs.json",
+    "tests/fixtures/job_deduplication/groups.json",
+    "tests/fixtures/job_deduplication/truth_corpus.json",
+    "scripts/verify_sk06_guards.py",
+    "docs/agent-reports/SPEC-SK06-DEDUP.md"
+  ],
+  "output": "SPEC-SK-06 consolidé : module career/job_deduplication.py (reprise du lot agent/spec-sk06-dedup après recherche préalable sur toutes les branches, re-portée sur le main courant) + point d'intégration discover_stage_offers() dans career/discovery.py. 9 critères de rapprochement et 7 garde-fous non négociables implémentés, corpus synthétique étiqueté de 194 cas (121 paires dont 9 cas title_qualifier ajoutés par cette mission, 14 groupes, 59 enregistrements), 172 tests, précision/rappel = 1.0. Branche worker/cvboost-27-1792608124 poussée (commit 73f0c92).",
+  "logs": "Recherche préalable : 3 implémentations trouvées (origin/agent/cvboost-07-dedup -> career/cv_quality/job_deduplication.py, origin/agent/spec-sk06-dedup -> lot consolidé retenu, WIP non suivi de 33 Ko abandonné) ; la branche d'origine partait d'une base ancienne supprimant 3 342 lignes de tests de main, seuls les fichiers métier ont donc été repris.\npytest -q tests/test_job_deduplication.py -> 172 passed in 1.52s\npytest -q (suite complète) -> 1596 passed, 1 skipped in 104.41s (skip pré-existant test_offer_summary_exhaustiveness.py)\nruff check . -> All checks passed!\npython scripts/verify_sk06_guards.py -> 9/9 critères OK, 7/7 garde-fous OK\nVENV_PY=.../.venv/bin/python ./checklist_codex.sh -> TOUT VERT\ngit diff --check -> propre (whitespace corrigé dans le rapport)\nPrécision/rappel/F1 sur truth_corpus.json (59 enregistrements, 36 groupes, 24 paires réelles) = 1.0000 / 1.0000 / 1.0000, 0 paire d'erreur\nCorpus : pairs.json 112 -> 121 paires (78 fusions, 43 refus), groups.json 14 cas, truth_corpus.json 59 enregistrements\nLimites documentées dans le rapport : (1) la règle de réouverture fusionne deux offres distinctes de même entreprise/rôle/ville (arbitrage imposé par la mission, atténué par conflicts + provenances) ; (2) le champ city structuré fait autorité sur une ville portée par le titre.",
+  "error": null
+}
