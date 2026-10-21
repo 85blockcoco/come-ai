@@ -1,0 +1,405 @@
+{
+  "lang": "de",
+  "note": "Cas de reference supplementaires (SK-02) : textes synthetiques multilingues, aucune donnee reelle.",
+  "cases": [
+    {
+      "id": "ext-sk02-de-001",
+      "text": "Bewerbungsfrist: 15. November 2025",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Bewerbungsfrist: 15. November 2025"
+        }
+      ],
+      "absent": [
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-de-002",
+      "text": "Mindestens 2 Jahre Erfahrung",
+      "expected": [],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-de-003",
+      "text": "Vertragsdauer: 6 Monate",
+      "expected": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 6,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Vertragsdauer: 6 Monate"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-de-004",
+      "text": "Beginnendatum: 01.03.2027",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": null,
+            "year": 2027
+          },
+          "precision": "unknown",
+          "confidence": "ambiguous",
+          "quote": "Beginnendatum: 01.03.2027"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published"
+      ]
+    },
+    {
+      "id": "ext-sk02-de-005",
+      "text": "Bewerbungen bis zum 15. November 2025",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Bewerbungen bis zum 15. November 2025"
+        }
+      ],
+      "absent": [
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-de-006",
+      "text": "Der Vertrag läuft bis 30. Juni 2027",
+      "expected": [
+        {
+          "fact_type": "end",
+          "value": {
+            "day": 30,
+            "month": 6,
+            "year": 2027
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Vertrag läuft bis 30. Juni 2027"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-de-007",
+      "text": "Befristeter Vertrag über 12 Monate",
+      "expected": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 12,
+            "months_max": 12
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Vertrag über 12 Monate"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-de-008",
+      "text": "Veröffentlicht am 3. Januar 2025",
+      "expected": [
+        {
+          "fact_type": "published",
+          "value": {
+            "day": 3,
+            "month": 1,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Veröffentlicht am 3. Januar 2025"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-de-009",
+      "text": "Die Stelle ist ab 1. Oktober 2026 zu besetzen",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 1,
+            "month": 10,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "ab 1. Oktober 2026"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published"
+      ]
+    },
+    {
+      "id": "ext-sk02-de-010",
+      "text": "Zwischen 3 und 6 Monaten",
+      "expected": [
+        {
+          "fact_type": "duration_range",
+          "value": {
+            "months_min": 3,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Zwischen 3 und 6 Monaten"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-de-011",
+      "text": "Höchstens 6 Monate",
+      "expected": [
+        {
+          "fact_type": "duration_max",
+          "value": {
+            "months_min": null,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Höchstens 6 Monate"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-de-012",
+      "text": "Mindestens 12 Monate Vertragslaufzeit",
+      "expected": [
+        {
+          "fact_type": "duration_min",
+          "value": {
+            "months_min": 12,
+            "months_max": null
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Mindestens 12 Monate"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-de-013",
+      "text": "Das Praktikum dauert 6 Monate",
+      "expected": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 6,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "dauert 6 Monate"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-de-014",
+      "text": "Frist: 15. Januar 2026",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 1,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Frist: 15. Januar 2026"
+        }
+      ],
+      "absent": [
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-de-015",
+      "text": "Die Ausschreibung ist bis 30. April 2026 online",
+      "expected": [
+        {
+          "fact_type": "end",
+          "value": {
+            "day": 30,
+            "month": 4,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "bis 30. April 2026"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-de-016",
+      "text": "Einsatzbeginn am 01.09.2026",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": null,
+            "year": 2026
+          },
+          "precision": "unknown",
+          "confidence": "ambiguous",
+          "quote": "Einsatzbeginn am 01.09.2026"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published"
+      ]
+    }
+  ]
+}

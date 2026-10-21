@@ -1,0 +1,791 @@
+{
+  "lang": "en",
+  "note": "Cas de reference supplementaires (SK-02) : textes synthetiques multilingues, aucune donnee reelle.",
+  "cases": [
+    {
+      "id": "ext-sk02-en-001",
+      "text": "Apply by 15 November 2025",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Apply by 15 November 2025"
+        }
+      ],
+      "absent": [
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-002",
+      "text": "Starting January 2027",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": 1,
+            "year": 2027
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Starting January 2027"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-003",
+      "text": "Starting January",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": 1,
+            "year": null
+          },
+          "precision": "month",
+          "confidence": "inferred",
+          "quote": "Starting January"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-004",
+      "text": "Up to six months",
+      "expected": [
+        {
+          "fact_type": "duration_max",
+          "value": {
+            "months_min": null,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Up to six months"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-005",
+      "text": "At least six months",
+      "expected": [
+        {
+          "fact_type": "duration_min",
+          "value": {
+            "months_min": 6,
+            "months_max": null
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "At least six months"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-006",
+      "text": "Three to six months",
+      "expected": [
+        {
+          "fact_type": "duration_range",
+          "value": {
+            "months_min": 3,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Three to six months"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-007",
+      "text": "Two years of prior experience",
+      "expected": [],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-008",
+      "text": "The application deadline is 01/02/2025",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": null,
+            "month": null,
+            "year": 2025
+          },
+          "precision": "unknown",
+          "confidence": "ambiguous",
+          "quote": "application deadline is 01/02/2025"
+        }
+      ],
+      "absent": [
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-009",
+      "text": "Published on 3 January 2025, apply by 15 November 2025.",
+      "expected": [
+        {
+          "fact_type": "published",
+          "value": {
+            "day": 3,
+            "month": 1,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Published on 3 January 2025"
+        },
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "apply by 15 November 2025"
+        }
+      ],
+      "absent": [
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-010",
+      "text": "Contract duration: 6 months",
+      "expected": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 6,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "duration: 6 months"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-011",
+      "text": "This is a 6-month contract.",
+      "expected": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 6,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "6-month"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-012",
+      "text": "We respond within 48 hours.",
+      "expected": [],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-013",
+      "text": "The project will be delivered in 6 months.",
+      "expected": [],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-014",
+      "text": "The position starts on 1 March 2027 and ends on 30 June 2027.",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 1,
+            "month": 3,
+            "year": 2027
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "position starts on 1 March 2027"
+        },
+        {
+          "fact_type": "end",
+          "value": {
+            "day": 30,
+            "month": 6,
+            "year": 2027
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "ends on 30 June 2027"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "published"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-015",
+      "text": "Applications close on 15 March 2026.",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 3,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Applications close on 15 March 2026"
+        }
+      ],
+      "absent": [
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-016",
+      "text": "The role requires 3 years of experience.",
+      "expected": [],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-017",
+      "text": "Contract: 24 months",
+      "expected": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 24,
+            "months_max": 24
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Contract: 24 months"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-018",
+      "text": "The assignment is open from 3 to 6 months.",
+      "expected": [
+        {
+          "fact_type": "duration_range",
+          "value": {
+            "months_min": 3,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "from 3 to 6 months"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-019",
+      "text": "Start date: 2027-01-15",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 15,
+            "month": 1,
+            "year": 2027
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Start date: 2027-01-15"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-020",
+      "text": "Posted on 2025-03-01",
+      "expected": [
+        {
+          "fact_type": "published",
+          "value": {
+            "day": 1,
+            "month": 3,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Posted on 2025-03-01"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-021",
+      "text": "The internship lasts 12 months.",
+      "expected": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 12,
+            "months_max": 12
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "lasts 12 months"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-022",
+      "text": "Minimum of 3 years of experience",
+      "expected": [],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-023",
+      "text": "The contract runs until 31 December 2027.",
+      "expected": [
+        {
+          "fact_type": "end",
+          "value": {
+            "day": 31,
+            "month": 12,
+            "year": 2027
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "runs until 31 December 2027"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-024",
+      "text": "Starting in 2027",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": null,
+            "year": 2027
+          },
+          "precision": "year",
+          "confidence": "confirmed",
+          "quote": "Starting in 2027"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-025",
+      "text": "No experience required. Six-month contract.",
+      "expected": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 6,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Six-month"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-026",
+      "text": "Applications must be received by 15 November 2025.",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Applications must be received by 15 November 2025"
+        }
+      ],
+      "absent": [
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-027",
+      "text": "Fixed-term contract of 18 months.",
+      "expected": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 18,
+            "months_max": 18
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "contract of 18 months"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-028",
+      "text": "We are looking for a profile available starting September 2026.",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": 9,
+            "year": 2026
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "starting September 2026"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-029",
+      "text": "This is a 2-year assignment.",
+      "expected": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 24,
+            "months_max": 24
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "2-year"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-030",
+      "text": "The deadline to apply is 2026-01-31.",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 31,
+            "month": 1,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "deadline to apply is 2026-01-31"
+        }
+      ],
+      "absent": [
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-031",
+      "text": "Send your application by 30 September 2026.",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 30,
+            "month": 9,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "application by 30 September 2026"
+        }
+      ],
+      "absent": [
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-en-032",
+      "text": "The engagement may last up to 24 months.",
+      "expected": [
+        {
+          "fact_type": "duration_max",
+          "value": {
+            "months_min": null,
+            "months_max": 24
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "up to 24 months"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    }
+  ]
+}

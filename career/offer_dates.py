@@ -285,6 +285,7 @@ _CONTEXT_PHRASES: dict[str, dict[str, tuple[str, ...]]] = {
             r"\bend of (?:the )?(?:contract|internship|placement|period|assignment|programme|program)\b",
             r"\bcontract ends?\b", r"\bending (?:on|of)\b", r"\bends?\s+(?:on|by)\b",
             r"\bend date\b", r"\buntil the end of\b",
+            r"\bruns? until\b", r"\buntil\b",
         ),
     },
     "fr": {
@@ -506,22 +507,22 @@ _DURATION_ANCHOR_LEFT: dict[str, str] = {
 }
 
 _DURATION_MIN: dict[str, str] = {
-    "en": r"\b(?:at least|a minimum of|minimum of|min\.?)\s*$",
-    "fr": r"\b(?:au moins|un minimum de|minimum de|[àa] partir de)\s*$",
-    "de": r"\b(?:mindestens|mindestens|minimal|minimale?n?|zum mindesten)\s*$",
-    "it": r"\b(?:almeno|minimo di|minimo)\s*$",
-    "es": r"\b(?:al menos|m[íi]nimo de|m[íi]nimo)\s*$",
+    "en": r"\b(?:at least|a minimum of|minimum of|min\.?)\s*[:\-–]?\s*$",
+    "fr": r"\b(?:au moins|un minimum de|minimum de|[àa] partir de)\s*[:\-–]?\s*$",
+    "de": r"\b(?:mindestens|mindestens|minimal|minimale?n?|zum mindesten)\s*[:\-–]?\s*$",
+    "it": r"\b(?:almeno|minimo di|minimo)\s*[:\-–]?\s*$",
+    "es": r"\b(?:al menos|m[íi]nimo de|m[íi]nimo)\s*[:\-–]?\s*$",
 }
 
 _DURATION_MAX: dict[str, str] = {
-    "en": r"\b(?:up to|a maximum of|maximum of|max\.?|limited to|no longer than)\s*$",
+    "en": r"\b(?:up to|a maximum of|maximum of|max\.?|limited to|no longer than)\s*[:\-–]?\s*$",
     "fr": (
         r"\b(?:jusqu['’][àa]|maximum de|au maximum|maximal[eo]?s?|limit[ée]e?s?\s+[àa]|"
-        r"plafonn[ée]e?s?\s+[àa])\s*$"
+        r"plafonn[ée]e?s?\s+[àa])(?:\s+\S+)?\s*[:\-–]?\s*$"
     ),
-    "de": r"\b(?:h[öo]chstens|maximal|maximale?n?|maximum|sp[äa]testens|bis zu|begrenzt auf)\s*$",
-    "it": r"\b(?:fino a|massimo|massima|fino|limitat[oa]\s+a)\s*$",
-    "es": r"\b(?:hasta|m[áa]ximo|m[áa]xim[ao]s?|limitad[oa]\s+a)\s*$",
+    "de": r"\b(?:h[öo]chstens|maximal|maximale?n?|maximum|sp[äa]testens|bis zu|begrenzt auf)(?:\s+\S+)?\s*[:\-–]?\s*$",
+    "it": r"\b(?:fino a|massimo|massima|fino|limitat[oa]\s+a)(?:\s+\S+)?\s*[:\-–]?\s*$",
+    "es": r"\b(?:hasta|m[áa]ximo|m[áa]xim[ao]s?|limitad[oa]\s+a)(?:\s+\S+)?\s*[:\-–]?\s*$",
 }
 
 # Preposition that introduces a range ("de 3 à 6 mois"): it belongs to the

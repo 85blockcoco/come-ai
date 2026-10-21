@@ -1,0 +1,353 @@
+{
+  "lang": "it",
+  "note": "Cas de reference supplementaires (SK-02) : textes synthetiques multilingues, aucune donnee reelle.",
+  "cases": [
+    {
+      "id": "ext-sk02-it-001",
+      "text": "Scadenza: 15 marzo 2027",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 3,
+            "year": 2027
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Scadenza: 15 marzo 2027"
+        }
+      ],
+      "absent": [
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-it-002",
+      "text": "Durata del contratto: 24 mesi",
+      "expected": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 24,
+            "months_max": 24
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "contratto: 24 mesi"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-it-003",
+      "text": "Almeno 2 anni di esperienza",
+      "expected": [],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-it-004",
+      "text": "Inizio attività: 1 marzo 2027",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 1,
+            "month": 3,
+            "year": 2027
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Inizio attività: 1 marzo 2027"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published"
+      ]
+    },
+    {
+      "id": "ext-sk02-it-005",
+      "text": "Pubblicato il 3 gennaio 2025",
+      "expected": [
+        {
+          "fact_type": "published",
+          "value": {
+            "day": 3,
+            "month": 1,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Pubblicato il 3 gennaio 2025"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-it-006",
+      "text": "Candidare entro il 15 marzo 2027",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 3,
+            "year": 2027
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "entro il 15 marzo 2027"
+        }
+      ],
+      "absent": [
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-it-007",
+      "text": "Contratto a termine di 12 mesi",
+      "expected": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 12,
+            "months_max": 12
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "di 12 mesi"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-it-008",
+      "text": "La scadenza per le candidature è il 15 aprile 2026",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 4,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "scadenza per le candidature è il 15 aprile 2026"
+        }
+      ],
+      "absent": [
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-it-009",
+      "text": "Stage di 6 mesi",
+      "expected": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 6,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Stage di 6 mesi"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-it-010",
+      "text": "Durata massima: 18 mesi",
+      "expected": [
+        {
+          "fact_type": "duration_max",
+          "value": {
+            "months_min": null,
+            "months_max": 18
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "massima: 18 mesi"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-it-011",
+      "text": "L'offerta è disponibile fino al 30 settembre 2027",
+      "expected": [
+        {
+          "fact_type": "end",
+          "value": {
+            "day": 30,
+            "month": 9,
+            "year": 2027
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "fino al 30 settembre 2027"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-it-012",
+      "text": "Tra 3 e 6 mesi",
+      "expected": [
+        {
+          "fact_type": "duration_range",
+          "value": {
+            "months_min": 3,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Tra 3 e 6 mesi"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "end",
+        "published",
+        "start"
+      ]
+    },
+    {
+      "id": "ext-sk02-it-013",
+      "text": "Inizio: 2027-04-01",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 1,
+            "month": 4,
+            "year": 2027
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Inizio: 2027-04-01"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_exact",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published"
+      ]
+    },
+    {
+      "id": "ext-sk02-it-014",
+      "text": "Periodo di prova: 3 mesi",
+      "expected": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 3,
+            "months_max": 3
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "3 mesi"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "duration_max",
+        "duration_min",
+        "duration_range",
+        "end",
+        "published",
+        "start"
+      ]
+    }
+  ]
+}
