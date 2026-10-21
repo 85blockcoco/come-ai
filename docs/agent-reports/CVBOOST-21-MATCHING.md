@@ -14,7 +14,7 @@ Worktree : `/Users/comedelavenne/AI-Excel-Agent-worker-cvboost-21-1792569485`
 | `career/cv_quality/models.py` | étendu | `MatchAction`, `MatchEvidence`, `MatchResult`, `MatchActionCode` + `Provenance.source_text` |
 | `career/cv_quality/__init__.py` | étendu | exporte `match_cv_to_offer`, `find_evidence_in_cv` et les nouveaux modèles |
 | `career/cv_quality/structure.py` | 1 ligne | `Provenance.source_text = text` — le texte source est gardé pour la provenance exacte |
-| `tests/test_cv_matching_actions.py` | **nouveau** | 42 tests unitaires (mission : ≥ 20) |
+| `tests/test_cv_matching_actions.py` | **nouveau** | 43 tests unitaires (mission : ≥ 20) |
 | `docs/agent-reports/CVBOOST-21-MATCHING.md` | **nouveau** | ce rapport |
 
 Interdits respectés : `career/service.py`, `career/router.py`, `career_static/*`,
@@ -93,7 +93,7 @@ et `coverage` (part de l'exigence réellement prouvée).
 | Confiance : exact ≥ 0.9, approximatif 0.6–0.8, `DO_NOT_ADD` = 1.0 | `test_confidence_scoring`, `test_confidence_do_not_add` |
 | Avertissement alternance | `test_warning_alternance`, `test_warning_alternance_detected_in_the_description` |
 | Avertissement niveau d'études | `test_warning_education_gap`, `test_no_education_warning_when_the_degree_matches` |
-| Avertissement langue | `test_language_warning`, `test_language_level_of_another_language_is_not_borrowed` |
+| Avertissement langue | `test_language_warning`, `test_language_level_of_another_language_is_not_borrowed`, `test_several_languages_are_never_sold_as_covered` |
 | Exigence obligatoire sans preuve ⇒ `missing_critical` | `test_missing_critical`, `test_critical_vs_optional`, `test_modality_preferred_is_never_critical` |
 | Fonction pure et déterministe | `test_is_deterministic`, `test_does_not_mutate_its_inputs`, `test_uses_no_network` |
 
@@ -111,7 +111,7 @@ et `coverage` (part de l'exigence réellement prouvée).
    mais c'est un match plus faible (vocabulaire différent de celui de l'offre).
 4. **Décision** :
    - aucune preuve ⇒ `DO_NOT_ADD` (+ `missing_critical` si obligatoire) ;
-   - langue sans niveau démontré ⇒ `CONFIRM_LANGUAGE` ;
+   - langue unique sans niveau démontré ⇒ `CONFIRM_LANGUAGE` ;
    - l'exigence demande un volume (`10+`, `5 ans`, `30%`) et l'extrait n'a aucun
      chiffre ⇒ `QUANTIFY` ;
    - preuve complète mais vocabulaire différent, ou preuve partielle ⇒ `REPHRASE` ;
@@ -119,6 +119,17 @@ et `coverage` (part de l'exigence réellement prouvée).
 5. **Confiance** : 0.9 (tout trouvé littéralement), 0.6–0.8 (couverture
    partielle), 0.7 (trouvé par synonyme), 1.0 (`DO_NOT_ADD` : aucune preuve,
    c'est certain).
+
+Cas particuliers traités explicitement :
+
+- **plusieurs langues dans une même exigence** (« Français et espagnol ») : la
+  branche « langue » ne s'applique qu'à une exigence nommant **une** langue ;
+  sinon le chemin générique s'applique et l'action dit honnêtement que le CV
+  ne prouve qu'une partie (`REPHRASE`), avec un avertissement nommant la
+  langue absente ;
+- **niveau de langue emprunté à une autre langue** : dans « Français (natif),
+  Anglais », le « natif » qualifie le français — l'anglais reste
+  `CONFIRM_LANGUAGE`.
 
 ## 4. Exemple réel (CV et offre synthétiques)
 
@@ -159,20 +170,33 @@ Deux détails qui comptent :
 
 ```text
 $ .venv/bin/python -m pytest -q tests/test_cv_matching_actions.py
-42 passed in 2.54s
+43 passed in 1.79s
 
 $ .venv/bin/python -m pytest -q          # suite complète, base 3a0d1ee
-1409 passed, 1 skipped in 225.50s (0:03:45)
+1410 passed, 1 skipped in 124.33s (0:02:04)
 
 $ .venv/bin/python -m ruff check .
 All checks passed!
+
+$ ./checklist_codex.sh all                # VENV_PY=... MAIN_ROOT=<worktree>
+TOUT VERT   (étapes mémoire / study-coach ignorées : worktrees absents)
 
 $ git diff --check
 (clean)
 ```
 
-La base `main` @ `3a0d1ee` comptait 1367 tests ; la mission en ajoute 42
+La base `main` @ `3a0d1ee` comptait 1367 tests ; la mission en ajoute 43
 (≥ 20 demandés). **Aucune régression.**
+
+Recul supplémentaire : les 36 offres synthétiques de la Mission 02
+(`career.offer_requirements.load_fixtures`) ont été passées au matching avec un
+CV synthétique — 86 exigences, aucun crash, provenance exacte vérifiée sur
+chaque extrait, résultat identique à chaque appel.
+
+```text
+offers=36 requirements=86
+codes: {'DO_NOT_ADD': 60, 'CONFIRM_LANGUAGE': 11, 'HIGHLIGHT': 8, 'REPHRASE': 7}
+```
 
 ## 6. Limites honnêtes
 

@@ -180,6 +180,22 @@ _LANGUAGES: dict[str, tuple[str, ...]] = {
     "arabe": ("arabe", "arabic"),
 }
 
+#: Display name of each language, used in the warnings.
+_LANGUAGE_LABELS: dict[str, str] = {
+    "anglais": "Anglais",
+    "francais": "Français",
+    "allemand": "Allemand",
+    "espagnol": "Espagnol",
+    "italien": "Italien",
+    "portugais": "Portugais",
+    "neerlandais": "Néerlandais",
+    "chinois": "Chinois",
+    "japonais": "Japonais",
+    "coreen": "Coréen",
+    "russe": "Russe",
+    "arabe": "Arabe",
+}
+
 #: Level markers proving that a language level is stated, not only the language.
 _LANGUAGE_LEVEL_MARKERS = (
     "courant", "courante", "fluent", "natif", "native", "professionnel",
@@ -208,11 +224,22 @@ _QUANTITY_PATTERN = re.compile(
 _DIGIT_PATTERN = re.compile(r"\d")
 
 #: Education levels, expressed on the "Bac+X" scale.
+#: The specific markers come first (so "Licence professionnelle" is not read
+#: as a "Licence", and "Master 1" is not read as a "Master"), then the
+#: general ones, from the highest level to the lowest.
 _EDUCATION_MARKERS: tuple[tuple[str, int], ...] = (
     ("licence professionnelle", 2),
     ("licence pro", 2),
     ("master 1", 4),
     ("master1", 4),
+    ("bac+5", 5),
+    ("bac 5", 5),
+    ("bac+4", 4),
+    ("bac 4", 4),
+    ("bac+3", 3),
+    ("bac 3", 3),
+    ("bac+2", 2),
+    ("bac 2", 2),
     ("doctorat", 6),
     ("phd", 6),
     ("master", 5),
@@ -220,21 +247,13 @@ _EDUCATION_MARKERS: tuple[tuple[str, int], ...] = (
     ("mba", 5),
     ("m2", 5),
     ("ingenieur", 5),
-    ("bac+5", 5),
-    ("bac 5", 5),
     ("m1", 4),
-    ("bac+4", 4),
-    ("bac 4", 4),
     ("licence", 3),
     ("bachelor", 3),
     ("l3", 3),
-    ("bac+3", 3),
-    ("bac 3", 3),
     ("bts", 2),
     ("dut", 2),
     ("deug", 2),
-    ("bac+2", 2),
-    ("bac 2", 2),
     ("baccalaureat", 1),
     ("bac", 1),
     ("cap", 1),
@@ -415,10 +434,13 @@ def _language_mentions(text: str) -> list[tuple[int, int, str]]:
     return sorted(mentions)
 
 
-def _detect_language(text: str) -> str | None:
-    """Language a requirement is about, when it is about a language."""
-    mentions = _language_mentions(text)
-    return mentions[0][2] if mentions else None
+def _languages_in(text: str) -> list[str]:
+    """Every language mentioned by a text, in order of appearance."""
+    names: list[str] = []
+    for _start, _end, name in _language_mentions(text):
+        if name not in names:
+            names.append(name)
+    return names
 
 
 def _language_level_proven(text: str, language: str) -> bool:
@@ -456,10 +478,16 @@ def _language_level_proven(text: str, language: str) -> bool:
 
 
 def _requirement_language(text: str, category: str) -> str | None:
-    """Language of a requirement, when the requirement is about a language."""
-    language = _detect_language(text)
-    if language is None:
+    """Language of a requirement, when the requirement is about a language.
+
+    A requirement naming several languages ("Français et espagnol") is not
+    handled here: it goes through the generic path, which reports honestly
+    that the CV only proves part of it.
+    """
+    names = _languages_in(text)
+    if len(names) != 1:
         return None
+    language = names[0]
     if category == "language":
         return language
     keywords = extract_keywords(text)
@@ -467,6 +495,23 @@ def _requirement_language(text: str, category: str) -> str | None:
     if keywords and all(keyword in aliases for keyword in keywords):
         return language
     return None
+
+
+def _missing_languages(cv_result: CVAnalysisResult, text: str) -> list[str]:
+    """Languages a requirement asks for that the CV never mentions."""
+    source = cv_result.provenance.source_text
+    if not source:
+        return []
+    folded_source = _fold(source)
+    blocked = _header_spans(cv_result, source)
+    missing: list[str] = []
+    for language in _languages_in(text):
+        if language in missing:
+            continue
+        position, _literal = _language_position(folded_source, language, blocked)
+        if position is None:
+            missing.append(language)
+    return missing
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -861,14 +906,15 @@ def match_cv_to_offer(cv_result: CVAnalysisResult, offer: dict[str, Any]) -> Mat
         if code == "DO_NOT_ADD":
             if requirement.mandatory:
                 missing_critical.append(requirement.text)
-            if requirement.category == "language":
-                warnings.append(
-                    f"Langue requise non prouvée dans le CV : « {requirement.text} »."
-                )
         elif code == "CONFIRM_LANGUAGE":
             warnings.append(
                 f"Langue mentionnée sans niveau démontré : « {requirement.text} » — à confirmer."
             )
+        if requirement.category == "language":
+            unproven = _missing_languages(cv_result, requirement.text)
+            if unproven:
+                labels = ", ".join(_LANGUAGE_LABELS.get(name, name) for name in unproven)
+                warnings.append(f"Langue requise non prouvée dans le CV : « {labels} ».")
 
     warnings.extend(_contract_warnings(offer, requirements))
     warnings.extend(_education_warnings(cv_result, offer, requirements))
@@ -886,7 +932,7 @@ def match_cv_to_offer(cv_result: CVAnalysisResult, offer: dict[str, Any]) -> Mat
         total_requirements=total,
         actions=actions,
         missing_critical=missing_critical,
-        warnings=warnings,
+        warnings=list(dict.fromkeys(warnings)),
     )
 
 

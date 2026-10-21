@@ -423,6 +423,19 @@ def test_language_warning():
     assert any("Langue" in warning for warning in result.warnings)
 
 
+def test_several_languages_are_never_sold_as_covered():
+    """A requirement naming two languages reports what the CV proves."""
+    result = match_cv_to_offer(
+        _analyze(CV_TEXT),
+        _offer(_requirement("Français et espagnol", category="language")),
+    )
+
+    action = _action(result, "Français et espagnol")
+    assert action.code == "REPHRASE"
+    assert "Français" in (action.cv_evidence_text or "")
+    assert any("Espagnol" in warning for warning in result.warnings)
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Warnings
 # ──────────────────────────────────────────────────────────────────────
