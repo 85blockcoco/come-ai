@@ -11,7 +11,7 @@ import time
 import pytest
 
 from career.cv_quality import extract_salary, SalaryEvidence
-from career.cv_quality.parser import _parse_number, _split_number_groups
+from career.cv_quality.parser import _parse_number
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -107,7 +107,7 @@ def test_salary_monthly_slash():
 
 def test_salary_hourly_annualised():
     ev = one("Per hour $50")
-    assert ev.min_annual_eur == 50 * 2080
+    assert ev.min_annual_eur == 50 * 1820
     assert ev.periodicity == "hourly"
 
 
@@ -291,6 +291,28 @@ def test_multiple_salaries():
     assert evidences[1].min_annual_eur == 10000
 
 
+def test_a_mention_does_not_reuse_the_previous_qualifiers():
+    """The "brut annuel" of a mention belongs to it, not to the next one."""
+    text = "Nous recrutons un Data Scientist (45-55k€ brut annuel) et un Engineer (50 k€)."
+    evidences = extract_salary(text)
+    assert len(evidences) == 2
+    assert evidences[0].periodicity == "annual"
+    assert evidences[1].periodicity == "unknown"
+    assert evidences[1].salary_type == "unknown"
+
+
+def test_salary_word_is_a_base_salary():
+    ev = one("Le salaire est de 45 000 euros par an.")
+    assert ev.salary_type == "base"
+    assert ev.periodicity == "annual"
+
+
+def test_hourly_uses_the_french_working_year():
+    """35 hours a week x 52 weeks."""
+    ev = one("Per hour $50")
+    assert ev.min_annual_eur == 50 * 1820
+
+
 def test_full_package_breakdown():
     evidences = extract_salary("Total compensation 150k$ (base 120k$ + bonus 30k$)")
     assert [e.salary_type for e in evidences] == ["total", "base", "bonus"]
@@ -405,12 +427,9 @@ def test_parse_number(raw, expected):
     assert _parse_number(raw) == expected
 
 
-def test_split_number_groups_keeps_thousands_together():
-    assert _split_number_groups("45 000") == [(0, "45 000")]
-
-
-def test_split_number_groups_splits_two_years():
-    assert _split_number_groups("2020 2021") == [(0, "2020"), (5, "2021")]
+def test_parse_number_keeps_two_years_apart():
+    assert _parse_number("2020") == 2020.0
+    assert _parse_number("2021") == 2021.0
 
 
 # ──────────────────────────────────────────────────────────────────────

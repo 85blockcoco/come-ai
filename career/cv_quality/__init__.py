@@ -20,9 +20,11 @@ from __future__ import annotations
 
 from .models import (
     CVAnalysisResult,
+    Currency,
     DocumentInput,
     ExperienceEntry,
     Finding,
+    Periodicity,
     Provenance,
     ReadabilityScore,
     SalaryEvidence,
@@ -53,6 +55,8 @@ __all__ = [
     "SalaryEvidence",
     "SalaryType",
     "SalaryPeriodicity",
+    "Periodicity",
+    "Currency",
     "extract_salary",
     # Status constants
     "STATUS_OK",

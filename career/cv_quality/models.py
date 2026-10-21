@@ -46,7 +46,15 @@ SALARY_PERIOD_MONTHLY = "monthly"
 SALARY_PERIOD_HOURLY = "hourly"
 SALARY_PERIOD_UNKNOWN = "unknown"
 
-SalaryPeriodicity = Literal["annual", "monthly", "hourly", "unknown"]
+Periodicity = Literal["annual", "monthly", "hourly", "unknown"]
+SalaryPeriodicity = Periodicity
+
+# ISO 4217 codes the extractor can read, plus the empty string for a text
+# that carries no currency at all.
+Currency = Literal[
+    "EUR", "USD", "GBP", "JPY", "CHF", "CAD", "AUD", "NOK", "SEK", "DKK",
+    "PLN", "INR", "BRL", "ZAR", "SGD", "CNY", "",
+]
 
 
 @dataclass(frozen=True, slots=True)

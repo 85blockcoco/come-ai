@@ -8,11 +8,10 @@ from __future__ import annotations
 
 import io
 import re
-from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 from pathlib import Path
 
-from .models import DocumentInput, Finding, SalaryEvidence, SalaryPeriodicity, SalaryType, STATUS_RISK
+from .models import DocumentInput, Finding, SalaryEvidence, STATUS_RISK
 
 
 # Optional dependencies — handled gracefully
@@ -181,7 +180,6 @@ def create_parse_error_finding(error: Exception, filetype: str, filename: str | 
         metadata={"filetype": filetype, "filename": filename, "error_type": type(error).__name__},
     )
 
-
 # ══════════════════════════════════════════════════════════════════════
 # Salary extraction (Mission CVBOOST-16)
 #
@@ -190,134 +188,153 @@ def create_parse_error_finding(error: Exception, filetype: str, filename: str | 
 # and is never completed by a default value: what is not written in the
 # text stays missing (None / "" / "unknown").
 #
-# The text is scanned with C-level substring searches (str.find) plus a
-# single regular expression, so a 50 000 character offer stays in the low
-# milliseconds (the mission requires ≤ 5 ms).
+# Performance: the text is swept once for its digits, the amount pattern is
+# only tried at those positions, and the context of an amount is read word
+# by word inside the sentence fragment that surrounds it. A 50 000
+# character offer is extracted in well under 5 ms.
 # ══════════════════════════════════════════════════════════════════════
 
 # ── Currencies ─────────────────────────────────────────────────────────
-# Symbols are unambiguous; alpha codes are matched on word boundaries only.
+# Symbols are unambiguous; the alpha codes are matched on word boundaries.
 _CURRENCY_SYMBOLS: dict[str, str] = {
     "€": "EUR",
     "$": "USD",
     "£": "GBP",
     "¥": "JPY",
 }
-_CURRENCY_CODES: tuple[str, ...] = (
-    "EUR", "USD", "GBP", "JPY", "CHF", "CAD", "AUD",
-    "NOK", "SEK", "DKK", "PLN", "INR", "BRL", "ZAR", "SGD",
-)
-# Currency tokens searched in the text (lowercase needles → ISO code).
-_CURRENCY_NEEDLES: tuple[tuple[str, str, int], ...] = (
-    ("euros", "EUR", 0),
-    ("euro", "EUR", 0),
-) + tuple((code.lower(), code, 0) for code in _CURRENCY_CODES)
-
-# ── Keyword needles ────────────────────────────────────────────────────
-# (needle in lowercase, kind, priority). The kind is "t:<type>" for a salary
-# nature, "p:<periodicity>" for a periodicity, "q" for a qualifier that is
-# neither. The priority orders the needles from the most specific to the most
-# generic: when two needles overlap, the most specific one wins.
-# A trailing "s" is accepted on every needle, so the plural forms do not need
-# their own entry.
-_KEYWORD_NEEDLES: tuple[tuple[str, str, int], ...] = (
-    # -- total compensation --------------------------------------------------
-    ("total compensation", "t:total", 0),
-    ("compensation totale", "t:total", 0),
-    ("rémunération totale", "t:total", 0),
-    ("remuneration totale", "t:total", 0),
-    ("total comp", "t:total", 0),
-    ("ctc", "t:total", 0),
-    # -- equity instruments ---------------------------------------------------
-    ("rsu", "t:rsu", 1),
-    ("stock", "t:stock", 2),
-    ("equity", "t:equity", 3),
-    # -- package --------------------------------------------------------------
-    ("package", "t:package", 5),
-    # -- variable / bonus -----------------------------------------------------
-    ("variable", "t:variable", 6),
-    ("indexation", "t:variable", 6),
-    ("bonus", "t:bonus", 7),
-    ("prime", "t:bonus", 7),
-    ("commission", "t:bonus", 7),
-    # -- base -----------------------------------------------------------------
-    ("base", "t:base", 9),
-    ("fixe", "t:base", 9),
-    ("brut", "t:base", 9),
-    ("net", "t:base", 9),
-    ("gross", "t:base", 9),
-    # -- generic salary words -------------------------------------------------
-    ("salaire", "t:base", 10),
-    ("rémunération", "t:base", 10),
-    ("remuneration", "t:base", 10),
-    ("salary", "t:base", 10),
-    ("compensation", "t:base", 10),
-    # -- periodicity ----------------------------------------------------------
-    ("annuellement", "p:annual", 11),
-    ("annuelle", "p:annual", 11),
-    ("annuel", "p:annual", 11),
-    ("yearly", "p:annual", 11),
-    ("annually", "p:annual", 11),
-    ("mensuelle", "p:monthly", 11),
-    ("mensuel", "p:monthly", 11),
-    ("monthly", "p:monthly", 11),
-    ("hourly", "p:hourly", 11),
-    # -- qualifier only (neither a nature nor a supported periodicity) ---------
-    ("before tax", "q", 12),
-    ("after tax", "q", 12),
-    ("hebdomadaire", "q", 12),
-    ("weekly", "q", 12),
+_CURRENCY_CODES: dict[str, str] = {
+    "EUR": "EUR", "USD": "USD", "GBP": "GBP", "JPY": "JPY", "CHF": "CHF",
+    "CAD": "CAD", "AUD": "AUD", "NOK": "NOK", "SEK": "SEK", "DKK": "DKK",
+    "PLN": "PLN", "INR": "INR", "BRL": "BRL", "ZAR": "ZAR", "SGD": "SGD",
+    "CNY": "CNY", "RMB": "CNY",
+}
+# A currency token: a symbol, or a code / a written word.
+_CURRENCY_TOKEN = (
+    r"(?:[€$£¥]"
+    r"|\b(?:EUR|euros?|USD|dollars?|GBP|pounds?|JPY|yens?|CHF|CAD|AUD|NOK|SEK|DKK"
+    r"|PLN|INR|BRL|ZAR|SGD|CNY|RMB)\b)"
 )
 
-# Periodicity written with a prefix: "/ mois", "par an", "per annum".
-_PREFIX_PERIODS: tuple[tuple[str, dict[str, str]], ...] = (
-    (
-        "/",
-        {
-            "an": "p:annual", "année": "p:annual", "annee": "p:annual", "ans": "p:annual",
-            "mois": "p:monthly", "heure": "p:hourly", "semaine": "q",
-            "year": "p:annual", "yr": "p:annual", "month": "p:monthly",
-            "hour": "p:hourly", "week": "q",
-        },
-    ),
-    (
-        "par ",
-        {
-            "an": "p:annual", "année": "p:annual", "annee": "p:annual", "ans": "p:annual",
-            "mois": "p:monthly", "heure": "p:hourly", "semaine": "q",
-        },
-    ),
-    (
-        "per ",
-        {
-            "annum": "p:annual", "year": "p:annual", "month": "p:monthly",
-            "hour": "p:hourly", "week": "q",
-        },
-    ),
-)
-
-# Horizontal whitespace only: a number split across two lines is NOT a number.
-_INNER_SPACE = r"[ \t\u00a0\u202f]"
-
-# An amount: 45 000 / 60,000 / 6,000,000 / 1.5 / 45000, with an optional
-# k/M scale suffix and an optional currency symbol. The left boundary is
-# checked in Python (it is cheaper than a lookbehind on long texts).
+# ── Amounts ───────────────────────────────────────────────────────────
+# A number with its thousands separators, its k/M scale suffix and the
+# currency written after it. The currency written *before* the amount
+# ("€45 000") is read separately, just before the match.
+_NUMBER_PATTERN = r"""
+    (?:
+        \d{1,3}(?:[ \u00a0\u202f]\d{3})+(?:[.,]\d{1,2})?
+      | \d{1,3}(?:,\d{3})+(?:[.,]\d{1,2})?
+      | \d{1,3}(?:\.\d{3})+(?:[.,]\d{1,2})?
+      | \d+(?:[.,]\d{1,2})?
+    )
+"""
+# The k/M suffix: the character that follows must not be a letter, so that
+# "45 km" is not read as forty-five thousand.
+_UNIT_SUFFIX = r"(?P<unit>[kKmM])(?![^\W\d_])"
 _AMOUNT_RE = re.compile(
-    rf"(?P<num>\d+(?:[ .,\u00a0\u202f]\d+)*){_INNER_SPACE}*(?P<unit>[kKmM])?{_INNER_SPACE}*(?P<sym>[€$£¥])?"
+    rf"(?P<num>{_NUMBER_PATTERN})(?:\s*{_UNIT_SUFFIX})?(?:\s*(?P<trail>{_CURRENCY_TOKEN}))?",
+    re.VERBOSE | re.IGNORECASE,
 )
+# The text is swept once for its digits; the amount pattern is only tried
+# at those positions, which keeps the cost linear and low.
+_DIGIT_RE = re.compile(r"\d")
+# A currency written just before an amount ("€45 000", "EUR 45 000").
+_LEAD_CURRENCY_RE = re.compile(rf"(?P<cur>{_CURRENCY_TOKEN})\s*$", re.IGNORECASE)
 
-# Counters that turn an amount into a quantity of shares/units.
-_UNIT_COUNTERS: frozenset[str] = frozenset({
-    "unit", "units", "unite", "unites", "unité", "unités", "share", "shares", "action", "actions",
-})
+# ── Context ───────────────────────────────────────────────────────────
+# The context of an amount is read word by word inside the sentence
+# fragment that surrounds it, then translated through these tables: far
+# faster than a long alternation of patterns, and the cost stays linear
+# whatever the length of the offer.
+#
+# The kinds are the priority order of the context words: the closest word
+# wins and, on a tie, the word written before the amount wins.
+_CONTEXT_WORDS: dict[str, str] = {
+    # nature of the remuneration
+    "rsu": "rsu",
+    "stock": "stock",
+    "equity": "equity",
+    "bonus": "bonus",
+    "prime": "bonus",
+    "variable": "variable",
+    "commission": "variable",
+    "package": "package",
+    "base": "base",
+    "fixe": "base",
+    "total": "total",
+    "ctc": "total",
+    "salaire": "base",
+    "salary": "base",
+    "rémunération": "base",
+    "remuneration": "base",
+    "compensation": "base",
+    # gross / net qualifier
+    "brut": "gross",
+    "net": "gross",
+    "gross": "gross",
+    # periodicity
+    "annuel": "annual",
+    "annuelle": "annual",
+    "annuellement": "annual",
+    "annually": "annual",
+    "yearly": "annual",
+    "mensuel": "monthly",
+    "mensuelle": "monthly",
+    "monthly": "monthly",
+    "horaire": "hourly",
+    "hourly": "hourly",
+}
+# Two-word expressions: (previous word, next word) -> kind.
+_CONTEXT_PAIRS: dict[tuple[str, str], str] = {
+    ("total", "compensation"): "total",
+    ("total", "remuneration"): "total",
+    ("total", "package"): "total",
+    ("compensation", "totale"): "total",
+    ("rémunération", "totale"): "total",
+    ("remuneration", "totale"): "total",
+    ("compensation", "package"): "package",
+    ("remuneration", "package"): "package",
+    ("rémunération", "package"): "package",
+    ("restricted", "stock"): "rsu",
+    ("stock", "options"): "stock",
+    ("part", "variable"): "variable",
+    ("base", "salary"): "base",
+    ("par", "an"): "annual",
+    ("par", "année"): "annual",
+    ("par", "mois"): "monthly",
+    ("par", "heure"): "hourly",
+    ("per", "year"): "annual",
+    ("per", "annum"): "annual",
+    ("per", "month"): "monthly",
+    ("per", "hour"): "hourly",
+}
+# Periodicity written after a slash ("/ an", "/ mois", "/ year").
+_SLASH_WORDS: dict[str, str] = {
+    "an": "annual", "année": "annual", "yr": "annual",
+    "mois": "monthly", "month": "monthly", "heure": "hourly", "hour": "hourly",
+}
+# A word: a run of latin letters (accents included).
+_WORD_RE = re.compile(r"[A-Za-z\u00C0-\u024F]+")
 
-# Range connectors accepted between two amounts ("45-55k€", "entre 40k et 50k").
-_RANGE_GAP_RE = re.compile(
-    rf"^{_INNER_SPACE}*(?:-|–|—|~|bis|et|and|à|to|until|jusqu['’]?à){_INNER_SPACE}*$",
+# ── Boundaries ────────────────────────────────────────────────────────
+# Sentence breaks: the context of an amount never crosses one.
+_BREAK_RE = re.compile(r"[\n;.!?,•|+]")
+# Range separators: "45-55k€", "50k to 60k", "40k à 50k".
+_RANGE_SEPARATOR_RE = re.compile(r"\s*(?:[-\u2013\u2014]|\bto\b|\bà\b)\s*", re.IGNORECASE)
+# Alphabetic range separator: "entre 40k et 50k", "between 50k and 60k".
+_WORD_SEPARATOR_RE = re.compile(r"\s*(?:\bet\b|\band\b)\s*", re.IGNORECASE)
+# A word mandatory before an alphabetic separator.
+_RANGE_PREFIX_RE = re.compile(r"(?:entre|between)\s*$", re.IGNORECASE)
+
+# ── Filters ───────────────────────────────────────────────────────────
+# A percentage sign right after the amount: a rate, not a money amount.
+_PERCENT_SUFFIX_RE = re.compile(r"\s*%")
+# A counter of shares/units right after the amount: a quantity, not money.
+_COUNT_SUFFIX_RE = re.compile(
+    r"\s*(?:units?|shares?|actions?|titres?|stock\s+options?|options?)\b",
     re.IGNORECASE,
 )
-
-# Counters that disqualify a currency-less "50k" (50k downloads is not a salary).
+# Counters that disqualify a currency-less "50k": "50k downloads" is a
+# traffic figure, not a salary.
 _NON_SALARY_COUNTERS: frozenset[str] = frozenset({
     "utilisateurs", "utilisateur", "user", "users",
     "visiteurs", "visiteur", "visitor", "visitors",
@@ -327,464 +344,40 @@ _NON_SALARY_COUNTERS: frozenset[str] = frozenset({
     "requêtes", "requetes", "requests", "lectures", "visites", "hits", "collaborateurs",
 })
 
-# Context window (characters) searched before/after an amount.
+# ── Tuning ────────────────────────────────────────────────────────────
+# Characters read around an amount to find its context.
 _CONTEXT_WINDOW = 40
-# Maximum gap between a keyword and the amount for the keyword to qualify it.
-_MAX_KEYWORD_GAP = 12
-# Maximum gap between a currency token and the amount for them to be glued.
-_MAX_CURRENCY_GAP = 4
-# Sentence terminators that break the link between a keyword and an amount.
-_TERMINATORS = ".!?;\n\r"
-
+# Maximum gap between a context word and the amount for the word to apply.
+_PERIOD_MAX_GAP = 20
+_TYPE_MAX_GAP = 2
+# Confidence scale.
+_MAX_CONFIDENCE = 0.98
 # Annualisation factors.
-_ANNUAL_MULTIPLIER: dict[str, float] = {"annual": 1.0, "monthly": 12.0, "hourly": 2080.0}
+_ANNUAL_MULTIPLIER: dict[str, float] = {"annual": 1.0, "monthly": 12.0}
+# Hours worked per year, used to annualise an hourly rate (35 h x 52 weeks).
+_HOURS_PER_YEAR = 1820
 
 
 @dataclass(slots=True)
-class _AmountHit:
-    """One numeric amount found in the text."""
+class _Amount:
+    """One monetary candidate located in the source text."""
 
     start: int
     end: int
-    value: float
+    num_start: int
+    num_end: int
+    num: str
+    unit: str | None
     currency: str
-    scale: float
-    is_percent: bool
-    is_unit_count: bool
-    raw: str
-
-    @property
-    def has_scale(self) -> bool:
-        """True when a k/M scale suffix was applied to the amount."""
-        return self.scale != 1.0
-
-
-def _lowercase_aligned(text: str) -> str:
-    """Lowercase copy of the text that keeps the same length (offsets stay valid)."""
-    low = text.lower()
-    if len(low) != len(text):
-        # U+0130 lowercases to two characters: neutralise it beforehand.
-        low = text.replace("\u0130", "I").lower()
-    return low
-
-
-def _find_needles(low: str, needles: tuple[tuple[str, str, int], ...]) -> list[tuple[int, int, str]]:
-    """Find every needle occurrence on word boundaries.
-
-    Args:
-        low: Lowercased text.
-        needles: (needle, payload, priority) triples, the needle being lowercase.
-
-    Returns:
-        List of (start, end, payload) sorted by position. Overlapping needles
-        are resolved in favour of the longest one, then the most specific one.
-    """
-    hits: list[tuple[int, int, int, str]] = []
-    length = len(low)
-    for needle, payload, priority in needles:
-        width = len(needle)
-        index = low.find(needle)
-        while index >= 0:
-            end = index + width
-            if index > 0 and low[index - 1].isalnum():
-                index = low.find(needle, index + 1)
-                continue
-            if end < length and low[end].isalnum():
-                # A trailing "s" is accepted: the plural forms share the entry.
-                if low[end] != "s" or (end + 1 < length and low[end + 1].isalnum()):
-                    index = low.find(needle, index + 1)
-                    continue
-                end += 1
-            hits.append((index, -end, priority, payload))
-            index = low.find(needle, index + 1)
-    hits.sort()
-    kept: list[tuple[int, int, str]] = []
-    last_end = -1
-    for start, neg_end, _priority, payload in hits:
-        end = -neg_end
-        if start >= last_end:
-            kept.append((start, end, payload))
-            last_end = end
-    return kept
-
-
-def _scan_prefix_periods(low: str) -> list[tuple[int, int, int, str]]:
-    """Find the periodicity tokens written with a prefix ("/ mois", "par an")."""
-    hits: list[tuple[int, int, int, str]] = []
-    length = len(low)
-    for prefix, words in _PREFIX_PERIODS:
-        index = low.find(prefix)
-        while index >= 0:
-            cursor = index + len(prefix)
-            while cursor < length and low[cursor] in " \t":
-                cursor += 1
-            end = cursor
-            while end < length and low[end].isalpha():
-                end += 1
-            kind = words.get(low[cursor:end])
-            if kind is not None and (end >= length or not low[end].isalnum()):
-                hits.append((index, -end, 11, kind))
-            index = low.find(prefix, index + 1)
-    return hits
-
-
-def _scan_keywords(low: str) -> list[tuple[int, int, str]]:
-    """Locate every salary keyword in the lowercased text."""
-    hits = _find_needles(low, _KEYWORD_NEEDLES)
-    prefix_hits = _scan_prefix_periods(low)
-    if not prefix_hits:
-        return hits
-    merged = [(start, -end, 11, payload) for start, end, payload in hits]
-    merged.extend(prefix_hits)
-    merged.sort()
-    kept: list[tuple[int, int, str]] = []
-    last_end = -1
-    for start, neg_end, _priority, payload in merged:
-        end = -neg_end
-        if start >= last_end:
-            kept.append((start, end, payload))
-            last_end = end
-    return kept
-
-
-def _parse_number(raw: str) -> float:
-    """Parse a numeric token written with FR or EN separators.
-
-    "45 000" / "60,000" / "6,000,000" / "45.000" → thousands.
-    "1.5" / "45,50" → decimals.
-    """
-    if raw.isdigit():
-        return float(raw)
-    s = raw.replace(" ", "").replace("\u00a0", "").replace("\u202f", "")
-    if "," in s and "." in s:
-        # The right-most separator is the decimal one.
-        if s.rfind(",") > s.rfind("."):
-            s = s.replace(".", "").replace(",", ".")
-        else:
-            s = s.replace(",", "")
-    elif "," in s or "." in s:
-        sep = "," if "," in s else "."
-        parts = s.split(sep)
-        if len(parts) == 2 and len(parts[1]) in (1, 2):
-            s = parts[0] + "." + parts[1]  # decimal separator
-        else:
-            s = "".join(parts)  # thousands separator
-    return float(s)
-
-
-def _split_number_groups(token: str) -> list[tuple[int, str]]:
-    """Split a raw number token into sub-numbers.
-
-    "45 000" is one number, "2020 2021" is two. A space only groups digits
-    when exactly three of them follow (thousands separator).
-    """
-    if " " not in token and "\u00a0" not in token and "\u202f" not in token:
-        return [(0, token)]
-    pieces = token.replace("\u00a0", " ").replace("\u202f", " ").split(" ")
-    parts: list[tuple[int, str]] = []
-    offset = 0
-    current = pieces[0]
-    for piece in pieces[1:]:
-        if len(piece) == 3 or "," in piece or "." in piece:
-            current = current + " " + piece
-        else:
-            parts.append((offset, current))
-            offset += len(current) + 1
-            current = piece
-    parts.append((offset, current))
-    return parts
-
-
-def _is_percent(text: str, end: int) -> bool:
-    """True when the amount is followed by a percentage sign."""
-    return text[end:end + 1] == "%" or text[end:end + 2] == " %"
-
-
-def _is_unit_count(text: str, end: int) -> bool:
-    """True when the amount is followed by a share/unit counter ("5000 units")."""
-    tail = text[end:end + 24]
-    cursor = 0
-    while cursor < len(tail) and tail[cursor] in " \t":
-        cursor += 1
-    if cursor >= len(tail) or tail[cursor] not in "uUaAsS":
-        return False
-    stop = cursor
-    while stop < len(tail) and tail[stop].isalpha():
-        stop += 1
-    return tail[cursor:stop].lower() in _UNIT_COUNTERS
-
-
-def _adjacent_currency(
-    currency_hits: list[tuple[int, int, str]],
-    currency_starts: list[int],
-    text: str,
-    start: int,
-    end: int,
-) -> tuple[str, int, int]:
-    """Find the currency token glued to an amount.
-
-    Returns:
-        (iso_code, start, end) of the currency, or ("", -1, -1) when there is none.
-    """
-    if not currency_hits:
-        return "", -1, -1
-    index = bisect_left(currency_starts, end)
-    if index < len(currency_hits):
-        hit = currency_hits[index]
-        if hit[0] - end <= _MAX_CURRENCY_GAP and not text[end:hit[0]].strip():
-            return hit[2], hit[0], hit[1]
-    index = bisect_left(currency_starts, start) - 1
-    if index >= 0:
-        hit = currency_hits[index]
-        if start - hit[1] <= _MAX_CURRENCY_GAP and not text[hit[1]:start].strip():
-            return hit[2], hit[0], hit[1]
-    return "", -1, -1
-
-
-def _closest_before(
-    hits: list[tuple[int, int, str]],
-    starts: list[int],
-    low: int,
-    high: int,
-) -> tuple[int, int, str] | None:
-    """Closest keyword ending at or before `high` and starting at or after `low`."""
-    index = bisect_right(starts, high) - 1
-    while index >= 0 and starts[index] >= low:
-        hit = hits[index]
-        if hit[1] <= high:
-            return hit
-        index -= 1
-    return None
-
-
-def _symbol_before(text: str, start: int) -> tuple[str, int]:
-    """Currency symbol written just before an amount ("€45 000").
-
-    Returns:
-        (iso_code, symbol_start) or ("", -1) when there is no symbol.
-    """
-    index = start - 1
-    while index >= 0 and text[index] in " \t\u00a0\u202f":
-        index -= 1
-    if index >= 0 and text[index] in _CURRENCY_SYMBOLS:
-        return _CURRENCY_SYMBOLS[text[index]], index
-    return "", -1
-
-
-def _find_amount_hits(
-    text: str,
-    currency_hits: list[tuple[int, int, str]],
-    currency_starts: list[int],
-    keyword_hits: list[tuple[int, int, str]],
-    keyword_starts: list[int],
-) -> list[_AmountHit]:
-    """Find every numeric amount candidate in the text.
-
-    Candidates that carry no currency, no scale suffix and no salary keyword
-    around them are dropped right away: they are ordinary numbers, not a
-    compensation mention.
-    """
-    hits: list[_AmountHit] = []
-    matches = list(_AMOUNT_RE.finditer(text))
-    for position, match in enumerate(matches):
-        number_text = match.group("num")
-        unit = match.group("unit")
-        symbol = match.group("sym")
-        base = match.start("num")
-        if base > 0:
-            previous = text[base - 1]
-            if previous.isalnum() or previous == ".":
-                continue  # a digit glued to a word ("COVID19") is not an amount
-        groups = _split_number_groups(number_text)
-        for group_position, (offset, part) in enumerate(groups):
-            last = group_position == len(groups) - 1
-            start = base + offset
-            end = start + len(part)
-            value = _parse_number(part)
-            scale = 1.0
-            currency = ""
-
-            if last:
-                if unit:
-                    scale = 1_000.0 if unit.lower() == "k" else 1_000_000.0
-                    end = match.end("unit")
-                if symbol:
-                    currency = _CURRENCY_SYMBOLS[symbol]
-                    end = match.end("sym")
-
-            if not currency:
-                found, found_start, found_end = _adjacent_currency(
-                    currency_hits, currency_starts, text, start, end
-                )
-                if found:
-                    currency = found
-                    if found_start >= end:
-                        end = found_end
-                    else:
-                        start = found_start
-            if not currency:
-                found, symbol_start = _symbol_before(text, start)
-                if found:
-                    currency = found
-                    start = symbol_start
-
-            # A lowercase "m" only means "million" when a currency follows,
-            # otherwise it is a unit of measure ("10 m").
-            if last and unit == "m" and not currency:
-                scale = 1.0
-            value *= scale
-
-            if not currency and scale == 1.0 and not _near_keyword(
-                keyword_hits, keyword_starts, start, end
-            ) and not _is_range_bound(text, matches, position, end):
-                continue  # an ordinary number, not a compensation mention
-
-            hits.append(
-                _AmountHit(
-                    start=start,
-                    end=end,
-                    value=value,
-                    currency=currency,
-                    scale=scale,
-                    is_percent=_is_percent(text, start + len(part)),
-                    is_unit_count=_is_unit_count(text, start + len(part)),
-                    raw=text[start:end],
-                )
-            )
-    return hits
-
-
-def _is_range_bound(text: str, matches: list[re.Match[str]], position: int, end: int) -> bool:
-    """True when the amount is the first bound of a range ("45-55k€")."""
-    if position + 1 >= len(matches):
-        return False
-    following = matches[position + 1]
-    gap = text[end:following.start("num")]
-    stripped = gap.strip()
-    if not stripped or stripped[0] not in "-–—~eabtuj":
-        return False
-    return bool(_RANGE_GAP_RE.match(gap))
-
-
-def _near_keyword(
-    keyword_hits: list[tuple[int, int, str]],
-    keyword_starts: list[int],
-    start: int,
-    end: int,
-) -> bool:
-    """True when a salary keyword sits right next to the amount."""
-    if not keyword_hits:
-        return False
-    index = bisect_right(keyword_starts, start) - 1
-    if index >= 0:
-        hit = keyword_hits[index]
-        if hit[1] <= start and start - hit[1] <= _MAX_KEYWORD_GAP:
-            return True
-    index = bisect_left(keyword_starts, end)
-    if index < len(keyword_hits):
-        hit = keyword_hits[index]
-        if hit[0] - end <= _MAX_KEYWORD_GAP:
-            return True
-    return False
-
-
-def _propagate_scale(first: _AmountHit, second: _AmountHit) -> _AmountHit:
-    """Apply the scale of one bound to the other bound of a range."""
-    if first.scale == second.scale:
-        return first
-    if first.scale != 1.0 and second.scale == 1.0:
-        # The first bound already carries the scale: nothing to propagate.
-        return first
-    if second.scale != 1.0 and first.scale == 1.0:
-        # The scale of the second bound covers the whole range ("45-55k€").
-        return _AmountHit(
-            start=first.start,
-            end=first.end,
-            value=first.value * second.scale,
-            currency=first.currency,
-            scale=1.0,
-            is_percent=first.is_percent,
-            is_unit_count=first.is_unit_count,
-            raw=first.raw,
-        )
-    return first
-
-
-def _merge_ranges(text: str, hits: list[_AmountHit]) -> list[tuple[_AmountHit, _AmountHit]]:
-    """Merge two amounts joined by a range connector into a single mention."""
-    groups: list[tuple[_AmountHit, _AmountHit]] = []
-    index = 0
-    while index < len(hits):
-        current = hits[index]
-        if index + 1 < len(hits):
-            following = hits[index + 1]
-            gap = text[current.end:following.start]
-            if gap.strip() and _RANGE_GAP_RE.match(gap):
-                groups.append((_propagate_scale(current, following), following))
-                index += 2
-                continue
-        groups.append((current, current))
-        index += 1
-    return groups
-
-
-def _gap_links(gap: str) -> bool:
-    """True when a keyword and an amount are part of the same mention."""
-    return len(gap) <= _MAX_KEYWORD_GAP and not any(char in gap for char in _TERMINATORS)
-
-
-def _followed_by_non_salary_counter(text: str, offset: int) -> bool:
-    """True when the amount is followed by a non-salary counter ("50k downloads")."""
-    tail = text[offset:offset + 30]
-    match = re.match(rf"^{_INNER_SPACE}*([A-Za-zÀ-ÿ'’-]+)", tail)
-    if not match:
-        return False
-    return match.group(1).lower() in _NON_SALARY_COUNTERS
-
-
-def _excerpt(text: str, offset: int) -> str:
-    """~50 characters of context around an offset (same convention as structure.py)."""
-    excerpt_start = max(0, offset - 25)
-    excerpt_end = min(len(text), offset + 25)
-    return text[excerpt_start:excerpt_end].replace("\n", "⏎")
-
-
-def _score_confidence(
-    *,
-    has_currency: bool,
-    has_type: bool,
-    has_period: bool,
-    has_context: bool,
-    is_range: bool,
-    has_scale: bool,
-    is_percent: bool,
-    is_unit_count: bool,
-) -> float:
-    """Heuristic confidence score in [0, 1] for a mention."""
-    score = 0.15
-    if has_currency:
-        score += 0.35
-    if has_type:
-        score += 0.25
-    if has_period:
-        score += 0.15
-    if has_context:
-        score += 0.10
-    if is_range:
-        score += 0.10
-    if has_scale:
-        score += 0.05
-    if is_percent or is_unit_count:
-        score -= 0.15
-    return round(min(max(score, 0.0), 0.98), 2)
+    value: float
 
 
 def extract_salary(text: str) -> list[SalaryEvidence]:
     """Extract salary / compensation mentions from a job offer text.
 
-    Deterministic and fully offline: no network call, no LLM, no default value.
-    Every returned evidence carries the exact provenance of the mention
-    (`source_offset` + `source_excerpt`) and the normalized amounts
+    Deterministic and fully offline: no network call, no LLM, no default
+    value. Every returned evidence carries the exact provenance of the
+    mention (`source_offset` + `source_excerpt`) and the normalized amounts
     (annualised, k/M expanded) expressed in the currency found in the text —
     no exchange rate is ever applied, so nothing is ever invented.
 
@@ -792,158 +385,529 @@ def extract_salary(text: str) -> list[SalaryEvidence]:
         text: Raw text, typically an offer description.
 
     Returns:
-        The mentions found, ordered by position in the text. Empty when the text
-        carries no salary information (never a default amount).
+        The mentions found, ordered by position in the text. Empty when the
+        text carries no salary information (never a default amount).
     """
     if not text or not text.strip():
         return []
 
-    low = _lowercase_aligned(text)
-
-    # Keyword and currency positions (C-level substring searches).
-    keyword_hits = _scan_keywords(low)
-    currency_hits = _find_needles(low, _CURRENCY_NEEDLES)
-    currency_starts = [hit[0] for hit in currency_hits]
-
-    type_hits = [(hit[0], hit[1], hit[2][2:]) for hit in keyword_hits if hit[2].startswith("t:")]
-    type_starts = [hit[0] for hit in type_hits]
-    period_hits = [(hit[0], hit[1], hit[2][2:]) for hit in keyword_hits if hit[2].startswith("p:")]
-    period_starts = [hit[0] for hit in period_hits]
-    keyword_starts = [hit[0] for hit in keyword_hits]
-
-    hits = _find_amount_hits(text, currency_hits, currency_starts, keyword_hits, keyword_starts)
-    if not hits:
+    amounts = _scan_amounts(text)
+    if not amounts:
         return []
 
-    groups = _merge_ranges(text, hits)
     evidences: list[SalaryEvidence] = []
-
-    for position, (first, last) in enumerate(groups):
-        prev_end = groups[position - 1][1].end if position > 0 else None
-        next_start = groups[position + 1][0].start if position + 1 < len(groups) else None
-
-        # --- Context windows ---------------------------------------------------
-        window_start = max(0, first.start - _CONTEXT_WINDOW)
-        if prev_end is not None:
-            window_start = max(window_start, prev_end)
-        window_end = min(len(text), last.end + _CONTEXT_WINDOW)
-        if next_start is not None:
-            window_end = min(window_end, next_start)
-
-        # --- Salary nature ----------------------------------------------------
-        salary_type: SalaryType = "unknown"
-        keyword_adjacent = False
-        keyword_start: int | None = None
-        before_hit = _closest_before(type_hits, type_starts, window_start, first.start)
-        if before_hit is not None:
-            gap = text[before_hit[1]:first.start]
-            if _gap_links(gap):
-                salary_type = before_hit[2]
-                keyword_start = before_hit[0]
-                keyword_adjacent = not gap.strip()
-
-        # --- Qualifier run right after the amount ("45 000 € brut annuel") ------
-        qualifier_end = last.end
-        qualifier_start = last.end
-        index = bisect_left(keyword_starts, last.end)
-        while index < len(keyword_hits):
-            hit = keyword_hits[index]
-            if hit[0] >= window_end:
-                break
-            if text[qualifier_end:hit[0]].strip():
-                break
-            if qualifier_start == last.end:
-                qualifier_start = hit[0]
-            qualifier_end = hit[1]
-            index += 1
-
-        qualifier_text = text[qualifier_start:qualifier_end] if qualifier_end > last.end else ""
-        if salary_type == "unknown" and qualifier_text:
-            index = bisect_left(type_starts, qualifier_start)
-            while index < len(type_hits) and type_hits[index][0] < qualifier_end:
-                hit = type_hits[index]
-                if hit[1] <= qualifier_end:
-                    salary_type = hit[2]
-                index += 1
-
-        # --- Periodicity -------------------------------------------------------
-        periodicity: SalaryPeriodicity = "unknown"
-        raw_period_text = ""
-        if qualifier_text:
-            index = bisect_left(period_starts, qualifier_start)
-            while index < len(period_hits) and period_hits[index][0] < qualifier_end:
-                hit = period_hits[index]
-                if hit[1] <= qualifier_end:
-                    periodicity = hit[2]
-                    raw_period_text = text[qualifier_start:qualifier_end]
-                index += 1
-        if periodicity == "unknown":
-            before_period = _closest_before(period_hits, period_starts, window_start, first.start)
-            if before_period is not None:
-                gap = text[before_period[1]:first.start]
-                if _gap_links(gap):
-                    periodicity = before_period[2]
-                    raw_period_text = text[before_period[0]:before_period[1]]
-
-        # --- Amounts ------------------------------------------------------------
-        is_range = first is not last
-        is_percent = first.is_percent or last.is_percent
-        is_unit_count = first.is_unit_count or last.is_unit_count
-        currency = first.currency or last.currency
-
-        if is_percent or is_unit_count:
-            min_annual = None
-            max_annual = None
+    index = 0
+    limit = 0
+    while index < len(amounts):
+        current = amounts[index]
+        following = amounts[index + 1] if index + 1 < len(amounts) else None
+        if following is not None and _is_range(text, current, following):
+            after_index = index + 2
+            after = amounts[after_index].start if after_index < len(amounts) else None
+            evidence = _build_range_evidence(text, current, following, (limit, after))
+            index += 2
         else:
-            low_bound = min(first.value, last.value)
-            high_bound = max(first.value, last.value)
-            multiplier = _ANNUAL_MULTIPLIER.get(periodicity, 1.0)
-            min_annual = round(low_bound * multiplier, 2)
-            max_annual = round(high_bound * multiplier, 2)
+            after = following.start if following is not None else None
+            evidence = _build_single_evidence(text, current, (limit, after))
+            index += 1
+        if evidence is not None:
+            evidences.append(evidence)
+            # The qualifiers of a mention belong to it: the next mention
+            # never reads them again.
+            limit = max(limit, evidence.source_offset + len(evidence.raw_text))
+        else:
+            limit = max(limit, current.end)
 
-        # --- Precision guards ----------------------------------------------------
-        if not currency and salary_type == "unknown" and not first.has_scale and not last.has_scale:
-            continue  # a bare number without any salary signal: not a mention
-        if not currency and not is_percent and not is_unit_count:
-            if _followed_by_non_salary_counter(text, last.end):
-                continue
+    evidences.sort(key=lambda evidence: evidence.source_offset)
+    return evidences
 
-        # --- Provenance ------------------------------------------------------------
-        span_start = first.start
-        if keyword_adjacent and keyword_start is not None:
-            span_start = keyword_start
-        span_end = qualifier_end if qualifier_end > last.end else last.end
-        while span_end > span_start and text[span_end - 1].isspace():
-            span_end -= 1
 
-        raw_amount_text = text[first.start:last.end]
-        raw_text = text[span_start:span_end]
+# ──────────────────────────────────────────────────────────────────────
+# Internals — amounts
+# ──────────────────────────────────────────────────────────────────────
 
-        confidence = _score_confidence(
-            has_currency=bool(currency),
-            has_type=salary_type != "unknown",
-            has_period=periodicity != "unknown",
-            has_context=keyword_adjacent,
-            is_range=is_range,
-            has_scale=first.has_scale or last.has_scale,
-            is_percent=is_percent,
-            is_unit_count=is_unit_count,
-        )
+def _scan_amounts(text: str) -> list[_Amount]:
+    """Locate every monetary candidate of the text.
 
-        evidences.append(
-            SalaryEvidence(
-                raw_text=raw_text,
-                source_offset=span_start,
-                source_excerpt=_excerpt(text, span_start),
-                min_annual_eur=min_annual,
-                max_annual_eur=max_annual,
+    The text is swept once for its digits (a cheap linear scan) and the
+    amount pattern is only tried at those positions.
+    """
+    amounts: list[_Amount] = []
+    consumed_until = 0
+    for digit in _DIGIT_RE.finditer(text):
+        position = digit.start()
+        if position < consumed_until:
+            continue
+        match = _AMOUNT_RE.match(text, position)
+        if match is None:
+            continue
+        consumed_until = match.end()
+        num_start, num_end = match.span("num")
+        unit = match.group("unit")
+        trail = match.group("trail")
+        lead, lead_start = _lead_currency(text, num_start)
+        currency = _resolve_currency(trail, lead)
+        amounts.append(
+            _Amount(
+                start=lead_start if lead is not None else num_start,
+                end=match.end("trail") if trail else (match.end("unit") if unit else num_end),
+                num_start=num_start,
+                num_end=num_end,
+                num=match.group("num"),
+                unit=unit,
                 currency=currency,
-                salary_type=salary_type,
-                periodicity=periodicity,
-                raw_amount_text=raw_amount_text,
-                raw_period_text=raw_period_text,
-                confidence=confidence,
+                value=_parse_number(match.group("num")),
             )
         )
+    return amounts
 
-    return evidences
+
+def _lead_currency(text: str, num_start: int) -> tuple[str | None, int]:
+    """Return the currency written just before an amount ("€45 000")."""
+    low = max(0, num_start - 8)
+    chunk = text[low:num_start]
+    match = _LEAD_CURRENCY_RE.search(chunk)
+    if match is None:
+        return None, num_start
+    start = low + match.start("cur")
+    if start > 0 and text[start - 1].isdigit():
+        # A currency glued to a previous number is not ours.
+        return None, num_start
+    return match.group("cur"), start
+
+
+def _resolve_currency(*tokens: str | None) -> str:
+    """Return the ISO code of the first currency actually written."""
+    for token in tokens:
+        if not token:
+            continue
+        cleaned = token.strip()
+        if cleaned in _CURRENCY_SYMBOLS:
+            return _CURRENCY_SYMBOLS[cleaned]
+        key = cleaned.upper().rstrip(".")
+        if key in _CURRENCY_CODES:
+            return _CURRENCY_CODES[key]
+        if key.startswith("EURO"):
+            return "EUR"
+        if key.startswith("DOLLAR"):
+            return "USD"
+        if key.startswith("POUND"):
+            return "GBP"
+        if key.startswith("YEN"):
+            return "JPY"
+    return ""
+
+
+def _parse_number(raw: str) -> float:
+    """Parse a written amount into a float.
+
+    The number of digits that follows the separator tells a thousands
+    separator from a decimal mark: "45 000" and "45,000" are forty-five
+    thousand, "1.5" is one point five, "45,50" is forty-five point five.
+    """
+    cleaned = raw.replace("\u00a0", "").replace("\u202f", "").replace(" ", "")
+    if "," in cleaned and "." in cleaned:
+        if cleaned.rfind(",") > cleaned.rfind("."):
+            cleaned = cleaned.replace(".", "").replace(",", ".")
+        else:
+            cleaned = cleaned.replace(",", "")
+    elif "," in cleaned or "." in cleaned:
+        separator = "," if "," in cleaned else "."
+        parts = cleaned.split(separator)
+        if len(parts) == 2 and len(parts[1]) == 3:
+            cleaned = parts[0] + parts[1]
+        elif len(parts) == 2:
+            cleaned = parts[0] + "." + parts[1]
+        else:
+            cleaned = "".join(parts)
+    return float(cleaned)
+
+
+def _unit_multiplier(unit: str | None, currency: str) -> float:
+    """Return the multiplier of a k / M suffix.
+
+    A lowercase "m" only means "million" when a currency is written next
+    to it, otherwise it is a unit of measure ("10 m").
+    """
+    if not unit:
+        return 1.0
+    if unit.lower() == "k":
+        return 1_000.0
+    if unit == "M" or currency:
+        return 1_000_000.0
+    return 1.0
+
+
+def _is_range(text: str, first: _Amount, second: _Amount) -> bool:
+    """Tell whether two neighbouring amounts form a single range."""
+    between = text[first.end:second.start]
+    if _RANGE_SEPARATOR_RE.fullmatch(between):
+        return True
+    if _WORD_SEPARATOR_RE.fullmatch(between):
+        before = text[max(0, first.num_start - 12):first.num_start]
+        return bool(_RANGE_PREFIX_RE.search(before))
+    return False
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Internals — context
+# ──────────────────────────────────────────────────────────────────────
+
+def _window_before(text: str, start: int, limit: int = 0) -> tuple[int, str]:
+    """Return the sentence fragment that precedes ``start`` (offsets + text)."""
+    low = max(0, max(start - _CONTEXT_WINDOW, limit))
+    chunk = text[low:start]
+    cut = -1
+    for match in _BREAK_RE.finditer(chunk):
+        cut = match.start()
+    if cut >= 0:
+        low += cut + 1
+        chunk = chunk[cut + 1:]
+    return low, chunk
+
+
+def _window_after(text: str, end: int, limit: int | None = None) -> tuple[int, str]:
+    """Return the sentence fragment that follows ``end`` (offsets + text)."""
+    high = end + _CONTEXT_WINDOW
+    if limit is not None:
+        high = min(high, limit)
+    high = min(high, len(text))
+    chunk = text[end:high]
+    match = _BREAK_RE.search(chunk)
+    if match is not None:
+        chunk = chunk[:match.start()]
+    return end, chunk
+
+
+def _word_kind(word: str) -> str | None:
+    """Return the kind of a context word ("salaires" is a "salaire")."""
+    kind = _CONTEXT_WORDS.get(word)
+    if kind is not None:
+        return kind
+    if len(word) > 3 and word.endswith("s"):
+        return _CONTEXT_WORDS.get(word[:-1])
+    return None
+
+
+def _scan_fragment(
+    text: str,
+    low: int,
+    high: int,
+    amount_start: int,
+    amount_end: int,
+    found: dict[str, tuple[int, int, int]],
+) -> None:
+    """Read the context words of a fragment and keep the closest of each kind."""
+    words = [
+        (match.start(), match.end(), match.group(0).lower())
+        for match in _WORD_RE.finditer(text, low, high)
+    ]
+    tokens: list[tuple[str, int, int]] = []
+    index = 0
+    while index < len(words):
+        start, end, word = words[index]
+        kind: str | None = None
+        if index + 1 < len(words):
+            kind = _CONTEXT_PAIRS.get((word, words[index + 1][2]))
+            if kind is not None:
+                tokens.append((kind, start, words[index + 1][1]))
+                index += 2
+                continue
+        if start > 0 and text[max(0, start - 2):start].rstrip().endswith("/"):
+            # Periodicity written after a slash: "/ an", "/ mois".
+            kind = _SLASH_WORDS.get(word)
+        if kind is None:
+            kind = _word_kind(word)
+        if kind is not None:
+            tokens.append((kind, start, end))
+        index += 1
+
+    for kind, start, end in tokens:
+        if end <= amount_start:
+            distance = (amount_start - end, 0)
+        elif start >= amount_end:
+            distance = (start - amount_end, 1)
+        else:
+            distance = (0, 0)
+        previous = found.get(kind)
+        if previous is None or distance < previous[2:]:
+            found[kind] = (start, end, distance[0], distance[1])
+
+
+def _scan_context(
+    text: str,
+    amount_start: int,
+    amount_end: int,
+    before_limit: int = 0,
+    after_limit: int | None = None,
+) -> dict[str, tuple[int, int, int, int]]:
+    """Return, for each kind of context word, the closest one around an amount.
+
+    Only the sentence fragments around the amount are read, and never beyond
+    the neighbouring amounts.
+    """
+    found: dict[str, tuple[int, int, int, int]] = {}
+    low, _before = _window_before(text, amount_start, before_limit)
+    after_start, after = _window_after(text, amount_end, after_limit)
+    _scan_fragment(text, low, amount_start, amount_start, amount_end, found)
+    _scan_fragment(text, after_start, after_start + len(after), amount_start, amount_end, found)
+    return found
+
+
+def _gap(span: tuple[int, int, int, int], amount_start: int, amount_end: int) -> int:
+    """Distance between a context word and an amount (0 when they touch)."""
+    start, end = span[0], span[1]
+    if end <= amount_start:
+        return amount_start - end
+    if start >= amount_end:
+        return start - amount_end
+    return 0
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Internals — evidence
+# ──────────────────────────────────────────────────────────────────────
+
+def _build_range_evidence(
+    text: str,
+    first: _Amount,
+    second: _Amount,
+    limits: tuple[int, int | None] = (0, None),
+) -> SalaryEvidence | None:
+    """Build the evidence of a salary range ("45-55k€")."""
+    amount_start = first.start
+    amount_end = second.end
+    raw_amount = text[amount_start:amount_end]
+
+    currency = first.currency or second.currency
+    # The k/M suffix of one bound covers the whole range ("45-55k€").
+    unit = first.unit or second.unit
+    multiplier = _unit_multiplier(unit, currency)
+    low = min(first.value, second.value) * multiplier
+    high = max(first.value, second.value) * multiplier
+
+    return _finalize_evidence(
+        text,
+        raw_amount_text=raw_amount,
+        amount_start=amount_start,
+        amount_end=amount_end,
+        values=(low, high),
+        currency=currency,
+        is_money=True,
+        has_unit=unit is not None,
+        is_range=True,
+        limits=limits,
+    )
+
+
+def _build_single_evidence(
+    text: str,
+    amount: _Amount,
+    limits: tuple[int, int | None] = (0, None),
+) -> SalaryEvidence | None:
+    """Build the evidence of a single amount ("45 000 € brut annuel")."""
+    amount_start = amount.start
+    amount_end = amount.end
+    raw_amount = text[amount_start:amount_end]
+    is_money = True
+
+    percent = _PERCENT_SUFFIX_RE.match(text, amount.end)
+    count = _COUNT_SUFFIX_RE.match(text, amount.end)
+    if percent is not None and not amount.currency and not amount.unit:
+        # A percentage is not a money amount ("variable 20 %").
+        is_money = False
+        amount_end = percent.end()
+        raw_amount = text[amount_start:amount_end]
+    elif count is not None and not amount.currency and not amount.unit:
+        # A number of units is not a money amount ("1 000 stock options").
+        is_money = False
+        amount_end = count.end()
+        raw_amount = text[amount_start:amount_end]
+    elif not amount.currency and not amount.unit:
+        # No currency, no scale suffix: the number says nothing about money.
+        return None
+    elif _followed_by_non_salary_counter(text, amount.end):
+        # "50k downloads" is a traffic figure, not a salary.
+        return None
+
+    multiplier = _unit_multiplier(amount.unit, amount.currency)
+    values = (amount.value * multiplier, amount.value * multiplier) if is_money else None
+    return _finalize_evidence(
+        text,
+        raw_amount_text=raw_amount,
+        amount_start=amount_start,
+        amount_end=amount_end,
+        values=values,
+        currency=amount.currency,
+        is_money=is_money,
+        has_unit=amount.unit is not None,
+        is_range=False,
+        limits=limits,
+    )
+
+
+def _followed_by_non_salary_counter(text: str, offset: int) -> bool:
+    """True when the amount is followed by a non-salary counter ("50k downloads")."""
+    tail = text[offset:offset + 30]
+    match = re.match(r"\s*([A-Za-zÀ-ÿ'’-]+)", tail)
+    if not match:
+        return False
+    return match.group(1).lower() in _NON_SALARY_COUNTERS
+
+
+def _finalize_evidence(
+    text: str,
+    *,
+    raw_amount_text: str,
+    amount_start: int,
+    amount_end: int,
+    values: tuple[float, float] | None,
+    currency: str,
+    is_money: bool,
+    has_unit: bool,
+    is_range: bool,
+    limits: tuple[int, int | None] = (0, None),
+) -> SalaryEvidence | None:
+    """Complete a candidate with its provenance, its type and its confidence."""
+    context = _scan_context(text, amount_start, amount_end, limits[0], limits[1])
+
+    type_kind, type_span = _closest(context, _TYPE_GROUPS, before_only=True)
+    qualifier = context.get("gross")
+    period_kind, period_span = _closest(context, _PERIOD_GROUPS)
+
+    if not is_money and type_span is None:
+        # A percentage or a number of units only makes sense attached to a
+        # named component ("variable 20 %", "RSU 5000 units").
+        return None
+
+    # --- Periodicity and the exact periodicity text -------------------------
+    periodicity = "unknown"
+    if period_span is not None and _gap(period_span, amount_start, amount_end) <= _PERIOD_MAX_GAP:
+        periodicity = period_kind or "unknown"
+    spans: list[tuple[int, int]] = []
+    if periodicity != "unknown" and period_span is not None:
+        spans.append((period_span[0], period_span[1]))
+    if qualifier is not None and _gap(qualifier, amount_start, amount_end) <= _PERIOD_MAX_GAP:
+        spans.append((qualifier[0], qualifier[1]))
+    spans.sort()
+
+    raw_period_text = ""
+    if len(spans) == 2 and spans[1][0] - spans[0][1] <= 3:
+        raw_period_text = text[spans[0][0]:spans[1][1]]
+    elif spans:
+        raw_period_text = text[spans[0][0]:spans[0][1]]
+
+    # --- The exact text of the expression -----------------------------------
+    raw_start = amount_start
+    raw_end = amount_end
+    if type_span is not None and _gap(type_span, amount_start, amount_end) <= _TYPE_MAX_GAP:
+        if type_span[1] <= amount_start:
+            raw_start = min(raw_start, type_span[0])
+        else:
+            raw_end = max(raw_end, type_span[1])
+    for span in spans:
+        if span[1] <= amount_start:
+            raw_start = min(raw_start, span[0])
+        else:
+            raw_end = max(raw_end, span[1])
+
+    raw_text = text[raw_start:raw_end]
+
+    # --- Normalized amounts --------------------------------------------------
+    min_annual: float | None = None
+    max_annual: float | None = None
+    if values is not None:
+        multiplier = float(_HOURS_PER_YEAR) if periodicity == "hourly" else _ANNUAL_MULTIPLIER.get(periodicity, 1.0)
+        min_annual = round(values[0] * multiplier, 2)
+        max_annual = round(values[1] * multiplier, 2)
+
+    # --- Nature of the remuneration -------------------------------------------
+    salary_type = "unknown"
+    if type_kind is not None:
+        salary_type = _KIND_TO_SALARY_TYPE[type_kind]
+    elif qualifier is not None:
+        # "brut annuel" / "net mensuel" without another qualifier describes the
+        # base remuneration: "base" is the only literal that fits.
+        salary_type = "base"
+
+    # --- Confidence ------------------------------------------------------------
+    confidence = 0.15
+    if currency:
+        confidence += 0.35
+    if salary_type != "unknown":
+        confidence += 0.25
+    if periodicity != "unknown":
+        confidence += 0.15
+    if type_span is not None and _gap(type_span, amount_start, amount_end) <= _TYPE_MAX_GAP:
+        confidence += 0.10
+    if is_range:
+        confidence += 0.10
+    if has_unit:
+        confidence += 0.05
+    if not is_money:
+        confidence -= 0.15
+    confidence = min(confidence, _MAX_CONFIDENCE)
+
+    return SalaryEvidence(
+        raw_text=raw_text,
+        source_offset=raw_start,
+        source_excerpt=_excerpt(text, raw_start),
+        min_annual_eur=min_annual,
+        max_annual_eur=max_annual,
+        currency=currency,
+        salary_type=salary_type,  # type: ignore[arg-type]
+        periodicity=periodicity,  # type: ignore[arg-type]
+        raw_amount_text=raw_amount_text,
+        raw_period_text=raw_period_text,
+        confidence=round(confidence, 2),
+    )
+
+
+_KIND_TO_SALARY_TYPE: dict[str, str] = {
+    "base": "base",
+    "total": "total",
+    "package": "package",
+    "variable": "variable",
+    "bonus": "bonus",
+    "stock": "stock",
+    "equity": "equity",
+    "rsu": "rsu",
+}
+# The context kinds, from the most specific to the most generic.
+_TYPE_GROUPS = ("total", "rsu", "equity", "stock", "package", "variable", "bonus", "base")
+_PERIOD_GROUPS = ("annual", "monthly", "hourly")
+
+
+def _closest(
+    context: dict[str, tuple[int, int, int, int]],
+    kinds: tuple[str, ...],
+    before_only: bool = False,
+) -> tuple[str | None, tuple[int, int, int, int] | None]:
+    """Return the closest context word among the given kinds.
+
+    The closest wins; on a tie the order of the kinds breaks it.
+    """
+    best_distance: tuple[int, int] | None = None
+    best_kind: str | None = None
+    best_span: tuple[int, int, int, int] | None = None
+    for kind in kinds:
+        entry = context.get(kind)
+        if entry is None:
+            continue
+        if before_only and entry[3] != 0:
+            # The nature of a remuneration is written *before* the amount
+            # ("Package 70k€", "variable 20 %").
+            continue
+        distance = (entry[2], entry[3])
+        if best_distance is None or distance < best_distance:
+            best_distance = distance
+            best_kind = kind
+            best_span = entry
+    return best_kind, best_span
+
+
+def _excerpt(text: str, offset: int) -> str:
+    """~50 characters of context around an offset (same convention as structure.py)."""
+    excerpt_start = max(0, offset - 25)
+    excerpt_end = min(len(text), offset + 25)
+    return text[excerpt_start:excerpt_end].replace("\n", "⏎")
