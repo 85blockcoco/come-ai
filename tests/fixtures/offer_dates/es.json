@@ -1,0 +1,208 @@
+{
+  "lang": "es",
+  "note": "Ofertas sintéticas. Ninguna empresa real, ninguna persona real, ninguna red.",
+  "cases": [
+    {
+      "id": "es-deadline-fecha-limite",
+      "text": "Fecha límite: 15 de noviembre de 2025",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {"day": 15, "month": 11, "year": 2025},
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Fecha límite: 15 de noviembre de 2025"
+        }
+      ],
+      "absent": ["start", "published", "end"]
+    },
+    {
+      "id": "es-deadline-numeric",
+      "text": "Fecha límite: 15/11/2025",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {"day": 15, "month": 11, "year": 2025},
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Fecha límite: 15/11/2025"
+        }
+      ],
+      "absent": ["start"]
+    },
+    {
+      "id": "es-start-inicio",
+      "text": "Inicio: enero 2027",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {"day": null, "month": 1, "year": 2027},
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Inicio: enero 2027"
+        }
+      ],
+      "absent": ["deadline"]
+    },
+    {
+      "id": "es-start-month-without-year",
+      "text": "Inicio en enero",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {"day": null, "month": 1, "year": null},
+          "precision": "month",
+          "confidence": "inferred",
+          "quote": "Inicio en enero"
+        }
+      ],
+      "absent": ["deadline"]
+    },
+    {
+      "id": "es-duration-exact",
+      "text": "Duración: 6 meses",
+      "expected": [
+        {
+          "fact_type": "duration_exact",
+          "value": {"months": 6},
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Duración: 6 meses"
+        }
+      ],
+      "absent": ["duration_min", "duration_max", "duration_range"]
+    },
+    {
+      "id": "es-duration-min",
+      "text": "Al menos 6 meses",
+      "expected": [
+        {
+          "fact_type": "duration_min",
+          "value": {"months": 6},
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Al menos 6 meses"
+        }
+      ],
+      "absent": ["duration_max", "duration_exact"]
+    },
+    {
+      "id": "es-duration-max",
+      "text": "Hasta 6 meses",
+      "expected": [
+        {
+          "fact_type": "duration_max",
+          "value": {"months": 6},
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Hasta 6 meses"
+        }
+      ],
+      "absent": ["duration_min", "duration_exact"]
+    },
+    {
+      "id": "es-duration-range",
+      "text": "De 3 a 6 meses",
+      "expected": [
+        {
+          "fact_type": "duration_range",
+          "value": {"months_min": 3, "months_max": 6},
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "De 3 a 6 meses"
+        }
+      ],
+      "absent": ["duration_min", "duration_max", "duration_exact"]
+    },
+    {
+      "id": "es-prior-experience-is-not-a-duration",
+      "text": "Dos años de experiencia",
+      "expected": [],
+      "absent": ["duration_exact", "duration_min", "duration_max", "duration_range"]
+    },
+    {
+      "id": "es-published",
+      "text": "Publicado el 3 de enero de 2025",
+      "expected": [
+        {
+          "fact_type": "published",
+          "value": {"day": 3, "month": 1, "year": 2025},
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Publicado el 3 de enero de 2025"
+        }
+      ],
+      "absent": ["start", "deadline"]
+    },
+    {
+      "id": "es-ambiguous-numeric-date",
+      "text": "Fecha límite: 01/02/2025",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {"day": 1, "month": 2, "year": 2025},
+          "precision": "day",
+          "confidence": "ambiguous",
+          "quote": "Fecha límite: 01/02/2025",
+          "contradictions": ["alternative:2025-02-01"]
+        }
+      ],
+      "absent": ["start"]
+    },
+    {
+      "id": "es-end-date",
+      "text": "Termina el 30 de junio de 2027",
+      "expected": [
+        {
+          "fact_type": "end",
+          "value": {"day": 30, "month": 6, "year": 2027},
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Termina el 30 de junio de 2027"
+        }
+      ],
+      "absent": ["start", "deadline"]
+    },
+    {
+      "id": "es-application-opening-is-not-a-start",
+      "text": "Las solicitudes están abiertas desde el 15 de enero de 2027",
+      "expected": [],
+      "absent": ["start", "deadline", "published"]
+    },
+    {
+      "id": "es-published-and-deadline-are-two-facts",
+      "text": "Publicado el 3 de enero de 2025. Fecha límite: 15 de noviembre de 2025.",
+      "expected": [
+        {
+          "fact_type": "published",
+          "value": {"day": 3, "month": 1, "year": 2025},
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Publicado el 3 de enero de 2025"
+        },
+        {
+          "fact_type": "deadline",
+          "value": {"day": 15, "month": 11, "year": 2025},
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Fecha límite: 15 de noviembre de 2025"
+        }
+      ],
+      "absent": ["start", "end"]
+    },
+    {
+      "id": "es-start-cuanto-antes-has-no-calendar-date",
+      "text": "Inicio: cuanto antes",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {"day": null, "month": null, "year": null},
+          "precision": "unknown",
+          "confidence": "ambiguous",
+          "quote": "Inicio: cuanto antes"
+        }
+      ],
+      "absent": ["deadline"]
+    }
+  ]
+}
