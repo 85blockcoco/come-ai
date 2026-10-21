@@ -219,6 +219,22 @@ class InterviewAnswerPayload(BaseModel):
     answer: str = Field(min_length=3, max_length=6_000)
 
 
+class CVAnalyzePayload(BaseModel):
+    """Request payload for CV structural analysis."""
+    text: str = Field(min_length=1, max_length=200_000)
+    filename: str | None = Field(default=None, max_length=256)
+    filetype: str = Field(default="txt", pattern="^(txt|pdf|docx)$")
+
+
+class CVAnalyzeResponse(BaseModel):
+    """Response payload for CV structural analysis."""
+    findings: list[dict[str, Any]]
+    sections: list[dict[str, Any]]
+    experiences: list[dict[str, Any]]
+    readability: dict[str, Any]
+    provenance: dict[str, Any]
+
+
 def create_career_router(
     service: CareerService,
     *,
@@ -259,6 +275,65 @@ def create_career_router(
             "calendar_export": capabilities["calendar_export"],
             "stage_search": capabilities["stage_search"],
         }
+
+    @router.post("/api/career/cv/analyze")
+    async def analyze_cv_endpoint(payload: CVAnalyzePayload) -> CVAnalyzeResponse:
+        """Analyze a CV for structural quality issues (100% local, deterministic)."""
+        from career.cv_quality import analyze_cv, DocumentInput
+
+        document = DocumentInput(
+            text=payload.text,
+            filename=payload.filename,
+            filetype=payload.filetype,
+        )
+        result = await local(lambda: analyze_cv(document))
+
+        # Convert dataclasses to dicts for JSON serialization
+        def finding_to_dict(f):
+            return {
+                "code": f.code,
+                "status": f.status,
+                "message": f.message,
+                "source_offset": f.source_offset,
+                "source_excerpt": f.source_excerpt,
+                "metadata": f.metadata,
+            }
+
+        def section_to_dict(s):
+            return {
+                "title": s.title,
+                "start_offset": s.start_offset,
+                "end_offset": s.end_offset,
+                "content_preview": s.content_preview,
+            }
+
+        def exp_to_dict(e):
+            return {
+                "company": e.company,
+                "role": e.role,
+                "start_date": e.start_date,
+                "end_date": e.end_date,
+                "description": e.description,
+                "has_quantified_result": e.has_quantified_result,
+                "source_offset": e.source_offset,
+            }
+
+        return CVAnalyzeResponse(
+            findings=[finding_to_dict(f) for f in result.findings],
+            sections=[section_to_dict(s) for s in result.sections],
+            experiences=[exp_to_dict(e) for e in result.experiences],
+            readability={
+                "flesch_kincaid_fr": result.readability.flesch_kincaid_fr,
+                "avg_sentence_length": result.readability.avg_sentence_length,
+                "complex_word_ratio": result.readability.complex_word_ratio,
+            },
+            provenance={
+                "filename": result.provenance.filename,
+                "filetype": result.provenance.filetype,
+                "text_length": result.provenance.text_length,
+                "page_count": result.provenance.page_count,
+            },
+        )
 
     @router.get("/api/career/dashboard")
     async def dashboard() -> Any:
