@@ -311,7 +311,17 @@ class ExplorationService:
                 daemon=True,
             )
             self._threads[run_id] = thread
-            thread.start()
+            try:
+                thread.start()
+            except RuntimeError:
+                # The thread never started: give the search lock back so the
+                # next attempt is not refused by a lock nobody holds.
+                self._threads.pop(run_id, None)
+                self._clocks.pop(run_id, None)
+                self._backend.release_search_lock()
+                raise UserFacingError(
+                    "L’exploration n’a pas pu démarrer. Réessaie dans un instant."
+                )
         return run.to_public_dict()
 
     def state(self, run_id: str) -> dict[str, Any] | None:
