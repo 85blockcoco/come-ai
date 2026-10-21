@@ -60,7 +60,6 @@ assert.strictEqual(stageOfferFactValue(known.job, known.qualification, "duration
     completed = subprocess.run([_node(), "-e", script], capture_output=True, text=True, timeout=8)
     assert completed.returncode == 0, completed.stderr
 
-
 def test_offer_cards_surface_all_decision_facts_and_source_reliability() -> None:
     source = SCRIPT.read_text(encoding="utf-8")
     for label in (
