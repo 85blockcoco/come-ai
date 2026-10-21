@@ -16,11 +16,13 @@ import itertools
 import pytest
 
 from career.job_deduplication import (
+    MERGED_PROVENANCES_FIELD,
     USER_SCORE_FIELDS,
     USER_SIDE_FIELDS,
     USER_STATE_FIELDS,
     canonical_city,
     deduplicate_jobs,
+    deduplicate_offers,
     location_canonical,
     match_records,
     title_role_level,
@@ -304,3 +306,97 @@ def test_every_provenance_and_every_contradiction_stays_visible():
     assert "posted_date" in group["conflicts"]
     assert "city" in group["conflicts"]
     assert {view["source_name"] for view in group["provenances"]} == {"greenhouse", "employer"}
+
+
+# ---------------------------------------------------------------------------
+# Guardrail: a shared link is not a proof when the roles are different
+# ---------------------------------------------------------------------------
+
+LANDING_PAGE = "https://careers.acme.com/careers"
+
+
+def test_a_shared_landing_page_never_merges_two_different_roles():
+    """A careers landing page hosts several postings: they must stay apart.
+
+    Before the fix, five roles published under the same link were merged into
+    a single offer, which destroyed four real postings.
+    """
+    records = [
+        offer("greenhouse", id=str(index), url=LANDING_PAGE, title=title)
+        for index, title in enumerate([
+            "Software Engineer", "Product Manager", "Data Scientist",
+            "Sales Intern", "HR Manager",
+        ])
+    ]
+    groups = deduplicate_jobs(records)
+    assert len(groups) == 5
+    assert all(not group["merged"] for group in groups)
+    assert len({group["best"]["title"] for group in groups}) == 5
+
+
+def test_a_shared_link_never_overrides_a_known_role_conflict():
+    """Two known business concepts that differ are two different jobs."""
+    left = offer("greenhouse", id="1", url=LANDING_PAGE, title="Data Analyst")
+    right = offer("greenhouse", id="2", url=LANDING_PAGE, title="Financial Analyst")
+    decision = match_records(left, right)
+    assert decision["matches"] is False
+    assert decision["reasons"] == ["different_role_same_employer"]
+
+
+def test_a_shared_link_without_a_title_is_still_a_duplicate():
+    """A board may publish a posting without its title: the link then decides."""
+    left = offer("greenhouse", id="1", url=LANDING_PAGE, title="")
+    right = offer("greenhouse", id="2", url=LANDING_PAGE, title="Data Analyst")
+    decision = match_records(left, right)
+    assert decision["matches"] is True
+    assert decision["reasons"] == ["canonical_url_match"]
+
+
+def test_a_shared_link_still_merges_the_same_role_written_twice():
+    left = offer("greenhouse", id="1", url=LANDING_PAGE, title="Data Analyst")
+    right = offer("greenhouse", id="2", url=LANDING_PAGE, title="Analyste de donnees")
+    decision = match_records(left, right)
+    assert decision["matches"] is True
+    assert decision["reasons"] == ["canonical_url_match"]
+
+
+# ---------------------------------------------------------------------------
+# Guardrail: the trace of a merged offer opens with the official source
+# ---------------------------------------------------------------------------
+
+def test_the_official_source_opens_the_trace_of_a_merged_group():
+    """The elected representative is the first provenance of the group."""
+    records = [
+        offer("greenhouse", id="1", url="https://boards.greenhouse.io/acme/jobs/1",
+              title="Data Analyst Intern", extra={"source_trust": "unverified"}),
+        offer("employer", id="2", url="https://careers.acme.com/jobs/1",
+              title="Data Analyst Internship", extra={"source_trust": "verified"}),
+        offer("lever", id="3", url="https://jobs.lever.co/acme/3",
+              title="Data Analyst Internship", extra={"source_trust": "unverified"}),
+    ]
+    group = deduplicate_jobs(records)[0]
+    assert group["best"]["source_name"] == "employer"
+    assert group["provenances"][0]["is_representative"] is True
+    assert group["provenances"][0]["source_name"] == "employer"
+
+
+def test_the_merged_offer_carries_every_provenance():
+    """A merged offer stays traceable: every source keeps its link."""
+    offers, report = deduplicate_offers([
+        offer("greenhouse", id="1", url="https://boards.greenhouse.io/acme/jobs/1",
+              title="Data Analyst Intern"),
+        offer("lever", id="2", url="https://jobs.lever.co/acme/2",
+              title="Data Analyst Internship"),
+    ])
+    assert len(offers) == 1
+    merged = offers[0]
+    assert merged["merged_from"] == ["lever"]
+    assert merged["merge_count"] == 1
+    provenances = merged[MERGED_PROVENANCES_FIELD]
+    assert [view["source_name"] for view in provenances] == ["greenhouse", "lever"]
+    assert {view["official_url"] for view in provenances} == {
+        "https://boards.greenhouse.io/acme/jobs/1",
+        "https://jobs.lever.co/acme/2",
+    }
+    assert sum(1 for view in provenances if view["is_representative"]) == 1
+    assert report.clusters[0]["size"] == 2

@@ -568,26 +568,52 @@ def test_the_module_stays_offline():
         assert forbidden not in text
 
 
-def test_five_hundred_offers_are_deduplicated_quickly():
+def _timed_deduplication(records):
+    """Return the deduplicated offers and the elapsed time, in milliseconds."""
+    started = time.perf_counter()
+    offers, report = deduplicate_offers(records)
+    return offers, report, (time.perf_counter() - started) * 1000
+
+
+def _synthetic_collection(size):
+    """Build a synthetic collection of ``size`` offers published twice."""
     cities = ["Paris", "London", "Milan", "Luxembourg", "Frankfurt", "Geneva"]
     titles = ["Data Analyst", "M&A Intern", "Consulting Intern", "Private Equity Intern",
               "Asset Management Intern", "Corporate Finance Intern", "Audit Intern", "Quant Intern"]
     records = []
-    for index in range(250):
+    for index in range(size):
         company = f"Company {index}"
         city = cities[index % len(cities)]
         title = titles[index % len(titles)]
         for source in ("greenhouse", "lever"):
             records.append(ats(source, id=f"{source}-{index}", company=company, city=city,
                                title=title, url=f"https://example.org/{source}/{index}"))
+    return records
+
+
+def test_five_hundred_offers_are_deduplicated_quickly():
+    """The grouper stays fast on a realistic collection.
+
+    The bound is checked twice: an absolute ceiling (a pathological blow-up
+    is caught on any machine) and a growth ratio (a quadratic grouper is
+    caught whatever the speed of the machine).  The ratio is the meaningful
+    one: an absolute threshold only measures the speed of the reviewer.
+    """
+    records = _synthetic_collection(250)
     assert len(records) == 500
-    started = time.perf_counter()
-    offers, report = deduplicate_offers(records)
-    elapsed = (time.perf_counter() - started) * 1000
+    offers, report, elapsed = _timed_deduplication(records)
     assert report.total_count == 500
     assert report.merged_count == 250
     assert len(offers) == 250
-    assert elapsed < 200, f"500 offres dédupliquées en {elapsed:.0f} ms"
+    assert elapsed < 1500, f"500 offres dédupliquées en {elapsed:.0f} ms"
+
+    small_records = _synthetic_collection(60)
+    _, _, small_elapsed = _timed_deduplication(small_records)
+    _, _, large_elapsed = _timed_deduplication(_synthetic_collection(240))
+    assert large_elapsed < small_elapsed * 10 + 100, (
+        f"la déduplication ne croît pas linéairement : "
+        f"{small_elapsed:.0f} ms pour 120 offres, {large_elapsed:.0f} ms pour 480"
+    )
 
 
 # ---------------------------------------------------------------------------
