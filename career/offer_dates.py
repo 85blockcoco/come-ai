@@ -305,7 +305,7 @@ _CONTEXT_PHRASES: dict[str, dict[str, tuple[str, ...]]] = {
         "start": (
             r"\bprise de (?:poste|fonction)\b", r"\b[àa] compter du\b",
             r"\b[àa] partir du\b", r"\bposte [àa] pourvoir\b", r"\bpr[ée]vu (?:pour|le|à)\b",
-            r"\bdisponible (?:le|[àa] partir|au)\b", r"\bd[ée]but\b", r"\bcommence(?:nt)?\b",
+            r"\bdisponible (?:le|[àa] partir|au)\b", r"\bd[ée]but\w*\b", r"\bcommence(?:nt)?\b",
             r"\bd[ée]marre\b",
         ),
         "end": (
@@ -322,17 +322,21 @@ _CONTEXT_PHRASES: dict[str, dict[str, tuple[str, ...]]] = {
             r"\bgeschrieben am\b",
         ),
         "deadline": (
-            r"\bbewerbungsfrist\b", r"\bbewerbung(?:en)?\s+bis\b", r"\beinreichung bis\b",
-            r"\bbewerbbar bis\b", r"\bantrag bis\b", r"\bfrist\b",
+            r"\bbewerbungsfrist\b", r"\bbewerbung(?:en)?\s+bis(?:\s+zum)?\b",
+            r"\beinreichung bis\b", r"\bbewerbbar bis\b", r"\bantrag bis\b", r"\bfrist\b",
+            r"\bbewerbungen?\s+(?:sind|ist)\s+bis\b",
         ),
         "start": (
             r"\bstartdatum\b", r"\bstart(?:et|en)?\s+(?:am|ab|in)\b", r"\bab dem\b",
             r"\beintritt\b", r"\bwir starten\b", r"\bbeginn(?:end|t|nt|e|es)?\b",
             r"\bverf[üu]gbar ab\b",
+            r"\beinsatzbeginn\b", r"\barbeitsbeginn\b", r"\bbeginnendatum\b",
+            r"\beintrittsdatum\b", r"\bvertragsbeginn\b", r"\bab\b(?!\w)",
         ),
         "end": (
             r"\bvertragsende\b", r"\bendet am\b", r"\bende am\b", r"\bl[äa]uft ab\b",
             r"\bbis zum\b", r"\bende\b",
+            r"\bvertrag l[äa]uft bis\b", r"\bl[äa]uft bis\b", r"\bbis\b",
         ),
     },
     "it": {
@@ -344,6 +348,7 @@ _CONTEXT_PHRASES: dict[str, dict[str, tuple[str, ...]]] = {
             r"\bscadenza(?: per le candidature)?\b", r"\bscadenza entro\b",
             r"\bcandidate?\s+entro\b", r"\btermine (?:entro|per)\b", r"\binvio entro\b",
             r"\bentro (?:il|le)\b",
+            r"\baperte? (?:fino|entro)\b", r"\bcandidature aperte?\b",
         ),
         "start": (
             r"\bdata di inizio\b", r"\ba partire dal\b", r"\binizio attivit[àa]\b",
@@ -364,10 +369,13 @@ _CONTEXT_PHRASES: dict[str, dict[str, tuple[str, ...]]] = {
             r"\bpostular hasta\b", r"\bpostulaci[óo]n hasta\b",
             r"\bpresente su (?:solicitud|candidatura) antes del\b",
             r"\bsolicitudes?\b[^.\n]{0,30}?\b(?:hasta|antes del)\b",
+            r"\bsolicitar (?:antes|hasta)\b",
+            r"\bcandidat(?:uras?|es)\b[^.\n]{0,30}?\b(?:hasta|antes del)\b",
         ),
         "start": (
             r"\bfecha de inicio\b", r"\ba partir de\b", r"\bdisponible (?:el|a partir|desde)\b",
             r"\bdesde el\b", r"\binicio\b", r"\bcomienzo\b", r"\bempieza\b",
+            r"\bcomienza\b",
         ),
         "end": (
             r"\bfecha de fin\b", r"\bfin de (?:contrato|pr[áa]ctica)\b", r"\btermina el\b",
@@ -387,7 +395,10 @@ _EXPERIENCE_LEFT: dict[str, str] = {
 
 _EXPERIENCE_RIGHT: dict[str, str] = {
     "en": r"^\s*(?:of\s+)?(?:prior\s+|previous\s+|preceding\s+|relevant\s+|professional\s+|work\s+)?(?:experience|experiences)\b",
-    "fr": r"^\s*(?:de\s+)?(?:pr[ée]c[ée]dente|ant[ée]rieure|enrichie\s+)?(?:exp[ée]rience|exp[ée]riences)\b",
+    "fr": (
+        r"^\s*(?:d['’]\s*|de\s+|d['’]de\s+)?(?:pr[ée]c[ée]dente|ant[ée]rieure|enrichie\s+)?"
+        r"(?:exp[ée]rience|exp[ée]riences)\b"
+    ),
     "de": r"^\s*(?:in\s+)?(?:der\s+)?(?:Erfahrung|Erfahrungen)\b",
     "it": r"^\s*(?:di\s+)?(?:precedente|pregressiva)?\s*(?:esperienza|esperienze)\b",
     "es": r"^\s*(?:de\s+)?(?:previa|anterior|relacionada\s+)?(?:experiencia|experiencias)\b",
@@ -415,6 +426,62 @@ _DURATION_LEFT: dict[str, str] = {
     "en": (
         r"\b(?:duration|length|lasting|lasts?|contracts?|internships?|stages?|placements?|"
         r"assignments?|employment|engagement|programmes?|programs?|period|term|between|for)\b"
+        r"(?:\s+(?:of|de|di|del|d['’]|von|para|per))?(?:\s+\S+){0,2}\s*[:\-–]?\s*$"
+    ),
+    "fr": (
+        r"\b(?:dur[ée]e|longueur|dure|contrats?|stages?|periodes?|p[ée]riodes?|engagement|"
+        r"programme|formation|entre|pour)\b(?:\s+(?:de|de d['’]|di|del|d['’]|von|para|per))?"
+        r"(?:\s+\S+){0,2}\s*[:\-–]?\s*$"
+    ),
+    "de": (
+        r"\b(?:dauer|vertrags?(?:dauer|laufzeit|zeit)|befristet\w*|vertr[äa]ge?|l[äa]nge|"
+        r"dauert|praktikum|stage|stellen|zeitraum|anstellung|beschaeftigung|programm|"
+        r"zwischen|f[üu]r|einen|einem)\b"
+        r"(?:\s+(?:von|of|de|di|del|d['’]|[üu]ber|ueber))?(?:\s+\S+){0,2}\s*[:\-–]?\s*$"
+    ),
+    "it": (
+        r"\b(?:durata|contratt[oi]|stage|tirocini|period[oi]|assunzione|"
+        r"programma|tra|per|un|una)\b(?:\s+(?:di|da|del|de|della|in|a|tra))?"
+        r"(?:\s+\S+){0,2}\s*[:\-–]?\s*$"
+    ),
+    "es": (
+        r"\b(?:duraci[óo]n|contratos?|stage|pasant[íi]as?|pr[áa]cticas?|becas?|periodo|"
+        r"per[íi]odo|programa|empleo|entre|para|un|una|dura\w*)\b"
+        r"(?:\s+(?:de|del|di|in|para|entre))?(?:\s+\S+){0,2}\s*[:\-–]?\s*$"
+    ),
+}
+
+_DURATION_RIGHT: dict[str, str] = {
+    "en": (
+        r"^\s*[-–]?\s*(?:internships?|stages?|contracts?|programmes?|programs?|employment|"
+        r"engagement|traineeship|placement|assignments?|periods?|terms?|full[- ]time|"
+        r"part[- ]time)\b"
+    ),
+    "fr": (
+        r"^\s*[-–]?\s*(?:stages?|alternances?|contrats?|programmes?|formations?|emploi|"
+        r"alternance|plein temps|temps plein|periodes?|p[ée]riodes?)\b"
+    ),
+    "de": (
+        r"^\s*[-–]?\s*(?:praktikum|stellen?vertrag|vertr[äa]ge|vertrag|anstellung|programm|"
+        r"vollzeit|teilzeit|aushilfe|zeitraum)\b"
+    ),
+    "it": (
+        r"^\s*[-–]?\s*(?:stage|tirocinio|contratti?|contratto|programma|assunzione|"
+        r"tempo pieno|tempo parziale|period[oi])\b"
+    ),
+    "es": (
+        r"^\s*[-–]?\s*(?:stage|pasant[íi]a|pr[áa]ctica|becas?|contratos?|contrato|"
+        r"programa|empleo|jornada completa|tiempo completo|periodo)\b"
+    ),
+}
+
+# Strict version of the duration markers, used to quote the duration: the
+# quote starts at the head word ("duration", "contract"), not at the whole
+# noun phrase that made the detection possible.
+_DURATION_ANCHOR_LEFT: dict[str, str] = {
+    "en": (
+        r"\b(?:duration|length|lasting|lasts?|contracts?|internships?|stages?|placements?|"
+        r"assignments?|employment|engagement|programmes?|programs?|period|term|between|for)\b"
         r"(?:\s+(?:of|de|di|del|d['’]|von|para|per))?\s*[:\-–]?\s*$"
     ),
     "fr": (
@@ -422,40 +489,19 @@ _DURATION_LEFT: dict[str, str] = {
         r"programme|formation|entre|pour)\b(?:\s+(?:de|de d['’]|di|del|d['’]|von|para|per))?\s*[:\-–]?\s*$"
     ),
     "de": (
-        r"\b(?:dauer|l[äa]nge|dauert|vertr[äa]ge|praktikum|stage|stellen|zeitraum|"
-        r"anstellung|beschaeftigung|programm|zwischen|f[üu]r|einen|einem)\b"
-        r"(?:\s+(?:von|of|de|di|del|d['’]))?\s*[:\-–]?\s*$"
+        r"\b(?:dauer|vertrags?(?:dauer|laufzeit|zeit)|befristet\w*|vertr[äa]g(?:e)?|l[äa]nge|"
+        r"dauert|praktikum|stage|stellen|zeitraum|anstellung|beschaeftigung|programm|"
+        r"zwischen|f[üu]r|einen|einem)\b"
+        r"(?:\s+(?:von|of|de|di|del|d['’]|[üu]ber|ueber))?\s*[:\-–]?\s*$"
     ),
     "it": (
-        r"\b(?:durata|contratti?|stage|tirocini|period[oi]|periodi|assunzione|"
-        r"programma|tra|per|un|una)\b(?:\s+(?:di|da|in|a|tra))?\s*[:\-–]?\s*$"
+        r"\b(?:durata|contratt[oi]|stage|tirocini|period[oi]|assunzione|"
+        r"programma|tra|per|un|una)\b(?:\s+(?:di|da|del|de|della|in|a|tra))?\s*[:\-–]?\s*$"
     ),
     "es": (
-        r"\b(?:duraci[óo]n|contratos?|stage|pasant[íi]as?|becas?|periodo|per[íi]odo|"
-        r"programa|empleo|entre|para|un|una)\b(?:\s+(?:de|del|di|in|para|entre))?\s*[:\-–]?\s*$"
-    ),
-}
-
-_DURATION_RIGHT: dict[str, str] = {
-    "en": (
-        r"^\s*[-–]?\s*(?:internships?|stages?|contracts?|programmes?|programs?|employment|"
-        r"engagement|traineeship|placement|full[- ]time|part[- ]time)\b"
-    ),
-    "fr": (
-        r"^\s*[-–]?\s*(?:stages?|alternances?|contrats?|programmes?|formations?|emploi|"
-        r"alternance|plein temps|temps plein)\b"
-    ),
-    "de": (
-        r"^\s*[-–]?\s*(?:praktikum|stellen?vertrag|vertr[äa]ge|vertrag|anstellung|programm|"
-        r"vollzeit|teilzeit|aushilfe)\b"
-    ),
-    "it": (
-        r"^\s*[-–]?\s*(?:stage|tirocinio|contratti?|contratto|programma|assunzione|"
-        r"tempo pieno|tempo parziale)\b"
-    ),
-    "es": (
-        r"^\s*[-–]?\s*(?:stage|pasant[íi]a|becas?|contratos?|contrato|programa|empleo|"
-        r"jornada completa|tiempo completo)\b"
+        r"\b(?:duraci[óo]n|contratos?|stage|pasant[íi]as?|pr[áa]cticas?|becas?|periodo|"
+        r"per[íi]odo|programa|empleo|entre|para|un|una|dura\w*)\b"
+        r"(?:\s+(?:de|del|di|in|para|entre))?\s*[:\-–]?\s*$"
     ),
 }
 
@@ -468,11 +514,14 @@ _DURATION_MIN: dict[str, str] = {
 }
 
 _DURATION_MAX: dict[str, str] = {
-    "en": r"\b(?:up to|a maximum of|maximum of|max\.?)\s*$",
-    "fr": r"\b(?:jusqu['’][àa]|maximum de|au maximum)\s*$",
-    "de": r"\b(?:h[öo]chstens|maximal|maximum|sp[äa]testens|bis zu)\s*$",
-    "it": r"\b(?:fino a|massimo|fino)\s*$",
-    "es": r"\b(?:hasta|m[áa]ximo|m[áa]ximo de)\s*$",
+    "en": r"\b(?:up to|a maximum of|maximum of|max\.?|limited to|no longer than)\s*$",
+    "fr": (
+        r"\b(?:jusqu['’][àa]|maximum de|au maximum|maximal[eo]?s?|limit[ée]e?s?\s+[àa]|"
+        r"plafonn[ée]e?s?\s+[àa])\s*$"
+    ),
+    "de": r"\b(?:h[öo]chstens|maximal|maximale?n?|maximum|sp[äa]testens|bis zu|begrenzt auf)\s*$",
+    "it": r"\b(?:fino a|massimo|massima|fino|limitat[oa]\s+a)\s*$",
+    "es": r"\b(?:hasta|m[áa]ximo|m[áa]xim[ao]s?|limitad[oa]\s+a)\s*$",
 }
 
 # Preposition that introduces a range ("de 3 à 6 mois"): it belongs to the
@@ -630,6 +679,7 @@ class _Vocab:
     relative_left: re.Pattern[str]
     relative_right: re.Pattern[str]
     duration_left: re.Pattern[str]
+    duration_anchor_left: re.Pattern[str]
     duration_right: re.Pattern[str]
     duration_min: re.Pattern[str]
     duration_max: re.Pattern[str]
@@ -722,6 +772,7 @@ def _build_vocab(code: str) -> _Vocab:
         relative_left=re.compile(_RELATIVE_LEFT[code], re.IGNORECASE),
         relative_right=re.compile(_RELATIVE_RIGHT[code], re.IGNORECASE),
         duration_left=re.compile(_DURATION_LEFT[code], re.IGNORECASE),
+        duration_anchor_left=re.compile(_DURATION_ANCHOR_LEFT[code], re.IGNORECASE),
         duration_right=re.compile(_DURATION_RIGHT[code], re.IGNORECASE),
         duration_min=re.compile(_DURATION_MIN[code], re.IGNORECASE),
         duration_max=re.compile(_DURATION_MAX[code], re.IGNORECASE),
@@ -1113,12 +1164,15 @@ def _duration_is_usable(text: str, start: int, end: int, vocab: _Vocab, *, is_ra
     right = text[end:end + _RIGHT_WINDOW]
     if vocab.experience_left.search(left) or vocab.experience_right.search(right):
         return False
-    if vocab.relative_left.search(left) or vocab.relative_right.search(right):
-        return False
     if vocab.duration_min.search(left) or vocab.duration_max.search(left):
         return True
     if is_range:
+        # An interval is bounded on both sides: it is a contract length by
+        # itself, whatever preposition introduces it ("from 3 to 6 months",
+        # "tra 3 e 6 mesi").  Only the experience trap still applies.
         return True
+    if vocab.relative_left.search(left) or vocab.relative_right.search(right):
+        return False
     if vocab.duration_left.search(left) or vocab.duration_right.search(right):
         return True
     return False
@@ -1132,7 +1186,7 @@ def _duration_anchor(text: str, start: int, vocab: _Vocab) -> int:
         match = pattern.search(left)
         if match is not None:
             return window_start + match.start()
-    match = vocab.duration_left.search(left)
+    match = vocab.duration_anchor_left.search(left)
     if match is not None:
         return window_start + match.start()
     match = vocab.range_prefix.search(left)
