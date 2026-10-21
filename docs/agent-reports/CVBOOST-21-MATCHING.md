@@ -159,9 +159,19 @@ numéro — le distinguer d'un vrai chiffre serait plus fragile que l'inverse.
 
 **Contrôle de non-régression sur le corpus** : les 36 offres synthétiques de la
 Mission 02 (`career.offer_requirements.load_fixtures`) ont été passées au
-matching avant et après correction, sur deux CV synthétiques : **0 différence**
-sur les 86 exigences. Les corrections ne changent le comportement que sur les
-cas réellement fautifs.
+matching avant et après correction, sur deux CV synthétiques (172 exigences au
+total) :
+
+- CV à sections classiques (une étiquette par ligne) : **0 différence** ;
+- CV à en-têtes sur une ligne (`Compétences : Python, SQL`) : **21 différences,
+  toutes des corrections** — « Strong SQL skills are mandatory. »,
+  « Python is mandatory. », « SQL requis. », « We require proficiency in SQL and
+  Excel. »… passaient de `DO_NOT_ADD` (faux négatif : la compétence est écrite
+  noir sur blanc) à `HIGHLIGHT` / `REPHRASE`, et la preuve « Anglais » passe du
+  champ `skills` au champ `languages`.
+
+Les corrections ne changent donc le comportement que sur les cas réellement
+fautifs.
 
 ## 5. Exemple réel (CV et offre synthétiques)
 
