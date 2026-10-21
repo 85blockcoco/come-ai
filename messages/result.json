@@ -25,19 +25,19 @@
     "career_static/index.html",
     "career_static/career.css"
   ],
-  "output": "Mission SK-10 (CVBOOST-31) livrée et consolidée : le CV importé devient un profil structuré de faits reviewables un par un (5 statuts, provenance page/offsets/citation exacte, OCR local jamais auto-approuvé, suppression + export, UI d'approbation). Consolidation des 4 lots parallèles : base = lot worker/cvboost-31-1792615600, + câblage effectif du critère 5 (les faits validés seuls alimentent le brouillon de candidature et le matching), + 5 défauts adversariaux corrigés (offsets/citation incohérents sur passage long, page fausse sur document CRLF, transitions refusées offertes par l'UI, approbation sans date, upload hors plafond) + contrat SK-11 (/evidence, get_matching_profile).",
-  "logs": "pytest -q tests/test_candidate_profile.py → 64 passed (18 nouveaux)\npytest -q (suite complète) → 1488 passed, 1 skipped\nruff check . → All checks passed!\ngit diff --check → propre\n./checklist_codex.sh → TOUT VERT\nChacun des 5 défauts corrigés est couvert par un test qui échoue sur le code d'origine (vérifié par retour arrière du patch).",
+  "output": "Mission SK-10 (CVBOOST-31) livrée en alternative complète et verte : le CV importé devient un profil structuré de faits reviewables un par un (5 statuts, provenance page/offsets/citation exacte, OCR local jamais auto-approuvé, suppression + export, UI d'approbation). Base = lot D (worker/cvboost-31-1792615600) + audit adversariale : 5 défauts réels corrigés (offsets/citation incohérents sur passage long, page fausse sur document CRLF, transitions refusées offertes par l'UI, approbation sans date, upload hors plafond) + câblage effectif du critère 5 (les faits validés seuls nourrissent le brouillon de candidature et le matching, en fusionnant avec la saisie à la main) + contrat SK-11 (/evidence, get_matching_profile).",
+  "logs": "pytest -q tests/test_candidate_profile.py → 66 passed (20 nouveaux)\npytest -q (suite complète) → 1490 passed, 1 skipped\nruff check . → All checks passed!\ngit diff --check → propre\n./checklist_codex.sh → TOUT VERT\nChaque défaut corrigé est couvert par un test qui échoue sur le code d'origine (vérifié par retour arrière du patch).",
   "error": null,
   "branch": "worker/cvboost-31-1792617513",
   "base": "f5b22f2 (main)",
   "integration": {
-    "branch_to_integrate": "worker/cvboost-31-1792617513",
-    "registry_branch": "agent/spec-sk10-candidate-profile",
-    "note": "Quatre implémentations parallèles de SK-10 existent sur la même base f5b22f2 et touchent les mêmes fichiers : ne pas les fusionner ensemble. Cette branche est la livraison consolidée (base = lot D worker/cvboost-31-1792615600 + audit). Le lot C (0502c4b) est conservé sur origin/worker/cvboost-31-1792614464 ; les lots A (worker/cvboost-31-1792607995) et B (worker/cvboost-31-1792614191) sont inchangés sur origin.",
+    "recommended_branch_to_integrate": "agent/spec-sk10-candidate-profile",
+    "alternative_branch": "worker/cvboost-31-1792617513",
+    "note": "Cinq implémentations parallèles de SK-10 existent sur la même base f5b22f2 et touchent les mêmes fichiers : ne pas les fusionner ensemble. Pendant la mission, un autre agent a audité la branche désignée par le registre (lot C, commit 1d2f73c : 6 défauts corrigés, 58 tests, essai réel uvicorn) — elle est complète et verte, et c'est elle que je recommande d'intégrer. Ma branche est l'alternative complète et verte : elle apporte une projection recalculée (aucune ligne périmée possible), aucune migration de schéma et un contrat SK-11 explicite (/evidence qui refuse tant que rien n'est validé). Le comparatif ligne à ligne est dans docs/agent-reports/SPEC-SK10-CANDIDATE_PROFILE.md §7. Aucune branche concurrente n'a été modifiée ni écrasée ; le lot C est conservé sur origin/agent/spec-sk10-candidate-profile et sur origin/worker/cvboost-31-1792614464.",
     "sk11_contract": [
       "GET /api/career/candidate-profile/evidence (400 tant que rien n'est validé)",
       "GET /api/career/candidate-profile/active (faits validés + profile_fields projetés)",
-      "CareerService.get_matching_profile() (profil projeté sur les faits validés)",
+      "CareerService.get_matching_profile() (profil fusionné : saisie à la main + faits validés)",
       "CareerService.require_candidate_profile_evidence()"
     ]
   }
