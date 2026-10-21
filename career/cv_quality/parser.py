@@ -35,7 +35,9 @@ def extract_text_from_bytes(data: bytes, filetype: str, filename: str | None = N
         filename: Original filename for provenance.
 
     Returns:
-        DocumentInput with extracted text and metadata.
+        DocumentInput with extracted text and metadata. The raw bytes are
+        attached so that a layout level analysis (ATS check) can inspect the
+        exported file itself.
 
     Raises:
         ValueError: If filetype is unsupported or extraction fails.

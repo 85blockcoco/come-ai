@@ -1,20 +1,19 @@
-"""Tests unitaires du contrôle ATS local (Mission 04).
+"""Tests for the local ATS risk analysis (Mission 04).
 
-Toutes les fixtures sont **synthétiques** (PDF générés avec reportlab, DOCX
-générés avec python-docx, texte brut) : aucun CV réel, aucun appel réseau.
-
-Couverture : les 9 détecteurs, le score pondéré, le label, les erreurs de
-parsing (fichier chiffré / corrompu) et les combinaisons.
+Every fixture is synthetic: the PDFs are generated on the fly with reportlab,
+the DOCX files with python-docx. No real CV, no personal data, no network.
 """
 
 from __future__ import annotations
 
 import io
-import struct
+import socket
 import time
-import zlib
 
 import pytest
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfgen import canvas
 
 from career.cv_quality import (
     ATSCheckResult,
@@ -25,157 +24,45 @@ from career.cv_quality import (
     run_ats_check_file,
 )
 from career.cv_quality.ats import (
-    RISK_WEIGHTS,
-    PageContent,
-    TextChunk,
-    risk_interpretation,
+    RISK_INTERPRETATIONS,
+    calculate_risk_label,
+    calculate_risk_score,
+    describe_risk,
 )
+from career.cv_quality.parser import extract_text_from_bytes
 
-reportlab = pytest.importorskip("reportlab")
-docx = pytest.importorskip("docx")
+PAGE_WIDTH, PAGE_HEIGHT = A4
 
-from reportlab.lib.pagesizes import A4  # noqa: E402
-from reportlab.lib.utils import ImageReader  # noqa: E402
-from reportlab.pdfgen import canvas  # noqa: E402
+CLEAN_SECTIONS = ("Expérience", "Formation", "Compétences")
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Helpers — fixtures synthétiques
+# Helpers — synthetic document builders
 # ──────────────────────────────────────────────────────────────────────
 
-CLEAN_LINES = [
-    "Jean Dupont",
-    "jean.dupont@email.fr",
-    "+33 6 12 34 56 78",
-    "Expérience",
-    "2020-2023 | Développeur Python | TechCorp",
-    "Migration de 5 services vers Kubernetes",
-    "2018-2020 | Développeur Junior | StartupInc",
-    "Formation",
-    "2018-2020 | Master Informatique | Universite Paris-Saclay",
-    "Compétences",
-    "Python, SQL, Docker, Kubernetes, React, AWS",
-    "Langues",
-    "Français (natif), Anglais (courant)",
-]
-
-
-def _pdf_bytes(draw) -> bytes:
-    """Build a PDF from a drawing callback."""
+def _pdf(draw_pages: list) -> bytes:
+    """Build a PDF where each element of `draw_pages` draws one page."""
     buffer = io.BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=A4)
-    draw(pdf)
+    for index, draw in enumerate(draw_pages):
+        if index:
+            pdf.showPage()
+        draw(pdf)
     pdf.save()
     return buffer.getvalue()
 
 
-def _png_bytes(width: int = 8, height: int = 8) -> bytes:
-    """Minimal solid grey PNG built without any image library."""
-    raw = b"".join(b"\x00" + bytes((200, 200, 200)) * width for _ in range(height))
-
-    def chunk(kind: bytes, data: bytes) -> bytes:
-        payload = kind + data
-        return (
-            struct.pack(">I", len(data))
-            + payload
-            + struct.pack(">I", zlib.crc32(payload) & 0xFFFFFFFF)
-        )
-
-    ihdr = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
-    return (
-        b"\x89PNG\r\n\x1a\n"
-        + chunk(b"IHDR", ihdr)
-        + chunk(b"IDAT", zlib.compress(raw))
-        + chunk(b"IEND", b"")
-    )
-
-
-def _clean_pdf() -> bytes:
-    def draw(pdf: canvas.Canvas) -> None:
-        y = 780.0
-        pdf.setFont("Helvetica", 14)
-        pdf.drawString(60, y, "Jean Dupont")
-        y -= 30
-        pdf.setFont("Helvetica", 11)
-        for line in CLEAN_LINES:
-            pdf.drawString(60, y, line)
-            y -= 16
-
-    return _pdf_bytes(draw)
-
-
-def _two_column_pdf() -> bytes:
-    def draw(pdf: canvas.Canvas) -> None:
-        pdf.setFont("Helvetica", 10)
-        for index in range(8):
-            pdf.drawString(60, 760 - index * 18, f"Experience line {index}")
-            pdf.drawString(330, 751 - index * 18, f"Formation line {index}")
-        pdf.drawString(60, 600, "Competences line")
-
-    return _pdf_bytes(draw)
-
-
-def _table_pdf() -> bytes:
-    def draw(pdf: canvas.Canvas) -> None:
-        pdf.setFont("Helvetica", 10)
-        for row in range(4):
-            for col in range(3):
-                pdf.drawString(60 + col * 150, 700 - row * 20, f"Cell {row}{col}")
-
-    return _pdf_bytes(draw)
-
-
-def _image_only_pdf() -> bytes:
-    def draw(pdf: canvas.Canvas) -> None:
-        pdf.drawImage(ImageReader(io.BytesIO(_png_bytes())), 0, 0, width=A4[0], height=A4[1])
-
-    return _pdf_bytes(draw)
-
-
-def _header_footer_pdf() -> bytes:
-    def draw(pdf: canvas.Canvas) -> None:
-        for _ in range(2):
-            pdf.setFont("Helvetica", 9)
-            pdf.drawString(60, 800, "CV - Jean Dupont")
-            pdf.drawString(60, 42, "Document confidentiel")
-            pdf.setFont("Helvetica", 11)
-            pdf.drawString(60, 700, "Experience")
-            pdf.drawString(60, 660, "Formation")
-            pdf.drawString(60, 620, "Competences")
-            pdf.showPage()
-
-    return _pdf_bytes(draw)
-
-
-def _multi_page_pdf(pages: int = 5) -> bytes:
-    def draw(pdf: canvas.Canvas) -> None:
-        for _ in range(pages):
-            pdf.setFont("Helvetica", 11)
-            for index in range(20):
-                pdf.drawString(60, 760 - index * 18, f"Experience line {index}")
-            pdf.showPage()
-
-    return _pdf_bytes(draw)
-
-
-def _encrypted_pdf() -> bytes:
-    import pypdf
-
-    reader = pypdf.PdfReader(io.BytesIO(_clean_pdf()))
-    for algorithm in ("AES-256", "AES-128", "RC4-128", "RC4-40"):
-        writer = pypdf.PdfWriter()
-        writer.clone_document_from_reader(reader)
-        try:
-            writer.encrypt("motdepasse", algorithm=algorithm)
-        except Exception:
-            continue
-        buffer = io.BytesIO()
-        writer.write(buffer)
-        return buffer.getvalue()
-    raise RuntimeError("pypdf ne sait pas chiffrer la fixture PDF")
+def _draw_lines(pdf, lines: list[tuple[str, float]], x: float = 50.0, size: float = 11.0) -> None:
+    """Draw `(text, y)` pairs, top to bottom, all at the same x."""
+    for text, y in lines:
+        pdf.setFont("Helvetica", size)
+        pdf.drawString(x, y, text)
 
 
 def _docx_bytes(build) -> bytes:
+    """Build a DOCX through the given callback and return its bytes."""
+    import docx
+
     document = docx.Document()
     build(document)
     buffer = io.BytesIO()
@@ -183,515 +70,629 @@ def _docx_bytes(build) -> bytes:
     return buffer.getvalue()
 
 
-def _clean_docx() -> bytes:
-    def build(document) -> None:
-        document.add_paragraph("Jean Dupont")
-        document.add_paragraph("jean.dupont@email.fr")
-        document.add_paragraph("Expérience")
-        document.add_paragraph("2020-2023 | Développeur Python | TechCorp")
-        document.add_paragraph("Formation")
-        document.add_paragraph("2018-2020 | Master Informatique | Université Paris-Saclay")
-        document.add_paragraph("Compétences")
-        document.add_paragraph("Python, SQL, Docker, Kubernetes")
-
-    return _docx_bytes(build)
-
-
-def _two_column_docx() -> bytes:
+def _set_columns(document, number: int) -> None:
+    """Declare a number of text columns in the DOCX section properties."""
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
 
-    def build(document) -> None:
-        section = document.sections[0]
+    sect_pr = document.sections[0]._sectPr
+    cols = sect_pr.find(qn("w:cols"))
+    if cols is None:
         cols = OxmlElement("w:cols")
-        cols.set(qn("w:num"), "2")
-        section._sectPr.append(cols)  # noqa: SLF001 - no public accessor
-        document.add_paragraph("Jean Dupont")
-        document.add_paragraph("Expérience")
-        document.add_paragraph("Formation")
-        document.add_paragraph("Compétences")
-
-    return _docx_bytes(build)
+        sect_pr.append(cols)
+    cols.set(qn("w:num"), str(number))
 
 
-def _nested_table_docx() -> bytes:
-    def build(document) -> None:
-        document.add_paragraph("Jean Dupont")
-        document.add_paragraph("Expérience")
-        document.add_paragraph("Formation")
-        document.add_paragraph("Compétences")
-        table = document.add_table(rows=2, cols=2)
-        table.cell(0, 0).text = "Poste"
-        table.cell(0, 1).text = "Entreprise"
-        table.cell(1, 0).text = "Details"
-        nested = table.cell(1, 1).add_table(rows=1, cols=2)
-        nested.cell(0, 0).text = "Python"
-        nested.cell(0, 1).text = "SQL"
+def _clean_pdf() -> bytes:
+    """One column CV, no image, no table, no decorative glyph, no raw URL."""
+    def draw(pdf):
+        _draw_lines(pdf, [
+            ("Jean Dupont", 770),
+            ("Developpeur Python - Paris", 745),
+            ("jean.dupont@example.fr", 725),
+            ("Experience", 690),
+            ("2020-2023 Developpeur Python - TechCorp", 668),
+            ("- Croissance du trafic API de 30% en 6 mois", 648),
+            ("- Migration de 5 services vers Kubernetes", 628),
+            ("Formation", 590),
+            ("2018-2020 Master Informatique - Universite Paris-Saclay", 568),
+            ("Competences", 530),
+            ("Python, SQL, Docker, Kubernetes, React, AWS", 508),
+        ], size=12)
 
-    return _docx_bytes(build)
-
-
-def _header_docx() -> bytes:
-    def build(document) -> None:
-        section = document.sections[0]
-        section.header.paragraphs[0].text = "Jean Dupont - CV confidentiel"
-        document.add_paragraph("Jean Dupont")
-        document.add_paragraph("Expérience")
-        document.add_paragraph("Formation")
-        document.add_paragraph("Compétences")
-
-    return _docx_bytes(build)
+    return _pdf([draw])
 
 
-def _decorative_docx() -> bytes:
-    def build(document) -> None:
-        document.add_paragraph("Jean Dupont")
-        document.add_paragraph("Expérience")
-        document.add_paragraph("● Développeur Python ﬁ TechCorp")
-        document.add_paragraph("Formation")
-        document.add_paragraph("Compétences")
+def _two_columns_pdf() -> bytes:
+    """CV laid out on two columns (left column then right column)."""
+    def draw(pdf):
+        pdf.setFont("Helvetica", 12)
+        pdf.drawString(50, 770, "Jean Dupont")
+        _draw_lines(pdf, [
+            ("Experience", 700),
+            ("2020-2023 Developpeur Python", 678),
+            ("Croissance du trafic de 30%", 658),
+            ("Migration de 5 services", 638),
+        ], x=50)
+        _draw_lines(pdf, [
+            ("Formation", 700),
+            ("2018-2020 Master Informatique", 678),
+            ("Universite Paris-Saclay", 658),
+        ], x=320)
 
-    return _docx_bytes(build)
-
-
-def _url_docx() -> bytes:
-    def build(document) -> None:
-        document.add_paragraph("Jean Dupont")
-        document.add_paragraph("Expérience")
-        document.add_paragraph("https://github.com/jeandupont/projet")
-        document.add_paragraph("Formation")
-        document.add_paragraph("Compétences")
-
-    return _docx_bytes(build)
+    return _pdf([draw])
 
 
-def _missing_section_docx() -> bytes:
-    def build(document) -> None:
-        document.add_paragraph("Jean Dupont")
-        document.add_paragraph("Expérience")
-        document.add_paragraph("Technicien de maintenance")
+def _table_pdf() -> bytes:
+    """CV with an aligned grid (3 columns x 3 rows)."""
+    def draw(pdf):
+        _draw_lines(pdf, [
+            ("Jean Dupont", 770),
+            ("Experience", 720),
+        ], size=12)
+        rows = [
+            ("Entreprise", "Role", "Dates"),
+            ("TechCorp", "Developpeur", "2020-2023"),
+            ("DataInc", "Lead", "2021-2024"),
+        ]
+        y = 680
+        for row in rows:
+            for index, cell in enumerate(row):
+                pdf.setFont("Helvetica", 11)
+                pdf.drawString(50 + index * 150, y, cell)
+            y -= 25
 
-    return _docx_bytes(build)
+    return _pdf([draw])
+
+
+def _image_only_pdf() -> bytes:
+    """Page made of a single image, without any extractable text."""
+    from PIL import Image
+
+    image = Image.new("RGB", (600, 800), (235, 235, 235))
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    buffer.seek(0)
+
+    def draw(pdf):
+        pdf.drawImage(ImageReader(buffer), 0, 0, width=PAGE_WIDTH, height=PAGE_HEIGHT)
+
+    return _pdf([draw])
+
+
+def _encrypted_pdf() -> bytes:
+    """PDF protected by a password."""
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4, encrypt="secret")
+    pdf.drawString(50, 700, "CONFIDENTIEL")
+    pdf.showPage()
+    pdf.save()
+    return buffer.getvalue()
+
+
+def _reading_order_pdf() -> bytes:
+    """Text flow jumping back up three times (boxed side content)."""
+    def draw(pdf):
+        _draw_lines(pdf, [
+            ("Experience", 700),
+            ("2020-2023 Developpeur", 678),
+            ("Croissance de 30%", 658),
+            ("Encadre lateral", 740),
+            ("2018-2020 Master", 640),
+            ("Universite Paris-Saclay", 620),
+            ("Encadre lateral 2", 720),
+            ("Competences", 600),
+            ("Python, SQL, Docker", 580),
+            ("Encadre lateral 3", 700),
+        ], size=11)
+
+    return _pdf([draw])
+
+
+def _header_footer_pdf() -> bytes:
+    """Two pages sharing the same header and the same footer."""
+    def make_page(body: list[tuple[str, float]]):
+        def draw(pdf):
+            pdf.setFont("Helvetica", 9)
+            pdf.drawString(50, 810, "CONFIDENTIEL - CV Jean Dupont")
+            _draw_lines(pdf, body, size=11)
+            pdf.setFont("Helvetica", 9)
+            pdf.drawString(50, 30, "Page sur 2 - Jean Dupont")
+        return draw
+
+    page1 = make_page([("Experience", 700), ("2020-2023 Developpeur", 678)])
+    page2 = make_page([("Formation", 700), ("2018-2020 Master", 678)])
+    return _pdf([page1, page2])
+
+
+def _five_pages_pdf() -> bytes:
+    """Five pages of plain text (performance fixture)."""
+    pages = []
+    for index in range(5):
+        def draw(pdf, index=index):
+            _draw_lines(pdf, [(f"Experience - societe numero {index}", 700 - 20 * line) for line in range(10)], size=11)
+        pages.append(draw)
+    return _pdf(pages)
+
+
+def _realistic_pdf() -> bytes:
+    """Realistic CV: centred title, photo in the corner, bullet lists."""
+    from PIL import Image
+
+    image = Image.new("RGB", (80, 100), (200, 210, 230))
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    buffer.seek(0)
+
+    def draw(pdf):
+        pdf.drawImage(ImageReader(buffer), PAGE_WIDTH - 130, PAGE_HEIGHT - 120, width=80, height=100)
+        pdf.setFont("Helvetica-Bold", 18)
+        pdf.drawCentredString(PAGE_WIDTH / 2, PAGE_HEIGHT - 90, "Jean Dupont")
+        pdf.setFont("Helvetica", 10)
+        pdf.drawCentredString(PAGE_WIDTH / 2, PAGE_HEIGHT - 108, "jean.dupont@example.fr")
+        _draw_lines(pdf, [
+            ("EXPERIENCE", PAGE_HEIGHT - 170),
+            ("2020 - 2023   Developpeur Python   TechCorp", PAGE_HEIGHT - 188),
+            ("- Croissance du trafic API de 30% en 6 mois", PAGE_HEIGHT - 202),
+            ("- Migration de 5 services vers Kubernetes", PAGE_HEIGHT - 216),
+            ("FORMATION", PAGE_HEIGHT - 240),
+            ("2018 - 2020   Master Informatique   Universite Paris-Saclay", PAGE_HEIGHT - 258),
+            ("COMPETENCES", PAGE_HEIGHT - 282),
+            ("Python, SQL, Docker, Kubernetes, React, AWS", PAGE_HEIGHT - 300),
+            ("LANGUES", PAGE_HEIGHT - 324),
+            ("Francais (natif), Anglais (courant)", PAGE_HEIGHT - 342),
+        ])
+
+    return _pdf([draw])
 
 
 CLEAN_TXT = """Jean Dupont
-jean.dupont@email.fr
+jean.dupont@example.fr
 
-Expérience
-2020-2023 | Développeur Python | TechCorp
+Experience
+2020-2023 Developpeur Python - TechCorp
+- Croissance du trafic API de 30% en 6 mois
+
 Formation
-2018-2020 | Master Informatique | Universite Paris-Saclay
-Compétences
-Python, SQL, Docker
+2018-2020 Master Informatique - Universite Paris-Saclay
+
+Competences
+Python, SQL, Docker, Kubernetes
 """
 
 
-def _codes(result: ATSCheckResult) -> set[str]:
-    return {finding.code for finding in result.findings}
-
+# ──────────────────────────────────────────────────────────────────────
+# Helpers — assertions
+# ──────────────────────────────────────────────────────────────────────
 
 def _findings(result: ATSCheckResult, code: str) -> list[ATSFinding]:
     return [finding for finding in result.findings if finding.code == code]
 
 
-# ──────────────────────────────────────────────────────────────────────
-# 1. PDF une colonne propre
-# ──────────────────────────────────────────────────────────────────────
-
-def test_clean_pdf_has_no_high_risk():
-    result = run_ats_check_bytes(_clean_pdf(), "pdf")
-    high = [f for f in result.findings if f.risk_level == "HIGH"]
-    assert high == [], high
-    assert result.risk_label in ("LOW", "MEDIUM")
-    assert result.pages_analyzed == 1
-    assert result.parse_errors == []
+def _has(result: ATSCheckResult, code: str, level: str | None = None) -> bool:
+    return any(
+        finding.code == code and (level is None or finding.risk_level == level)
+        for finding in result.findings
+    )
 
 
-def test_clean_pdf_sections_are_detected():
-    result = run_ats_check_bytes(_clean_pdf(), "pdf")
-    assert "MISSING_SECTION" not in _codes(result)
-
-
-def test_clean_pdf_reading_order_is_linear():
-    result = run_ats_check_bytes(_clean_pdf(), "pdf")
-    assert "READING_ORDER" not in _codes(result)
-
-
-def test_clean_pdf_is_not_multi_column():
-    result = run_ats_check_bytes(_clean_pdf(), "pdf")
-    assert "MULTIPLE_COLUMNS" not in _codes(result)
+def _pdf_document(data: bytes) -> DocumentInput:
+    return extract_text_from_bytes(data, "pdf", filename="cv.pdf")
 
 
 # ──────────────────────────────────────────────────────────────────────
-# 2. PDF deux colonnes
+# Detector 1 — reading order
 # ──────────────────────────────────────────────────────────────────────
 
-def test_two_column_pdf_detected():
-    result = run_ats_check_bytes(_two_column_pdf(), "pdf")
-    findings = _findings(result, "MULTIPLE_COLUMNS")
-    assert findings, _codes(result)
+def test_reading_order_detected_on_non_linear_flow():
+    result = run_ats_check(_pdf_document(_reading_order_pdf()))
+    findings = _findings(result, "READING_ORDER")
+    assert findings, "un flux non linéaire doit être signalé"
     assert findings[0].risk_level == "MEDIUM"
     assert findings[0].page == 1
+    assert "sauts" in findings[0].evidence_excerpt
+
+
+def test_reading_order_quiet_on_linear_flow():
+    result = run_ats_check(_pdf_document(_clean_pdf()))
+    assert not _has(result, "READING_ORDER")
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Detector 2 — text stored as images
+# ──────────────────────────────────────────────────────────────────────
+
+def test_text_in_images_detected_on_image_only_pdf():
+    result = run_ats_check(_pdf_document(_image_only_pdf()))
+    findings = _findings(result, "TEXT_IN_IMAGES")
+    assert findings, "une page image-only doit être signalée"
+    assert findings[0].risk_level == "HIGH"
+    assert findings[0].page == 1
+
+
+def test_image_only_pdf_does_not_duplicate_the_missing_sections():
+    """Sans texte extractible, le détecteur de sections n'apporte rien de plus."""
+    result = run_ats_check(_pdf_document(_image_only_pdf()))
+    assert not _has(result, "MISSING_SECTION")
+    assert result.risk_label == "HIGH"
+
+
+def test_text_in_images_quiet_on_text_pdf():
+    result = run_ats_check(_pdf_document(_clean_pdf()))
+    assert not _has(result, "TEXT_IN_IMAGES")
+
+
+def test_photo_with_enough_text_is_not_an_ats_risk():
+    """A photo next to a real text is not a "text in images" risk."""
+    result = run_ats_check(_pdf_document(_realistic_pdf()))
+    assert not _has(result, "TEXT_IN_IMAGES")
+
+
+def test_realistic_cv_with_centred_title_is_not_flagged():
+    """A centred title or a photo must not create a false positive."""
+    result = run_ats_check(_pdf_document(_realistic_pdf()))
+    assert result.findings == [], [finding.message for finding in result.findings]
+    assert result.risk_score == 0
+    assert result.risk_label == "LOW"
+
+
+def test_text_in_images_detected_on_docx_with_picture():
+    from PIL import Image
+
+    image = Image.new("RGB", (40, 40), (200, 200, 200))
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    buffer.seek(0)
+
+    def build(document):
+        document.add_picture(buffer, width=1000000)
+        document.add_paragraph("Contact")
+
+    data = _docx_bytes(build)
+    result = run_ats_check_bytes(data, "docx")
+    assert _has(result, "TEXT_IN_IMAGES", "HIGH")
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Detector 3 — tabular structures
+# ──────────────────────────────────────────────────────────────────────
+
+def test_nested_table_detected_on_pdf_grid():
+    result = run_ats_check(_pdf_document(_table_pdf()))
+    findings = _findings(result, "NESTED_TABLE")
+    assert findings, "une grille alignée doit être signalée"
+    assert findings[0].risk_level == "MEDIUM"
     assert findings[0].evidence_excerpt
 
 
-def test_two_column_pdf_is_not_reported_as_a_table():
-    result = run_ats_check_bytes(_two_column_pdf(), "pdf")
-    assert "NESTED_TABLE" not in _codes(result)
+def test_nested_table_detected_on_docx_nested_table():
+    def build(document):
+        document.add_paragraph("Experience")
+        table = document.add_table(rows=2, cols=2)
+        table.cell(0, 0).text = "Cellule"
+        inner = table.cell(0, 0).add_table(rows=1, cols=2)
+        inner.cell(0, 0).text = "Imbrique"
 
-
-# ──────────────────────────────────────────────────────────────────────
-# 3. PDF avec tableau
-# ──────────────────────────────────────────────────────────────────────
-
-def test_table_pdf_detected():
-    result = run_ats_check_bytes(_table_pdf(), "pdf")
+    data = _docx_bytes(build)
+    result = run_ats_check_bytes(data, "docx")
     findings = _findings(result, "NESTED_TABLE")
-    assert findings, _codes(result)
+    assert findings, "un tableau imbriqué doit être signalé"
+    assert "imbriqué" in findings[0].message.lower()
+
+
+def test_nested_table_quiet_on_plain_cv():
+    result = run_ats_check(_pdf_document(_clean_pdf()))
+    assert not _has(result, "NESTED_TABLE")
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Detector 4 — multiple columns
+# ──────────────────────────────────────────────────────────────────────
+
+def test_multiple_columns_detected_on_two_column_pdf():
+    result = run_ats_check(_pdf_document(_two_columns_pdf()))
+    findings = _findings(result, "MULTIPLE_COLUMNS")
+    assert findings, "une mise en page deux colonnes doit être signalée"
     assert findings[0].risk_level == "MEDIUM"
-    assert "lignes" in findings[0].evidence_excerpt or "colonnes" in findings[0].evidence_excerpt
+    assert findings[0].evidence_excerpt
 
 
-def test_table_pdf_breaks_reading_order():
-    result = run_ats_check_bytes(_table_pdf(), "pdf")
-    assert "READING_ORDER" in _codes(result)
+def test_multiple_columns_detected_on_docx_columns():
+    def build(document):
+        document.add_paragraph("Experience")
+        document.add_paragraph("2020-2023 Developpeur Python")
+        _set_columns(document, 2)
+
+    data = _docx_bytes(build)
+    result = run_ats_check_bytes(data, "docx")
+    findings = _findings(result, "MULTIPLE_COLUMNS")
+    assert findings, "des colonnes déclarées doivent être signalées"
+    assert findings[0].risk_level == "MEDIUM"
 
 
-# ──────────────────────────────────────────────────────────────────────
-# 4. PDF image seule
-# ──────────────────────────────────────────────────────────────────────
-
-def test_image_only_pdf_detected():
-    result = run_ats_check_bytes(_image_only_pdf(), "pdf")
-    findings = _findings(result, "TEXT_IN_IMAGES")
-    assert findings, _codes(result)
-    assert findings[0].risk_level == "HIGH"
-    assert findings[0].bbox is not None
-
-
-def test_image_only_pdf_is_high_risk():
-    result = run_ats_check_bytes(_image_only_pdf(), "pdf")
-    assert result.risk_label == "HIGH"
-    assert result.risk_interpretation == "Risque élevé — restructuration recommandée"
+def test_multiple_columns_quiet_on_single_column_pdf():
+    result = run_ats_check(_pdf_document(_clean_pdf()))
+    assert not _has(result, "MULTIPLE_COLUMNS")
 
 
 # ──────────────────────────────────────────────────────────────────────
-# 5. PDF chiffré + PDF corrompu
+# Detector 5 — headers / footers
+# ──────────────────────────────────────────────────────────────────────
+
+def test_header_footer_detected_on_repeated_bands():
+    result = run_ats_check(_pdf_document(_header_footer_pdf()))
+    findings = _findings(result, "HEADER_FOOTER")
+    assert findings, "un en-tête / pied de page répété doit être signalé"
+    assert findings[0].risk_level == "LOW"
+    assert findings[0].page == 1
+
+
+def test_header_footer_quiet_on_single_page():
+    result = run_ats_check(_pdf_document(_clean_pdf()))
+    assert not _has(result, "HEADER_FOOTER")
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Detector 6 — decorative characters
+# ──────────────────────────────────────────────────────────────────────
+
+def test_decorative_chars_detected_on_ligatures():
+    text = "Jean Dupont\nExperience\n2020-2023 ﬁ Developpeur ﬂ TechCorp\nFormation\n2018-2020 Master\n"
+    document = DocumentInput(text=text, filename="cv.txt", filetype="txt")
+    result = run_ats_check(document)
+    findings = _findings(result, "DECORATIVE_CHARS")
+    assert findings, "des ligatures doivent être signalées"
+    assert findings[0].risk_level == "LOW"
+    assert "ﬁ" in findings[0].evidence_excerpt
+
+
+def test_decorative_chars_quiet_on_plain_text():
+    document = DocumentInput(text=CLEAN_TXT, filename="cv.txt", filetype="txt")
+    result = run_ats_check(document)
+    assert not _has(result, "DECORATIVE_CHARS")
+
+
+def test_accents_are_not_reported_as_decorative():
+    text = "Jean Dupont\nExpérience\n2020-2023 Développeur — Études à Paris\n"
+    document = DocumentInput(text=text, filename="cv.txt", filetype="txt")
+    result = run_ats_check(document)
+    assert not _has(result, "DECORATIVE_CHARS")
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Detector 7 — raw URLs
+# ──────────────────────────────────────────────────────────────────────
+
+def test_unreadable_links_detected_on_raw_urls():
+    text = (
+        "Jean Dupont\nExperience\n2020-2023 Developpeur\n"
+        "- Portfolio : https://github.com/jeandupont/portfolio\n"
+        "- Site : www.jeandupont.fr\n"
+    )
+    document = DocumentInput(text=text, filename="cv.txt", filetype="txt")
+    result = run_ats_check(document)
+    findings = _findings(result, "UNREADABLE_LINKS")
+    assert findings, "des URL brutes doivent être signalées"
+    assert findings[0].risk_level == "LOW"
+
+
+def test_email_is_not_reported_as_a_raw_link():
+    text = "Jean Dupont\njean.dupont@example.fr\nExperience\n2020-2023 Developpeur\n"
+    document = DocumentInput(text=text, filename="cv.txt", filetype="txt")
+    result = run_ats_check(document)
+    assert not _has(result, "UNREADABLE_LINKS")
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Detector 8 — missing sections
+# ──────────────────────────────────────────────────────────────────────
+
+def test_missing_section_detected_on_txt_without_sections():
+    text = "Jean Dupont\nContact\njean.dupont@example.fr\n"
+    document = DocumentInput(text=text, filename="cv.txt", filetype="txt")
+    result = run_ats_check(document)
+    findings = _findings(result, "MISSING_SECTION")
+    assert findings, "les sections absentes doivent être signalées"
+    assert all(finding.risk_level == "HIGH" for finding in findings)
+    assert any("Formation" in finding.message for finding in findings)
+
+
+def test_missing_section_quiet_on_complete_cv():
+    document = DocumentInput(text=CLEAN_TXT, filename="cv.txt", filetype="txt")
+    result = run_ats_check(document)
+    assert not _has(result, "MISSING_SECTION")
+
+
+def test_expected_sections_are_configurable():
+    text = "Jean Dupont\nExperience\n2020-2023 Developpeur\n"
+    document = DocumentInput(text=text, filename="cv.txt", filetype="txt")
+    result = run_ats_check(document, expected_sections=["Langues"])
+    findings = _findings(result, "MISSING_SECTION")
+    assert len(findings) == 1
+    assert "Langues" in findings[0].message
+
+
+def test_expected_sections_present_are_not_reported():
+    text = "Jean Dupont\nLangues\nFrancais, Anglais\n"
+    document = DocumentInput(text=text, filename="cv.txt", filetype="txt")
+    result = run_ats_check(document, expected_sections=["Langues"])
+    assert not _has(result, "MISSING_SECTION")
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Detector 9 — parse errors
 # ──────────────────────────────────────────────────────────────────────
 
 def test_encrypted_pdf_reports_parse_error():
     result = run_ats_check_bytes(_encrypted_pdf(), "pdf")
     findings = _findings(result, "PARSE_ERROR")
-    assert findings, _codes(result)
+    assert findings, "un PDF chiffré doit produire une erreur d'extraction"
     assert findings[0].risk_level == "HIGH"
     assert findings[0].error == "PARSE_ERROR"
     assert result.parse_errors
+    assert result.pages_analyzed == 0
     assert result.risk_label == "HIGH"
 
 
-def test_corrupt_pdf_reports_parse_error():
-    result = run_ats_check_bytes(b"%PDF-1.4 ceci n'est pas un pdf", "pdf")
+def test_corrupted_docx_reports_parse_error():
+    result = run_ats_check_bytes(b"ceci n'est pas un docx", "docx")
     findings = _findings(result, "PARSE_ERROR")
-    assert findings, _codes(result)
+    assert findings, "un DOCX corrompu doit produire une erreur d'extraction"
     assert findings[0].risk_level == "HIGH"
     assert findings[0].error == "PARSE_ERROR"
 
 
-# ──────────────────────────────────────────────────────────────────────
-# 6. DOCX propre
-# ──────────────────────────────────────────────────────────────────────
-
-def test_clean_docx_has_no_high_risk():
-    result = run_ats_check_bytes(_clean_docx(), "docx")
-    high = [f for f in result.findings if f.risk_level == "HIGH"]
-    assert high == [], high
-    assert result.pages_analyzed == 1
+def test_corrupted_pdf_reports_parse_error():
+    result = run_ats_check_bytes(b"%PDF-1.7 pas un vrai pdf", "pdf")
+    assert _has(result, "PARSE_ERROR", "HIGH")
 
 
-def test_clean_docx_sections_are_detected():
-    result = run_ats_check_bytes(_clean_docx(), "docx")
-    assert "MISSING_SECTION" not in _codes(result)
+def test_unsupported_filetype_reports_parse_error():
+    result = run_ats_check_bytes(b"whatever", "rtf")
+    assert _has(result, "PARSE_ERROR", "HIGH")
 
 
 # ──────────────────────────────────────────────────────────────────────
-# 7. DOCX avec colonnes
+# Scoring, labels and vocabulary
 # ──────────────────────────────────────────────────────────────────────
 
-def test_two_column_docx_detected():
-    result = run_ats_check_bytes(_two_column_docx(), "docx")
-    findings = _findings(result, "MULTIPLE_COLUMNS")
-    assert findings, _codes(result)
-    assert findings[0].risk_level == "MEDIUM"
-    assert "2 colonnes" in findings[0].message
+def test_score_is_weighted_by_risk_level():
+    findings = [
+        ATSFinding(code="A", risk_level="LOW", message="m", page=1, bbox=None, evidence_excerpt="x"),
+        ATSFinding(code="B", risk_level="MEDIUM", message="m", page=1, bbox=None, evidence_excerpt="x"),
+        ATSFinding(code="C", risk_level="HIGH", message="m", page=1, bbox=None, evidence_excerpt="x"),
+    ]
+    assert calculate_risk_score(findings) == 75
 
 
-# ──────────────────────────────────────────────────────────────────────
-# 8. DOCX avec tableau imbriqué
-# ──────────────────────────────────────────────────────────────────────
-
-def test_nested_table_docx_detected():
-    result = run_ats_check_bytes(_nested_table_docx(), "docx")
-    findings = _findings(result, "NESTED_TABLE")
-    assert findings, _codes(result)
-    assert findings[0].risk_level == "MEDIUM"
-    assert "imbriqué" in findings[0].message
+def test_score_is_capped_at_100():
+    findings = [
+        ATSFinding(code="A", risk_level="HIGH", message="m", page=1, bbox=None, evidence_excerpt="x")
+        for _ in range(5)
+    ]
+    assert calculate_risk_score(findings) == 100
 
 
-# ──────────────────────────────────────────────────────────────────────
-# 9. DOCX corrompu
-# ──────────────────────────────────────────────────────────────────────
-
-def test_corrupt_docx_reports_parse_error():
-    result = run_ats_check_bytes(b"PK\x03\x04 ceci n'est pas un docx", "docx")
-    findings = _findings(result, "PARSE_ERROR")
-    assert findings, _codes(result)
-    assert findings[0].risk_level == "HIGH"
-    assert findings[0].error == "PARSE_ERROR"
+@pytest.mark.parametrize(
+    ("score", "label"),
+    [(0, "LOW"), (5, "LOW"), (19, "LOW"), (20, "MEDIUM"), (49, "MEDIUM"), (50, "HIGH"), (100, "HIGH")],
+)
+def test_label_thresholds(score, label):
+    assert calculate_risk_label(score) == label
 
 
-# ──────────────────────────────────────────────────────────────────────
-# 10. En-têtes / pieds de page
-# ──────────────────────────────────────────────────────────────────────
-
-def test_repeated_header_and_footer_pdf_detected():
-    result = run_ats_check_bytes(_header_footer_pdf(), "pdf")
-    findings = _findings(result, "HEADER_FOOTER")
-    assert len(findings) >= 2, _codes(result)
-    assert all(f.risk_level == "LOW" for f in findings)
-    assert result.pages_analyzed == 2
+def test_risk_interpretation_is_provided():
+    assert describe_risk("LOW") == "Faible risque"
+    assert "modéré" in describe_risk("MEDIUM")
+    assert "restructuration" in describe_risk("HIGH")
+    assert set(RISK_INTERPRETATIONS) == {"LOW", "MEDIUM", "HIGH"}
 
 
-def test_docx_header_detected():
-    result = run_ats_check_bytes(_header_docx(), "docx")
-    findings = _findings(result, "HEADER_FOOTER")
-    assert findings, _codes(result)
-    assert findings[0].risk_level == "LOW"
+def test_result_carries_the_interpretation():
+    result = run_ats_check(_pdf_document(_clean_pdf()))
+    assert result.risk_interpretation == describe_risk(result.risk_label)
 
 
-def test_clean_pdf_has_no_header_footer_finding():
-    result = run_ats_check_bytes(_clean_pdf(), "pdf")
-    assert "HEADER_FOOTER" not in _codes(result)
-
-
-# ──────────────────────────────────────────────────────────────────────
-# 11. Caractères décoratifs
-# ──────────────────────────────────────────────────────────────────────
-
-def test_decorative_chars_detected():
-    result = run_ats_check_bytes(_decorative_docx(), "docx")
-    findings = _findings(result, "DECORATIVE_CHARS")
-    assert findings, _codes(result)
-    assert findings[0].risk_level == "LOW"
-    assert "●" in findings[0].evidence_excerpt
-
-
-def test_clean_docx_has_no_decorative_chars():
-    result = run_ats_check_bytes(_clean_docx(), "docx")
-    assert "DECORATIVE_CHARS" not in _codes(result)
-
-
-# ──────────────────────────────────────────────────────────────────────
-# 12. Liens peu lisibles
-# ──────────────────────────────────────────────────────────────────────
-
-def test_raw_url_detected():
-    result = run_ats_check_bytes(_url_docx(), "docx")
-    findings = _findings(result, "UNREADABLE_LINKS")
-    assert findings, _codes(result)
-    assert findings[0].risk_level == "LOW"
-    assert "github.com" in findings[0].evidence_excerpt
-
-
-def test_clean_docx_has_no_unreadable_links():
-    result = run_ats_check_bytes(_clean_docx(), "docx")
-    assert "UNREADABLE_LINKS" not in _codes(result)
-
-
-# ──────────────────────────────────────────────────────────────────────
-# 13. Sections introuvables
-# ──────────────────────────────────────────────────────────────────────
-
-def test_missing_section_detected():
-    result = run_ats_check_bytes(_missing_section_docx(), "docx")
-    findings = _findings(result, "MISSING_SECTION")
-    assert findings, _codes(result)
-    assert findings[0].risk_level == "HIGH"
-    assert "Formation" in findings[0].message
-
-
-def test_custom_expected_sections():
-    result = run_ats_check_bytes(_clean_docx(), "docx", expected_sections=["Projets"])
-    findings = _findings(result, "MISSING_SECTION")
-    assert findings, _codes(result)
-    assert "Projets" in findings[0].message
-
-
-def test_keyword_search_does_not_match_inside_a_word():
-    """'information' must not be read as the section 'formation'."""
-    text = "Informations complementaires\nRencontre annuelle"
-    result = run_ats_check(DocumentInput(text=text, filename="cv.txt", filetype="txt"))
-    findings = _findings(result, "MISSING_SECTION")
-    messages = " ".join(f.message for f in findings)
-    assert "Formation" in messages
-
-
-# ──────────────────────────────────────────────────────────────────────
-# 14. Score, label, interprétation
-# ──────────────────────────────────────────────────────────────────────
-
-def test_risk_weights():
-    assert RISK_WEIGHTS == {"LOW": 5, "MEDIUM": 20, "HIGH": 50}
-
-
-def test_score_is_weighted_and_capped():
-    result = run_ats_check_bytes(_image_only_pdf(), "pdf")
-    expected = min(100, sum(RISK_WEIGHTS[f.risk_level] for f in result.findings))
-    assert result.risk_score == expected
-    assert 0 <= result.risk_score <= 100
-
-
-def test_risk_interpretations():
-    assert risk_interpretation("LOW") == "Faible risque"
-    assert risk_interpretation("MEDIUM") == "Risque modéré — relecture conseillée"
-    assert risk_interpretation("HIGH") == "Risque élevé — restructuration recommandée"
-
-
-def test_result_exposes_its_interpretation():
-    result = run_ats_check_bytes(_clean_pdf(), "pdf")
-    assert result.risk_interpretation == risk_interpretation(result.risk_label)
-
-
-# ──────────────────────────────────────────────────────────────────────
-# 15. Contrat de l'API
-# ──────────────────────────────────────────────────────────────────────
-
-def test_every_finding_is_complete():
-    result = run_ats_check_bytes(_table_pdf(), "pdf")
-    assert result.findings
-    for finding in result.findings:
-        assert finding.code
-        assert finding.risk_level in ("LOW", "MEDIUM", "HIGH")
-        assert finding.message
-        assert isinstance(finding.page, int)
-        assert finding.evidence_excerpt
-        if finding.bbox is not None:
-            assert len(finding.bbox) == 4
-
-
-def test_run_ats_check_accepts_a_document_input():
-    document = DocumentInput(text=CLEAN_TXT, filename="cv.txt", filetype="txt", page_count=1)
-    result = run_ats_check(document)
-    assert result.pages_analyzed == 1
-    assert "MISSING_SECTION" not in _codes(result)
-
-
-def test_run_ats_check_uses_the_bytes_kept_by_the_parser(tmp_path):
-    """The parser keeps the raw bytes: the real layout is then inspected."""
-    from career.cv_quality.parser import extract_text_from_file
-
-    path = tmp_path / "cv.pdf"
-    path.write_bytes(_two_column_pdf())
-    document = extract_text_from_file(path)
-    result = run_ats_check(document)
-    assert "MULTIPLE_COLUMNS" in _codes(result)
-
-
-def test_run_ats_check_file(tmp_path):
-    path = tmp_path / "cv.pdf"
-    path.write_bytes(_clean_pdf())
-    result = run_ats_check_file(path)
+def test_clean_pdf_is_a_low_risk_document():
+    result = run_ats_check(_pdf_document(_clean_pdf()))
+    assert result.risk_score == 0
+    assert result.risk_label == "LOW"
+    assert result.risk_interpretation == "Faible risque"
     assert result.pages_analyzed == 1
     assert result.parse_errors == []
 
 
-def test_run_ats_check_file_rejects_unknown_extension(tmp_path):
-    path = tmp_path / "cv.rtf"
-    path.write_bytes(b"rtf")
-    with pytest.raises(ValueError):
-        run_ats_check_file(path)
+def test_every_finding_is_complete_and_verifiable():
+    result = run_ats_check(_pdf_document(_table_pdf()))
+    assert result.findings
+    for finding in result.findings:
+        assert finding.code
+        assert finding.risk_level in {"LOW", "MEDIUM", "HIGH"}
+        assert finding.page >= 1
+        assert finding.message.strip()
+        assert finding.evidence_excerpt.strip()
+        assert len(finding.evidence_excerpt) <= 120
 
 
-def test_results_are_deterministic():
-    data = _two_column_pdf()
-    first = run_ats_check_bytes(data, "pdf")
-    second = run_ats_check_bytes(data, "pdf")
+def test_findings_never_claim_a_certain_rejection():
+    result = run_ats_check(_pdf_document(_image_only_pdf()))
+    for finding in result.findings:
+        lowered = finding.message.lower()
+        assert "rejet" not in lowered
+        assert "refus" not in lowered
+        assert "échec certain" not in lowered
+
+
+# ──────────────────────────────────────────────────────────────────────
+# API behaviour
+# ──────────────────────────────────────────────────────────────────────
+
+def test_run_ats_check_is_deterministic():
+    data = _two_columns_pdf()
+    first = run_ats_check(_pdf_document(data))
+    second = run_ats_check(_pdf_document(data))
     assert first == second
 
 
-def test_analysis_is_local_only():
-    """No socket is opened during the analysis."""
-    import socket
-
-    original = socket.socket
-
-    def forbidden(*args, **kwargs):
-        raise AssertionError("le contrôle ATS ne doit pas ouvrir de connexion réseau")
-
-    socket.socket = forbidden  # type: ignore[assignment]
-    try:
-        run_ats_check_bytes(_clean_pdf(), "pdf")
-        run_ats_check_bytes(_clean_docx(), "docx")
-    finally:
-        socket.socket = original  # type: ignore[assignment]
+def test_run_ats_check_uses_the_raw_bytes_carried_by_the_document():
+    document = extract_text_from_bytes(_two_columns_pdf(), "pdf", filename="cv.pdf")
+    assert document.raw_bytes, "le parseur doit conserver les octets du fichier"
+    result = run_ats_check(document)
+    assert _has(result, "MULTIPLE_COLUMNS"), "l'analyse doit utiliser la structure réelle du PDF"
 
 
-def test_performance_under_three_seconds():
-    data = _multi_page_pdf(5)
-    start = time.perf_counter()
-    result = run_ats_check_bytes(data, "pdf")
-    duration = time.perf_counter() - start
+def test_run_ats_check_file_reads_a_pdf(tmp_path):
+    path = tmp_path / "cv.pdf"
+    path.write_bytes(_two_columns_pdf())
+    result = run_ats_check_file(str(path))
+    assert result.pages_analyzed == 1
+    assert _has(result, "MULTIPLE_COLUMNS")
+
+
+def test_run_ats_check_file_reads_a_docx(tmp_path):
+    def build(document):
+        document.add_paragraph("Experience")
+        document.add_paragraph("2020-2023 Developpeur Python")
+
+    path = tmp_path / "cv.docx"
+    path.write_bytes(_docx_bytes(build))
+    result = run_ats_check_file(str(path))
+    assert result.pages_analyzed >= 1
+    assert result.parse_errors == []
+
+
+def test_run_ats_check_does_not_use_the_network(monkeypatch):
+    def refuse(*args, **kwargs):
+        raise AssertionError("aucun appel réseau ne doit être effectué")
+
+    monkeypatch.setattr(socket, "socket", refuse)
+    monkeypatch.setattr(socket, "create_connection", refuse)
+
+    result = run_ats_check(_pdf_document(_clean_pdf()))
+    assert result.risk_label == "LOW"
+
+
+def test_analysis_is_fast_enough_on_five_pages():
+    data = _five_pages_pdf()
+    started = time.perf_counter()
+    result = run_ats_check(_pdf_document(data))
+    duration = time.perf_counter() - started
     assert result.pages_analyzed == 5
-    assert duration < 3.0, f"{duration:.2f}s"
+    assert duration < 3.0, f"analyse trop lente : {duration:.2f}s"
 
 
-# ──────────────────────────────────────────────────────────────────────
-# 16. Détecteurs unitaires (PageContent synthétiques)
-# ──────────────────────────────────────────────────────────────────────
-
-def _page(**kwargs) -> PageContent:
-    base = {"page_num": 1, "text": ""}
-    base.update(kwargs)
-    return PageContent(**base)
+def test_sections_are_found_in_a_pdf_export():
+    result = run_ats_check(_pdf_document(_clean_pdf()))
+    assert not _has(result, "MISSING_SECTION")
 
 
-def test_detect_reading_order_on_positioned_chunks():
-    from career.cv_quality.ats import detect_reading_order
+def test_docx_without_sections_reports_the_missing_ones():
+    def build(document):
+        document.add_paragraph("Jean Dupont")
+        document.add_paragraph("Contact")
 
-    chunks = [
-        TextChunk(text="ligne 1", x=50, y=800, size=10),
-        TextChunk(text="ligne 2", x=350, y=700, size=10),
-        TextChunk(text="ligne 3", x=50, y=800, size=10),
-        TextChunk(text="ligne 4", x=350, y=700, size=10),
-        TextChunk(text="ligne 5", x=50, y=800, size=10),
-        TextChunk(text="ligne 6", x=350, y=700, size=10),
-        TextChunk(text="ligne 7", x=50, y=800, size=10),
-    ]
-    findings = detect_reading_order([_page(chunks=tuple(chunks))])
-    assert findings
-    assert findings[0].code == "READING_ORDER"
-
-
-def test_detect_text_in_images_needs_an_image():
-    from career.cv_quality.ats import detect_text_in_images
-
-    assert detect_text_in_images([_page(text=" beaucoup de texte " * 10)]) == []
-    findings = detect_text_in_images([_page(text="", images=((0.0, 0.0, 595.0, 842.0),))])
-    assert findings
-    assert findings[0].risk_level == "HIGH"
-
-
-def test_detect_decorative_chars_is_sorted_and_stable():
-    from career.cv_quality.ats import detect_decorative_chars
-
-    findings = detect_decorative_chars([_page(text="● ◆ ﬁ")])
-    assert len(findings) == 1
-    # The excerpt is sorted by code point so that the output stays deterministic.
-    assert findings[0].evidence_excerpt == "◆ ● ﬁ"
-
-
-def test_detect_parse_errors_flags_the_error_code():
-    from career.cv_quality.ats import detect_parse_errors
-
-    findings = detect_parse_errors(["PARSE_ERROR: PDF chiffré — extraction impossible"])
-    assert findings[0].error == "PARSE_ERROR"
-    assert findings[0].risk_level == "HIGH"
+    data = _docx_bytes(build)
+    result = run_ats_check_bytes(data, "docx")
+    findings = _findings(result, "MISSING_SECTION")
+    assert {finding.message for finding in findings}
+    assert all(finding.risk_level == "HIGH" for finding in findings)

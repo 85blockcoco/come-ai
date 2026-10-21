@@ -7,12 +7,12 @@ binary "pass/fail" verdict and never a "certain rejection" claim.
 Nine detectors are implemented (see `run_ats_check`):
 
 1. `READING_ORDER`    — non linear text flow (columns, boxes, mid-page headers)
-2. `TEXT_IN_IMAGES`   — text stored as images (scanned / flattened document)
+2. `TEXT_IN_IMAGES`   — text stored as images (scanned document)
 3. `NESTED_TABLE`     — tabular structures that break linear extraction
 4. `MULTIPLE_COLUMNS` — multi column layout
 5. `HEADER_FOOTER`    — repeated header/footer polluting the extraction
 6. `DECORATIVE_CHARS` — ligatures / decorative glyphs that may not be mapped
-7. `UNREADABLE_LINKS` — raw URLs printed instead of an anchor text
+7. `UNREADABLE_LINKS` — raw URLs printed instead of anchor text
 8. `MISSING_SECTION`  — expected section headings invisible to the ATS
 9. `PARSE_ERROR`      — encrypted / malformed file (extraction impossible)
 
@@ -26,11 +26,11 @@ from __future__ import annotations
 
 import io
 import re
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any
+import unicodedata
+from dataclasses import dataclass, field
 
 from .models import ATSCheckResult, ATSFinding, ATSRiskLevel, DocumentInput
+from .parser import extract_text_from_bytes, extract_text_from_file
 
 __all__ = [
     "run_ats_check",
@@ -45,7 +45,9 @@ __all__ = [
     "detect_unreadable_links",
     "detect_missing_sections",
     "detect_parse_errors",
-    "risk_interpretation",
+    "calculate_risk_score",
+    "calculate_risk_label",
+    "describe_risk",
     "PageLayout",
     "TextChunk",
     "TableInfo",
@@ -63,575 +65,180 @@ RISK_WEIGHTS: dict[ATSRiskLevel, int] = {
     "HIGH": 50,
 }
 
-# Score thresholds used to derive the global label.
-SCORE_MEDIUM_THRESHOLD = 25
-SCORE_HIGH_THRESHOLD = 60
-
-# User facing interpretation of each label (prudent wording).
-RISK_INTERPRETATIONS: dict[str, str] = {
+# Interpretation of the global label (prudent vocabulary, never a verdict).
+RISK_INTERPRETATIONS: dict[ATSRiskLevel, str] = {
     "LOW": "Faible risque",
     "MEDIUM": "Risque modéré — relecture conseillée",
     "HIGH": "Risque élevé — restructuration recommandée",
 }
 
-# Expected section keywords (FR/EN) — aligned with cv_quality.structure.
-SECTION_KEYWORDS: dict[str, list[str]] = {
-    "Expérience": [
-        "experience", "experiences", "experience professionnelle",
-        "work experience", "professional experience", "employment",
-        "emploi", "emplois", "parcours professionnel", "career",
-        "carriere", "experiencia",
-    ],
-    "Formation": [
-        "formation", "formations", "education", "etudes", "diplomes",
-        "degrees", "academic", "scolarite", "cursus", "formacion",
-    ],
-    "Compétences": [
-        "competences", "skills", "competencies", "technical skills",
-        "savoir-faire", "savoir faire", "expertise", "technologies",
-        "stack", "hard skills",
-    ],
-    "Langues": [
-        "langues", "languages", "language skills", "langue", "maitrise",
-        "idiomas",
-    ],
-    "Projets": [
-        "projets", "projects", "realisations", "achievements", "portfolio",
-        "personal projects", "side projects", "proyectos",
-    ],
-    "Certifications": [
-        "certifications", "certificates", "licenses", "licences",
-        "credentials", "badges", "certificaciones",
-    ],
-    "Contact": [
-        "contact", "coordonnees", "informations", "personal information",
-    ],
+# Score boundaries: < 20 low, < 50 moderate, otherwise high.
+SCORE_LOW_MAX = 19
+SCORE_MEDIUM_MAX = 49
+
+# Sections looked for when the caller does not provide its own list.
+DEFAULT_EXPECTED_SECTIONS: tuple[str, ...] = ("Expérience", "Formation", "Compétences")
+
+# Section heading synonyms (FR / EN) — headings are matched on line start.
+SECTION_KEYWORDS: dict[str, tuple[str, ...]] = {
+    "expérience": (
+        "experience", "experiences", "experience professionnelle", "experiences professionnelles",
+        "parcours professionnel", "parcours", "emploi", "emplois", "employment",
+        "work experience", "career", "carriere",
+    ),
+    "formation": (
+        "formation", "formations", "etudes", "etudes superieures", "diplomes", "diplomes obtertus",
+        "education", "academic", "scolarite", "cursus", "degrees",
+    ),
+    "compétences": (
+        "competences", "competences techniques", "competencesistiques", "savoir-faire",
+        "savoir faire", "skills", "technical skills", "competencies", "expertise",
+        "technologies", "stack", "outils",
+    ),
+    "langues": (
+        "langues", "langue", "languages", "language skills", "maitrise", "niveau",
+    ),
+    "projets": (
+        "projets", "projets personnels", "projects", "personal projects",
+        "realisations", "achievements", "portfolio",
+    ),
+    "certifications": (
+        "certifications", "certificats", "certificates", "licences", "licenses",
+        "credentials", "badges", "formations et certifications",
+    ),
+    "contact": ("contact", "coordonnees", "informations", "profil"),
+    "resume": ("resume", "summary", "profil", "a propos"),
 }
 
-# Sections checked when the caller does not provide any.
-DEFAULT_EXPECTED_SECTIONS: list[str] = ["Expérience", "Formation", "Compétences"]
-
-# Decorative glyphs / ligatures that some ATS parsers cannot map.
-# Typographic punctuation (curly quotes, en/em dashes) is deliberately
-# excluded: Word produces it on every export and it is not an ATS risk.
+# Glyphs that are frequently not mapped by ATS parsers (ligatures, bullets,
+# geometric shapes, arrows). Accented letters and typographic quotes/dashes
+# are deliberately NOT part of this list: they are perfectly readable.
 DECORATIVE_CHARS: dict[str, str] = {
-    "ﬀ": "ff",
-    "ﬁ": "fi",
-    "ﬂ": "fl",
-    "ﬃ": "ffi",
-    "ﬄ": "ffl",
-    "•": "•",   # bullet
-    "‣": "‣",   # triangular bullet
-    "●": "●",   # black circle
-    "◆": "◆",   # black diamond
-    "■": "■",   # black square
-    "▪": "▪",   # black small square
-    "◦": "◦",   # white bullet
-    "►": "►",   # right triangle
-    "▸": "▸",   # small right triangle
-    "➤": "➤",   # heavy right arrow
-    "→": "→",   # right arrow
-    "★": "★",   # black star
-    "☆": "☆",   # white star
-    "❖": "❖",   # black diamond minus white x
-    "✦": "✦",   # black four pointed star
-    "✧": "✧",   # white four pointed star
-    "❯": "❯",   # heavy right angle quotation
-    "‹": "‹",   # single left angle quote
-    "›": "›",   # single right angle quote
+    "ﬀ": "ﬀ",  # ﬀ
+    "ﬁ": "ﬁ",  # ﬁ
+    "ﬂ": "ﬂ",  # ﬂ
+    "ﬃ": "ﬃ",  # ﬃ
+    "ﬄ": "ﬄ",  # ﬄ
+    "ﬅ": "ﬅ",  # ﬅ
+    "ﬆ": "ﬆ",  # ﬆ
+    "•": "•",  # •
+    "‣": "‣",  # ‣
+    "●": "●",  # ●
+    "◦": "◦",  # ◦
+    "▪": "▪",  # ▪
+    "▫": "▫",  # ▫
+    "◆": "◆",  # ◆
+    "◇": "◇",  # ◇
+    "►": "►",  # ►
+    "▶": "▶",  # ▶
+    "▸": "▸",  # ▸
+    "➤": "➤",  # ➤
+    "→": "→",  # →
 }
 
-# Raw URL printed in the visible text (instead of an anchor text).
-URL_PATTERN = re.compile(r"(?:https?://|www\.)[^\s<>\"{}|\\^`\[\]]+", re.IGNORECASE)
+# Raw URL printed in the text (instead of an anchor label).
+URL_PATTERN = re.compile(
+    r"(?:https?://|ftp://|www\.)[^\s<>\"'()]+"
+    r"|\b(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+(?:com|fr|net|org|io|co|dev|me|eu|info|biz|edu|gov|xyz|app|ai)"
+    r"(?:/[^\s<>\"']*)?",
+    re.IGNORECASE,
+)
 
-# Geometry (PDF points, origin bottom-left).
-HEADER_BAND_PT = 72.0       # top band considered as a running header
-FOOTER_BAND_PT = 72.0       # bottom band considered as a running footer
-COLUMN_GAP_PT = 24.0        # horizontal gap above which two columns are distinct
-LATERAL_JUMP_PT = 120.0     # horizontal move considered as a jump between columns
-READING_JUMP_PT = 15.0      # vertical jump considered as a backward jump
-TEXT_WIDTH_FACTOR = 0.5     # average glyph width factor (font_size * factor)
+# Email addresses — removed before the URL scan (an email is not a raw link).
+EMAIL_PATTERN = re.compile(r"\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b")
 
-# Table detection.
-MIN_TABLE_ROWS = 3          # aligned rows needed to conclude "tabular layout"
-MIN_TABLE_COLS = 2          # separated blocks per row needed to conclude "tabular"
+# Markdown-ish / ASCII tables in plain text exports.
+TEXT_TABLE_PATTERN = re.compile(
+    r"(?:^|\n)\s*\|.*\|\s*(?:\n|$)"          # markdown rows
+    r"|(?:^|\n)\s*\+[-=+]{3,}\+\s*(?:\n|$)"   # ascii separators
+    r"|(?:^|\n)[^\n\t]*\t[^\n\t]*\t[^\n\t]*",  # tab separated rows
+)
 
-# Text-only fallbacks.
+# Approximate number of characters per page for text-only documents.
 CHARS_PER_PAGE = 3000
+
+# Page zones used for the header / footer detection.
+HEADER_ZONE_RATIO = 0.90
+FOOTER_ZONE_RATIO = 0.10
+
+# Minimum number of extracted characters for a page that also carries images.
+IMAGE_TEXT_MIN_CHARS = 200
+
+# Column detection thresholds (PDF points).
+COLUMN_GUTTER_MIN = 40.0
+COLUMN_MIN_CHUNKS = 3
+COLUMN_MIN_EXTENT_RATIO = 0.30
+
+# Maximum length of an evidence excerpt.
+EVIDENCE_MAX_CHARS = 120
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Layout model
+# Data structures
 # ──────────────────────────────────────────────────────────────────────
 
 @dataclass(frozen=True, slots=True)
 class TextChunk:
-    """A positioned run of text.
-
-    Attributes:
-        text: The extracted text of the run.
-        x: Horizontal position of the run (PDF points, origin left).
-        y: Vertical position of the baseline (PDF points, origin bottom).
-        size: Font size in points.
-    """
+    """A positioned piece of text (approximate PDF coordinates)."""
 
     text: str
     x: float
     y: float
     size: float
 
-    @property
-    def width(self) -> float:
-        """Estimated rendered width of the run."""
-        return max(1.0, len(self.text) * self.size * TEXT_WIDTH_FACTOR)
-
-    @property
-    def bbox(self) -> tuple[float, float, float, float]:
-        """Approximate bounding box of the run."""
-        return (round(self.x, 2), round(self.y, 2), round(self.x + self.width, 2), round(self.y + self.size, 2))
-
 
 @dataclass(frozen=True, slots=True)
 class TableInfo:
-    """A tabular structure detected on a page.
+    """A table detected in the document (native DOCX table or PDF grid)."""
 
-    Attributes:
-        kind: "grid" (PDF aligned rows) or "native" (DOCX table object).
-        bbox: Approximate bounding box when known.
-        nested: True when the table is nested inside another table.
-        detail: Short human readable detail used as evidence.
-    """
-
-    kind: str
-    bbox: tuple[float, float, float, float] | None = None
+    rows: int
+    cols: int
     nested: bool = False
-    detail: str = ""
+    origin: str = "document"
 
 
-@dataclass(frozen=True, slots=True)
-class PageContent:
-    """Structured content of a single page.
-
-    Attributes:
-        page_num: 1-based page number.
-        text: Flattened text of the page.
-        chunks: Positioned text runs (empty for TXT / DOCX without layout).
-        images: Bounding boxes of the images of the page.
-        tables: Tabular structures detected on the page.
-        width: Page width in points.
-        height: Page height in points.
-        header_texts: Running headers declared in the layout (DOCX).
-        footer_texts: Running footers declared in the layout (DOCX).
-        declared_columns: Number of columns declared in the layout (DOCX).
-    """
+@dataclass(slots=True)
+class PageLayout:
+    """Layout of a single page, ready for the detectors."""
 
     page_num: int
-    text: str
-    chunks: tuple[TextChunk, ...] = ()
-    images: tuple[tuple[float, float, float, float], ...] = ()
-    tables: tuple[TableInfo, ...] = ()
     width: float = 595.0
     height: float = 842.0
-    header_texts: tuple[str, ...] = ()
-    footer_texts: tuple[str, ...] = ()
-    declared_columns: int = 1
-
-
-# The public alias used by the detectors.
-PageLayout = PageContent
-
-
-# ──────────────────────────────────────────────────────────────────────
-# PDF extraction (pypdf)
-# ──────────────────────────────────────────────────────────────────────
-
-def _pdf_chunks(page: Any) -> list[TextChunk]:
-    """Collect the positioned text runs of a PDF page.
-
-    pypdf exposes the text matrix through the `visitor_text` hook: the
-    translation part of the matrix gives the position of the run on the page.
-    """
-    chunks: list[TextChunk] = []
-
-    def visitor(text: str, cm: Any, tm: Any, font_dict: Any, font_size: Any) -> None:
-        stripped = text.strip()
-        if not stripped:
-            return
-        try:
-            x = float(tm[4])
-            y = float(tm[5])
-            size = float(font_size or 0.0) or 10.0
-        except (TypeError, ValueError, IndexError):
-            return
-        chunks.append(TextChunk(text=stripped, x=x, y=y, size=size))
-
-    try:
-        page.extract_text(visitor_text=visitor)
-    except Exception:
-        return chunks
-    return chunks
-
-
-def _pdf_images(page: Any, width: float, height: float) -> list[tuple[float, float, float, float]]:
-    """Bounding boxes of the image XObjects of a PDF page.
-
-    The exact position of an image inside the content stream is not exposed by
-    pypdf: the page box is returned instead, which is enough to know that the
-    page carries an image.
-    """
-    boxes: list[tuple[float, float, float, float]] = []
-    try:
-        resources = page.get("/Resources")
-        xobjects = resources.get("/XObject") if resources else None
-        if not xobjects:
-            return boxes
-        for name in xobjects:
-            try:
-                obj = xobjects[name].get_object()
-            except Exception:
-                continue
-            if obj.get("/Subtype") == "/Image":
-                boxes.append((0.0, 0.0, round(width, 2), round(height, 2)))
-    except Exception:
-        return boxes
-    return boxes
-
-
-def _extract_pdf_pages(data: bytes) -> tuple[list[PageContent], list[str]]:
-    """Extract the layout of every page of a PDF (local only)."""
-    errors: list[str] = []
-
-    try:
-        import pypdf
-    except ImportError:  # pragma: no cover - dependency declared in requirements
-        return [], ["PARSE_ERROR: pypdf indisponible pour l'extraction PDF"]
-
-    try:
-        reader = pypdf.PdfReader(io.BytesIO(data))
-    except Exception as exc:
-        return [], [f"PARSE_ERROR: PDF illisible ou corrompu : {exc}"]
-
-    if getattr(reader, "is_encrypted", False):
-        unlocked = False
-        try:
-            unlocked = bool(reader.decrypt(""))
-        except Exception:
-            unlocked = False
-        if not unlocked:
-            return [], ["PARSE_ERROR: PDF chiffré/protégé par mot de passe — extraction impossible"]
-
-    pages: list[PageContent] = []
-    for index, page in enumerate(reader.pages, 1):
-        width, height = 595.0, 842.0
-        try:
-            mediabox = page.mediabox
-            width = float(mediabox.width)
-            height = float(mediabox.height)
-        except Exception:
-            pass
-
-        chunks = _pdf_chunks(page)
-        try:
-            text = page.extract_text() or ""
-        except Exception as exc:
-            errors.append(f"PARSE_ERROR: page {index} illisible : {exc}")
-            text = "\n".join(chunk.text for chunk in chunks)
-
-        tables = _pdf_tables(chunks)
-
-        pages.append(
-            PageContent(
-                page_num=index,
-                text=text,
-                chunks=tuple(chunks),
-                images=tuple(_pdf_images(page, width, height)),
-                tables=tuple(tables),
-                width=width,
-                height=height,
-            )
-        )
-
-    return pages, errors
-
-
-def _pdf_tables(chunks: list[TextChunk]) -> list[TableInfo]:
-    """Detect tabular layouts in a PDF page from the alignment of the runs."""
-    if len(chunks) < MIN_TABLE_COLS * MIN_TABLE_ROWS:
-        return []
-    rows = _aligned_rows(chunks)
-    tabular = [row for row in rows if len(row) >= MIN_TABLE_COLS]
-    if len(tabular) < MIN_TABLE_ROWS:
-        return []
-    xs = [chunk.x for chunk in chunks]
-    ys = [chunk.y for chunk in chunks]
-    bbox = (round(min(xs), 2), round(min(ys), 2), round(max(xs), 2), round(max(ys), 2))
-    return [
-        TableInfo(
-            kind="grid",
-            bbox=bbox,
-            nested=False,
-            detail=f"{len(tabular)} lignes alignées sur {len(tabular[0])} colonnes",
-        )
-    ]
+    text: str = ""
+    chunks: list[TextChunk] = field(default_factory=list)
+    image_count: int = 0
+    tables: list[TableInfo] = field(default_factory=list)
+    column_count: int | None = None
+    failed: bool = False
 
 
 # ──────────────────────────────────────────────────────────────────────
-# DOCX extraction (python-docx)
+# Text helpers
 # ──────────────────────────────────────────────────────────────────────
 
-def _docx_section_columns(doc: Any) -> int:
-    """Number of text columns declared in the section properties."""
-    from docx.oxml.ns import qn
+def _strip_accents(text: str) -> str:
+    """Remove diacritics (é -> e) without touching the rest of the text."""
+    decomposed = unicodedata.normalize("NFKD", text)
+    return "".join(char for char in decomposed if not unicodedata.combining(char))
 
-    columns = 1
-    for section in doc.sections:
-        try:
-            cols = section._sectPr.findall(qn("w:cols"))  # noqa: SLF001 - no public accessor
-        except Exception:
-            continue
-        for col in cols:
-            try:
-                number = int(col.get(qn("w:num")) or 1)
-            except (TypeError, ValueError):
-                number = 1
-            if number > 1:
-                columns = max(columns, number)
-    return columns
-
-
-def _docx_header_footer_text(doc: Any) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    """Header and footer texts declared in the sections of the document."""
-    headers: list[str] = []
-    footers: list[str] = []
-    for section in doc.sections:
-        try:
-            header = " ".join(p.text.strip() for p in section.header.paragraphs if p.text.strip())
-            footer = " ".join(p.text.strip() for p in section.footer.paragraphs if p.text.strip())
-        except Exception:
-            continue
-        if header:
-            headers.append(header)
-        if footer:
-            footers.append(footer)
-    return tuple(headers), tuple(footers)
-
-
-def _docx_table_info(table: Any) -> tuple[bool, int]:
-    """Return (nested, row_count) for a python-docx table."""
-    nested = False
-    rows = 0
-    try:
-        rows = len(table.rows)
-    except Exception:
-        rows = 0
-    try:
-        for row in table.rows:
-            for cell in row.cells:
-                if getattr(cell, "tables", None):
-                    nested = True
-                    break
-            if nested:
-                break
-    except Exception:
-        pass
-    return nested, rows
-
-
-def _docx_page_break(paragraph: Any) -> bool:
-    """Detect an explicit page break inside a DOCX paragraph."""
-    try:
-        xml = paragraph._p.xml  # noqa: SLF001 - no public accessor
-    except Exception:
-        return False
-    return 'w:type="page"' in xml or "lastRenderedPageBreak" in xml
-
-
-def _iter_docx_blocks(doc: Any) -> list[tuple[str, Any]]:
-    """Return the paragraphs and the tables of a DOCX body, in document order."""
-    from docx.oxml.ns import qn
-    from docx.table import Table
-    from docx.text.paragraph import Paragraph
-
-    items: list[tuple[str, Any]] = []
-    try:
-        body = doc.element.body
-    except Exception:
-        return items
-    for child in body.iterchildren():
-        if child.tag == qn("w:p"):
-            items.append(("p", Paragraph(child, doc)))
-        elif child.tag == qn("w:tbl"):
-            items.append(("tbl", Table(child, doc)))
-    return items
-
-
-def _extract_docx_pages(data: bytes) -> tuple[list[PageContent], list[str]]:
-    """Extract the layout of a DOCX (local only).
-
-    DOCX has no native page boundaries: explicit page breaks are honoured,
-    otherwise the document is treated as a single page.
-    """
-    try:
-        import docx
-    except ImportError:  # pragma: no cover - dependency declared in requirements
-        return [], ["PARSE_ERROR: python-docx indisponible pour l'extraction DOCX"]
-
-    try:
-        doc = docx.Document(io.BytesIO(data))
-    except Exception as exc:
-        return [], [f"PARSE_ERROR: DOCX illisible ou corrompu : {exc}"]
-
-    headers, footers = _docx_header_footer_text(doc)
-    columns = _docx_section_columns(doc)
-
-    page_texts: list[str] = []
-    page_tables: list[list[TableInfo]] = []
-    current_text: list[str] = []
-    current_tables: list[TableInfo] = []
-
-    for kind, element in _iter_docx_blocks(doc):
-        if kind == "p":
-            text = element.text.strip()
-            if text:
-                current_text.append(text)
-            if _docx_page_break(element):
-                page_texts.append("\n".join(current_text))
-                page_tables.append(current_tables)
-                current_text = []
-                current_tables = []
-        else:
-            nested, row_count = _docx_table_info(element)
-            rows_text: list[str] = []
-            try:
-                for row in element.rows:
-                    cells = [cell.text.strip() for cell in row.cells]
-                    if any(cells):
-                        rows_text.append(" | ".join(cells))
-            except Exception:
-                pass
-            if rows_text:
-                current_text.append("\n".join(rows_text))
-            current_tables.append(
-                TableInfo(
-                    kind="native",
-                    bbox=None,
-                    nested=nested,
-                    detail=f"{row_count} ligne(s)" + (" — tableau imbriqué" if nested else ""),
-                )
-            )
-
-    page_texts.append("\n".join(current_text))
-    page_tables.append(current_tables)
-
-    images: list[tuple[float, float, float, float]] = []
-    try:
-        for shape in doc.inline_shapes:
-            width_pt = float(shape.width) / 12700.0
-            height_pt = float(shape.height) / 12700.0
-            images.append((0.0, 0.0, round(width_pt, 2), round(height_pt, 2)))
-    except Exception:
-        images = []
-
-    pages: list[PageContent] = []
-    for index, (text, tables) in enumerate(zip(page_texts, page_tables), 1):
-        pages.append(
-            PageContent(
-                page_num=index,
-                text=text,
-                images=tuple(images) if index == 1 else (),
-                tables=tuple(tables),
-                header_texts=headers,
-                footer_texts=footers,
-                declared_columns=columns,
-            )
-        )
-
-    return pages, []
-
-
-# ──────────────────────────────────────────────────────────────────────
-# TXT extraction
-# ──────────────────────────────────────────────────────────────────────
-
-def _split_text_pages(text: str) -> list[str]:
-    """Split a plain text into pseudo pages of ~3000 characters."""
-    if not text:
-        return [""]
-    pages = []
-    for start in range(0, len(text), CHARS_PER_PAGE):
-        pages.append(text[start:start + CHARS_PER_PAGE])
-    return pages
-
-
-def _extract_txt_pages(data: bytes) -> tuple[list[PageContent], list[str]]:
-    """Extract the pseudo layout of a plain text file."""
-    try:
-        text = data.decode("utf-8")
-    except UnicodeDecodeError:
-        text = data.decode("latin-1", errors="replace")
-    pages = [
-        PageContent(page_num=index, text=page_text)
-        for index, page_text in enumerate(_split_text_pages(text), 1)
-    ]
-    return pages, []
-
-
-def extract_pages_from_bytes(data: bytes, filetype: str) -> tuple[list[PageContent], list[str]]:
-    """Extract the layout of a document from its raw bytes."""
-    if filetype == "pdf":
-        return _extract_pdf_pages(data)
-    if filetype == "docx":
-        return _extract_docx_pages(data)
-    if filetype == "txt":
-        return _extract_txt_pages(data)
-    return [], [f"PARSE_ERROR: type de fichier non pris en charge ({filetype})"]
-
-
-def extract_pages(document: DocumentInput) -> tuple[list[PageContent], list[str]]:
-    """Extract the layout from a DocumentInput (text fallback).
-
-    Used when the raw bytes of the file are not available: the analysis then
-    relies on the flattened text only, which is less precise (no position, no
-    image, no native table).
-    """
-    text = document.text or ""
-    page_count = document.page_count or len(_split_text_pages(text))
-    pages = [
-        PageContent(page_num=index, text=page_text)
-        for index, page_text in enumerate(_split_text_pages(text)[:page_count], 1)
-    ]
-    return pages, []
-
-
-# ──────────────────────────────────────────────────────────────────────
-# Helpers
-# ──────────────────────────────────────────────────────────────────────
 
 def _normalize(text: str) -> str:
-    """Lowercase, de-accent and collapse whitespace — used for comparisons."""
-    text = text.lower()
-    accents = {
-        "à": "a", "â": "a", "ä": "a", "é": "e", "è": "e", "ê": "e", "ë": "e",
-        "î": "i", "ï": "i", "ô": "o", "ö": "o", "ù": "u", "û": "u", "ü": "u",
-        "ç": "c", "ñ": "n", "œ": "oe", "æ": "ae",
-    }
-    for accented, plain in accents.items():
-        text = text.replace(accented, plain)
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
+    """Lowercase, strip accents, collapse whitespace — for comparisons."""
+    lowered = _strip_accents(text.lower())
+    return re.sub(r"\s+", " ", lowered).strip()
 
 
-def _contains_keyword(text: str, keyword: str) -> bool:
-    """Word-boundary aware keyword search.
-
-    Avoids the classic false positive where "information" matches "formation".
-    """
-    normalized = _normalize(text)
-    pattern = re.escape(_normalize(keyword))
-    return re.search(rf"(?<![a-z0-9]){pattern}(?![a-z0-9])", normalized) is not None
+def _clean_line(line: str) -> str:
+    """Normalise a single line for heading comparison."""
+    return _normalize(line).strip(" \t:-–—•·")
 
 
-def _make_ats_finding(
+def _lines_of(text: str) -> list[str]:
+    """Split a text into non-empty stripped lines."""
+    return [line.strip() for line in text.split("\n") if line.strip()]
+
+
+def _make_finding(
     code: str,
     risk_level: ATSRiskLevel,
     message: str,
@@ -640,8 +247,8 @@ def _make_ats_finding(
     evidence: str,
     error: str | None = None,
 ) -> ATSFinding:
-    """Build an ATSFinding with a bounded, single line evidence excerpt."""
-    excerpt = " ".join(evidence.split())[:160].strip()
+    """Build an `ATSFinding` with a truncated, single line evidence excerpt."""
+    excerpt = evidence[:EVIDENCE_MAX_CHARS].replace("\n", " / ").strip()
     return ATSFinding(
         code=code,
         risk_level=risk_level,
@@ -653,175 +260,392 @@ def _make_ats_finding(
     )
 
 
-def _calculate_risk_score(findings: list[ATSFinding]) -> int:
-    """Weighted risk score (LOW=5, MEDIUM=20, HIGH=50), capped at 100."""
-    total = sum(RISK_WEIGHTS.get(finding.risk_level, 0) for finding in findings)
-    return min(100, total)
-
-
-def _calculate_risk_label(score: int, findings: list[ATSFinding] | None = None) -> ATSRiskLevel:
-    """Global label derived from the score and from the worst finding."""
-    findings = findings or []
-    if score >= SCORE_HIGH_THRESHOLD or any(f.risk_level == "HIGH" for f in findings):
-        return "HIGH"
-    if score >= SCORE_MEDIUM_THRESHOLD or any(f.risk_level == "MEDIUM" for f in findings):
-        return "MEDIUM"
-    return "LOW"
-
-
-def risk_interpretation(label: str) -> str:
-    """User facing interpretation of a risk label."""
-    return RISK_INTERPRETATIONS.get(label, RISK_INTERPRETATIONS["MEDIUM"])
-
-
-def _aligned_rows(chunks: list[TextChunk]) -> list[list[TextChunk]]:
-    """Group the runs that share (approximately) the same vertical position."""
-    if not chunks:
-        return []
-    ordered = sorted(chunks, key=lambda c: (-c.y, c.x))
-    rows: list[list[TextChunk]] = []
-    for chunk in ordered:
-        if rows and abs(rows[-1][0].y - chunk.y) <= 3.0:
-            rows[-1].append(chunk)
-        else:
-            rows.append([chunk])
-    return rows
-
-
-def _column_clusters(chunks: list[TextChunk]) -> list[list[TextChunk]]:
-    """Group the runs into horizontal clusters (columns)."""
-    if not chunks:
-        return []
-    ordered = sorted(chunks, key=lambda c: c.x)
-    clusters: list[list[TextChunk]] = [[ordered[0]]]
-    for chunk in ordered[1:]:
-        current = clusters[-1]
-        left = min(c.x for c in current)
-        if chunk.x - left <= COLUMN_GAP_PT:
-            current.append(chunk)
-        else:
-            clusters.append([chunk])
-    return clusters
-
-
-def _text_coverage(page: PageContent) -> float:
-    """Ratio of the page surface covered by the text (0.0 - 1.0)."""
-    area = page.width * page.height
-    if area <= 0:
-        return 0.0
-    covered = 0.0
-    for chunk in page.chunks:
-        covered += chunk.width * max(1.0, chunk.size)
-    return min(1.0, covered / area)
-
-
-def _page_bbox(page: PageContent) -> tuple[float, float, float, float]:
+def _page_bbox(page: PageLayout) -> tuple[float, float, float, float]:
     """Bounding box covering the whole page."""
     return (0.0, 0.0, round(page.width, 2), round(page.height, 2))
 
 
-def _band_text(page: PageContent, band: str) -> str:
-    """Text of the top or bottom band of a page (empty string when absent)."""
-    if not page.chunks:
-        lines = [line.strip() for line in page.text.split("\n") if line.strip()]
-        if not lines:
-            return ""
-        return _normalize(lines[0] if band == "top" else lines[-1])
+# ──────────────────────────────────────────────────────────────────────
+# Layout extraction
+# ──────────────────────────────────────────────────────────────────────
 
-    if band == "top":
-        candidates = [c for c in page.chunks if c.y >= page.height - HEADER_BAND_PT]
-        if not candidates:
-            return ""
-        top_y = max(c.y for c in candidates)
-        candidates = [c for c in candidates if abs(c.y - top_y) <= 3.0]
-    else:
-        candidates = [c for c in page.chunks if c.y <= FOOTER_BAND_PT]
-        if not candidates:
-            return ""
-        bottom_y = min(c.y for c in candidates)
-        candidates = [c for c in candidates if abs(c.y - bottom_y) <= 3.0]
+def _layout_from_pdf(data: bytes) -> tuple[list[PageLayout], list[str]]:
+    """Build the layout of every page of a PDF (pypdf, local only)."""
+    errors: list[str] = []
 
-    return _normalize(" ".join(c.text for c in sorted(candidates, key=lambda c: c.x)))
+    try:
+        import pypdf
+    except ImportError:  # pragma: no cover - dependency declared in requirements
+        return [], ["pypdf indisponible pour l'extraction PDF"]
+
+    try:
+        reader = pypdf.PdfReader(io.BytesIO(data))
+    except Exception as exc:
+        return [], [f"PDF illisible ou corrompu : {exc}"]
+
+    if reader.is_encrypted:
+        unlocked = False
+        try:
+            unlocked = bool(reader.decrypt(""))
+        except Exception:
+            unlocked = False
+        if not unlocked:
+            return [], ["PDF chiffré/protégé par mot de passe — extraction impossible"]
+
+    pages: list[PageLayout] = []
+    for index, page in enumerate(reader.pages, 1):
+        chunks: list[TextChunk] = []
+
+        def visitor(text, cm, tm, font_dict, font_size, _chunks=chunks):
+            if text and text.strip():
+                _chunks.append(
+                    TextChunk(
+                        text=text,
+                        x=float(tm[4]),
+                        y=float(tm[5]),
+                        size=float(font_size or 0.0),
+                    )
+                )
+
+        failed = False
+        try:
+            text = page.extract_text(visitor_text=visitor) or ""
+        except Exception as exc:
+            errors.append(f"Page {index} : extraction impossible ({exc})")
+            text = ""
+            failed = True
+
+        image_count = 0
+        try:
+            resources = page.get("/Resources")
+            xobjects = resources.get("/XObject") if resources else None
+            if xobjects:
+                for name in xobjects:
+                    try:
+                        obj = xobjects[name].get_object()
+                    except Exception:
+                        continue
+                    if obj.get("/Subtype") == "/Image":
+                        image_count += 1
+        except Exception:
+            image_count = 0
+
+        width, height = 595.0, 842.0
+        try:
+            mediabox = page.mediabox
+            if mediabox is not None:
+                width = float(mediabox.width) or width
+                height = float(mediabox.height) or height
+        except Exception:
+            pass
+
+        pages.append(
+            PageLayout(
+                page_num=index,
+                width=width,
+                height=height,
+                text=text,
+                chunks=chunks,
+                image_count=image_count,
+                failed=failed,
+            )
+        )
+
+    return pages, errors
+
+
+def _docx_column_count(document) -> int | None:
+    """Number of text columns declared in the DOCX section properties."""
+    try:
+        from docx.oxml.ns import qn
+    except Exception:  # pragma: no cover - python-docx always available
+        return None
+
+    counts: list[int] = []
+    for section in document.sections:
+        try:
+            sect_pr = section._sectPr
+            for cols in sect_pr.findall(qn("w:cols")):
+                raw = cols.get(qn("w:num"))
+                if raw:
+                    counts.append(int(raw))
+        except Exception:
+            continue
+    return max(counts) if counts else None
+
+
+def _docx_tables(document) -> list[TableInfo]:
+    """Native DOCX tables, flagging the nested ones (table inside a cell)."""
+    tables: list[TableInfo] = []
+    try:
+        native = list(document.tables)
+    except Exception:
+        return tables
+
+    for table in native:
+        rows = len(table.rows)
+        cols = len(table.rows[0].cells) if rows else 0
+        nested = False
+        try:
+            nested = any(cell.tables for row in table.rows for cell in row.cells)
+        except Exception:
+            nested = False
+        tables.append(TableInfo(rows=rows, cols=cols, nested=nested, origin="docx"))
+    return tables
+
+
+def _layout_from_docx(data: bytes) -> tuple[list[PageLayout], list[str]]:
+    """Build the layout of a DOCX (python-docx, local only)."""
+    errors: list[str] = []
+
+    try:
+        import docx
+    except ImportError:  # pragma: no cover - dependency declared in requirements
+        return [], ["python-docx indisponible pour l'extraction DOCX"]
+
+    try:
+        document = docx.Document(io.BytesIO(data))
+    except Exception as exc:
+        return [], [f"DOCX corrompu ou malformé : {exc}"]
+
+    parts: list[str] = []
+    try:
+        for paragraph in document.paragraphs:
+            if paragraph.text.strip():
+                parts.append(paragraph.text)
+    except Exception as exc:
+        errors.append(f"Lecture des paragraphes impossible : {exc}")
+
+    tables = _docx_tables(document)
+    for table in document.tables:
+        try:
+            for row in table.rows:
+                cells = [cell.text.strip() for cell in row.cells]
+                if any(cells):
+                    parts.append(" | ".join(cells))
+        except Exception:
+            continue
+
+    image_count = 0
+    try:
+        image_count = len(document.inline_shapes)
+    except Exception:
+        image_count = 0
+
+    column_count = _docx_column_count(document)
+    text = "\n".join(parts)
+
+    page_count = max(1, (len(text) // CHARS_PER_PAGE) + 1)
+    pages: list[PageLayout] = []
+    for index in range(1, page_count + 1):
+        start = (index - 1) * CHARS_PER_PAGE
+        end = min(index * CHARS_PER_PAGE, len(text))
+        pages.append(
+            PageLayout(
+                page_num=index,
+                text=text[start:end],
+                chunks=[],
+                image_count=image_count if index == 1 else 0,
+                tables=tables if index == 1 else [],
+                column_count=column_count,
+            )
+        )
+
+    return pages, errors
+
+
+def _layout_from_text(text: str, page_count: int | None) -> list[PageLayout]:
+    """Split a plain text document into pseudo pages."""
+    total = page_count or max(1, (len(text) // CHARS_PER_PAGE) + 1)
+    pages: list[PageLayout] = []
+    for index in range(1, max(1, total) + 1):
+        start = (index - 1) * CHARS_PER_PAGE
+        end = min(index * CHARS_PER_PAGE, len(text))
+        pages.append(
+            PageLayout(
+                page_num=index,
+                text=text[start:end],
+                chunks=[],
+                image_count=0,
+                tables=[],
+                column_count=None,
+            )
+        )
+    return pages
+
+
+def build_layouts(
+    document: DocumentInput,
+    file_bytes: bytes | None = None,
+) -> tuple[list[PageLayout], list[str]]:
+    """Build the page layouts for a document (bytes first, text otherwise)."""
+    data = file_bytes if file_bytes is not None else getattr(document, "raw_bytes", None)
+
+    if data:
+        filetype = (document.filetype or "txt").lower()
+        if filetype == "pdf":
+            return _layout_from_pdf(data)
+        if filetype == "docx":
+            return _layout_from_docx(data)
+        if filetype == "txt":
+            try:
+                return _layout_from_text(data.decode("utf-8", errors="replace"), document.page_count), []
+            except Exception as exc:  # pragma: no cover - defensive
+                return [], [f"Texte illisible : {exc}"]
+        return [], [f"Type de fichier non pris en charge : {filetype}"]
+
+    return _layout_from_text(document.text, document.page_count), []
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Geometry helpers
+# ──────────────────────────────────────────────────────────────────────
+
+def _group_lines(chunks: list[TextChunk], tolerance: float = 3.0) -> list[list[TextChunk]]:
+    """Group positioned chunks into visual lines (same y, stream order kept)."""
+    lines: list[list[TextChunk]] = []
+    for chunk in chunks:
+        if lines and abs(chunk.y - lines[-1][0].y) <= tolerance:
+            lines[-1].append(chunk)
+        else:
+            lines.append([chunk])
+    return lines
+
+
+def _chunk_width(chunk: TextChunk) -> float:
+    """Approximate the width of a text chunk (average glyph width ~ 0.5 em)."""
+    size = chunk.size if chunk.size > 0 else 10.0
+    return max(len(chunk.text.strip()) * size * 0.5, 1.0)
+
+
+def _gutter_candidates(page: PageLayout) -> list[float]:
+    """Vertical bands of the page where no text is written (gutter candidates)."""
+    intervals = sorted((chunk.x, chunk.x + _chunk_width(chunk)) for chunk in page.chunks)
+    if not intervals:
+        return []
+
+    merged: list[list[float]] = []
+    for start, end in intervals:
+        if merged and start <= merged[-1][1] + 1.0:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+
+    candidates: list[float] = []
+    for left, right in zip(merged, merged[1:]):
+        gap = right[0] - left[1]
+        if gap >= COLUMN_GUTTER_MIN:
+            candidates.append((left[1] + right[0]) / 2.0)
+    return candidates
+
+
+def _detect_column_gutters(page: PageLayout) -> list[float]:
+    """Return the gutters that really separate two columns of text.
+
+    A gutter is a vertical band without text, crossed by at most half of the
+    lines, and separating two blocks of text each covering a significant
+    part of the vertical extent of the page. A centred title or a wide
+    headline does not create a gutter.
+    """
+    if len(page.chunks) < COLUMN_MIN_CHUNKS * 2:
+        return []
+
+    ys = [chunk.y for chunk in page.chunks]
+    total_extent = max(ys) - min(ys)
+    if total_extent <= 0:
+        return []
+
+    lines = _group_lines(page.chunks)
+    valid: list[float] = []
+    for gutter in _gutter_candidates(page):
+        crossing = sum(
+            1
+            for line in lines
+            if any(chunk.x < gutter < chunk.x + _chunk_width(chunk) for chunk in line)
+        )
+        if crossing > len(lines) / 2:
+            continue
+        left = [chunk for chunk in page.chunks if chunk.x + _chunk_width(chunk) <= gutter]
+        right = [chunk for chunk in page.chunks if chunk.x >= gutter]
+        if len(left) < COLUMN_MIN_CHUNKS or len(right) < COLUMN_MIN_CHUNKS:
+            continue
+        left_extent = max(chunk.y for chunk in left) - min(chunk.y for chunk in left)
+        right_extent = max(chunk.y for chunk in right) - min(chunk.y for chunk in right)
+        if (
+            left_extent >= COLUMN_MIN_EXTENT_RATIO * total_extent
+            and right_extent >= COLUMN_MIN_EXTENT_RATIO * total_extent
+        ):
+            valid.append(gutter)
+    return valid
+
+
+def _has_grid(page: PageLayout) -> bool:
+    """True when the page holds an aligned grid (table like structure)."""
+    return len(_grid_rows(page.chunks)) >= 2
+
+
+def _grid_rows(chunks: list[TextChunk], tolerance: float = 3.0) -> list[list[TextChunk]]:
+    """Lines holding several chunks aligned on distinct x positions (table rows)."""
+    rows = []
+    for line in _group_lines(chunks, tolerance):
+        distinct_x = {round(chunk.x, 1) for chunk in line}
+        if len(distinct_x) >= 3:
+            rows.append(line)
+    return rows
 
 
 # ──────────────────────────────────────────────────────────────────────
 # Detector 1 — reading order
 # ──────────────────────────────────────────────────────────────────────
 
-def detect_reading_order(pages: list[PageContent]) -> list[ATSFinding]:
-    """Detect a non linear reading flow (columns, boxes, headers read mid-flow).
+def detect_reading_order(pages: list[PageLayout]) -> list[ATSFinding]:
+    """Detect a non linear reading flow (columns, boxes, mid-page headers).
 
-    Two signals are combined, both counted per page:
-
-    * *backward jumps* — the text goes back up the page (y grows again in PDF
-      coordinates): a sidebar or a running header read in the middle of the
-      content;
-    * *lateral jumps* — on the same line, the text moves from one column to
-      another: the content is read row by row instead of column by column
-      (the classic table / multi-column extraction problem).
-
-    A page is flagged when the total exceeds two jumps. Text-only documents
-    fall back on a column-like line heuristic.
+    Heuristic: more than two backward jumps of the y axis on the same page.
     """
     findings: list[ATSFinding] = []
 
     for page in pages:
+        if page.failed:
+            continue
+
         if page.chunks:
-            chunks = list(page.chunks)
-            backward_jumps = 0
-            lateral_jumps = 0
-            samples: list[str] = []
-
-            clusters = _column_clusters(chunks)
-            substantial = [c for c in clusters if len(c) >= 3]
-            multi_column = len(substantial) >= 2
-
-            previous = chunks[0]
-            for chunk in chunks[1:]:
-                if chunk.y - previous.y > READING_JUMP_PT:
-                    backward_jumps += 1
-                    if len(samples) < 3:
-                        samples.append(chunk.text[:40])
-                elif multi_column and abs(chunk.y - previous.y) <= 3.0 and abs(chunk.x - previous.x) >= LATERAL_JUMP_PT:
-                    lateral_jumps += 1
-                    if len(samples) < 3:
-                        samples.append(chunk.text[:40])
-                previous = chunk
-
-            jumps = backward_jumps + lateral_jumps
+            lines = _group_lines(page.chunks)
+            jumps = 0
+            for previous, current in zip(lines, lines[1:]):
+                if current[0].y > previous[0].y + 5:
+                    jumps += 1
             if jumps > 2:
-                detail = []
-                if backward_jumps:
-                    detail.append(f"{backward_jumps} saut(s) vertical/verticaux inversé(s)")
-                if lateral_jumps:
-                    detail.append(f"{lateral_jumps} saut(s) latéral/latéraux entre colonnes")
                 findings.append(
-                    _make_ats_finding(
-                        "READING_ORDER",
-                        "MEDIUM",
-                        "Ordre de lecture potentiellement non linéaire (" + ", ".join(detail) + ")",
-                        page.page_num,
-                        None,
-                        " / ".join(samples) or "sauts de lecture détectés",
+                    _make_finding(
+                        code="READING_ORDER",
+                        risk_level="MEDIUM",
+                        message=(
+                            f"Ordre de lecture potentiellement non linéaire "
+                            f"({jumps} retours en arrière dans le flux de texte)"
+                        ),
+                        page=page.page_num,
+                        bbox=_page_bbox(page),
+                        evidence=f"{jumps} sauts de lecture inversés sur la page",
                     )
                 )
             continue
 
-        lines = [line.rstrip() for line in page.text.split("\n") if line.strip()]
-        if len(lines) < 4:
+        # Text only fallback: wide gaps inside the lines suggest columns.
+        lines_text = _lines_of(page.text)
+        if len(lines_text) < 4:
             continue
-        spaced = sum(1 for line in lines if re.search(r"\S\s{3,}\S", line))
-        tabbed = sum(1 for line in lines if line.count("\t") >= 2)
-        columns_like = spaced + tabbed
-        if columns_like >= 3 and columns_like > len(lines) * 0.3:
+        spaced = sum(1 for line in lines_text if re.search(r"\S\s{3,}\S", line))
+        tabbed = sum(1 for line in lines_text if line.count("\t") >= 1)
+        if (spaced + tabbed) >= 3 and (spaced + tabbed) > len(lines_text) * 0.3:
             findings.append(
-                _make_ats_finding(
-                    "READING_ORDER",
-                    "MEDIUM",
-                    "Ordre de lecture potentiellement non linéaire (colonnes détectées dans le texte extrait)",
-                    page.page_num,
-                    None,
-                    f"{columns_like} ligne(s) sur {len(lines)} présentent une structure multi-colonnes",
+                _make_finding(
+                    code="READING_ORDER",
+                    risk_level="MEDIUM",
+                    message="Ordre de lecture potentiellement non linéaire (colonnes détectées dans le texte)",
+                    page=page.page_num,
+                    bbox=None,
+                    evidence=f"{spaced} lignes avec colonnes séparées, {tabbed} lignes tabulées",
                 )
             )
 
@@ -829,39 +653,55 @@ def detect_reading_order(pages: list[PageContent]) -> list[ATSFinding]:
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Detector 2 — text stored in images
+# Detector 2 — text stored as images
 # ──────────────────────────────────────────────────────────────────────
 
-def detect_text_in_images(pages: list[PageContent]) -> list[ATSFinding]:
-    """Detect pages whose content is mainly images (scanned / flattened CV).
-
-    Heuristic: the page holds images and the extractable text covers less than
-    half of the page surface (or is almost absent).
-    """
+def detect_text_in_images(pages: list[PageLayout]) -> list[ATSFinding]:
+    """Detect pages whose content is (mostly) an image instead of text."""
     findings: list[ATSFinding] = []
 
     for page in pages:
-        if not page.images:
+        if page.failed:
             continue
-
         text_chars = len(page.text.strip())
-        coverage = _text_coverage(page)
-        image_area = sum(
-            max(0.0, box[2] - box[0]) * max(0.0, box[3] - box[1])
-            for box in page.images
-        )
-        page_area = page.width * page.height
-        image_share = (image_area / page_area) if page_area > 0 else 0.0
 
-        if text_chars < 50 or coverage < 0.5 or image_share >= 0.5:
+        if page.image_count > 0 and text_chars == 0:
             findings.append(
-                _make_ats_finding(
-                    "TEXT_IN_IMAGES",
-                    "HIGH",
-                    "Contenu majoritairement sous forme d'image — le texte risque de ne pas être extrait par l'ATS",
-                    page.page_num,
-                    _page_bbox(page),
-                    f"{len(page.images)} image(s), {text_chars} caractère(s) extractibles, texte sur {coverage:.0%} de la page",
+                _make_finding(
+                    code="TEXT_IN_IMAGES",
+                    risk_level="HIGH",
+                    message=(
+                        "Page sans texte extractible alors qu'elle contient des images — "
+                        "le contenu reste probablement invisible pour un ATS"
+                    ),
+                    page=page.page_num,
+                    bbox=_page_bbox(page),
+                    evidence=f"{page.image_count} image(s) sur la page, 0 caractère extrait",
+                )
+            )
+        elif page.image_count > 0 and text_chars < IMAGE_TEXT_MIN_CHARS:
+            findings.append(
+                _make_finding(
+                    code="TEXT_IN_IMAGES",
+                    risk_level="HIGH",
+                    message=(
+                        f"Texte extractible très faible ({text_chars} caractères) sur une page "
+                        "contenant des images — une lecture OCR serait nécessaire"
+                    ),
+                    page=page.page_num,
+                    bbox=_page_bbox(page),
+                    evidence=f"{page.image_count} image(s), {text_chars} caractères extraits",
+                )
+            )
+        elif page.image_count == 0 and text_chars == 0:
+            findings.append(
+                _make_finding(
+                    code="TEXT_IN_IMAGES",
+                    risk_level="HIGH",
+                    message="Page vide : aucun texte extractible pour l'ATS",
+                    page=page.page_num,
+                    bbox=_page_bbox(page),
+                    evidence="Aucun caractère ni image détecté sur la page",
                 )
             )
 
@@ -872,53 +712,60 @@ def detect_text_in_images(pages: list[PageContent]) -> list[ATSFinding]:
 # Detector 3 — tabular structures
 # ──────────────────────────────────────────────────────────────────────
 
-def detect_nested_tables(pages: list[PageContent]) -> list[ATSFinding]:
-    """Detect tabular structures (grid or native table) that may break extraction."""
+def detect_nested_tables(pages: list[PageLayout]) -> list[ATSFinding]:
+    """Detect table / grid structures that may break linear extraction."""
     findings: list[ATSFinding] = []
 
-    text_patterns = (
-        re.compile(r"^\s*\|.*\|\s*$", re.MULTILINE),                  # markdown table
-        re.compile(r"^\s*\+[-+]{2,}\+\s*$", re.MULTILINE),             # ascii table
-        re.compile(r"(?:^|\n)[^\n]*\t[^\n]*\t[^\n]*", re.MULTILINE),   # tab separated columns
-    )
-
     for page in pages:
+        if page.failed:
+            continue
+
+        for table in page.tables:
+            message = (
+                "Tableau imbriqué détecté — l'extraction linéaire peut perdre des cellules"
+                if table.nested
+                else "Structure tabulaire détectée — l'extraction linéaire peut perdre des cellules"
+            )
+            findings.append(
+                _make_finding(
+                    code="NESTED_TABLE",
+                    risk_level="MEDIUM",
+                    message=message,
+                    page=page.page_num,
+                    bbox=None,
+                    evidence=f"Tableau {table.rows} lignes × {table.cols} colonnes ({table.origin})",
+                )
+            )
+
         if page.tables:
-            for table in page.tables:
-                message = (
-                    "Tableau imbriqué détecté — structure tabulaire à risque pour l'extraction ATS"
-                    if table.nested
-                    else "Structure tabulaire détectée — les tableaux peuvent casser l'extraction ATS"
-                )
-                findings.append(
-                    _make_ats_finding(
-                        "NESTED_TABLE",
-                        "MEDIUM",
-                        message,
-                        page.page_num,
-                        table.bbox,
-                        table.detail or "structure tabulaire",
-                    )
-                )
             continue
 
-        if page.chunks:
+        grid = _grid_rows(page.chunks)
+        if len(grid) >= 2:
+            findings.append(
+                _make_finding(
+                    code="NESTED_TABLE",
+                    risk_level="MEDIUM",
+                    message="Grille alignée détectée (structure tabulaire) — l'extraction linéaire peut être perturbée",
+                    page=page.page_num,
+                    bbox=None,
+                    evidence=f"{len(grid)} lignes à au moins 3 cellules alignées",
+                )
+            )
             continue
 
-        for pattern in text_patterns:
-            match = pattern.search(page.text)
-            if match:
-                findings.append(
-                    _make_ats_finding(
-                        "NESTED_TABLE",
-                        "MEDIUM",
-                        "Structure tabulaire détectée dans le texte — les tableaux peuvent casser l'extraction ATS",
-                        page.page_num,
-                        None,
-                        match.group(),
-                    )
+        match = TEXT_TABLE_PATTERN.search(page.text)
+        if match:
+            findings.append(
+                _make_finding(
+                    code="NESTED_TABLE",
+                    risk_level="MEDIUM",
+                    message="Structure tabulaire détectée dans le texte — l'extraction linéaire peut être perturbée",
+                    page=page.page_num,
+                    bbox=None,
+                    evidence=match.group(0),
                 )
-                break
+            )
 
     return findings
 
@@ -927,75 +774,61 @@ def detect_nested_tables(pages: list[PageContent]) -> list[ATSFinding]:
 # Detector 4 — multiple columns
 # ──────────────────────────────────────────────────────────────────────
 
-def detect_multiple_columns(pages: list[PageContent]) -> list[ATSFinding]:
-    """Detect multi column layouts (each column narrower than 60% of the page)."""
+def detect_multiple_columns(pages: list[PageLayout]) -> list[ATSFinding]:
+    """Detect a layout with more than one column of text."""
     findings: list[ATSFinding] = []
 
     for page in pages:
-        if page.declared_columns > 1:
+        if page.failed:
+            continue
+
+        if page.column_count and page.column_count > 1:
             findings.append(
-                _make_ats_finding(
-                    "MULTIPLE_COLUMNS",
-                    "MEDIUM",
-                    f"Mise en page sur {page.declared_columns} colonnes — l'ordre de lecture peut être altéré",
-                    page.page_num,
-                    None,
-                    f"{page.declared_columns} colonnes déclarées dans la mise en page",
+                _make_finding(
+                    code="MULTIPLE_COLUMNS",
+                    risk_level="MEDIUM",
+                    message=(
+                        f"Mise en page en {page.column_count} colonnes détectée — "
+                        "l'ordre de lecture peut être altéré à l'extraction"
+                    ),
+                    page=page.page_num,
+                    bbox=None,
+                    evidence=f"{page.column_count} colonnes déclarées dans la mise en page",
                 )
             )
             continue
 
-        if page.chunks:
-            clusters = _column_clusters(list(page.chunks))
-            substantial = [c for c in clusters if len(c) >= 3]
-            if len(substantial) < 2:
-                continue
-            narrow = [
-                c for c in substantial
-                if (max(c.x + c.width for c in c) - min(c.x for c in c)) < page.width * 0.6
-            ]
-            if len(narrow) < 2:
-                continue
-
-            # A table also produces several x-clusters: it is detected by the
-            # table detector instead, so it is skipped here.
-            rows = _aligned_rows(list(page.chunks))
-            shared_rows = sum(1 for row in rows if len(row) >= MIN_TABLE_COLS)
-            if shared_rows >= MIN_TABLE_ROWS:
-                continue
-
+        gutters = [] if (page.tables or _has_grid(page)) else _detect_column_gutters(page)
+        if gutters:
             findings.append(
-                _make_ats_finding(
-                    "MULTIPLE_COLUMNS",
-                    "MEDIUM",
-                    f"Mise en page multi-colonnes détectée ({len(narrow)} colonnes étroites) — ordre de lecture à vérifier",
-                    page.page_num,
-                    None,
-                    "colonnes à x≈" + ", ".join(f"{min(c.x for c in c):.0f}" for c in narrow),
+                _make_finding(
+                    code="MULTIPLE_COLUMNS",
+                    risk_level="MEDIUM",
+                    message=(
+                        f"Mise en page multi-colonnes détectée ({len(gutters) + 1} colonnes de texte) — "
+                        "l'ordre de lecture peut être altéré à l'extraction"
+                    ),
+                    page=page.page_num,
+                    bbox=None,
+                    evidence=(
+                        f"Gouttière(s) verticale(s) à x≈{', '.join(f'{g:.0f}' for g in gutters)}pt "
+                        f"(largeur de page {page.width:.0f}pt)"
+                    ),
                 )
             )
             continue
 
-        lines = [line.strip() for line in page.text.split("\n") if line.strip()]
-        if len(lines) < 8:
-            continue
-        short_lines = [(i, line) for i, line in enumerate(lines) if 0 < len(line) < 50]
-        long_lines = [line for line in lines if len(line) >= 50]
-        non_bullet = [(i, line) for i, line in short_lines if not line.startswith(("-", "•", "·", "*", "○"))]
-        paired = sum(
-            1
-            for (idx1, line1), (idx2, line2) in zip(non_bullet, non_bullet[1:])
-            if idx2 == idx1 + 1 and abs(len(line1) - len(line2)) < 15
-        )
-        if paired >= 3 and len(non_bullet) > len(long_lines):
+        lines_text = _lines_of(page.text)
+        tabbed = [line for line in lines_text if line.count("\t") >= 1]
+        if len(tabbed) >= 3 and len(tabbed) > len(lines_text) * 0.3:
             findings.append(
-                _make_ats_finding(
-                    "MULTIPLE_COLUMNS",
-                    "MEDIUM",
-                    "Mise en page multi-colonnes détectée (lignes courtes alignées) — ordre de lecture à vérifier",
-                    page.page_num,
-                    None,
-                    " / ".join(line for _, line in non_bullet[:4]),
+                _make_finding(
+                    code="MULTIPLE_COLUMNS",
+                    risk_level="MEDIUM",
+                    message="Mise en page multi-colonnes détectée (colonnes séparées par tabulations)",
+                    page=page.page_num,
+                    bbox=None,
+                    evidence=f"{len(tabbed)} lignes{tabbed[0]}",
                 )
             )
 
@@ -1003,81 +836,80 @@ def detect_multiple_columns(pages: list[PageContent]) -> list[ATSFinding]:
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Detector 5 — running headers and footers
+# Detector 5 — repeated headers / footers
 # ──────────────────────────────────────────────────────────────────────
 
-def detect_headers_footers(pages: list[PageContent]) -> list[ATSFinding]:
-    """Detect running headers/footers repeated on consecutive pages."""
+def _zone_signature(page: PageLayout, zone: str) -> str | None:
+    """Signature (y bucket + normalised text) of the header or footer zone."""
+    chunks = []
+    for chunk in page.chunks:
+        if not chunk.text.strip():
+            continue
+        if zone == "header" and chunk.y >= page.height * HEADER_ZONE_RATIO:
+            chunks.append(chunk)
+        elif zone == "footer" and chunk.y <= page.height * FOOTER_ZONE_RATIO:
+            chunks.append(chunk)
+    if not chunks:
+        return None
+    text = _normalize(" ".join(chunk.text for chunk in chunks))
+    if not text:
+        return None
+    y_bucket = round(sum(chunk.y for chunk in chunks) / len(chunks) / 10.0)
+    return f"{y_bucket}|{text}"
+
+
+def detect_headers_footers(pages: list[PageLayout]) -> list[ATSFinding]:
+    """Detect a header or a footer repeated on at least two consecutive pages."""
     findings: list[ATSFinding] = []
-    if not pages:
+    usable = [page for page in pages if not page.failed]
+    if len(usable) < 2:
         return findings
 
-    # DOCX: the header/footer of a section is repeated on every page of it.
-    for page in pages:
-        reported = False
-        for header in page.header_texts:
-            if len(header.strip()) > 3:
-                findings.append(
-                    _make_ats_finding(
-                        "HEADER_FOOTER",
-                        "LOW",
-                        "En-tête défini dans la mise en page — il sera répété sur chaque page",
-                        page.page_num,
-                        None,
-                        header,
-                    )
-                )
-                reported = True
-                break
-        for footer in page.footer_texts:
-            if len(footer.strip()) > 3:
-                findings.append(
-                    _make_ats_finding(
-                        "HEADER_FOOTER",
-                        "LOW",
-                        "Pied de page défini dans la mise en page — il sera répété sur chaque page",
-                        page.page_num,
-                        None,
-                        footer,
-                    )
-                )
-                reported = True
-                break
-        if reported:
-            # The layout declares its own header/footer: no need to look for
-            # repeated bands in the extracted text.
-            return findings
+    positioned = any(page.chunks for page in usable)
 
-    if len(pages) < 2:
+    if positioned:
+        for zone, label in (("header", "En-tête"), ("footer", "Pied de page")):
+            signatures = [_zone_signature(page, zone) for page in usable]
+            for index in range(len(signatures) - 1):
+                current, following = signatures[index], signatures[index + 1]
+                if not current or current != following:
+                    continue
+                findings.append(
+                    _make_finding(
+                        code="HEADER_FOOTER",
+                        risk_level="LOW",
+                        message=(
+                            f"{label} répété sur les pages {index + 1} et {index + 2} — "
+                            "pollue l'extraction du CV"
+                        ),
+                        page=usable[index].page_num,
+                        bbox=None,
+                        evidence=current.split("|", 1)[-1],
+                    )
+                )
+                break
         return findings
 
-    tops = [_band_text(page, "top") for page in pages]
-    bottoms = [_band_text(page, "bottom") for page in pages]
+    # Text only fallback: the first / last line repeats from one page to the next.
+    tops = [_normalize(_lines_of(page.text)[0]) if _lines_of(page.text) else "" for page in usable]
+    bottoms = [_normalize(_lines_of(page.text)[-1]) if _lines_of(page.text) else "" for page in usable]
 
-    for index in range(len(tops) - 1):
-        if tops[index] and tops[index] == tops[index + 1]:
+    for series, label in ((tops, "En-tête"), (bottoms, "Pied de page")):
+        for index in range(len(series) - 1):
+            current, following = series[index], series[index + 1]
+            if not current or current != following or len(current) <= 5:
+                continue
             findings.append(
-                _make_ats_finding(
-                    "HEADER_FOOTER",
-                    "LOW",
-                    f"En-tête répété sur les pages {index + 1} et {index + 2} — pollution de l'extraction",
-                    index + 1,
-                    None,
-                    tops[index],
-                )
-            )
-            break
-
-    for index in range(len(bottoms) - 1):
-        if bottoms[index] and bottoms[index] == bottoms[index + 1]:
-            findings.append(
-                _make_ats_finding(
-                    "HEADER_FOOTER",
-                    "LOW",
-                    f"Pied de page répété sur les pages {index + 1} et {index + 2} — pollution de l'extraction",
-                    index + 1,
-                    None,
-                    bottoms[index],
+                _make_finding(
+                    code="HEADER_FOOTER",
+                    risk_level="LOW",
+                    message=(
+                        f"{label} répété sur les pages {index + 1} et {index + 2} — "
+                        "pollue l'extraction du CV"
+                    ),
+                    page=usable[index].page_num,
+                    bbox=None,
+                    evidence=current,
                 )
             )
             break
@@ -1086,26 +918,31 @@ def detect_headers_footers(pages: list[PageContent]) -> list[ATSFinding]:
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Detector 6 — decorative characters and ligatures
+# Detector 6 — decorative characters / ligatures
 # ──────────────────────────────────────────────────────────────────────
 
-def detect_decorative_chars(pages: list[PageContent]) -> list[ATSFinding]:
-    """Detect decorative glyphs/ligatures that some ATS parsers cannot map."""
+def detect_decorative_chars(pages: list[PageLayout]) -> list[ATSFinding]:
+    """Detect ligatures and decorative glyphs that may not be mapped."""
     findings: list[ATSFinding] = []
 
     for page in pages:
+        if page.failed:
+            continue
         found = sorted({char for char in page.text if char in DECORATIVE_CHARS})
         if not found:
             continue
-        names = ", ".join(DECORATIVE_CHARS[char] for char in found)
+        labels = ", ".join(DECORATIVE_CHARS[char] for char in found)
         findings.append(
-            _make_ats_finding(
-                "DECORATIVE_CHARS",
-                "LOW",
-                f"Caractères décoratifs ou ligatures détectés ({names}) — ils peuvent être mal interprétés",
-                page.page_num,
-                None,
-                " ".join(found),
+            _make_finding(
+                code="DECORATIVE_CHARS",
+                risk_level="LOW",
+                message=(
+                    f"Caractères décoratifs ou ligatures détectés ({labels}) — "
+                    "ils peuvent être mal interprétés à l'extraction"
+                ),
+                page=page.page_num,
+                bbox=None,
+                evidence="".join(found),
             )
         )
 
@@ -1113,25 +950,45 @@ def detect_decorative_chars(pages: list[PageContent]) -> list[ATSFinding]:
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Detector 7 — raw URLs instead of anchor texts
+# Detector 7 — raw URLs
 # ──────────────────────────────────────────────────────────────────────
 
-def detect_unreadable_links(pages: list[PageContent]) -> list[ATSFinding]:
-    """Detect raw URLs printed in the text instead of readable anchor texts."""
+def _raw_urls(text: str) -> list[str]:
+    """Raw URLs printed in the text (emails excluded)."""
+    without_emails = EMAIL_PATTERN.sub(" ", text)
+    matches: list[str] = []
+    last_end = -1
+    for match in URL_PATTERN.finditer(without_emails):
+        if match.start() < last_end:
+            continue
+        url = match.group(0).rstrip(".,;:!?")
+        if url:
+            matches.append(url)
+        last_end = match.end()
+    return matches
+
+
+def detect_unreadable_links(pages: list[PageLayout]) -> list[ATSFinding]:
+    """Detect full URLs printed in the text instead of an anchor label."""
     findings: list[ATSFinding] = []
 
     for page in pages:
-        matches = URL_PATTERN.findall(page.text)
-        if not matches:
+        if page.failed:
+            continue
+        urls = _raw_urls(page.text)
+        if not urls:
             continue
         findings.append(
-            _make_ats_finding(
-                "UNREADABLE_LINKS",
-                "LOW",
-                f"{len(matches)} URL(s) brute(s) visible(s) dans le texte — un libellé lisible serait préférable",
-                page.page_num,
-                None,
-                matches[0],
+            _make_finding(
+                code="UNREADABLE_LINKS",
+                risk_level="LOW",
+                message=(
+                    f"{len(urls)} URL(s) complète(s) visible(s) dans le texte — "
+                    "un libellé d'ancre est plus lisible pour un ATS"
+                ),
+                page=page.page_num,
+                bbox=None,
+                evidence=urls[0],
             )
         )
 
@@ -1139,62 +996,89 @@ def detect_unreadable_links(pages: list[PageContent]) -> list[ATSFinding]:
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Detector 8 — missing expected sections
+# Detector 8 — missing sections
 # ──────────────────────────────────────────────────────────────────────
 
+def _section_found(lines: list[str], section: str) -> bool:
+    """True when a heading matching the section is present in the text."""
+    key = _normalize(section)
+    variants = SECTION_KEYWORDS.get(key)
+    if variants:
+        for line in lines:
+            cleaned = _clean_line(line)
+            if any(cleaned.startswith(variant) for variant in variants):
+                return True
+        return False
+
+    # Unknown section (caller supplied): look for the raw wording anywhere.
+    needle = _normalize(section)
+    if not needle:
+        return True
+    return any(needle in _normalize(line) for line in lines)
+
+
 def detect_missing_sections(
-    pages: list[PageContent],
+    pages: list[PageLayout],
     expected_sections: list[str] | None = None,
 ) -> list[ATSFinding]:
-    """Detect the expected sections whose keyword is absent from the text."""
+    """Detect the expected section headings that are absent from the text."""
     findings: list[ATSFinding] = []
-    sections = expected_sections if expected_sections is not None else DEFAULT_EXPECTED_SECTIONS
+    sections = list(expected_sections) if expected_sections else list(DEFAULT_EXPECTED_SECTIONS)
     if not sections:
         return findings
 
-    full_text = "\n".join(page.text for page in pages)
+    lines: list[str] = []
+    for page in pages:
+        if page.failed:
+            continue
+        lines.extend(_lines_of(page.text))
 
     for section in sections:
-        keywords = SECTION_KEYWORDS.get(section, [section])
-        if not any(_contains_keyword(full_text, keyword) for keyword in keywords):
-            findings.append(
-                _make_ats_finding(
-                    "MISSING_SECTION",
-                    "HIGH",
-                    f"Section attendue introuvable dans le texte extrait : « {section} » — la structure reste invisible pour l'ATS",
-                    1,
-                    None,
-                    "aucun mot-clé parmi : " + ", ".join(keywords[:5]),
-                )
+        if _section_found(lines, section):
+            continue
+        findings.append(
+            _make_finding(
+                code="MISSING_SECTION",
+                risk_level="HIGH",
+                message=(
+                    f"Section attendue introuvable : « {section} » — "
+                    "la structure reste invisible pour un ATS"
+                ),
+                page=1,
+                bbox=None,
+                evidence=f"Aucun titre correspondant à « {section} » dans le texte extrait",
             )
+        )
 
     return findings
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Detector 9 — parse errors (encrypted / malformed files)
+# Detector 9 — parse errors
 # ──────────────────────────────────────────────────────────────────────
 
 def detect_parse_errors(parse_errors: list[str]) -> list[ATSFinding]:
-    """Convert the parsing errors into HIGH risk findings."""
+    """Turn extraction failures into HIGH risk findings."""
     findings: list[ATSFinding] = []
 
     for error in parse_errors:
         lowered = error.lower()
-        if "chiffr" in lowered or "mot de passe" in lowered or "password" in lowered:
-            message = "Fichier protégé par mot de passe — le contenu ne peut pas être analysé par l'ATS"
-        elif "corrompu" in lowered or "illisible" in lowered:
-            message = "Fichier corrompu ou malformé — l'analyse ATS ne peut pas aboutir"
+        if "chiffr" in lowered or "password" in lowered or "mot de passe" in lowered:
+            message = "Fichier protégé par mot de passe — l'extraction ATS est impossible"
+        elif "non pris en charge" in lowered:
+            message = "Type de fichier non pris en charge par le contrôle ATS"
+        elif "corrompu" in lowered or "malform" in lowered or "illisible" in lowered:
+            message = "Fichier corrompu ou malformé — l'extraction ATS est impossible"
         else:
-            message = "Erreur d'extraction du document — l'analyse ATS est incomplète"
+            message = f"Extraction partielle : {error}"
         findings.append(
-            _make_ats_finding(
-                "PARSE_ERROR",
-                "HIGH",
-                message,
-                0,
-                None,
-                error,
+            _make_finding(
+                code="PARSE_ERROR",
+                risk_level="HIGH",
+                message=message,
+                page=1,
+                bbox=None,
+                evidence=error,
                 error="PARSE_ERROR",
             )
         )
@@ -1203,7 +1087,31 @@ def detect_parse_errors(parse_errors: list[str]) -> list[ATSFinding]:
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Public entry points
+# Scoring
+# ──────────────────────────────────────────────────────────────────────
+
+def calculate_risk_score(findings: list[ATSFinding]) -> int:
+    """Weighted risk score (LOW=5, MEDIUM=20, HIGH=50) capped at 100."""
+    total = sum(RISK_WEIGHTS.get(finding.risk_level, 0) for finding in findings)
+    return min(100, total)
+
+
+def calculate_risk_label(score: int) -> ATSRiskLevel:
+    """Global risk label derived from the weighted score."""
+    if score <= SCORE_LOW_MAX:
+        return "LOW"
+    if score <= SCORE_MEDIUM_MAX:
+        return "MEDIUM"
+    return "HIGH"
+
+
+def describe_risk(label: ATSRiskLevel) -> str:
+    """Human readable interpretation of a risk label."""
+    return RISK_INTERPRETATIONS.get(label, RISK_INTERPRETATIONS["MEDIUM"])
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Entry point
 # ──────────────────────────────────────────────────────────────────────
 
 def run_ats_check(
@@ -1212,45 +1120,39 @@ def run_ats_check(
     expected_sections: list[str] | None = None,
     file_bytes: bytes | None = None,
 ) -> ATSCheckResult:
-    """Run the complete ATS risk analysis on a document.
+    """Analyse a document and report its ATS risks.
 
     Args:
-        document: DocumentInput carrying the extracted text and the metadata.
-        expected_sections: Sections the user expects to find. Defaults to
-            Expérience, Formation, Compétences.
-        file_bytes: Optional raw bytes of the original file. When provided the
-            real PDF/DOCX structure is analysed (positions, images, tables,
-            columns); otherwise the analysis falls back on the plain text.
+        document: The document to analyse (text + metadata).
+        expected_sections: Optional list of the section headings the user
+            expects in the document. Defaults to Expérience / Formation /
+            Compétences.
+        file_bytes: Optional raw bytes of the exported file. When omitted the
+            bytes attached to `document` are used (see `DocumentInput.raw_bytes`).
 
     Returns:
-        ATSCheckResult with the findings, the weighted score, the label and
-        its interpretation.
+        ATSCheckResult with the findings, the weighted score, the risk label,
+        the number of pages analysed and the extraction errors.
     """
-    if file_bytes:
-        pages, parse_errors = extract_pages_from_bytes(file_bytes, document.filetype)
-    else:
-        raw = getattr(document, "raw_bytes", None)
-        if raw is not None:
-            # The parser keeps the original bytes: the real layout can be used.
-            pages, parse_errors = extract_pages_from_bytes(raw, document.filetype)
-        else:
-            pages, parse_errors = extract_pages(document)
+    pages, parse_errors = build_layouts(document, file_bytes)
 
     findings: list[ATSFinding] = []
-    findings.extend(detect_reading_order(pages))
-    findings.extend(detect_text_in_images(pages))
-    findings.extend(detect_nested_tables(pages))
-    findings.extend(detect_multiple_columns(pages))
-    findings.extend(detect_headers_footers(pages))
-    findings.extend(detect_decorative_chars(pages))
-    findings.extend(detect_unreadable_links(pages))
-    # A missing section only makes sense when the text could actually be read.
-    if any(page.text.strip() for page in pages):
-        findings.extend(detect_missing_sections(pages, expected_sections))
+    if pages:
+        findings.extend(detect_reading_order(pages))
+        findings.extend(detect_text_in_images(pages))
+        findings.extend(detect_nested_tables(pages))
+        findings.extend(detect_multiple_columns(pages))
+        findings.extend(detect_headers_footers(pages))
+        findings.extend(detect_decorative_chars(pages))
+        findings.extend(detect_unreadable_links(pages))
+        if any(page.text.strip() for page in pages):
+            # Without any extractable text the section detector would only
+            # repeat what the "text in images" finding already says.
+            findings.extend(detect_missing_sections(pages, expected_sections))
     findings.extend(detect_parse_errors(parse_errors))
 
-    risk_score = _calculate_risk_score(findings)
-    risk_label = _calculate_risk_label(risk_score, findings)
+    risk_score = calculate_risk_score(findings)
+    risk_label = calculate_risk_label(risk_score)
 
     return ATSCheckResult(
         findings=findings,
@@ -1258,7 +1160,7 @@ def run_ats_check(
         risk_label=risk_label,
         pages_analyzed=len(pages),
         parse_errors=parse_errors,
-        risk_interpretation=risk_interpretation(risk_label),
+        risk_interpretation=describe_risk(risk_label),
     )
 
 
@@ -1266,38 +1168,94 @@ def run_ats_check_bytes(
     data: bytes,
     filetype: str,
     *,
-    expected_sections: list[str] | None = None,
     filename: str | None = None,
+    expected_sections: list[str] | None = None,
 ) -> ATSCheckResult:
-    """Run the ATS analysis directly on raw bytes (full structural analysis)."""
-    document = DocumentInput(text="", filename=filename, filetype=filetype)  # type: ignore[arg-type]
-    try:
-        from .parser import extract_text_from_bytes
+    """Run the ATS risk analysis on raw file bytes.
 
+    An unreadable file (password protected, corrupted, unsupported type) is
+    reported as a `PARSE_ERROR` finding — it never raises.
+
+    Args:
+        data: Raw bytes of the document (PDF, DOCX or TXT).
+        filetype: One of "pdf", "docx", "txt".
+        filename: Optional original file name, kept for the provenance.
+        expected_sections: Optional list of the expected section headings.
+
+    Returns:
+        ATSCheckResult with the findings, the weighted score and the label.
+    """
+    if filetype not in ("txt", "pdf", "docx"):
+        return _parse_error_result([f"Type de fichier non pris en charge : {filetype}"])
+
+    try:
         document = extract_text_from_bytes(data, filetype, filename=filename)
     except Exception:
-        # The text extraction failed (encrypted / corrupted file): the layout
-        # extraction reports the PARSE_ERROR finding.
-        document = DocumentInput(text="", filename=filename, filetype=filetype)  # type: ignore[arg-type]
+        # The text could not be extracted: the byte level analysis reports
+        # the precise reason (encrypted file, corrupted file...).
+        document = DocumentInput(
+            text="",
+            filename=filename,
+            filetype=filetype,
+            page_count=0,
+            raw_bytes=data,
+        )
 
     return run_ats_check(document, expected_sections=expected_sections, file_bytes=data)
 
 
 def run_ats_check_file(
-    path: Path | str,
+    path: str,
     *,
     expected_sections: list[str] | None = None,
 ) -> ATSCheckResult:
-    """Run the ATS analysis on a PDF/DOCX/TXT file (full structural analysis)."""
+    """Run the ATS risk analysis on a PDF, DOCX or TXT file.
+
+    Convenience wrapper: reads the file, extracts the text and runs the full
+    structural analysis (glyph positions, images, tables, columns). An
+    unreadable file is reported as a `PARSE_ERROR` finding — it never raises.
+
+    Args:
+        path: Path of the exported file.
+        expected_sections: Optional list of the expected section headings.
+
+    Returns:
+        ATSCheckResult with the findings, the weighted score and the label.
+    """
+    from pathlib import Path
+
     file_path = Path(path)
     data = file_path.read_bytes()
-    suffix = file_path.suffix.lower()
-    filetype = {".pdf": "pdf", ".docx": "docx", ".txt": "txt"}.get(suffix)
-    if filetype is None:
-        raise ValueError(f"Extension non prise en charge pour l'analyse ATS : {suffix}")
-    return run_ats_check_bytes(
-        data,
-        filetype,
-        expected_sections=expected_sections,
-        filename=file_path.name,
+    suffix = file_path.suffix.lower().lstrip(".")
+    filetype = {"pdf": "pdf", "docx": "docx", "doc": "docx", "txt": "txt"}.get(suffix, "")
+
+    if not filetype:
+        return _parse_error_result([f"Type de fichier non pris en charge : {suffix or path}"])
+
+    try:
+        document = extract_text_from_file(file_path)
+    except Exception:
+        document = DocumentInput(
+            text="",
+            filename=file_path.name,
+            filetype=filetype,
+            page_count=0,
+            raw_bytes=data,
+        )
+
+    return run_ats_check(document, expected_sections=expected_sections, file_bytes=data)
+
+
+def _parse_error_result(parse_errors: list[str]) -> ATSCheckResult:
+    """Build a result made of the parse errors only."""
+    findings = detect_parse_errors(parse_errors)
+    risk_score = calculate_risk_score(findings)
+    risk_label = calculate_risk_label(risk_score)
+    return ATSCheckResult(
+        findings=findings,
+        risk_score=risk_score,
+        risk_label=risk_label,
+        pages_analyzed=0,
+        parse_errors=parse_errors,
+        risk_interpretation=describe_risk(risk_label),
     )
