@@ -58,31 +58,43 @@ grouped = facts_by_type(facts) -> dict[str, list[DateFact]]
 
 - `fact_type` : `published` | `deadline` | `start` | `end` | `duration_exact` |
   `duration_min` | `duration_max` | `duration_range` (**8 types**).
-- `value` : `{"day","month","year"}` pour les dates ;
-  `{"months"}` pour `duration_exact|min|max` ; `{"months_min","months_max"}` pour `duration_range`.
+- `value` :
+  - date (`published`, `deadline`, `start`, `end`) : `{"day","month","year"}` ;
+  - durée : `{"months_min","months_max"}` — **toujours en mois**.
+    `duration_exact` → `(N, N)`, `duration_min` → `(N, None)`,
+    `duration_max` → `(None, N)`, `duration_range` → les deux bornes.
 - `precision` : `day` | `month` | `year` | `unknown`.
 - `confidence` : `confirmed` | `inferred` | `ambiguous`.
 - `start_offset` / `end_offset` : offsets **absolus dans le texte analysé** ;
   `text[start_offset:end_offset] == quote` est vérifié par test sur tout le corpus.
 - `contradictions` : `fact_id` des autres faits incompatibles (**mutuels**), plus
-  `"alternative:AAAA-MM-JJ"` pour la lecture inversée d'une date numérique ambiguë.
+  `"ambiguous_reading:AAAA-MM-JJ"` pour chaque lecture possible d'une date
+  numérique inversable.
 - `fact_id` : `"{fact_type}@{source_field}:{start_offset}"`, stable et unique dans une analyse.
 
 ### Règles de précision / confiance (documentées dans le module)
 
-| Cas | `precision` | `confidence` |
-|-----|-------------|--------------|
-| `15 November 2025` | `day` | `confirmed` |
-| `November 2025` | `month` | `confirmed` |
-| `November` (sans année) | `month` (année `null`) | `inferred` |
-| `15 November` (sans année) | `month` (année `null`) | `inferred` |
-| `2027` (année seule) | `year` | `confirmed` |
-| `01/02/2025` | `day` | `ambiguous` + `alternative:2025-02-01` |
-| `Starting ASAP` | `unknown` (valeur vide) | `ambiguous` |
+| Cas | `precision` | `confidence` | `value` |
+|-----|-------------|--------------|---------|
+| `15 November 2025` | `day` | `confirmed` | `{15, 11, 2025}` |
+| `November 2025` | `month` | `confirmed` | `{null, 11, 2025}` |
+| `November` (sans année) | `month` | `inferred` | `{null, 11, null}` |
+| `15 November` (sans année) | `day` | `inferred` | `{15, 11, null}` |
+| `2027` (année seule) | `year` | `confirmed` | `{null, null, 2027}` |
+| `01/02/2025` | `unknown` | `ambiguous` | `{null, null, 2025}` + 2 lectures listées |
+| `Starting ASAP` | `unknown` | `ambiguous` | `{null, null, null}` |
 
-**Règle centrale** : une année manquante plafonne la précision à `month` et
-passe la confiance en `inferred` ; une précision `month` avec une année connue
-ne porte **jamais** de jour ; une précision `day` exige jour + mois + année.
+**Règles centrales** :
+
+1. `precision` = le plus fin composant **écrit explicitement** dans le texte
+   (jour → `day`, mois → `month`, année → `year`, rien → `unknown`).
+2. Une **année manquante** ne change pas la précision mais passe la confiance
+   en `inferred` ; `value["year"]` reste `null`.
+3. Une précision `month` **avec** une année connue ne porte jamais de jour.
+4. Une **date numérique inversable** ne s'engage sur rien : jour et mois restent
+   `null`, la précision est `unknown`, la confiance `ambiguous` et les deux
+   lectures possibles sont listées dans `contradictions`.
+5. Une durée a toujours `precision="month"` : sa valeur est en mois.
 
 ---
 
@@ -96,7 +108,7 @@ ne porte **jamais** de jour ; une précision `day` exige jour + mois + année.
 | "At least six months" | minimum → `duration_min` | modificateur `at least` | `en-duration-min` |
 | "Three to six months" | intervalle → `duration_range` | motif de range à connecteurs par langue | `en-duration-range` |
 | "Two years of prior experience" | jamais une durée de contrat | contexte « expérience » (avant/après) → aucun fait | `en-prior-experience-is-not-a-duration` |
-| `01/02/2025` | `ambiguous` + contradiction si inversable | lecture DD/MM vs MM/DD ; les deux lectures sont nommées | `en-ambiguous-numeric-date` |
+| `01/02/2025` | `ambiguous` + contradiction si inversable | jour et mois **non devinés** (`null`), les deux lectures listées | `en-ambiguous-numeric-date` |
 | Publication + échéance même phrase | **deux** faits distincts | un fait par expression de date | `en-published-and-deadline-are-two-facts` |
 | Mois sans année | `precision="month"`, `year=null`, `inferred` | idem | `fr-start-month-without-year` |
 | Deux sources contradictoires | les deux faits, contradictions mutuelles | comparaison dates + intervalles de durée | `test_two_conflicting_dates_name_each_other` |
@@ -144,8 +156,9 @@ Trois familles de contradictions, toutes **exposées et jamais arbitrées** :
    Deux intervalles disjoints se contredisent ; `exact 6` et `range 3-6` ne se
    contredisent pas.
 2. **Cohérence temporelle** — `end` avant `start`, `deadline` avant `published`.
-3. **Lecture ambiguë** — `01/02/2025` porte `alternative:2025-02-01` en plus
-   des autres faits.
+3. **Lecture ambiguë** — `01/02/2025` porte les deux lectures possibles dans
+   `contradictions` (`ambiguous_reading:2025-01-02` et
+   `ambiguous_reading:2025-02-01`), sans jamais assumer un jour.
 
 Chaque fait contradictoire cite l'autre : les deux listes sont symétriques
 (vérifié par test sur les deux sources et sur deux champs d'une même offre).
@@ -174,9 +187,12 @@ sources : une description qui annonce un début en janvier et un champ
 
 | Précision | nb | | Confiance | nb |
 |-----------|----|---|-----------|----|
-| `day` | 38 | | `confirmed` | 61 |
-| `month` | 34 | | `inferred` | 6 |
-| `unknown` | 5 | | `ambiguous` | 10 |
+| `day` | 34 | | `confirmed` | 61 |
+| `month` | 33 | | `inferred` | 6 |
+| `unknown` | 10 | | `ambiguous` | 10 |
+
+Les 10 faits `unknown` = 5 dates numériques inversables (une par langue) + 5
+expressions sans date calendaire (« Starting ASAP », « Beginn: sofort », …).
 
 ---
 
@@ -210,7 +226,37 @@ Couverture :
 
 ---
 
-## 8. Choix de conception (à relire)
+## 8. Comparaison avec le tour précédent de la mission
+
+Un tour précédent de la même mission (ordre `cvboost-23-…`) avait déjà poussé
+une implémentation sur `origin/agent/spec-sk02-offer-dates` (commit `3b18eec`).
+L'orchestrateur a relancé la mission en parallèle (ordre `cvboost-23-1792597737`,
+le mien) — d'où deux implémentations concurrentes du même module.
+
+Comparaison automatique sur un corpus de 41 cas (5 langues × 8 formulations) :
+
+| Point | Tour précédent (`3b18eec`) | Cette livraison |
+|-------|---------------------------|-----------------|
+| Classification (`fact_type`, `value`, `confidence`) | — | **identique** sur les 41 cas |
+| `value` des durées | `{"months_min","months_max","unit","source_unit",…}` | `{"months_min","months_max"}` (forme exacte du squelette de mission) |
+| `precision` des durées | `unknown` | `month` (la valeur est en mois) |
+| Date numérique inversable | jour/mois `null`, 2 lectures listées | **identique** |
+| Précision d'un jour sans année | `day` | `day` — **aligné** après revue |
+| "Applications open from 1 March 2027" | produit un `start` | **aucun** `start` (garde « ouverture des candidatures ») |
+| Champ structuré de publication | `published_date` (nom inexistant dans le dépôt) | `posted_date` (nom réel des connecteurs) |
+| API | `extract_dates`, `extract_offer_dates`, `detect_language`, `facts_to_json` | idem + `facts_by_type` |
+
+**Décision** : les deux contrats ont été alignés sur les points structurants
+(forme de `value` pour les durées, règle de précision, traitement des dates
+ambiguës) pour que l'intégrateur n'ait pas à arbitrer deux vocabulaires
+différents. Les deux écarts assumés restants (précision des durées, garde
+« ouverture des candidatures ») sont documentés ci-dessus.
+
+Le commit du tour précédent reste accessible : `git show 3b18eec`.
+
+---
+
+## 9. Choix de conception (à relire)
 
 1. **Marqueur le plus proche** — la classification d'une date expression
    utilise le marqueur de contexte le **plus proche** qui la précède
@@ -238,10 +284,15 @@ Couverture :
    des tables de mois et de nombres ; le module les **duplique** volontairement
    pour rester sans dépendance et sans risque de régression croisée. La
    convergence pourra être faite plus tard si l'intégration le demande.
+7. **Précision = plus fin composant explicite.** Une année manquante ne
+   change pas la précision, elle baisse la confiance (`inferred`). Une date
+   numérique inversable, elle, ne s'engage sur rien (`precision="unknown"`,
+   jour et mois `null`, les deux lectures listées dans `contradictions`) :
+   c'est la lecture la plus prudente de « aucun jour inventé ».
 
 ---
 
-## 9. Limites connues
+## 10. Limites connues
 
 | Limite | Impact | Piste |
 |--------|--------|-------|
@@ -254,7 +305,7 @@ Couverture :
 
 ---
 
-## 10. Checklist Codex
+## 11. Checklist Codex
 
 ```bash
 $ ./checklist_codex.sh
@@ -266,7 +317,7 @@ $ ./checklist_codex.sh
 
 ---
 
-## 11. Fichiers modifiés
+## 12. Fichiers modifiés
 
 ```
 A career/offer_dates.py
@@ -284,7 +335,7 @@ composant du dépôt.
 
 ---
 
-## 12. Conclusion
+## 13. Conclusion
 
 ✅ Module `career/offer_dates.py` : analyseur temporel multilingue **FR/EN/DE/IT/ES**  
 ✅ **8** `fact_type`, offsets exacts, quote verbatim, precision, confidence, contradictions mutuelles  

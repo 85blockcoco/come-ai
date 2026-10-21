@@ -56,26 +56,29 @@ SCHEMA (compact JSON of one fact)
 VALUE SHAPES
 - date facts (``published``, ``deadline``, ``start``, ``end``):
   ``{"day": int|None, "month": int|None, "year": int|None}``
-- duration facts (``duration_exact``, ``duration_min``, ``duration_max``):
-  ``{"months": int}`` — always normalised to months, never guessed.
-- ``duration_range``: ``{"months_min": int, "months_max": int}``
+- duration facts: ``{"months_min": int|None, "months_max": int|None}`` —
+  always normalised to months, never guessed.  ``duration_exact`` gives
+  ``(N, N)``, ``duration_min`` gives ``(N, None)``, ``duration_max`` gives
+  ``(None, N)`` and ``duration_range`` gives the two bounds of the interval.
+  The ``precision`` of a duration reports the unit of the value (``month``).
 
 PRECISION AND CONFIDENCE
-- ``precision`` is the finest granularity at which the value is fully
-  specified: ``day`` (day + month + year), ``month`` (month + year), ``year``
-  (year only), ``unknown`` (nothing resolvable).
-- A missing year caps the precision at ``month`` and sets the confidence to
+- ``precision`` is the finest component the text names explicitly:
+  ``day`` (a day is written), ``month`` (only a month is written), ``year``
+  (only a year is written), ``unknown`` (nothing is resolvable).
+- A missing year does not change the precision but lowers the confidence to
   ``inferred``: ``"Starting January"`` -> month 1, year ``None``, ``inferred``.
 - ``confidence`` is ``confirmed`` when the value is explicit, ``inferred``
   when a part is missing, ``ambiguous`` when the text admits several
-  readings (``01/02/2025`` -> day 1, month 2, plus the inverted reading in
-  ``contradictions``).
+  readings.  An inversable numeric date (``01/02/2025``) commits to
+  nothing: its day and month stay ``None``, its precision is ``unknown`` and
+  both possible readings are listed in ``contradictions``.
 
 CONTRADICTIONS
 ``contradictions`` lists the ``fact_id`` of the other facts that cannot be
 true at the same time as this one.  Both sides are listed, so the consumer
-never has to guess which one won.  A single ambiguous fact also lists its
-alternative reading as ``"alternative:YYYY-MM-DD"``.
+never has to guess which one won.  An ambiguous date also lists its possible
+readings as ``"ambiguous_reading:YYYY-MM-DD"``.
 """
 
 from __future__ import annotations
@@ -860,8 +863,9 @@ def _numeric_candidates(text: str, vocab: _Vocab) -> list[_Candidate]:
                 alternative = None
             else:
                 day, month = first, second
+                # The other reading swaps the roles: month = first, day = second.
                 alternative = (
-                    f"{year:04d}-{second:02d}-{first:02d}" if year else None
+                    f"{year:04d}-{first:02d}-{second:02d}" if year else None
                 )
             if not 1 <= month <= 12 or not 1 <= day <= 31:
                 continue
@@ -983,30 +987,39 @@ def _is_application_start(text: str, marker_start: int) -> bool:
 
 
 def _date_value(candidate: _Candidate) -> tuple[dict[str, Any], str, str, list[str]]:
-    """Build the value, the precision and the confidence of a date candidate."""
+    """Build the value, the precision and the confidence of a date candidate.
+
+    ``precision`` is the finest component the text names explicitly.  A
+    missing year does not change the precision but lowers the confidence to
+    ``inferred`` (``value["year"]`` stays ``None``).
+
+    An inversable numeric date (``01/02/2025``) commits to nothing: the day
+    and the month stay ``None``, the precision is ``unknown`` and the two
+    possible readings are listed in ``contradictions``.
+    """
+    if candidate.alternative:
+        value = {"day": None, "month": None, "year": candidate.year}
+        readings = {candidate.alternative}
+        if candidate.year is not None:
+            readings.add(f"{candidate.year:04d}-{candidate.month:02d}-{candidate.day:02d}")
+        contradictions = [f"ambiguous_reading:{reading}" for reading in sorted(readings)]
+        return value, "unknown", "ambiguous", contradictions
+
     value = {
         "day": candidate.day,
         "month": candidate.month,
         "year": candidate.year,
     }
-    contradictions: list[str] = []
-    if candidate.alternative:
-        contradictions.append(f"alternative:{candidate.alternative}")
-    if candidate.year is None:
-        precision = "month" if candidate.month is not None else "unknown"
-        confidence = "inferred"
-    elif candidate.month is None:
-        precision = "year"
-        confidence = "confirmed"
-    elif candidate.day is None:
-        precision = "month"
-        confidence = "confirmed"
-    else:
+    if candidate.day is not None:
         precision = "day"
-        confidence = "confirmed"
-    if candidate.alternative:
-        confidence = "ambiguous"
-    return value, precision, confidence, contradictions
+    elif candidate.month is not None:
+        precision = "month"
+    elif candidate.year is not None:
+        precision = "year"
+    else:
+        precision = "unknown"
+    confidence = "inferred" if candidate.year is None else "confirmed"
+    return value, precision, confidence, []
 
 
 def _duration_months(number: int, unit: str, vocab: _Vocab) -> int | None:
@@ -1179,7 +1192,7 @@ def _extract_duration_facts(text: str, vocab: _Vocab, source_field: str) -> list
         facts.append(
             DateFact(
                 fact_type=fact_type,
-                value={"months": months},
+                value=_duration_value(fact_type, months),
                 precision="month",
                 source_field=source_field,
                 quote=text[anchor:end],
@@ -1282,16 +1295,28 @@ def _date_conflict(left: DateFact, right: DateFact) -> bool:
     return False
 
 
+def _duration_value(fact_type: str, months: int | None) -> dict[str, Any]:
+    """Normalised value of a duration: bounds in months.
+
+    ``duration_exact`` gives a closed bound, ``duration_min`` an open upper
+    bound, ``duration_max`` an open lower bound and ``duration_range`` the
+    two bounds of the interval.  The value is always expressed in months.
+    """
+    if fact_type == "duration_min":
+        return {"months_min": months, "months_max": None}
+    if fact_type == "duration_max":
+        return {"months_min": None, "months_max": months}
+    return {"months_min": months, "months_max": months}
+
+
 def _duration_bounds(fact: DateFact) -> tuple[float, float]:
     value = fact.value
-    if fact.fact_type == "duration_range":
-        return float(value["months_min"]), float(value["months_max"])
-    if fact.fact_type == "duration_min":
-        return float(value["months"]), float("inf")
-    if fact.fact_type == "duration_max":
-        return float("-inf"), float(value["months"])
-    months = float(value["months"])
-    return months, months
+    low = value.get("months_min")
+    high = value.get("months_max")
+    return (
+        float(low) if low is not None else float("-inf"),
+        float(high) if high is not None else float("inf"),
+    )
 
 
 def _duration_conflict(left: DateFact, right: DateFact) -> bool:
@@ -1483,7 +1508,7 @@ def extract_offer_dates(offer: dict[str, Any], lang: str = "auto") -> list[DateF
         facts.append(
             DateFact(
                 fact_type="duration_exact",
-                value={"months": duration},
+                value=_duration_value("duration_exact", duration),
                 precision="month",
                 source_field="duration_months",
                 quote=str(duration),

@@ -145,7 +145,7 @@ def test_long_offer_keeps_exact_offsets_and_quotes():
 def test_long_offer_never_reads_a_salary_or_an_experience_as_a_duration():
     facts = extract_dates(OFFER_EN, "en")
     durations = [fact for fact in facts if fact.fact_type.startswith("duration")]
-    assert [fact.value for fact in durations] == [{"months": 6}]
+    assert [fact.value for fact in durations] == [{"months_min": 6, "months_max": 6}]
 
 
 def test_long_french_offer_is_read_the_same_way():
@@ -194,14 +194,14 @@ def test_a_month_without_a_year_never_invents_a_day():
 def test_a_maximum_bound_is_never_used_as_a_minimum():
     facts = extract_dates("Up to six months", "en")
     assert [fact.fact_type for fact in facts] == ["duration_max"]
-    assert facts[0].value == {"months": 6}
+    assert facts[0].value == {"months_min": None, "months_max": 6}
     assert not extract_dates("Up to six months", "en")[0].contradictions
 
 
 def test_a_minimum_bound_is_never_used_as_a_maximum():
     facts = extract_dates("At least six months", "en")
     assert [fact.fact_type for fact in facts] == ["duration_min"]
-    assert facts[0].value == {"months": 6}
+    assert facts[0].value == {"months_min": 6, "months_max": None}
 
 
 def test_an_interval_is_reported_as_a_range():
@@ -221,8 +221,13 @@ def test_ambiguous_numeric_date_keeps_both_readings():
     assert len(facts) == 1
     fact = facts[0]
     assert fact.confidence == "ambiguous"
-    assert fact.value == {"day": 1, "month": 2, "year": 2025}
-    assert fact.contradictions == ["alternative:2025-02-01"]
+    assert fact.precision == "unknown"
+    # The day and the month are not guessed: only the year is certain.
+    assert fact.value == {"day": None, "month": None, "year": 2025}
+    assert fact.contradictions == [
+        "ambiguous_reading:2025-01-02",
+        "ambiguous_reading:2025-02-01",
+    ]
 
 
 def test_two_conflicting_dates_name_each_other():
@@ -269,19 +274,17 @@ def test_no_day_is_invented_anywhere_in_the_corpus():
         for fact in facts:
             if fact.fact_type not in {"published", "deadline", "start", "end"}:
                 continue
-            if fact.value["year"] is None:
-                # A missing year caps the precision: the fact is never a day.
-                assert fact.precision in {"month", "unknown"}
-            if fact.precision == "month" and fact.value["year"] is not None:
-                # A month with a year never carries a day.
-                assert fact.value["day"] is None
-            if fact.precision == "unknown":
-                # An unknown date carries no component at all.
-                assert fact.value == {"day": None, "month": None, "year": None}
             if fact.precision == "day":
-                assert fact.value["day"] and fact.value["month"] and fact.value["year"]
+                # A day is only asserted when the text writes one.
+                assert fact.value["day"] is not None
+            if fact.precision == "month":
+                # A month precision never carries a day when a year is known.
+                assert fact.value["day"] is None or fact.value["year"] is None
+            if fact.precision == "unknown":
+                # An unknown date commits to nothing but the year.
+                assert fact.value["day"] is None and fact.value["month"] is None
             if fact.fact_type in {"duration_exact", "duration_min", "duration_max"}:
-                assert fact.value["months"] >= 1
+                assert fact.value["months_min"] is not None or fact.value["months_max"] is not None
 
 
 def test_language_detection_is_stable_and_readable():
