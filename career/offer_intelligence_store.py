@@ -94,6 +94,14 @@ def store_snapshot(
 
     if current is not None and str(current["source_hash"]) == source_hash:
         # Identical source content: the analysis and its identifiers stay.
+        # The document keeps its first derivation date and only refreshes its
+        # last update: the audit trail of a version never rewrites itself.
+        previous = connection.execute(
+            f"SELECT snapshot_json FROM {TABLE_NAME} WHERE job_id = ? AND version = ?",
+            (job_id, int(current["version"])),
+        ).fetchone()
+        payload = _with_audit_dates(payload, previous, now)
+        summary = snapshot_summary(payload)
         connection.execute(
             f"UPDATE {TABLE_NAME} SET summary_json = ?, snapshot_json = ?, updated_at = ? "
             "WHERE job_id = ? AND version = ?",
@@ -114,6 +122,8 @@ def store_snapshot(
     connection.execute(
         f"UPDATE {TABLE_NAME} SET is_current = 0 WHERE job_id = ?", (job_id,)
     )
+    payload = _with_audit_dates(payload, None, now)
+    summary = snapshot_summary(payload)
     connection.execute(
         f"""
         INSERT INTO {TABLE_NAME} (
@@ -233,6 +243,30 @@ def _decode(raw: Any) -> dict[str, Any]:
     except (TypeError, ValueError):
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _with_audit_dates(
+    payload: dict[str, Any],
+    previous: Any,
+    now: str,
+) -> dict[str, Any]:
+    """Stamp a snapshot document with its first and last derivation date.
+
+    The first derivation date of a version is never rewritten: re-importing an
+    unchanged offer refreshes the analysis, not its history.
+    """
+    document = dict(payload)
+    created_at = None
+    if previous is not None:
+        try:
+            stored = json.loads(previous["snapshot_json"] or "{}")
+        except (TypeError, ValueError):
+            stored = {}
+        if isinstance(stored, dict):
+            created_at = stored.get("created_at")
+    document["created_at"] = created_at or document.get("created_at") or now
+    document["updated_at"] = now
+    return document
 
 
 __all__ = [

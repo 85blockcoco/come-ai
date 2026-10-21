@@ -3226,7 +3226,11 @@ class CareerService:
         source creates a new version and retires the previous one, which stays
         in the history but is never presented as the current analysis.
         """
-        snapshot = build_snapshot(job, cls._offer_intelligence_qualification(job))
+        snapshot = build_snapshot(
+            job,
+            cls._offer_intelligence_qualification(job),
+            clock=lambda: now,
+        )
         return offer_intelligence_store.store_snapshot(connection, snapshot, now=now)
 
     def import_job(self, payload: dict[str, Any], *, availability: dict[str, Any] | None = None,
@@ -3512,28 +3516,32 @@ class CareerService:
         """
         with self._lock, self._connection() as connection:
             rows = connection.execute(statement, params).fetchall()
-            summaries = {
-                str(item["job_id"]): {
-                    **json.loads(item["summary_json"] or "{}"),
-                    "version": int(item["version"] or 0),
-                }
-                for item in connection.execute(
-                    "SELECT job_id, version, summary_json FROM job_offer_intelligence_snapshots "
-                    "WHERE is_current = 1"
-                ).fetchall()
-            }
+            summaries: dict[str, dict[str, Any]] = {}
+            versions: dict[str, int] = {}
+            for item in connection.execute(
+                "SELECT job_id, version, summary_json FROM job_offer_intelligence_snapshots "
+                "WHERE is_current = 1"
+            ).fetchall():
+                identifier = str(item["job_id"])
+                versions[identifier] = int(item["version"] or 0)
+                try:
+                    payload = json.loads(item["summary_json"] or "{}")
+                except (TypeError, ValueError):
+                    payload = {}
+                summaries[identifier] = payload if isinstance(payload, dict) else {}
         context = self._scoring_context()
         jobs = [self._serialize_job(row, context) for row in rows]
         for job in jobs:
             # The explorer shows the identifiers of the current snapshot: it
-            # never recomputes a requirement on its own.
-            summary = summaries.get(str(job.get("id") or ""))
-            job["offer_intelligence_summary"] = summary if isinstance(summary, dict) else None
+            # never recomputes a requirement on its own.  The summary is the
+            # very same document as the one of the detailed view: only the
+            # version travels beside it, never inside it.
+            identifier = str(job.get("id") or "")
+            summary = summaries.get(identifier)
+            job["offer_intelligence_summary"] = summary
             job["offer_intelligence"] = None
-            job["offer_intelligence_current"] = bool(summary)
-            job["offer_intelligence_version"] = (
-                int(summary.get("version") or 0) if isinstance(summary, dict) else None
-            )
+            job["offer_intelligence_current"] = identifier in versions
+            job["offer_intelligence_version"] = versions.get(identifier)
         source_rank = {"open": 0, "unknown": 1, "closed": 2}
         jobs.sort(
             key=lambda job: (
@@ -4020,11 +4028,24 @@ class CareerService:
 
         This reuses the deterministic preparation fact-checker: a requirement
         is "non trouvé dans ton profil" until the profile itself proves it.
-        The kit never claims it is satisfied.
+        The kit never claims it is satisfied.  Each line keeps the canonical
+        identifier of the requirement, the one every other screen uses.
         """
         prep = prepare_application(profile or {}, intake or {}, job)
+        intelligence = prep.get("offer_intelligence")
+        intelligence = intelligence if isinstance(intelligence, dict) else {}
+        by_id = intelligence.get("requirements_by_id")
+        by_id = by_id if isinstance(by_id, dict) else {}
+        by_text = {
+            str(record.get("text") or ""): str(identifier)
+            for identifier, record in by_id.items()
+            if isinstance(record, dict)
+        }
         return [
             {
+                "requirement_id": by_text.get(
+                    clean_text(item.get("requirement"), limit=300), ""
+                ),
                 "requirement": clean_text(item.get("requirement"), limit=300),
                 "note": clean_text(item.get("note"), limit=300),
             }

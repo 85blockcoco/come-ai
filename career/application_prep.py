@@ -284,6 +284,11 @@ def _canonical_requirements(intelligence: Mapping[str, Any] | None) -> list[dict
     view, the matching panel, the CV preparation, the cover letter and the
     application checklist.  When it is present, the preparation panel reads
     the very same records — and therefore the very same identifiers.
+
+    A statement flagged as an injection attempt is **never** a requirement:
+    it stays visible as flagged evidence in the snapshot, but it is excluded
+    here so that it can never become an action item, a CV gap or a quoted
+    sentence of the cover letter.
     """
     if not isinstance(intelligence, Mapping):
         return []
@@ -293,6 +298,8 @@ def _canonical_requirements(intelligence: Mapping[str, Any] | None) -> list[dict
     canonical: list[dict[str, Any]] = []
     for record in records:
         if not isinstance(record, Mapping):
+            continue
+        if bool(record.get("injection_suspect")):
             continue
         identifier = clean_text(record.get("id"), limit=80)
         text = clean_text(record.get("text"), limit=MAX_TEXT_LENGTH)
@@ -308,6 +315,25 @@ def _canonical_requirements(intelligence: Mapping[str, Any] | None) -> list[dict
             }
         )
     return canonical
+
+
+def _injection_suspect_ids(intelligence: Mapping[str, Any] | None) -> list[str]:
+    """Return the identifiers of the statements excluded as injection attempts."""
+    if not isinstance(intelligence, Mapping):
+        return []
+    records = intelligence.get("requirements")
+    if not isinstance(records, (list, tuple)):
+        return []
+    identifiers: list[str] = []
+    for record in records:
+        if not isinstance(record, Mapping):
+            continue
+        if not bool(record.get("injection_suspect")):
+            continue
+        identifier = clean_text(record.get("id"), limit=80)
+        if identifier and identifier not in identifiers:
+            identifiers.append(identifier)
+    return identifiers
 
 
 def _intelligence_block(
@@ -328,6 +354,9 @@ def _intelligence_block(
         "matched_requirement_ids": list(matched_requirement_ids),
         "unverified_requirement_ids": list(unverified_requirement_ids),
         "to_verify_requirement_ids": list(unverified_requirement_ids),
+        # The statements refused as injection attempts are listed, never
+        # silently dropped: they are visible, they are not requirements.
+        "injection_suspect_ids": _injection_suspect_ids(intelligence),
         "missing": [
             {
                 "field": clean_text(item.get("field"), limit=120),

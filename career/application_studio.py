@@ -338,27 +338,67 @@ def _field(profile: dict[str, Any], key: str, fallback: str) -> str:
     return _text(profile.get(key)) or fallback
 
 
+def _flagged_injection_texts(intelligence: object) -> list[str]:
+    """Return the statements the snapshot flagged as injection attempts."""
+    if not isinstance(intelligence, dict):
+        return []
+    records = intelligence.get("requirements")
+    if not isinstance(records, list):
+        return []
+    flagged: list[str] = []
+    for record in records:
+        if not isinstance(record, dict) or not bool(record.get("injection_suspect")):
+            continue
+        text = _text(record.get("text"), 400)
+        if text and text not in flagged:
+            flagged.append(text)
+    return flagged
+
+
+def _redact(text: str, flagged: list[str]) -> str:
+    """Remove the flagged passages from a quoted text.
+
+    The letter quotes what the offer says.  A passage that tries to give an
+    instruction to the reading program is not something the employer said:
+    it is removed instead of being repeated to the reader.
+    """
+    if not text or not flagged:
+        return text
+    redacted = text
+    for passage in flagged:
+        redacted = re.sub(re.escape(passage), " ", redacted, flags=re.IGNORECASE)
+    return re.sub(r"[ \t]{2,}", " ", redacted).strip()
+
+
 def _offer_summary(job: dict[str, Any]) -> str:
     """Quote the requirements of the offer, from the shared snapshot when there is one.
 
     The letter must refer to the very same requirements as the other screens:
     when the offer carries its intelligence snapshot, its canonical records
     are quoted, with the identifiers the whole workspace shares.
+
+    A statement flagged as an injection attempt is never quoted here: an
+    untrusted passage of the posting must never reach the letter as if it
+    were a requirement of the employer.
     """
     intelligence = job.get("offer_intelligence")
     requirements = ""
+    flagged: list[str] = []
     if isinstance(intelligence, dict):
         records = intelligence.get("requirements")
         if isinstance(records, list):
             requirements = "\n".join(
                 _text(record.get("text"), 400)
                 for record in records
-                if isinstance(record, dict) and _text(record.get("text"), 400)
+                if isinstance(record, dict)
+                and not bool(record.get("injection_suspect"))
+                and _text(record.get("text"), 400)
             )
+        flagged = _flagged_injection_texts(intelligence)
     parts = [
         requirements or _text(job.get("requirements"), 1_500),
         _text(job.get("languages_required"), 500),
-        _text(job.get("description_original"), 1_800),
+        _redact(_text(job.get("description_original"), 1_800), flagged),
     ]
     return "\n\n".join(part for part in parts if part)
 

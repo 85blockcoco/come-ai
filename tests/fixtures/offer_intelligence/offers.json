@@ -176,7 +176,7 @@
           { "text": "Probability and statistics required", "modality": "required", "category": "other" }
         ],
         "missing_fields": ["duration_months", "posted_date", "requirements", "languages_required"],
-        "contradictions": 2
+        "contradictions": 1
       }
     },
     {

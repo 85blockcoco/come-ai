@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Iterable, Mapping
 
@@ -409,11 +410,24 @@ class OfferIntelligenceSnapshot:
 # ------------------------------------------------------------------ helpers
 
 
+def _source_text(value: Any) -> str:
+    """Return the exact source text of one field, without truncating it.
+
+    The fingerprint must cover the whole passage: a change beyond a
+    truncation boundary is still a change, and a stale analysis must never
+    survive it.
+    """
+    if isinstance(value, str):
+        return value.replace("\x00", "").strip()
+    return clean_text(value, limit=1_000_000)
+
+
 def compute_source_hash(offer: Mapping[str, Any]) -> str:
     """Return the stable fingerprint of the exact source content of an offer.
 
     Only source fields participate: a personal note, a shortlist flag or an
-    application stage never invalidates an analysis.
+    application stage never invalidates an analysis.  The whole text of every
+    source field is hashed: nothing is cut, so an edit is always visible.
     """
     payload = {}
     for name in SOURCE_FIELDS:
@@ -423,7 +437,7 @@ def compute_source_hash(offer: Mapping[str, Any]) -> str:
         if isinstance(value, (int, float, bool)):
             payload[name] = value
         else:
-            payload[name] = _bounded(value, limit=30_000)
+            payload[name] = _source_text(value)
     return _sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True))
 
 
@@ -697,30 +711,50 @@ def _extract_requirements(
 
 
 def _temporal_contradictions(
-    facts: Iterable[TemporalFact], links: Mapping[str, tuple[str, ...]]
+    offer: Mapping[str, Any],
+    facts: Iterable[TemporalFact],
+    links: Mapping[str, tuple[str, ...]],
 ) -> list[Contradiction]:
     """Pair the temporal facts that cannot both be true.
 
     The pairing comes from the temporal analyzer itself (SPEC SK-02) and is
     completed by a value comparison, so a conflict stated by the source and a
     conflict deduced from two incompatible values are both visible.
+
+    A coarser statement is **not** a contradiction: "January 2026" and
+    "2026-01-15" describe the same period, and "six months" is compatible
+    with "up to six months".  Only two statements that cannot both be true
+    are reported, and a given pair is reported once.
     """
+    facts = list(facts)
     by_source_id = {fact.source_fact_id: fact for fact in facts if fact.source_fact_id}
     seen: set[tuple[str, str]] = set()
     contradictions: list[Contradiction] = []
 
-    def _add(left: TemporalFact, right: TemporalFact, kind: str) -> None:
-        pair = tuple(sorted((left.id, right.id)))
+    def _topic(left: TemporalFact, right: TemporalFact) -> str:
+        if left.kind == right.kind:
+            return left.kind
+        return f"{left.kind}/{right.kind}"
+
+    def _register(
+        left_key: str,
+        right_key: str,
+        topic: str,
+        kind: str,
+        left: dict[str, Any],
+        right: dict[str, Any],
+    ) -> None:
+        pair = tuple(sorted((left_key, right_key)))
         if pair in seen:
             return
         seen.add(pair)
         contradictions.append(
             Contradiction(
                 id="ctr_" + _digest(pair[0], pair[1])[:16],
-                topic=left.kind if left.kind == right.kind else f"{left.kind}/{right.kind}",
+                topic=topic,
                 kind=kind,
-                left=_fact_side(left),
-                right=_fact_side(right),
+                left=left,
+                right=right,
             )
         )
 
@@ -728,13 +762,28 @@ def _temporal_contradictions(
         for other_id in links.get(fact.source_fact_id, ()):  # conflicts stated by the analyzer
             other = by_source_id.get(other_id)
             if other is not None and other.id != fact.id:
-                _add(fact, other, "temporal_conflict")
+                _register(
+                    fact.id,
+                    other.id,
+                    _topic(fact, other),
+                    "temporal_conflict",
+                    _fact_side(fact),
+                    _fact_side(other),
+                )
     for fact in facts:
         for other in facts:
             if other.id == fact.id:
                 continue
             if _facts_conflict(fact, other):
-                _add(fact, other, "temporal_conflict")
+                _register(
+                    fact.id,
+                    other.id,
+                    _topic(fact, other),
+                    "temporal_conflict",
+                    _fact_side(fact),
+                    _fact_side(other),
+                )
+    _structured_vs_text_contradictions(offer, facts, register=_register)
     return contradictions[:MAX_CONTRADICTIONS]
 
 
@@ -752,17 +801,67 @@ def _fact_side(fact: TemporalFact) -> dict[str, Any]:
     }
 
 
+def _periods_overlap(left: str, right: str) -> bool:
+    """Tell whether two dated statements can describe the same period.
+
+    "2026-01" and "2026-01-15" are compatible; "2026-01" and "2026-02" are
+    not.  A coarser statement is never a contradiction, only a less precise
+    version of the same period.
+    """
+    if left == right:
+        return True
+    shorter, longer = (left, right) if len(left) <= len(right) else (right, left)
+    return longer.startswith(shorter)
+
+
+def _bound(value: str | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _intervals_overlap(
+    left_low: str | None,
+    left_high: str | None,
+    right_low: str | None,
+    right_high: str | None,
+) -> bool:
+    """Tell whether two duration intervals can both be true."""
+    left_min = _bound(left_low)
+    left_max = _bound(left_high)
+    right_min = _bound(right_low)
+    right_max = _bound(right_high)
+    if left_min is None and left_max is None:
+        return True
+    if right_min is None and right_max is None:
+        return True
+    if left_max is not None and right_min is not None and left_max < right_min:
+        return False
+    if right_max is not None and left_min is not None and right_max < left_min:
+        return False
+    return True
+
+
 def _facts_conflict(left: TemporalFact, right: TemporalFact) -> bool:
-    """Two facts conflict when they are the same kind with different values."""
+    """Two facts conflict when they are the same kind and cannot both be true.
+
+    A month statement never contradicts the exact date it contains, and an
+    exact duration never contradicts a bound that contains it.
+    """
     if left.kind != right.kind:
         return False
-    if left.value and right.value and left.value != right.value:
-        return True
-    if left.lower_bound != right.lower_bound or left.upper_bound != right.upper_bound:
-        if left.lower_bound is not None or right.lower_bound is not None:
-            if left.upper_bound is not None or right.upper_bound is not None:
-                return True
-    return False
+    if left.kind == "duration":
+        return not _intervals_overlap(
+            left.lower_bound, left.upper_bound, right.lower_bound, right.upper_bound
+        )
+    if not left.value or not right.value:
+        # Nothing is proven on one side: the two statements cannot be shown
+        # to be incompatible, so they are not a contradiction.
+        return False
+    return not _periods_overlap(str(left.value), str(right.value))
 
 
 def _requirement_contradictions(
@@ -799,43 +898,81 @@ def _requirement_contradictions(
     return contradictions[:MAX_CONTRADICTIONS]
 
 
+_STRUCTURED_DATE_FIELDS: dict[str, str] = {
+    "posted_date": "publication",
+    "deadline_date": "deadline",
+    "start_date": "start",
+    "end_date": "end",
+}
+
+_ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_ISO_MONTH = re.compile(r"^\d{4}-\d{2}$")
+_ISO_YEAR = re.compile(r"^\d{4}$")
+
+
+def _structured_period(raw: Any) -> str | None:
+    """Return the canonical period of a structured date, or ``None``.
+
+    Only the three canonical shapes are understood: a non canonical value is
+    never compared, so a malformed field can never invent a contradiction.
+    """
+    text = _bounded(raw, limit=40).strip()
+    if _ISO_DATE.match(text) or _ISO_MONTH.match(text) or _ISO_YEAR.match(text):
+        return text
+    return None
+
+
 def _structured_vs_text_contradictions(
-    offer: Mapping[str, Any], facts: Iterable[TemporalFact]
-) -> list[Contradiction]:
-    """Compare the structured dates of the offer with the dates of its text."""
-    contradictions: list[Contradiction] = []
-    structured_map = {
-        "posted_date": "publication",
-        "deadline_date": "deadline",
-        "start_date": "start",
-        "end_date": "end",
-    }
-    for name, kind in structured_map.items():
+    offer: Mapping[str, Any],
+    facts: Iterable[TemporalFact],
+    *,
+    register: Callable[[str, str, str, str, dict[str, Any], dict[str, Any]], None],
+) -> None:
+    """Compare the structured dates of the offer with the dates of its text.
+
+    A structured date and a passage of the description only contradict each
+    other when the two periods are genuinely incompatible: a month that
+    contains the exact day is a less precise version of the same fact.
+
+    The comparison writes into the shared registry: a clash already reported
+    between two facts is never reported a second time.
+    """
+    facts = list(facts)
+    for name, kind in _STRUCTURED_DATE_FIELDS.items():
         raw = offer.get(name)
         if not isinstance(raw, str) or not raw.strip():
             continue
-        structured_value = raw.strip()[:10]
+        structured_value = _structured_period(raw)
+        if structured_value is None:
+            continue
         for fact in facts:
             if fact.kind != kind or not fact.value:
                 continue
             if fact.evidence.source_field == name:
                 continue
-            if fact.value != structured_value:
-                contradictions.append(
-                    Contradiction(
-                        id="ctr_" + _digest(name, fact.id, structured_value)[:16],
-                        topic=kind,
-                        kind="structured_vs_description",
-                        left={
-                            "source_field": name,
-                            "value": structured_value,
-                            "quote": _bounded(raw),
-                            "confidence_state": "confirmed",
-                        },
-                        right=_fact_side(fact),
-                    )
-                )
-    return contradictions[:MAX_CONTRADICTIONS]
+            if _periods_overlap(structured_value, str(fact.value)):
+                continue
+            anchor = next(
+                (
+                    other.id
+                    for other in facts
+                    if other.kind == kind and other.evidence.source_field == name
+                ),
+                f"field:{name}",
+            )
+            register(
+                anchor,
+                fact.id,
+                kind,
+                "structured_vs_description",
+                {
+                    "source_field": name,
+                    "value": structured_value,
+                    "quote": _bounded(raw),
+                    "confidence_state": "confirmed",
+                },
+                _fact_side(fact),
+            )
 
 
 def _geo_fact(offer: Mapping[str, Any], source_id: str) -> dict[str, Any]:
@@ -912,22 +1049,30 @@ def _trust_fact(
     *,
     clock: Callable[[], str] | None = None,
 ) -> dict[str, Any]:
-    """Read the trust decision of the official link (reuses SPEC SK-01)."""
+    """Read the trust decision of the official link (reuses SPEC SK-01).
+
+    The decision itself never reads a clock.  The stamp is only filled when
+    the caller injects one: an unstamped snapshot stays reproducible, so two
+    builds of the same offer always yield the very same document.
+    """
     try:
         from .source_trust import check_trust
     except ImportError:  # pragma: no cover - the contract is part of the product
         return {"status": "missing", "reasons": ["Le contrat de confiance n’est pas disponible."], "checked_at": None}
     url = _bounded(offer.get("official_url"), limit=2_000)
+    stamp = clock() if clock is not None else None
     try:
         result = check_trust(
             url,
             employer_hint=_bounded(offer.get("company"), limit=200) or None,
             declared_provider=_bounded(offer.get("source_name"), limit=60) or None,
-            clock=clock,
+            clock=(lambda: stamp) if stamp is not None else (lambda: ""),
         )
     except (TypeError, ValueError):
         return {"status": "missing", "reasons": ["La confiance de la source n’a pas pu être établie."], "checked_at": None}
-    return dict(result.to_dict())
+    payload = dict(result.to_dict())
+    payload["checked_at"] = stamp
+    return payload
 
 
 def _missing_information(
@@ -1059,9 +1204,8 @@ def build_snapshot(
             if key in qualified_data
         }
 
-    contradictions = _temporal_contradictions(facts, temporal_links)
+    contradictions = _temporal_contradictions(offer, facts, temporal_links)
     contradictions.extend(_requirement_contradictions(raw_contradictions))
-    contradictions.extend(_structured_vs_text_contradictions(offer, facts))
 
     geo = _geo_fact(offer, source_id)
     lang = _lang_fact(offer, requirements, source_id)
