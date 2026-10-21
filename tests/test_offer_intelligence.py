@@ -39,10 +39,17 @@ from career.offer_qualification import qualify_offer
 from career.service import CareerService
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "offer_intelligence" / "offers.json"
+ADVERSARIAL_FIXTURES = (
+    Path(__file__).resolve().parent / "fixtures" / "offer_intelligence" / "adversarial.json"
+)
 
 
 def _cases() -> list[dict]:
     return json.loads(FIXTURES.read_text(encoding="utf-8"))["cases"]
+
+
+def _adversarial_cases() -> list[dict]:
+    return json.loads(ADVERSARIAL_FIXTURES.read_text(encoding="utf-8"))["cases"]
 
 
 def _case(case_id: str) -> dict:
@@ -497,3 +504,185 @@ def test_the_route_exposes_the_same_snapshot_as_the_service(tmp_path: Path) -> N
     assert alias["snapshot"]["source_hash"] == detail["offer_intelligence"]["source_hash"]
     assert nested["snapshot"]["source_hash"] == detail["offer_intelligence"]["source_hash"]
     assert alias["summary"]["requirement_ids"] == nested["summary"]["requirement_ids"]
+
+
+# ------------------------------------------------------- the adversarial pass
+#
+# Two statements that agree must never be shown as a contradiction, and two
+# statements that cannot both be true must always be shown.  A user who is
+# told that a correct offer is contradictory stops trusting the screen.
+
+
+@pytest.mark.parametrize("case", _adversarial_cases(), ids=lambda case: case["id"])
+def test_the_adversarial_corpus_separates_compatibility_from_contradiction(case: dict) -> None:
+    offer = dict(case["offer"])
+    snapshot = build_snapshot(offer, qualify_offer(offer).to_dict())
+
+    assert len(snapshot.contradictions) == case["expected"]["contradictions"]
+    assert sorted(item.kind for item in snapshot.contradictions) == sorted(
+        case["expected"]["kinds"]
+    )
+
+
+def test_a_month_statement_never_contradicts_the_day_it_contains() -> None:
+    offer = {
+        "id": "job_month_contains_day",
+        "title": "Data Analyst Intern",
+        "company": "Synthetic Analytics",
+        "city": "Berlin",
+        "country": "Germany",
+        "start_date": "2027-01-15",
+        "requirements": "SQL for data analysis",
+        "description_original": "The programme starts in January 2027.",
+    }
+
+    snapshot = build_snapshot(offer)
+
+    starts = [fact for fact in snapshot.temporal_facts if fact.kind == "start"]
+    assert {fact.precision for fact in starts} == {"month", "exact_date"}
+    assert snapshot.contradictions == ()
+
+
+def test_an_upper_bound_never_contradicts_the_duration_it_allows() -> None:
+    offer = {
+        "id": "job_bound_allows_exact",
+        "title": "Data Analyst Intern",
+        "company": "Synthetic Analytics",
+        "city": "London",
+        "country": "United Kingdom",
+        "requirements": "Advanced Excel",
+        "description_original": (
+            "The placement lasts up to six months.\nThe placement lasts six months."
+        ),
+    }
+
+    snapshot = build_snapshot(offer)
+
+    durations = [fact for fact in snapshot.temporal_facts if fact.kind == "duration"]
+    assert durations
+    assert snapshot.contradictions == ()
+
+
+def test_a_real_conflict_is_never_hidden() -> None:
+    offer = {
+        "id": "job_real_conflict",
+        "title": "Data Analyst Intern",
+        "company": "Synthetic Analytics",
+        "city": "Berlin",
+        "country": "Germany",
+        "requirements": "SQL for data analysis",
+        "description_original": (
+            "The programme starts 5 January 2027.\nThe programme starts 12 January 2027."
+        ),
+    }
+
+    snapshot = build_snapshot(offer)
+
+    assert len(snapshot.contradictions) == 1
+    contradiction = snapshot.contradictions[0]
+    assert contradiction.kind == "temporal_conflict"
+    assert contradiction.left["value"] == "2027-01-05"
+    assert contradiction.right["value"] == "2027-01-12"
+
+
+def test_a_disjoint_duration_is_never_hidden() -> None:
+    offer = {
+        "id": "job_disjoint_duration",
+        "title": "Data Analyst Intern",
+        "company": "Synthetic Analytics",
+        "city": "Berlin",
+        "country": "Germany",
+        "requirements": "SQL for data analysis",
+        "description_original": (
+            "The placement lasts at least eight months.\nThe placement lasts up to four months."
+        ),
+    }
+
+    snapshot = build_snapshot(offer)
+
+    assert len(snapshot.contradictions) == 1
+    assert snapshot.contradictions[0].topic == "duration"
+
+
+def test_the_qualification_facts_keep_their_evidence() -> None:
+    offer = _offer("fr_stage_complet")
+    snapshot = build_snapshot(offer, qualify_offer(offer).to_dict())
+
+    provenance = snapshot.qualifications.get("provenance")
+    assert isinstance(provenance, dict) and provenance
+    for field, evidence in provenance.items():
+        assert isinstance(evidence, dict), field
+        assert evidence.get("source"), field
+        assert "value" in evidence, field
+
+
+def test_the_source_hash_covers_the_whole_source_text() -> None:
+    before = {
+        "id": "job_long_text",
+        "title": "Data Intern",
+        "company": "Synthetic Co",
+        "description_original": ("A" * 40_000) + "Apply by 15 November 2026.",
+    }
+    after = {
+        "id": "job_long_text",
+        "title": "Data Intern",
+        "company": "Synthetic Co",
+        "description_original": ("A" * 40_000) + "Apply by 20 November 2026.",
+    }
+
+    assert compute_source_hash(before) != compute_source_hash(after)
+
+
+def test_an_unchanged_requirement_keeps_its_identifier_after_a_refresh(tmp_path: Path) -> None:
+    service = CareerService(tmp_path)
+    job = service.import_job(_synthetic_payload())
+    before = set(job["offer_intelligence_summary"]["requirement_ids"])
+
+    refreshed = service.import_job(
+        _synthetic_payload(description_original="Apply by 15 November 2026.\nSQL is required.")
+    )
+
+    after = set(refreshed["offer_intelligence_summary"]["requirement_ids"])
+    assert before & after
+    assert refreshed["offer_intelligence_version"] == job["offer_intelligence_version"] + 1
+
+
+def test_the_cv_gaps_carry_the_canonical_requirement_id(tmp_path: Path) -> None:
+    service = CareerService(tmp_path)
+    service.update_profile({"skills": "Communication and teamwork"})
+    service.import_profile_text(
+        source_kind="cv",
+        text=(
+            "EXPERIENCE\nSynthetic Corp — Analyst (2024-2026)\n"
+            "Reduced the reporting time by 30%.\n"
+            "FORMATION\nMaster 2 Finance — Synthetic University (2023)\n"
+            "SKILLS\nCommunication and teamwork\n"
+            "LANGUAGES\nEnglish C1\n"
+            "PROJECTS\nExcel model for a retail dashboard\n"
+            "CERTIFICATIONS\nExcel certification\n"
+        ),
+    )
+    job = service.import_job(
+        _synthetic_payload(language="English", start_date="2027-01-15", end_date="2027-07-15")
+    )
+
+    prep = service.get_job_prep(job["id"])
+    detail = service.get_job(job["id"])
+    canonical = {record["id"] for record in detail["offer_intelligence"]["requirements"]}
+
+    gaps = [gap for gap in prep["gaps"] if gap.get("requirement_id")]
+    assert gaps
+    for gap in gaps:
+        assert gap["requirement_id"] in canonical
+
+
+def test_the_snapshot_stays_readable_without_any_candidate_data(tmp_path: Path) -> None:
+    service = CareerService(tmp_path)
+    job = service.import_job(_synthetic_payload())
+    service.update_job_note(job["id"], "Relancer avant la date limite.")
+
+    detail = service.get_job(job["id"])
+
+    assert "Relancer avant la date limite." not in json.dumps(
+        detail["offer_intelligence"], ensure_ascii=False
+    )

@@ -21,7 +21,7 @@ from contextlib import contextmanager
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, Mapping
 
 from .models import (
     AVAILABILITY_STATES,
@@ -112,6 +112,7 @@ from .exploration import (
 )
 from .offer_qualification import qualify_offer
 from .offer_intelligence import (
+    align_display_requirements,
     build_snapshot,
     snapshot_summary,
 )
@@ -2155,12 +2156,38 @@ class CareerService:
                     "mandatory_pct": coverage.mandatory_pct,
                     "preferred_pct": coverage.preferred_pct,
                 },
-                "gaps": [serialize_gap(gap) for gap in gaps],
+                "gaps": self._gaps_with_requirement_ids(gaps, job),
                 "automatic_submission": False,
             }
         )
         self._prep_cache.add(job_id)
         return analysis
+
+    @staticmethod
+    def _gaps_with_requirement_ids(
+        gaps: list[Any], job: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        """Attach the canonical requirement identifier to every CV gap.
+
+        The gap keeps its own wording; the identifier is the one of the
+        versioned snapshot, so the matching panel points at the very same
+        requirement as the explorer, the detailed view, the cover letter and
+        the application checklist.  A gap without a canonical counterpart
+        simply has no identifier: none is ever invented.
+        """
+        payload = [serialize_gap(gap) for gap in gaps]
+        snapshot = job.get("offer_intelligence")
+        if not isinstance(snapshot, Mapping):
+            return payload
+        aligned = align_display_requirements(
+            [{"text": str(item.get("requirement") or "")} for item in payload],
+            snapshot,
+        )
+        for gap, entry in zip(payload, aligned):
+            identifier = entry.get("requirement_id")
+            if identifier:
+                gap["requirement_id"] = identifier
+        return payload
 
     def get_application_sprint(self, *, limit: int = 12) -> dict[str, Any]:
         """Prioritise a bounded batch for local preparation, without sending.
@@ -4043,9 +4070,8 @@ class CareerService:
         }
         return [
             {
-                "requirement_id": by_text.get(
-                    clean_text(item.get("requirement"), limit=300), ""
-                ),
+                "requirement_id": clean_text(item.get("requirement_id"), limit=80)
+                or by_text.get(clean_text(item.get("requirement"), limit=300), ""),
                 "requirement": clean_text(item.get("requirement"), limit=300),
                 "note": clean_text(item.get("note"), limit=300),
             }

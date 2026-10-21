@@ -434,6 +434,7 @@ def prepare_application(
                 {
                     "requirement": requirement["text"],
                     "note": "Non trouvé dans ton profil : aucun élément comparable n’y figure (vérifie, complète ou ajuste si pertinent).",
+                    **({"requirement_id": requirement_id} if requirement_id else {}),
                 }
             )
             unverified_requirement_ids.append(requirement_id)
@@ -447,6 +448,7 @@ def prepare_application(
                     "profile_field": field,
                     "evidence": excerpt,
                     "matched_on": hits,
+                    **({"requirement_id": requirement_id} if requirement_id else {}),
                 }
             )
             matched_requirement_ids.append(requirement_id)
@@ -455,6 +457,7 @@ def prepare_application(
                 {
                     "requirement": requirement["text"],
                     "note": "Non trouvé dans ton profil : aucun élément comparable n’y figure (vérifie, complète ou ajuste si pertinent).",
+                    **({"requirement_id": requirement_id} if requirement_id else {}),
                 }
             )
             unverified_requirement_ids.append(requirement_id)

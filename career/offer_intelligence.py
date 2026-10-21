@@ -100,6 +100,11 @@ QUALIFICATION_FIELDS: tuple[str, ...] = (
     "verification_status",
 )
 
+# The evidence and the unknown fields of the contractual qualification.  They
+# describe the offer, never the person, so they belong to the snapshot: every
+# qualification fact resolves to a passage instead of floating without proof.
+QUALIFICATION_EVIDENCE_FIELDS: tuple[str, ...] = ("provenance", "missing_fields")
+
 MAX_FACTS = 200
 MAX_REQUIREMENTS = 200
 MAX_MISSING = 40
@@ -426,8 +431,10 @@ def compute_source_hash(offer: Mapping[str, Any]) -> str:
     """Return the stable fingerprint of the exact source content of an offer.
 
     Only source fields participate: a personal note, a shortlist flag or an
-    application stage never invalidates an analysis.  The whole text of every
-    source field is hashed: nothing is cut, so an edit is always visible.
+    application stage never invalidates an analysis.  The whole text is
+    hashed — not only the part the analyzers read — so that any change of the
+    source really produces a new analysis: nothing is cut, so an edit is
+    always visible.
     """
     payload = {}
     for name in SOURCE_FIELDS:
@@ -801,67 +808,85 @@ def _fact_side(fact: TemporalFact) -> dict[str, Any]:
     }
 
 
-def _periods_overlap(left: str, right: str) -> bool:
-    """Tell whether two dated statements can describe the same period.
+def _date_interval(value: str | None, precision: str) -> tuple[str | None, str | None]:
+    """Return the interval a date value proves, at the precision it carries.
 
-    "2026-01" and "2026-01-15" are compatible; "2026-01" and "2026-02" are
-    not.  A coarser statement is never a contradiction, only a less precise
-    version of the same period.
+    A month-only statement covers its whole month: it is compatible with every
+    day of that month and it contradicts another month.  An unknown value
+    proves nothing and contradicts nothing.
     """
-    if left == right:
-        return True
-    shorter, longer = (left, right) if len(left) <= len(right) else (right, left)
-    return longer.startswith(shorter)
+    if not value:
+        return None, None
+    if precision == "exact_date" and len(value) == 10:
+        return value, value
+    if precision == "month" and len(value) == 7:
+        return f"{value}-01", f"{value}-31"
+    if precision == "year" and len(value) == 4:
+        return f"{value}-01-01", f"{value}-12-31"
+    return None, None
 
 
-def _bound(value: str | None) -> int | None:
-    if value is None:
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
+def _infer_date_interval(value: str | None) -> tuple[str | None, str | None]:
+    """Return the interval a structured date proves, whatever its precision.
+
+    Only the canonical shapes are understood: a value that is not a date
+    (``"15/11/2026"``, ``"soon"``…) proves nothing, so a malformed field can
+    never invent a contradiction.
+    """
+    text = _bounded(value, limit=40).strip()
+    if _ISO_DATE.match(text):
+        return _date_interval(text, "exact_date")
+    if _ISO_MONTH.match(text):
+        return _date_interval(text, "month")
+    if _ISO_YEAR.match(text):
+        return _date_interval(text, "year")
+    return None, None
 
 
-def _intervals_overlap(
-    left_low: str | None,
-    left_high: str | None,
-    right_low: str | None,
-    right_high: str | None,
+def _duration_interval(fact: TemporalFact) -> tuple[int | None, int | None]:
+    """Return the proven bounds of a duration; a missing bound stays unbounded."""
+    lower = int(fact.lower_bound) if str(fact.lower_bound or "").isdigit() else None
+    upper = int(fact.upper_bound) if str(fact.upper_bound or "").isdigit() else None
+    return lower, upper
+
+
+def _intervals_conflict(
+    left: tuple[Any, Any], right: tuple[Any, Any]
 ) -> bool:
-    """Tell whether two duration intervals can both be true."""
-    left_min = _bound(left_low)
-    left_max = _bound(left_high)
-    right_min = _bound(right_low)
-    right_max = _bound(right_high)
-    if left_min is None and left_max is None:
-        return True
-    if right_min is None and right_max is None:
-        return True
+    """Tell whether two proven intervals cannot both hold.
+
+    An interval that proves nothing (``None, None``) contradicts nothing: an
+    unknown value stays unknown instead of becoming an invented conflict.  A
+    single missing bound means "unbounded" on that side, which is how an upper
+    bound ("up to six months") stays compatible with an exact duration.
+    """
+    left_min, left_max = left
+    right_min, right_max = right
+    if (left_min is None and left_max is None) or (right_min is None and right_max is None):
+        return False
     if left_max is not None and right_min is not None and left_max < right_min:
-        return False
+        return True
     if right_max is not None and left_min is not None and right_max < left_min:
-        return False
-    return True
+        return True
+    return False
 
 
 def _facts_conflict(left: TemporalFact, right: TemporalFact) -> bool:
-    """Two facts conflict when they are the same kind and cannot both be true.
+    """Two facts conflict when their proven intervals cannot both hold.
 
-    A month statement never contradicts the exact date it contains, and an
-    exact duration never contradicts a bound that contains it.
+    The comparison is done on the intervals, not on the raw strings: a
+    month-only statement and the exact day it contains agree, and an upper
+    bound and the duration it allows agree too.  Only genuinely incompatible
+    statements are exposed as a contradiction.
     """
     if left.kind != right.kind:
         return False
     if left.kind == "duration":
-        return not _intervals_overlap(
-            left.lower_bound, left.upper_bound, right.lower_bound, right.upper_bound
-        )
-    if not left.value or not right.value:
-        # Nothing is proven on one side: the two statements cannot be shown
-        # to be incompatible, so they are not a contradiction.
-        return False
-    return not _periods_overlap(str(left.value), str(right.value))
+        return _intervals_conflict(_duration_interval(left), _duration_interval(right))
+    return _intervals_conflict(
+        _date_interval(left.value, left.precision),
+        _date_interval(right.value, right.precision),
+    )
 
 
 def _requirement_contradictions(
@@ -910,18 +935,6 @@ _ISO_MONTH = re.compile(r"^\d{4}-\d{2}$")
 _ISO_YEAR = re.compile(r"^\d{4}$")
 
 
-def _structured_period(raw: Any) -> str | None:
-    """Return the canonical period of a structured date, or ``None``.
-
-    Only the three canonical shapes are understood: a non canonical value is
-    never compared, so a malformed field can never invent a contradiction.
-    """
-    text = _bounded(raw, limit=40).strip()
-    if _ISO_DATE.match(text) or _ISO_MONTH.match(text) or _ISO_YEAR.match(text):
-        return text
-    return None
-
-
 def _structured_vs_text_contradictions(
     offer: Mapping[str, Any],
     facts: Iterable[TemporalFact],
@@ -930,9 +943,9 @@ def _structured_vs_text_contradictions(
 ) -> None:
     """Compare the structured dates of the offer with the dates of its text.
 
-    A structured date and a passage of the description only contradict each
-    other when the two periods are genuinely incompatible: a month that
-    contains the exact day is a less precise version of the same fact.
+    The comparison respects the precision of each side: a structured day and a
+    month-only sentence about the same month agree, only genuinely different
+    dates are exposed as a contradiction.
 
     The comparison writes into the shared registry: a clash already reported
     between two facts is never reported a second time.
@@ -942,15 +955,19 @@ def _structured_vs_text_contradictions(
         raw = offer.get(name)
         if not isinstance(raw, str) or not raw.strip():
             continue
-        structured_value = _structured_period(raw)
-        if structured_value is None:
+        structured_value = _bounded(raw, limit=40).strip()
+        structured_interval = _infer_date_interval(structured_value)
+        if structured_interval == (None, None):
+            # A value that is not a date proves nothing: it can never invent
+            # a contradiction.
             continue
         for fact in facts:
-            if fact.kind != kind or not fact.value:
+            if fact.kind != kind:
                 continue
             if fact.evidence.source_field == name:
                 continue
-            if _periods_overlap(structured_value, str(fact.value)):
+            fact_interval = _date_interval(fact.value, fact.precision)
+            if not _intervals_conflict(structured_interval, fact_interval):
                 continue
             anchor = next(
                 (
@@ -1203,6 +1220,18 @@ def build_snapshot(
             for key in QUALIFICATION_FIELDS
             if key in qualified_data
         }
+        # The evidence of the qualification travels with it: a contractual fact
+        # without a passage would be a fact nobody can check.
+        provenance = qualified_data.get("provenance")
+        if isinstance(provenance, Mapping):
+            qualifications["provenance"] = {
+                str(name): dict(block)
+                for name, block in provenance.items()
+                if isinstance(block, Mapping)
+            }
+        missing_fields = qualified_data.get("missing_fields")
+        if isinstance(missing_fields, (list, tuple)):
+            qualifications["missing_fields"] = [str(item) for item in missing_fields]
 
     contradictions = _temporal_contradictions(offer, facts, temporal_links)
     contradictions.extend(_requirement_contradictions(raw_contradictions))
@@ -1285,6 +1314,8 @@ def snapshot_summary(snapshot: OfferIntelligenceSnapshot | Mapping[str, Any]) ->
             if isinstance(item, Mapping)
         ],
         "trust_status": str((payload.get("trust") or {}).get("status") or "missing"),
+        "geo_status": str((payload.get("geo") or {}).get("status") or "to_verify"),
+        "lang_status": str((payload.get("lang") or {}).get("status") or "to_verify"),
         "contract_status": str((payload.get("qualifications") or {}).get("contract_status") or ""),
         "contract_type": str((payload.get("qualifications") or {}).get("contract_type") or ""),
     }
