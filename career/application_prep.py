@@ -503,6 +503,15 @@ def prepare_application(
 def summarize_offer(job: dict[str, Any]) -> dict[str, Any]:
     """Local, deterministic, factual summary of one offer (no model, no network)."""
     requirements = extract_requirements(job)
+    qualification = job.get("qualification_facts")
+    qualification = qualification if isinstance(qualification, dict) else {}
+    contract_type = clean_text(qualification.get("contract_type"), limit=120) or "unknown"
+    start_month = qualification.get("start_month")
+    if type(start_month) is not int or not 1 <= abs(start_month) <= 12:
+        start_month = None
+    duration_min = qualification.get("duration_min_months")
+    if type(duration_min) is not int or not 1 <= duration_min <= 24:
+        duration_min = None
     return {
         "title": clean_text(job.get("title"), limit=300),
         "company": clean_text(job.get("company"), limit=240),
@@ -513,6 +522,12 @@ def summarize_offer(job: dict[str, Any]) -> dict[str, Any]:
         "deadline_date": clean_text(job.get("deadline_date"), limit=32),
         "posted_date": clean_text(job.get("posted_date"), limit=32),
         "duration_months": job.get("duration_months"),
+        "contract_type": contract_type,
+        "start_month": start_month,
+        "duration_min_months": duration_min,
+        "qualification_status": clean_text(qualification.get("target_status"), limit=40) or "to_verify",
+        "qualification_missing": list(qualification.get("missing_fields") or []),
+        "qualification_provenance": dict(qualification.get("provenance") or {}),
         "missions": [clean_text(r.get("text"), limit=300) for r in requirements],
         "prerequisites_count": len(requirements),
         "official_url": clean_text(job.get("official_url"), limit=2_000),

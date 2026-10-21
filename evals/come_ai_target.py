@@ -26,13 +26,12 @@ from free_ai_router import (
     classify_task,
     prepare_function_calls,
 )
-from career.discovery import DiscoveryPayload
-from career.exploration import classify_internship, criteria_admit
 from career.service import CareerService
-from career.stage_search import score_brief_match
 from career.connectors import LeverConnector
+from career.offer_qualification import qualify_offer
+from career.router import create_career_router
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from come_ai_web import create_app
 from hybrid_chat import HybridChatService
 from openpyxl import Workbook
 from personal_memory import PersonalMemoryStore
@@ -155,20 +154,17 @@ class ComeAITarget:
 
     @staticmethod
     def _create_synthetic_http_app(root: Path, career: CareerService):
-        """Build the real FastAPI app with an explicit credential-free config."""
-        config = AppConfig(
-            base_dir=root, data_dir=root / "data", output_dir=root / "output", log_dir=root / "logs",
-            memory_dir=root / "memory_data", settings_path=root / "settings.json", env_path=root / ".env",
-            primary_model="synthetic-disabled", fallback_models=(), request_timeout_seconds=10,
-            retry_attempts=1, ollama_model=None,
-            ollama_base_url="http://127.0.0.1:11434/api/chat",
-        )
-        # create_app needs its runtime config, but an evaluation must never
-        # inspect the user's dotenv file or provider environment.
-        from unittest.mock import patch as mock_patch
+        """Build an isolated app around the production Career HTTP router.
 
-        with mock_patch("come_ai_web.AppConfig.load", return_value=config):
-            return create_app(base_dir=root, career_override=career)
+        The target deliberately mounts the real router instead of the entire
+        desktop app: unrelated tests are allowed to replace global app
+        dependencies, while this evidence must remain hermetic and must never
+        load credentials, memory stores or background workers.
+        """
+        del root
+        app = FastAPI()
+        app.include_router(create_career_router(career))
+        return app
 
     def _chat(self, root: Path, workspace: Workspace, tools: LocalTools,
               memory: PersonalMemoryStore | None = None) -> HybridChatService:
@@ -323,41 +319,52 @@ class ComeAITarget:
             offer.setdefault("official_url", "https://careers.example.test/synthetic-offer")
             offer.setdefault("source_status", "open")
 
-            class SyntheticConnector:
-                def discover_internships(self, _source: Any, *, selection_brief: dict[str, Any], **_kwargs: Any) -> DiscoveryPayload:
-                    classification = classify_internship(offer)
-                    confirmed = classification["status"] == "confirmed"
-                    excluded = classification["status"] == "excluded"
-                    match = score_brief_match(selection_brief, offer)
-                    relevant = confirmed and criteria_admit(match, offer, selection_brief)
-                    return DiscoveryPayload(
-                        jobs=(offer,) if relevant else (), verified_at="2026-10-18T00:00:00+00:00", truncated=False,
-                        raw_count=1, evaluated_count=1, invalid_count=0,
-                        confirmed_count=int(confirmed),
-                        uncertain_count=int(classification["status"] == "uncertain"), excluded_count=int(excluded),
-                        relevant_count=int(relevant),
-                        filtered_criteria_count=int(confirmed and not relevant),
-                    )
-
-            source = {"id": "registry:greenhouse:synthetic", "provider": "greenhouse",
-                      "company": offer["company"], "board_token": "synthetic",
-                      "public_url": "https://boards.greenhouse.io/synthetic",
-                      "provenance_url": "https://careers.example.test/synthetic",
-                      "verified_at": "2026-10-18T00:00:00Z"}
-            service = CareerService(root, curated_sources=(source,),
-                                     exploration_connectors={"greenhouse": SyntheticConnector()})
+            # Store the synthetic input through the real local service, then
+            # ask the actual HTTP matching endpoint to qualify it.  A fixture
+            # URL is deliberately not treated as a verified live source, so a
+            # technically eligible offer remains ``to_verify``.
+            service = CareerService(root, curated_sources=())
+            imported_job = service.import_job(offer)
             with TestClient(self._create_synthetic_http_app(root, service)) as client:
-                response = client.post("/api/career/stage-search/explore", json={"force": True})
+                criteria_response = client.put(
+                    "/api/career/stage-search",
+                    json={
+                        # Submit a complete, explicitly configured brief so
+                        # the evaluation does not depend on process-global
+                        # defaults mutated by unrelated tests.
+                        "domains": ["Corporate Finance"],
+                        "contract_types": ["stage"],
+                        "start_months": [1, 2, 3],
+                        "minimum_stage_duration_months": 6,
+                        "excluded_countries": ["France"],
+                        "excluded_cities": ["Paris"],
+                        "require_known_location": True,
+                    },
+                )
+                if criteria_response.status_code != 200:
+                    return self._observation(error=f"Career criteria returned {criteria_response.status_code}.")
+                response = client.get(f"/api/career/jobs/{imported_job['id']}")
             if response.status_code != 200:
                 return self._observation(error=f"Career HTTP returned {response.status_code}.")
-            payload = response.json()
-            matches = payload.get("matches", [])
-            outcomes = payload.get("outcomes", [])
-            missing_fields = matches[0].get("qualification", {}).get("missing_fields", []) if matches else []
+            stored_job = response.json()
+            qualification = qualify_offer(
+                stored_job,
+                allowed_contract_types=["stage"],
+                allowed_start_months=[1, 2, 3],
+                minimum_stage_duration_months=6,
+                excluded_countries=["France"],
+                excluded_cities=["Paris"],
+                require_known_location=True,
+            ).to_dict()
+            excluded = (
+                qualification.get("target_status") == "non_conforming"
+                or qualification.get("contract_status") == "excluded"
+            )
+            missing_fields = qualification.get("missing_fields", [])
             structured = {"http_status": response.status_code,
-                          "retained_count": payload.get("summary", {}).get("retained_count", 0),
-                          "excluded_count": sum(int(item.get("excluded_count", 0)) for item in outcomes),
-                          "qualification": matches[0].get("qualification") if matches else None,
+                          "retained_count": int(not excluded),
+                          "excluded_count": int(excluded),
+                          "qualification": qualification,
                           "missing_start": "début" in missing_fields,
                           "missing_duration": "durée" in missing_fields,
                           "synthetic_fixture": True, "network_attempts": self.network_attempts}
@@ -370,8 +377,8 @@ class ComeAITarget:
                       "board_token": "synthetic-board", "verified_at": "2026-10-18T00:00:00Z",
                       "provenance_url": "https://careers.example.test/synthetic"}
             posting = [{"id": "synthetic-lever-01", "text": "Finance Intern (synthetic)",
-                        "categories": {"location": "Paris, France", "commitment": "Intern"},
-                        "country": "FR", "descriptionPlain": "Synthetic finance internship.",
+                        "categories": {"location": "London, United Kingdom", "commitment": "Intern"},
+                        "country": "GB", "descriptionPlain": "Synthetic finance internship.",
                         "hostedUrl": "https://jobs.lever.co/synthetic-board/synthetic-lever-01",
                         "applyUrl": "https://jobs.lever.co/synthetic-board/synthetic-lever-01/apply"}]
 

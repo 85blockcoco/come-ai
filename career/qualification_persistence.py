@@ -1,0 +1,122 @@
+"""Safe persistence helpers for deterministic offer qualification snapshots.
+
+Qualification is derived metadata, not a replacement for source fields.  This
+module therefore stores a bounded snapshot beside the job instead of turning a
+month-only observation into an invented exact date or overwriting user edits.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from typing import Any
+
+from .models import clean_text
+
+
+SNAPSHOT_SCHEMA_VERSION = 1
+_FACT_FIELDS = (
+    "contract_type",
+    "contract_status",
+    "posted_date",
+    "start_date",
+    "end_date",
+    "start_month",
+    "duration_min_months",
+    "duration_max_months",
+    "language",
+    "country",
+    "city",
+    "geography_status",
+    "source_name",
+    "source_id",
+    "official_url",
+    "verification_status",
+    "target_status",
+)
+
+
+def _bounded_scalar(value: Any) -> str | int | float | bool | None:
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    return clean_text(value, limit=2_000)
+
+
+def normalize_qualification_snapshot(
+    qualification: dict[str, Any], source_payload: dict[str, Any]
+) -> dict[str, Any]:
+    """Return a bounded, JSON-safe snapshot with field-level provenance."""
+    if not isinstance(qualification, dict):
+        raise TypeError("qualification must be an object")
+
+    facts = {
+        field: _bounded_scalar(qualification.get(field))
+        for field in _FACT_FIELDS
+        if qualification.get(field) not in (None, "")
+    }
+    raw_provenance = qualification.get("provenance")
+    provenance: dict[str, dict[str, Any]] = {}
+    if isinstance(raw_provenance, dict):
+        for field, evidence in raw_provenance.items():
+            if not isinstance(field, str) or not isinstance(evidence, dict):
+                continue
+            source = clean_text(evidence.get("source"), limit=160)
+            quote = clean_text(evidence.get("quote"), limit=1_000)
+            if not source:
+                continue
+            provenance[clean_text(field, limit=120)] = {
+                "value": _bounded_scalar(evidence.get("value")),
+                "source": source,
+                "quote": quote,
+            }
+
+    missing = qualification.get("missing_fields")
+    missing_fields = [clean_text(item, limit=160) for item in missing] if isinstance(missing, (list, tuple)) else []
+    missing_fields = [item for item in missing_fields if item]
+    reasons = qualification.get("reasons")
+    reason_items = [clean_text(item, limit=500) for item in reasons] if isinstance(reasons, (list, tuple)) else []
+    reason_items = [item for item in reason_items if item]
+
+    source_identity = {
+        "source_name": clean_text(source_payload.get("source_name"), limit=120),
+        "source_id": clean_text(source_payload.get("source_id"), limit=240),
+        "official_url": clean_text(source_payload.get("official_url"), limit=2_000),
+        "description_sha256": hashlib.sha256(
+            clean_text(source_payload.get("description_original"), limit=30_000).encode("utf-8")
+        ).hexdigest(),
+    }
+    fingerprint = hashlib.sha256(
+        json.dumps(source_identity, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    return {
+        "schema_version": SNAPSHOT_SCHEMA_VERSION,
+        "facts_json": json.dumps(facts, ensure_ascii=False, sort_keys=True),
+        "provenance_json": json.dumps(provenance, ensure_ascii=False, sort_keys=True),
+        "missing_fields_json": json.dumps(missing_fields, ensure_ascii=False),
+        "reasons_json": json.dumps(reason_items, ensure_ascii=False),
+        "source_fingerprint": fingerprint,
+    }
+
+
+def decode_qualification_snapshot(row: dict[str, Any]) -> dict[str, Any]:
+    """Decode a joined database snapshot without trusting malformed JSON."""
+    if row.get("qualification_schema_version") is None:
+        return {}
+    try:
+        facts = json.loads(row.get("qualification_facts_json") or "{}")
+        provenance = json.loads(row.get("qualification_provenance_json") or "{}")
+        missing = json.loads(row.get("qualification_missing_json") or "[]")
+        reasons = json.loads(row.get("qualification_reasons_json") or "[]")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+    if not isinstance(facts, dict) or not isinstance(provenance, dict):
+        return {}
+    return {
+        **facts,
+        "provenance": provenance,
+        "missing_fields": missing if isinstance(missing, list) else [],
+        "reasons": reasons if isinstance(reasons, list) else [],
+        "source_fingerprint": clean_text(row.get("qualification_source_fingerprint"), limit=64),
+        "qualified_at": clean_text(row.get("qualification_updated_at"), limit=40),
+        "snapshot_schema_version": row.get("qualification_schema_version"),
+    }

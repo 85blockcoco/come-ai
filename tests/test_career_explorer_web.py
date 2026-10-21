@@ -24,10 +24,10 @@ class SyntheticTransport:
         self.calls += 1
         assert endpoint.startswith("https://boards-api.greenhouse.io/")
         return {"jobs": [
-            {"id": "stage", "title": "Corporate Finance Intern", "location": {"name": "Paris, France"},
+            {"id": "stage", "title": "Corporate Finance Intern", "location": {"name": "London, United Kingdom"},
              "absolute_url": "https://careers.example.test/stage",
              "content": "<p>Stage synthétique en corporate finance.</p><h3>Requirements</h3><p>Excel required.</p>"},
-            {"id": "senior", "title": "Senior Corporate Finance Director", "location": {"name": "Paris, France"},
+            {"id": "senior", "title": "Senior Corporate Finance Director", "location": {"name": "London, United Kingdom"},
              "absolute_url": "https://careers.example.test/senior", "content": "<p>Permanent position, CDI.</p>"},
         ]}
 
@@ -42,7 +42,7 @@ def test_zero_personal_boards_http_explore_prepare_track_and_cache(tmp_path: Pat
         assert "Explorer les stages" in client.get("/career").text
         assert client.get("/api/career/stage-search/explore").status_code == 200
         assert transport.calls == 0, "opening the UI never fetches a source"
-        assert client.put("/api/career/stage-search", json={"domains":["Corporate Finance"], "cities":["Paris"]}).status_code == 200
+        assert client.put("/api/career/stage-search", json={"domains":["Corporate Finance"], "cities":["London"]}).status_code == 200
         response = client.post("/api/career/stage-search/explore", json={"force":False})
         assert response.status_code == 200
         report = response.json()
@@ -74,7 +74,7 @@ def test_job_summary_endpoint_returns_local_summary(tmp_path: Path) -> None:
         exploration_connectors={"greenhouse": GreenhouseJobBoardConnector(transport)})
     app = create_app(base_dir=tmp_path, career_override=service)
     with TestClient(app) as client:
-        assert client.put("/api/career/stage-search", json={"domains":["Corporate Finance"], "cities":["Paris"]}).status_code == 200
+        assert client.put("/api/career/stage-search", json={"domains":["Corporate Finance"], "cities":["London"]}).status_code == 200
         report = client.post("/api/career/stage-search/explore", json={"force":False}).json()
         job_id = report["matches"][0]["job"]["id"]
         response = client.get(f"/api/career/jobs/{job_id}/summary")
