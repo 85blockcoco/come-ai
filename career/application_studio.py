@@ -339,8 +339,24 @@ def _field(profile: dict[str, Any], key: str, fallback: str) -> str:
 
 
 def _offer_summary(job: dict[str, Any]) -> str:
+    """Quote the requirements of the offer, from the shared snapshot when there is one.
+
+    The letter must refer to the very same requirements as the other screens:
+    when the offer carries its intelligence snapshot, its canonical records
+    are quoted, with the identifiers the whole workspace shares.
+    """
+    intelligence = job.get("offer_intelligence")
+    requirements = ""
+    if isinstance(intelligence, dict):
+        records = intelligence.get("requirements")
+        if isinstance(records, list):
+            requirements = "\n".join(
+                _text(record.get("text"), 400)
+                for record in records
+                if isinstance(record, dict) and _text(record.get("text"), 400)
+            )
     parts = [
-        _text(job.get("requirements"), 1_500),
+        requirements or _text(job.get("requirements"), 1_500),
         _text(job.get("languages_required"), 500),
         _text(job.get("description_original"), 1_800),
     ]
