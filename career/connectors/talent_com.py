@@ -7,8 +7,9 @@ Documentation: No public API; uses search HTML with structured data.
 
 from __future__ import annotations
 
-import re
+import functools
 import socket
+import ssl
 import time
 import urllib.error
 import urllib.parse
@@ -19,7 +20,7 @@ from html.parser import HTMLParser
 from typing import Any, Callable, Iterator
 
 from ..discovery import DiscoveryPayload, PublicSourceError, source_html_to_text
-from ..countries import canonical_country_codes, country_from_source
+from ..countries import canonical_country_codes, country_from_source, split_location
 from ..models import clean_text, canonical_url
 from ..exploration import classify_internship, criteria_admit, ranking_key
 from ..offer_qualification import qualify_offer
@@ -34,6 +35,28 @@ _TALENT_RATE_LIMIT = 2.0
 _TALENT_USER_AGENT = "ComeAI-StageBot/1.0"
 _TALENT_MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 _TALENT_MAX_ROWS = 400
+
+
+@functools.lru_cache(maxsize=1)
+def _trusted_ssl_context() -> ssl.SSLContext:
+    """SSL context that trusts the certifi root bundle when it is installed.
+
+    macOS Python installers often leave the system keychain without the
+    Mozilla root bundle, which makes a plain default context reject every
+    public site with CERTIFICATE_VERIFY_FAILED.  ``certifi`` solves this
+    without weakening certificate verification; the stdlib context stays the
+    fallback when certifi is absent.  The same fallback already backs the
+    Greenhouse transport (``career/discovery.py``) and the public ATS
+    connectors (``career/connectors/public_ats.py``).
+    """
+    context = ssl.create_default_context()
+    try:
+        import certifi  # noqa: PLC0415 - optional, keep stdlib-only fallback
+
+        context = ssl.create_default_context(cafile=certifi.where())
+    except (ImportError, OSError):
+        pass
+    return context
 
 
 @dataclass
@@ -146,7 +169,7 @@ def _default_fetch(url: str) -> str | None:
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=_TALENT_TIMEOUT) as resp:
+        with urllib.request.urlopen(req, timeout=_TALENT_TIMEOUT, context=_trusted_ssl_context()) as resp:
             body = resp.read(_TALENT_MAX_RESPONSE_BYTES + 1)
             if len(body) > _TALENT_MAX_RESPONSE_BYTES:
                 _HEALTH.last_error = "Response too large"
@@ -184,7 +207,7 @@ def _parse_location(location_text: str) -> tuple[str, str]:
     location_text = clean_text(location_text, limit=160)
     if not location_text:
         return "", ""
-    parts = [p.strip() for p in re.split(r"[,(]|\s+[-\u2013\u2014]\s+", location_text) if p.strip()]
+    parts = split_location(location_text)
     if len(parts) >= 2:
         city = parts[0]
         country = parts[-1]
