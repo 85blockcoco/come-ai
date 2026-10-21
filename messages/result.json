@@ -1,0 +1,28 @@
+{
+  "status": "done",
+  "files_created": [
+    "career/source_fields.py",
+    "career/connectors/cards.py",
+    "career/exploration.py",
+    "career/connectors/public_ats.py",
+    "career/discovery.py",
+    "career/connectors/welcome_jungle.py",
+    "career/connectors/jobteaser.py",
+    "career/connectors/talent_com.py",
+    "career/connectors/apec.py",
+    "tests/test_connectors_enrich.py",
+    "tests/test_connectors_enrich_live.py",
+    "tests/fixtures/connectors_enrich/greenhouse.json",
+    "tests/fixtures/connectors_enrich/lever.json",
+    "tests/fixtures/connectors_enrich/ashby.json",
+    "tests/fixtures/connectors_enrich/smartrecruiters.json",
+    "tests/fixtures/connectors_enrich/welcome_jungle.json",
+    "tests/fixtures/connectors_enrich/jobteaser.json",
+    "tests/fixtures/connectors_enrich/talent_com.json",
+    "tests/fixtures/connectors_enrich/apec.json",
+    "docs/agent-reports/SPEC-SK08-CONNECTORS_ENRICH.md"
+  ],
+  "output": "Mission SK-08 livrée : les 8 connecteurs (Greenhouse, Lever, Ashby, SmartRecruiters, Welcome to the Jungle, JobTeaser, Talent.com, APEC) transmettent la matière publiée par leur source via le contrat commun `source_fields[<provider>][<nom exact du champ source>]` + `description_original`, et signalent sans les trancher les contradictions entre champ structuré et texte (`source_conflicts`). La décision d'admission sort des connecteurs (career/exploration.py::admit_offer). 8 fixtures synthétiques (une par fournisseur, publication complète + publication contradictoire), 54 tests de contrat, contrôle réel borné et séparé (opt-in). Branches poussées : worker/cvboost-29-1792619869 et agent/spec-sk08-connectors-enrich (HEAD 1bfb411, base f5b22f2).",
+  "logs": "pytest -q tests/test_connectors_enrich.py → 54 passed\npytest -q (suite complète) → 1478 passed, 10 skipped (9 = contrôle réel opt-in, 1 skip préexistant test_offer_summary_exhaustiveness)\nruff check . → All checks passed\ngit diff --check → propre\n./checklist_codex.sh → TOUT VERT\nCAREER_LIVE_SOURCE_CHECK=1 pytest -q tests/test_connectors_enrich_live.py → 4 passed, 5 skipped (raisons explicites)\n\nContrôle réel du 22/10/2026 : Greenhouse (alixpartners), Lever (qonto), Ashby (oaknorth) = contrat tenu sur payloads réels ; SmartRecruiters = aucun board revu disponible (12 identifiants totalFound=0) ; Welcome to the Jungle = 0 data-testid=\"job-card\" et 0 lien /fr/companies/*/jobs/ sur 556 Ko (rendu côté client) ; JobTeaser = HTTP 410 Gone ; Talent.com = 20 liens href=\"/view?id=\" mais 0 \"/view/\" (le connecteur exige /view/) ; APEC = HTTP 403 Forbidden. Ces 4 défauts sont préexistants et signalés dans le rapport.\n\nGains réels : Greenhouse publie first_published et application_deadline (posted_date et deadline_date ne sont plus vides) ; updated_at reste une métadonnée de maintenance et ne devient jamais une date de publication ; SmartRecruiters compose description_original avec ses sections publiées, donc les prérequis parviennent enfin à offer_requirements ; createdAt de Lever est transmis brut et ne devient pas une date.\n\nHors périmètre assumé : aucune modification de career/service.py, du schéma SQLite ni de l'interface (registre schema_version_locked) — la persistance du bloc source_fields en base est la suite recommandée (table latérale à l'image de career/offer_intelligence_store.py de SK-07), et le branchement de SK-07 sur source_fields est également laissé à SK-07.",
+  "error": null
+}
