@@ -14,6 +14,11 @@ Usage:
     # From raw text
     doc = DocumentInput(text="...", filename="cv.txt", filetype="txt")
     result = analyze_cv(doc)
+
+    # Match the CV against one offer (CVBOOST-21)
+    from career.cv_quality import match_cv_to_offer
+
+    match = match_cv_to_offer(result, offer)
 """
 
 from __future__ import annotations
@@ -23,6 +28,10 @@ from .models import (
     DocumentInput,
     ExperienceEntry,
     Finding,
+    MatchAction,
+    MatchActionCode,
+    MatchEvidence,
+    MatchResult,
     Provenance,
     ReadabilityScore,
     SectionReading,
@@ -31,6 +40,7 @@ from .models import (
     STATUS_RISK,
     STATUS_UNKNOWN,
 )
+from .matching import find_evidence_in_cv, match_cv_to_offer
 from .parser import extract_text_from_bytes, extract_text_from_file
 from .structure import analyze_cv
 
@@ -46,6 +56,13 @@ __all__ = [
     "ExperienceEntry",
     "ReadabilityScore",
     "Provenance",
+    # Matching (CVBOOST-21)
+    "match_cv_to_offer",
+    "find_evidence_in_cv",
+    "MatchAction",
+    "MatchActionCode",
+    "MatchEvidence",
+    "MatchResult",
     # Status constants
     "STATUS_OK",
     "STATUS_INFO",

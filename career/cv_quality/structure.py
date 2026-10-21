@@ -624,6 +624,7 @@ def analyze_cv(document: DocumentInput) -> CVAnalysisResult:
         filetype=document.filetype,
         text_length=len(text),
         page_count=document.page_count,
+        source_text=text,
     )
 
     return CVAnalysisResult(
