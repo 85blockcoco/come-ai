@@ -162,7 +162,8 @@ HEADER_ZONE_RATIO = 0.90
 FOOTER_ZONE_RATIO = 0.10
 
 # Minimum number of extracted characters for a page that also carries images.
-IMAGE_TEXT_MIN_CHARS = 200
+IMAGE_TEXT_MIN_CHARS = 50
+DOMINANT_IMAGE_AREA_RATIO = 0.25
 
 # Column detection thresholds (PDF points).
 COLUMN_GUTTER_MIN = 40.0
@@ -207,9 +208,11 @@ class PageLayout:
     text: str = ""
     chunks: list[TextChunk] = field(default_factory=list)
     image_count: int = 0
+    image_boxes: list[tuple[float, float, float, float]] = field(default_factory=list)
     tables: list[TableInfo] = field(default_factory=list)
     column_count: int | None = None
     failed: bool = False
+    layout_known: bool = True
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -269,6 +272,83 @@ def _page_bbox(page: PageLayout) -> tuple[float, float, float, float]:
 # Layout extraction
 # ──────────────────────────────────────────────────────────────────────
 
+def _mat_mul(m1: tuple[float, ...], m2: tuple[float, ...]) -> tuple[float, ...]:
+    """Multiply two PDF transformation matrices (PDF row-vector convention)."""
+    a1, b1, c1, d1, e1, f1 = m1
+    a2, b2, c2, d2, e2, f2 = m2
+    return (
+        a1 * a2 + b1 * c2,
+        a1 * b2 + b1 * d2,
+        c1 * a2 + d1 * c2,
+        c1 * b2 + d1 * d2,
+        e1 * a2 + f1 * c2 + e2,
+        e1 * b2 + f1 * d2 + f2,
+    )
+
+
+def _pdf_graphics(page) -> tuple[list[tuple[float, float, float, float]], int, bool]:
+    """Read the placement of the images and the rules drawn on a PDF page.
+
+    The content stream is walked: `cm` sets the current transformation matrix
+    and `Do` paints an XObject. An image XObject paints the unit square, so
+    its placement rectangle is the current matrix. `l`, `m` and `re` draw the
+    straight segments of a grid.
+
+    Args:
+        page: A pypdf page object.
+
+    Returns:
+        Tuple of (image bounding boxes, number of drawn rules, layout known).
+    """
+    boxes: list[tuple[float, float, float, float]] = []
+    rules = 0
+
+    try:
+        from pypdf.generic import ContentStream
+    except Exception:  # pragma: no cover - pypdf always ships ContentStream
+        return boxes, rules, False
+
+    try:
+        contents = page.get_contents()
+        if contents is None:
+            return boxes, rules, False
+        reader = getattr(page, "pdf", None) or getattr(page, "_pdf", None)
+        operations = ContentStream(contents, reader).operations
+    except Exception:
+        return boxes, rules, False
+
+    ctm: tuple[float, ...] | None = None
+    stack: list[tuple[float, ...] | None] = []
+
+    for operands, operator in operations:
+        try:
+            if operator == b"q":
+                stack.append(ctm)
+            elif operator == b"Q":
+                ctm = stack.pop() if stack else None
+            elif operator == b"cm":
+                matrix = tuple(float(value) for value in operands)
+                ctm = _mat_mul(matrix, ctm) if ctm is not None else matrix
+            elif operator in (b"l", b"re", b"m"):
+                rules += 1
+            elif operator == b"Do":
+                name = operands[0]
+                resources = page.get("/Resources")
+                xobjects = resources.get("/XObject") if resources else None
+                if not xobjects or name not in xobjects:
+                    continue
+                xobject = xobjects[name].get_object()
+                if xobject.get("/Subtype") != "/Image" or ctm is None:
+                    continue
+                a, _b, _c, d, e, f = ctm
+                boxes.append((round(e, 2), round(f, 2), round(e + a, 2), round(f + d, 2)))
+        except Exception:
+            # A malformed operator must not abort the whole analysis.
+            continue
+
+    return boxes, rules, True
+
+
 def _layout_from_pdf(data: bytes) -> tuple[list[PageLayout], list[str]]:
     """Build the layout of every page of a PDF (pypdf, local only)."""
     errors: list[str] = []
@@ -297,15 +377,20 @@ def _layout_from_pdf(data: bytes) -> tuple[list[PageLayout], list[str]]:
         chunks: list[TextChunk] = []
 
         def visitor(text, cm, tm, font_dict, font_size, _chunks=chunks):
-            if text and text.strip():
-                _chunks.append(
-                    TextChunk(
-                        text=text,
-                        x=float(tm[4]),
-                        y=float(tm[5]),
-                        size=float(font_size or 0.0),
-                    )
-                )
+            if not text or not text.strip():
+                return
+            try:
+                tx, ty = float(tm[4]), float(tm[5])
+                size = float(font_size or 0.0)
+                if cm is not None:
+                    x = float(cm[0]) * tx + float(cm[2]) * ty + float(cm[4])
+                    y = float(cm[1]) * tx + float(cm[3]) * ty + float(cm[5])
+                    size *= abs(float(cm[3])) or 1.0
+                else:
+                    x, y = tx, ty
+            except (TypeError, ValueError, IndexError):
+                return
+            _chunks.append(TextChunk(text=text, x=x, y=y, size=size))
 
         failed = False
         try:
@@ -315,20 +400,24 @@ def _layout_from_pdf(data: bytes) -> tuple[list[PageLayout], list[str]]:
             text = ""
             failed = True
 
-        image_count = 0
-        try:
-            resources = page.get("/Resources")
-            xobjects = resources.get("/XObject") if resources else None
-            if xobjects:
-                for name in xobjects:
-                    try:
-                        obj = xobjects[name].get_object()
-                    except Exception:
-                        continue
-                    if obj.get("/Subtype") == "/Image":
-                        image_count += 1
-        except Exception:
-            image_count = 0
+        image_boxes, _rules, layout_known = _pdf_graphics(page)
+        image_count = len(image_boxes)
+        if not layout_known:
+            # The content stream is unreadable: count the images but keep
+            # their placement unknown so that no surface based reasoning runs.
+            try:
+                resources = page.get("/Resources")
+                xobjects = resources.get("/XObject") if resources else None
+                if xobjects:
+                    for name in xobjects:
+                        try:
+                            obj = xobjects[name].get_object()
+                        except Exception:
+                            continue
+                        if obj.get("/Subtype") == "/Image":
+                            image_count += 1
+            except Exception:
+                pass
 
         width, height = 595.0, 842.0
         try:
@@ -347,7 +436,9 @@ def _layout_from_pdf(data: bytes) -> tuple[list[PageLayout], list[str]]:
                 text=text,
                 chunks=chunks,
                 image_count=image_count,
+                image_boxes=image_boxes,
                 failed=failed,
+                layout_known=layout_known,
             )
         )
 
@@ -656,8 +747,36 @@ def detect_reading_order(pages: list[PageLayout]) -> list[ATSFinding]:
 # Detector 2 — text stored as images
 # ──────────────────────────────────────────────────────────────────────
 
+def _chunk_bbox(chunk: TextChunk) -> tuple[float, float, float, float]:
+    """Approximate bounding box of a positioned text run."""
+    width = _chunk_width(chunk)
+    return (chunk.x, chunk.y, chunk.x + width, chunk.y + max(1.0, chunk.size))
+
+
+def _text_overlaps_box(page: PageLayout, box: tuple[float, float, float, float]) -> bool:
+    """Tell whether a text run of the page overlaps a bounding box."""
+    x0, y0, x1, y1 = box
+    for chunk in page.chunks:
+        bx0, by0, bx1, by1 = _chunk_bbox(chunk)
+        if bx1 > x0 and bx0 < x1 and by1 > y0 and by0 < y1:
+            return True
+    return False
+
+
 def detect_text_in_images(pages: list[PageLayout]) -> list[ATSFinding]:
-    """Detect pages whose content is (mostly) an image instead of text."""
+    """Detect pages whose content is (mostly) an image instead of text.
+
+    Three situations are reported as HIGH risk:
+
+    * the page holds images but no extractable text at all (scanned document,
+      the ATS sees a blank page);
+    * the page holds images and almost no extractable text (OCR required);
+    * a dominant image (more than a quarter of the page) carries no adjacent
+      text: the textual content is baked into the picture.
+
+    A small picture next to a normal text — a photo in the header of a CV —
+    is **not** reported: it hides no text from the ATS.
+    """
     findings: list[ATSFinding] = []
 
     for page in pages:
@@ -679,7 +798,9 @@ def detect_text_in_images(pages: list[PageLayout]) -> list[ATSFinding]:
                     evidence=f"{page.image_count} image(s) sur la page, 0 caractère extrait",
                 )
             )
-        elif page.image_count > 0 and text_chars < IMAGE_TEXT_MIN_CHARS:
+            continue
+
+        if page.image_count > 0 and text_chars < IMAGE_TEXT_MIN_CHARS:
             findings.append(
                 _make_finding(
                     code="TEXT_IN_IMAGES",
@@ -693,7 +814,9 @@ def detect_text_in_images(pages: list[PageLayout]) -> list[ATSFinding]:
                     evidence=f"{page.image_count} image(s), {text_chars} caractères extraits",
                 )
             )
-        elif page.image_count == 0 and text_chars == 0:
+            continue
+
+        if page.image_count == 0 and text_chars == 0:
             findings.append(
                 _make_finding(
                     code="TEXT_IN_IMAGES",
@@ -704,6 +827,34 @@ def detect_text_in_images(pages: list[PageLayout]) -> list[ATSFinding]:
                     evidence="Aucun caractère ni image détecté sur la page",
                 )
             )
+            continue
+
+        # Dominant image without any adjacent text: the content is baked in.
+        if not page.layout_known:
+            continue
+        page_area = page.width * page.height
+        if page_area <= 0:
+            continue
+        for box in page.image_boxes:
+            share = (max(0.0, box[2] - box[0]) * max(0.0, box[3] - box[1])) / page_area
+            if share < DOMINANT_IMAGE_AREA_RATIO:
+                continue
+            if _text_overlaps_box(page, box):
+                continue
+            findings.append(
+                _make_finding(
+                    code="TEXT_IN_IMAGES",
+                    risk_level="HIGH",
+                    message=(
+                        "Image occupant une large part de la page sans texte adjacent — "
+                        "le contenu est probablement incorporé dans l'image (OCR requis)"
+                    ),
+                    page=page.page_num,
+                    bbox=box,
+                    evidence=f"image occupant {share:.0%} de la page, aucun texte adjacent",
+                )
+            )
+            break
 
     return findings
 
@@ -774,6 +925,28 @@ def detect_nested_tables(pages: list[PageLayout]) -> list[ATSFinding]:
 # Detector 4 — multiple columns
 # ──────────────────────────────────────────────────────────────────────
 
+def _aligned_column_offsets(lines: list[str]) -> list[int]:
+    """Offsets of the internal column separators shared by several lines.
+
+    Without coordinates, a two-column layout is recognised by several lines
+    separating two fields at the very same offset (a run of spaces or a tab).
+    """
+    offsets: list[int] = []
+    for line in lines:
+        match = re.search(r"\S(\s{3,})\S", line)
+        if match:
+            offsets.append(match.start(1))
+        elif "\t" in line:
+            offsets.append(line.index("\t"))
+    if len(offsets) < 3:
+        return []
+
+    ordered = sorted(offsets)
+    median = ordered[len(ordered) // 2]
+    aligned = [offset for offset in ordered if abs(offset - median) <= 3]
+    return aligned if len(aligned) >= 3 else []
+
+
 def detect_multiple_columns(pages: list[PageLayout]) -> list[ATSFinding]:
     """Detect a layout with more than one column of text."""
     findings: list[ATSFinding] = []
@@ -819,16 +992,19 @@ def detect_multiple_columns(pages: list[PageLayout]) -> list[ATSFinding]:
             continue
 
         lines_text = _lines_of(page.text)
-        tabbed = [line for line in lines_text if line.count("\t") >= 1]
-        if len(tabbed) >= 3 and len(tabbed) > len(lines_text) * 0.3:
+        aligned = _aligned_column_offsets(lines_text)
+        if aligned:
             findings.append(
                 _make_finding(
                     code="MULTIPLE_COLUMNS",
                     risk_level="MEDIUM",
-                    message="Mise en page multi-colonnes détectée (colonnes séparées par tabulations)",
+                    message="Mise en page multi-colonnes détectée (colonnes alignées dans le texte extrait)",
                     page=page.page_num,
                     bbox=None,
-                    evidence=f"{len(tabbed)} lignes{tabbed[0]}",
+                    evidence=(
+                        f"{len(aligned)} lignes séparent deux champs à la position "
+                        f"{sorted(aligned)[len(aligned) // 2]}"
+                    ),
                 )
             )
 

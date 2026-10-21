@@ -246,6 +246,27 @@ def _realistic_pdf() -> bytes:
     return _pdf([draw])
 
 
+def _flattened_cv_pdf() -> bytes:
+    """A CV flattened into a big image, with only a caption left as text.
+
+    The image covers most of the page and no text overlaps it: the ATS only
+    sees the caption, the whole content is baked into the picture.
+    """
+    from PIL import Image
+
+    image = Image.new("RGB", (900, 1100), (240, 240, 240))
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    buffer.seek(0)
+
+    def draw(pdf):
+        pdf.drawImage(ImageReader(buffer), 50, 120, width=480, height=600)
+        pdf.setFont("Helvetica", 11)
+        pdf.drawString(50, 80, "Jean Dupont")
+
+    return _pdf([draw])
+
+
 CLEAN_TXT = """Jean Dupont
 jean.dupont@example.fr
 
@@ -353,6 +374,22 @@ def test_text_in_images_detected_on_docx_with_picture():
     assert _has(result, "TEXT_IN_IMAGES", "HIGH")
 
 
+def test_flattened_cv_is_detected_as_text_in_images():
+    """A CV flattened into a big image hides its content from the ATS."""
+    result = run_ats_check(_pdf_document(_flattened_cv_pdf()))
+    findings = _findings(result, "TEXT_IN_IMAGES")
+    assert findings, "un CV aplati en image doit être signalé"
+    assert findings[0].risk_level == "HIGH"
+    assert findings[0].bbox is not None, "la position de l'image doit être connue"
+
+
+def test_small_photo_does_not_hide_the_text():
+    """A small picture next to a real text hides nothing from the ATS."""
+    result = run_ats_check(_pdf_document(_realistic_pdf()))
+    assert not _has(result, "TEXT_IN_IMAGES")
+    assert result.risk_score == 0
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Detector 3 — tabular structures
 # ──────────────────────────────────────────────────────────────────────
@@ -413,6 +450,29 @@ def test_multiple_columns_detected_on_docx_columns():
 def test_multiple_columns_quiet_on_single_column_pdf():
     result = run_ats_check(_pdf_document(_clean_pdf()))
     assert not _has(result, "MULTIPLE_COLUMNS")
+
+
+def test_multiple_columns_quiet_on_clean_text_only():
+    """A short contact block is not a multi-column layout."""
+    document = DocumentInput(text=CLEAN_TXT, filename="cv.txt", filetype="txt")
+    result = run_ats_check(document)
+    assert not _has(result, "MULTIPLE_COLUMNS")
+    assert result.risk_label == "LOW"
+
+
+def test_multiple_columns_detected_on_text_only_columns():
+    """Without coordinates, aligned internal separators reveal the columns."""
+    text = (
+        "Jean Dupont         jean.dupont@example.fr\n"
+        "Experience            Formation\n"
+        "2020-2023 Dev        2018-2020 Master\n"
+        "TechCorp             Universite Paris-Saclay\n"
+        "Competences          Langues\n"
+        "Python, SQL          Francais, Anglais\n"
+    )
+    document = DocumentInput(text=text, filename="cv.txt", filetype="txt")
+    result = run_ats_check(document)
+    assert _has(result, "MULTIPLE_COLUMNS"), "des colonnes alignées doivent être signalées"
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -659,6 +719,20 @@ def test_run_ats_check_file_reads_a_docx(tmp_path):
     result = run_ats_check_file(str(path))
     assert result.pages_analyzed >= 1
     assert result.parse_errors == []
+
+
+def test_run_ats_check_file_reports_an_unknown_extension(tmp_path):
+    """An unsupported type is reported as a parse error, it never raises."""
+    path = tmp_path / "cv.rtf"
+    path.write_bytes(b"whatever")
+    result = run_ats_check_file(str(path))
+    assert _has(result, "PARSE_ERROR", "HIGH")
+    assert result.parse_errors
+
+
+def test_run_ats_check_file_refuses_a_missing_file(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        run_ats_check_file(str(tmp_path / "absent.pdf"))
 
 
 def test_run_ats_check_does_not_use_the_network(monkeypatch):
