@@ -596,6 +596,122 @@ ROLE_LEVEL_PATTERNS = (
 )
 
 
+#: The words that express each role level in a title.  They tell whether the
+#: level is the **only** difference between two titles: "Software Engineer"
+#: and "Intern Software Engineer" describe two different jobs, because the
+#: second title only adds the word that says the role is an internship.
+ROLE_LEVEL_MARKER_WORDS: dict[str, tuple[str, ...]] = {
+    "intern": (
+        "stage", "stages", "stagi", "stagiaire", "stagiaires", "intern",
+        "interns", "internship", "trainee", "traineeship", "praktikum",
+        "tirocinio",
+    ),
+    "apprentice": (
+        "alternance", "apprentissage", "apprentice", "apprenticeship",
+        "apprenti", "apprentis", "working student", "werkstudent",
+    ),
+    "fixed_term": (
+        "cdd", "fixed term", "contractuel", "contractuelle", "temporaire",
+        "temporary",
+    ),
+    "freelance": ("freelance", "independant"),
+    "junior": ("junior", "jr"),
+    "experienced": (
+        "senior", "sr", "lead", "head", "director", "directeur", "directrice",
+        "manager", "partner", "principal", "vp", "md", "managing director",
+        "expert", "confirmed",
+    ),
+    "analyst": ("analyst", "analyste", "analystes", "off cycle", "off-cycle"),
+    "permanent": ("cdi", "permanent", "full time", "temps plein"),
+}
+
+
+def _compile_marker_pattern(words: tuple[str, ...]) -> re.Pattern[str]:
+    """Compile the pattern of a set of marker words.
+
+    The longest words come first so that "internship" is never read as
+    "intern" followed by a stray "ship".
+    """
+    alternatives = "|".join(
+        re.escape(word) for word in sorted(words, key=len, reverse=True)
+    )
+    return re.compile(rf"\b(?:{alternatives})\b")
+
+
+#: Compiled patterns of the words that express each role level.
+ROLE_LEVEL_MARKER_PATTERNS: dict[str, re.Pattern[str]] = {
+    level: _compile_marker_pattern(words)
+    for level, words in ROLE_LEVEL_MARKER_WORDS.items()
+}
+
+
+#: Fields that carry the contract of the offer, as declared by the connector.
+CONTRACT_FIELDS = ("employment_type", "contract_type", "contract")
+
+#: Contract types and the role level they map to.
+CONTRACT_TYPE_ALIASES = {
+    "cdi": "permanent",
+    "permanent": "permanent",
+    "indefinite": "permanent",
+    "cdd": "fixed_term",
+    "fixed term": "fixed_term",
+    "contractuel": "fixed_term",
+    "contractuelle": "fixed_term",
+    "temporaire": "fixed_term",
+    "temporary": "fixed_term",
+    "freelance": "freelance",
+    "independant": "freelance",
+    "independent": "freelance",
+    "internship": "intern",
+    "intern": "intern",
+    "stage": "intern",
+    "stagiaire": "intern",
+    "student": "intern",
+    "apprenticeship": "apprentice",
+    "alternance": "apprentice",
+    "apprentissage": "apprentice",
+    "apprentice": "apprentice",
+    # "Full time" is deliberately kept apart from "permanent": an internship
+    # is very often advertised as a full-time position.
+    "full time": "full_time",
+    "temps plein": "full_time",
+}
+
+#: Words of a title that state its contract, and the level they map to.
+CONTRACT_TITLE_MARKERS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (ROLE_LEVEL_MARKER_PATTERNS["intern"], "intern"),
+    (ROLE_LEVEL_MARKER_PATTERNS["apprentice"], "apprentice"),
+    (ROLE_LEVEL_MARKER_PATTERNS["fixed_term"], "fixed_term"),
+    (ROLE_LEVEL_MARKER_PATTERNS["freelance"], "freelance"),
+    (re.compile(r"\b(?:cdi|permanent)\b"), "permanent"),
+    (re.compile(r"\b(?:full time|temps plein)\b"), "full_time"),
+)
+
+
+def _contract_kind(job: Mapping[str, Any], raw_title: str) -> str:
+    """Return the kind of contract of a record (``""`` when unknown).
+
+    The contract written in the title wins: it says what the job *is*.  The
+    contract declared by the connector is used when the title says nothing
+    about it.  ``"full time"`` is kept apart from ``"permanent"``: it never
+    contradicts another contract, because an internship is often published
+    as a full-time position.
+    """
+    base = _title_base(raw_title)
+    for pattern, kind in CONTRACT_TITLE_MARKERS:
+        if pattern.search(base):
+            return kind
+    for field_name in CONTRACT_FIELDS:
+        declared = _clean_text(job.get(field_name), 60).lower()
+        if not declared:
+            continue
+        normalized = _squash(re.sub(r"[^\w\s]", " ", declared))
+        kind = CONTRACT_TYPE_ALIASES.get(normalized)
+        if kind:
+            return kind
+    return ""
+
+
 def _declared_role_level(job: Mapping[str, Any]) -> str:
     """Return the role level stated by the connector (``""`` when unknown)."""
     stated = _clean_text(job.get("role_level"), 40).lower()
@@ -637,6 +753,20 @@ def title_contract(title: Any) -> str:
     if level in {"intern", "apprentice", "permanent", "fixed_term", "freelance"}:
         return level
     return ""
+
+
+def _title_without_level_marker(title: Any, level: str) -> str:
+    """Return the canonical title without the words that express its level.
+
+    ``"Intern Software Engineer"`` becomes ``"software engineer"``: the
+    title that says what the job *is*, without the word that says who it is
+    for.
+    """
+    base = _title_base(title)
+    pattern = ROLE_LEVEL_MARKER_PATTERNS.get(level)
+    if pattern is not None:
+        base = _squash(pattern.sub(" ", base))
+    return _title_canonical_from_base(base)
 
 
 def title_seniority(title: Any) -> str:
@@ -1210,6 +1340,8 @@ class _Record:
     title: str
     concept: str
     level: str
+    level_from_title: bool
+    contract: str
     city: str
     country: str
     digits: str
@@ -1284,6 +1416,7 @@ def _build_record(index: int, job: Mapping[str, Any]) -> _Record:
     raw_title = _clean_text(job.get("title"), 300)
     base = _title_base(raw_title)
     declared_level = _declared_role_level(job)
+    title_level = _role_level_from_base(base)
     canonical_title = _title_canonical_from_base(base)
     canonical_url = canonicalize_url(job.get("official_url") or job.get("url") or "")
     company = company_canonical(job.get("company"))
@@ -1304,7 +1437,9 @@ def _build_record(index: int, job: Mapping[str, Any]) -> _Record:
         raw_title=raw_title,
         title=canonical_title,
         concept=_title_concept_from_raw(_raw_title_text(raw_title)),
-        level=declared_level or _role_level_from_base(base),
+        level=declared_level or title_level,
+        level_from_title=not declared_level and bool(title_level),
+        contract=_contract_kind(job, raw_title),
         city=city,
         country=_canonical_country(job.get("country")),
         digits=_digit_signature(canonical_title),
@@ -1330,6 +1465,7 @@ REASON_CLUSTER = "company_title_location_cluster"
 REASON_RECYCLED_ID = "recycled_identifier_conflict"
 REASON_COMPANY = "company_conflict"
 REASON_ROLE_LEVEL = "role_level_conflict"
+REASON_CONTRACT = "contract_conflict"
 REASON_COHORT = "cohort_conflict"
 REASON_START_DATE = "start_date_conflict"
 REASON_CITY = "city_conflict"
@@ -1430,6 +1566,56 @@ def _titles_are_compatible(left: _Record, right: _Record) -> bool:
     return similarity >= TITLE_SIMILARITY_THRESHOLD
 
 
+def _level_is_the_only_difference(left: _Record, right: _Record) -> bool:
+    """Tell whether the role level is the only difference between two titles.
+
+    "Software Engineer" and "Intern Software Engineer" describe two
+    different jobs: the second title only adds the word that says the role
+    is an internship.  The rule only fires when the titles are otherwise
+    identical, so that two titles that merely share a level word are never
+    refused.
+
+    A level **declared** by the connector never fires the rule: a board may
+    declare "intern" on a record whose title simply does not repeat the
+    word.
+    """
+    if left.level and not right.level:
+        marked, plain = left, right
+    elif right.level and not left.level:
+        marked, plain = right, left
+    else:
+        return False
+    if not marked.level_from_title:
+        return False
+    marked_tokens = _content_tokens(
+        _title_without_level_marker(marked.raw_title, marked.level)
+    )
+    plain_tokens = _content_tokens(
+        _title_without_level_marker(plain.raw_title, plain.level)
+    )
+    if not marked_tokens or not plain_tokens:
+        return False
+    return marked_tokens == plain_tokens
+
+
+def _contracts_conflict(left: _Record, right: _Record) -> bool:
+    """Tell whether two records state two different contracts.
+
+    "CDI" and "CDD" are two different jobs, even when the titles are
+    identical.  ``"full time"`` never conflicts: an internship is often
+    published as a full-time position.
+    """
+    kind_left = left.contract
+    kind_right = right.contract
+    if not kind_left or not kind_right:
+        return False
+    if kind_left == kind_right:
+        return False
+    if "full_time" in {kind_left, kind_right}:
+        return False
+    return True
+
+
 def match_records(a: Mapping[str, Any], b: Mapping[str, Any]) -> dict[str, Any]:
     """Determine if two records represent the same job posting.
 
@@ -1489,6 +1675,17 @@ def _match_records(
     # 3. Role level.  A stage and a permanent analyst role are two jobs.
     if left.level and right.level and left.level != right.level:
         return refuse(REASON_ROLE_LEVEL)
+    if _level_is_the_only_difference(left, right):
+        # One title says what the job is, the other one adds the word that
+        # says who the job is for ("Software Engineer" / "Intern Software
+        # Engineer"): two different jobs.
+        return refuse(REASON_ROLE_LEVEL)
+
+    # 3b. Contract.  Two records that state two different contracts describe
+    #     two different jobs ("CDI" against "CDD"), even when their titles
+    #     are identical.
+    if _contracts_conflict(left, right):
+        return refuse(REASON_CONTRACT)
 
     # 4. Cohort.  Two titles carrying different digits describe two
     #    different editions of the same programme.
@@ -1801,6 +1998,35 @@ def _record_weight(record: Mapping[str, Any]) -> tuple[int, int, float, int, int
     return (trust, tier, freshness, priority, verified, completeness)
 
 
+def _election_tiebreak(record: Mapping[str, Any]) -> tuple[str, str, str, str]:
+    """Return the deterministic tie-break of an election.
+
+    Two records of the same source can weigh exactly the same.  The tie is
+    then broken on the identity of the record, never on the order in which
+    the records were received: the same collection always elects the same
+    representative.
+    """
+    source_name = _clean_text(record.get("source_name"), 80)
+    source_id = _clean_text(record.get("source_id"), 240)
+    external_id = _clean_text(record.get("external_id") or record.get("externalId"), 240)
+    official_url = _clean_text(record.get("official_url") or record.get("url"), 2_000)
+    return (source_name, source_id, external_id, official_url)
+
+
+def _election_key(record: Mapping[str, Any]) -> tuple[Any, ...]:
+    """Return the sort key of an election: the weight, then the tie-break."""
+    trust, tier, freshness, priority, verified, completeness = _record_weight(record)
+    return (
+        -trust,
+        -tier,
+        -freshness,
+        -priority,
+        -verified,
+        -completeness,
+        _election_tiebreak(record),
+    )
+
+
 def choose_best(records: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
     """Choose the record that represents a merged group.
 
@@ -1810,10 +2036,13 @@ def choose_best(records: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
 
     The user relevance score is never read: it cannot decide which view of
     the offer survives.
+
+    The election never depends on the order in which the records are given:
+    a tie is broken on the identity of the record.
     """
     if not records:
         raise ValueError("choose_best() needs at least one record.")
-    return max(records, key=_record_weight)
+    return min(records, key=_election_key)
 
 
 def _detect_conflicts(records: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, str]]:
@@ -1910,6 +2139,9 @@ def _build_groups(
             name = member.source_name
             if name and name not in merged_from:
                 merged_from.append(name)
+        # The list of the absorbed sources is sorted: it describes the same
+        # thing whatever the order in which the records were received.
+        merged_from.sort()
         cluster_reasons: list[str] = []
         for index in indexes:
             for reason in reasons.get(index, []):

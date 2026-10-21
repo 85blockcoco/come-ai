@@ -1,8 +1,8 @@
 # SPEC-SK-06 — Déduplication multi-sources avec conservation des preuves
 
-**Mission** : CVBOOST-27 (ordre `cvboost-27-1792606659`, revérification `cvboost-27-1792613557`, **revérification 2 `cvboost-27-1792615721`**)
+**Mission** : CVBOOST-27 (ordre `cvboost-27-1792606659`, revérification `cvboost-27-1792613557`, **revérification 2 `cvboost-27-1792615721`**, **passe 3 `cvboost-27-1792617747`**)
 **Branche de mission** : `agent/spec-sk06-dedup`
-**Branche de travail** : `worker/cvboost-27-1792606659` / `worker/cvboost-27-1792613557` / `worker/cvboost-27-1792615721`
+**Branche de travail** : `worker/cvboost-27-1792606659` / `worker/cvboost-27-1792613557` / `worker/cvboost-27-1792615721` / `worker/cvboost-27-1792617747`
 **Date** : 2026-10-21
 **Statut** : livrée, vérifiée, poussée
 
@@ -424,3 +424,119 @@ corpus étiqueté et la mesure de précision / rappel.
 Les points d'attention de §7 restent valides : suppression du doublon du lot
 A à la fusion, raccordement de `source_trust` côté application, branchement
 de `discover_stage_offers()` dans la boucle de collecte.
+
+---
+
+## 10. Troisième passe (ordre `cvboost-27-1792617747`)
+
+La mission a été relancée une troisième fois alors que le module était déjà
+livré, poussé et **non fusionné** dans `main`. Cette passe n'a **pas** créé
+une v3 de plus : elle a d'abord **recherché le lot le plus avancé** — et le
+lot avancé n'était pas celui du départ.
+
+### 10.1 Recherche préalable : le lot a changé entre-temps
+
+Le premier reflexe a été de reprendre `3b3f7df` (le lot de la deuxième
+passe, connu au moment de la rédaction de la consigne). Un `git fetch` a
+révélé que **`origin/agent/spec-sk06-dedup` avait avancé de 3 commits**
+pendant la mission (ordre `cvboost-27-1792615721`) :
+
+| Commit | Contenu |
+|--------|---------|
+| `25976bd` | **fix** : un lien partagé ne fusionne plus deux rôles différents (`_titles_are_compatible`) |
+| `340f8a1` | **test** : 6 cas de corpus + 6 tests adversariaux sur le lien partagé |
+| `cfc9104` | **docs** : rapport de la deuxième revérification |
+
+Ce lot est **meilleur** que celui connu au départ : il corrige une fuite
+importante (page carrières commune) et **mémorise** les normaliseurs
+(500 offres : 311 ms → 135 ms). La branche de mission a donc été
+**repositionnée sur `cfc9104`** (`git reset --hard origin/agent/spec-sk06-dedup`,
+puis re-application du travail de cette passe), et non sur `3b3f7df`.
+
+> Conséquence : le travail de la troisième passe s'appuie sur le module
+> **avec** la correction du lien partagé et **avec** la mémoïsation. Les
+> trois défauts ci-dessous ont été cherchés dans ce module-là.
+
+### 10.2 Ce que la campagne adversariale a trouvé (3 défauts réels)
+
+| # | Défaut trouvé | Gravité | Correction |
+|---|---------------|---------|------------|
+| 5 | **Le niveau de rôle n'était lu que d'un côté.** Le conflit de niveau n'était détecté que si les **deux** niveaux étaient connus et différents. Un titre qui porte le marqueur face à un titre qui ne le porte pas (« Software Engineer » contre « Intern Software Engineer », « Data Engineer » contre « Senior Data Engineer ») passait par le raccourci du concept métier et **était fusionné** : un stage et un poste permanent devenaient une seule offre. Le garde-fou « les rôles différents ne sont jamais fusionnés » n'était donc tenu que partiellement — exactement le cas « Senior Dev » / « Junior Dev » de la mission, mais dans sa forme asymétrique. | **Élevée** — garde-fou non négociable | `_level_is_the_only_difference()` : le refus ne part que si le **marqueur de niveau est la seule différence** entre les deux titres (le reste des mots est identique). Un niveau **déclaré** par le connecteur ne déclenche jamais cette règle : une board peut déclarer « intern » sur un titre qui ne répète pas le mot (cas `level_explicit_intern_wins`, qui doit continuer à fusionner). |
+| 6 | **Le contrat déclaré n'était jamais lu.** `employment_type` n'était lu que comme contradiction *visible* (`CONFLICT_FIELDS`), jamais comme critère de décision : deux offres au même titre, l'une en CDI et l'autre en CDD, étaient **fusionnées**. | **Élevée** — garde-fou non négociable | `_contract_kind()` + `_contracts_conflict()` : le contrat écrit dans le titre l'emporte, sinon le contrat déclaré est lu ; deux contrats différents (`CDI` / `CDD` / `Freelance`) refusent la fusion (`contract_conflict`). « Full time » est tenu à part de « permanent » : un stage est très souvent publié comme un poste à temps plein. |
+| 7 | **Le représentant élu dépendait de l'ordre de réception.** `choose_best()` faisait un `max()` sur le poids : à poids égal (même source, même fraîcheur, même complétude), le premier enregistrement reçu l'emportait. La même collection d'offres dédupliquée dans un ordre différent élisait donc un représentant différent — et un `dedup_id`, un `merged_from` et un contenu d'offre différents. Le module annonçait pourtant « the same input always produces the same output ». | **Élevée** — déterminisme | `_election_key()` : le poids est suivi d'un départage déterministe sur l'identité de l'enregistrement (`source_name`, `source_id`, `external_id`, URL). `merged_from` est **trié**. |
+
+> Les trois défauts ont été corrigés **dans le module**, jamais dans les
+> attentes : le corpus étiqueté (59 enregistrements) reste identique et la
+> précision / le rappel / le F1 restent à **1.000**.
+
+### 10.3 Ce qui a été vérifié et n'est pas un défaut
+
+- **Le contrat déclaré contre le contrat du titre** : le titre l'emporte
+  (`test_the_contract_written_in_the_title_wins_over_the_declared_one`).
+  Un enregistrement qui dit « Intern » et déclare « CDI » est un stage.
+- **Un niveau déclaré par le connecteur** ne déclenche jamais le refus
+  « le niveau est la seule différence » : c'est le cas
+  `level_explicit_intern_wins` du corpus, qui doit continuer à fusionner.
+- **Le niveau asymétrique sans conflit de mots** : « Investment Banking
+  Program » contre « Investment Banking Intern » continue de fusionner
+  (le marqueur n'est pas la seule différence), comme l'exige le corpus.
+- **La correction du lien partagé de la deuxième passe** (`_titles_are_compatible`)
+  reste intacte : mes trois corrections s'ajoutent à la décision, aucune ne
+  l'affaiblit.
+- **La symétrie de la décision** et l'**absence d'horloge, de réseau et de
+  modèle** sont revérifiées sur les 15 nouveaux cas.
+
+### 10.4 Tests ajoutés
+
+- **15 cas du corpus de paires** (133 paires au total) :
+  - `role_level` (8) : le marqueur de niveau comme seule différence
+    (intern, senior, junior, CDD), le niveau déclaré qui ne refuse jamais,
+    le niveau asymétrique qui fusionne encore, la valeur déclarée inconnue
+    qui est ignorée, le niveau qui l'emporte sur la cohorte ;
+  - `contract` (7) : CDI contre CDD, CDI contre Freelance, CDI contre un
+    titre de stage, CDI contre CDI, « full time » qui ne contredit jamais,
+    un contrat contre un contrat manquant, CDI contre CDD écrits dans le
+    titre.
+- **18 tests adversariaux** : le niveau comme seule différence (6 cas
+  paramétrés), le niveau qui n'est pas la seule différence, le niveau
+  déclaré, les contrats qui diffèrent (4 cas paramétrés), le contrat
+  identique, « full time », le contrat manquant, le titre qui l'emporte sur
+  la déclaration, le représentant indépendant de l'ordre, les sources
+  absorbées listées dans un ordre stable.
+
+### 10.5 Validation de la troisième passe
+
+| Commande | Résultat |
+|----------|----------|
+| `.venv/bin/python -m pytest -q tests/test_job_deduplication.py` | **184 passed** |
+| `.venv/bin/python -m pytest -q tests/test_job_deduplication_adversarial.py` | **59 passed** |
+| `.venv/bin/python -m pytest -q tests/test_job_deduplication_legacy_contract.py` | **64 passed** |
+| `.venv/bin/python -m pytest -q` (suite complète) | **1731 passed, 1 skipped** (base `f5b22f2` 1424 + 307 SK-06, **zéro régression**) |
+| `.venv/bin/python -m ruff check .` | **All checks passed** |
+| `./checklist_codex.sh all` | **TOUT VERT** |
+| `git diff --check` | **propre** |
+
+### 10.6 Limite connue (non corrigée, documentée)
+
+Un enregistrement **sans ville** (`city` vide) est refusé face à un
+enregistrement qui porte une ville (`city_conflict`). Un champ manquant
+n'est pas une contradiction — le corpus l'admet pour le pays
+(`city_missing_country_is_accepted`) — mais le regroupement par
+`(entreprise, ville)` ne compare jamais deux enregistrements de villes
+différentes. Corriger ce point demanderait de comparer chaque offre à toutes
+les offres de son entreprise : le coût passerait de linéaire à quadratique
+sur un gros lot, pour un gain de rappel marginal (les connecteurs donnent
+presque toujours une ville). **La limite est assumée et documentée** plutôt
+que contournée.
+
+### 10.7 Points d'attention pour la fusion
+
+1. `agent/spec-sk06-dedup` porte maintenant **les trois passes** (reprise
+   du lot de la deuxième passe + corrections de la troisième). C'est la
+   branche à relire et à fusionner dans `main`.
+2. Le lot A (`career/cv_quality/job_deduplication.py`, branche
+   `agent/cvboost-07-dedup`) doit toujours être supprimé à la fusion :
+   deux implémentations cohabiteraient.
+3. `merged_from` est désormais **trié** et l'offre fusionnée porte
+   `merged_provenances` (§9.3) : les sources secondaires restent
+   consultables depuis l'offre elle-même.
