@@ -569,6 +569,50 @@
             <p>Garde ici les informations que tu veux réutiliser dans tes recherches et brouillons. Tout reste local tant que tu ne choisis pas explicitement un mode IA.</p>
           </header>
           <div id="profile-content" class="single-view-content"></div>
+
+          <section id="candidate-profile-panel" class="panel candidate-profile-panel" aria-labelledby="candidate-profile-title">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Profil candidat structuré</p>
+                <h3 id="candidate-profile-title">Valider chaque information</h3>
+              </div>
+              <span class="local-tag">Aucune approbation automatique</span>
+            </div>
+            <p class="panel-help">Ton CV est lu localement, puis découpé en faits (compétences, expériences, dates, diplômes). Chaque fait garde sa source : page, position exacte et citation. Rien n’est approuvé à ta place : tant qu’un fait n’est pas validé, il ne peut justifier aucune candidature. Un PDF scanné passe par l’OCR local macOS, et son résultat reste une proposition.</p>
+
+            <details class="profile-import-details">
+              <summary>Proposer des faits à partir d’un document ou d’un texte</summary>
+              <div class="form-stack top-gap">
+                <form id="candidate-profile-document-form" class="form-stack" enctype="multipart/form-data">
+                  <label>Document local (PDF, DOCX, TXT, MD)
+                    <input id="candidate-profile-document-file" name="document" type="file" accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown" required />
+                  </label>
+                  <button id="candidate-profile-document-submit" class="secondary-button" type="submit">Lire localement et proposer les faits</button>
+                </form>
+                <form id="candidate-profile-text-form" class="form-stack">
+                  <label>Texte copié depuis ton profil
+                    <textarea id="candidate-profile-text-value" name="text" rows="5" maxlength="200000" placeholder="Colle ici un texte que tu as le droit d’utiliser."></textarea>
+                  </label>
+                  <button id="candidate-profile-text-submit" class="secondary-button" type="submit">Proposer les faits de ce texte</button>
+                </form>
+                <label class="candidate-profile-replace-label">
+                  <input id="candidate-profile-replace" type="checkbox" />
+                  Remplacer les propositions déjà enregistrées au lieu de les compléter
+                </label>
+              </div>
+            </details>
+
+            <p id="candidate-profile-status" class="panel-help" role="status"></p>
+            <div id="candidate-profile-summary" class="candidate-profile-summary" aria-live="polite"></div>
+            <div id="candidate-profile-usable" class="candidate-profile-usable" aria-live="polite"></div>
+            <div id="candidate-profile-facts" class="candidate-profile-facts" aria-live="polite"></div>
+            <p id="candidate-profile-empty" class="empty-state">Aucune proposition pour l’instant. Importe un document ou colle ton texte pour obtenir des faits à vérifier.</p>
+
+            <div class="inline-actions">
+              <a id="candidate-profile-export" class="secondary-button link-button" href="/api/career/candidate-profile/export" download hidden>Exporter mon profil candidat</a>
+              <button id="candidate-profile-delete" class="danger-button" type="button" hidden>Supprimer le profil candidat</button>
+            </div>
+          </section>
         </section>
 
         <section id="view-settings" class="career-view" tabindex="-1" hidden aria-labelledby="settings-title">
@@ -734,5 +778,6 @@
     </div>
     <script src="/career-static/cv_plan.js" defer></script>
     <script src="/career-static/career.js" defer></script>
+    <script src="/career-static/js/profile-builder.js" defer></script>
   </body>
 </html>

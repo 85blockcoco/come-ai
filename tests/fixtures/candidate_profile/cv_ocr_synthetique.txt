@@ -1,0 +1,15 @@
+Jeanne Durrand
+jeanne.durand@example.org | +33 6 12 34 56 78
+
+EXPERTENCE
+2021-2024 | Doto Anolyst | Banque H0rizon
+Cornstruction de tobleaux de bord Power B1.
+
+FORMATION
+Moster Data Science, Universite Exemple Lyon (2021)
+
+COMPETENCES
+Pyth0n, SQL, Power B1, ExceI
+
+LANGUES
+AngIais - Cl, Francais - Natif

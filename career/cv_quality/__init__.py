@@ -31,7 +31,7 @@ from .models import (
     STATUS_RISK,
     STATUS_UNKNOWN,
 )
-from .parser import extract_text_from_bytes, extract_text_from_file
+from .parser import PageText, extract_pages_from_bytes, extract_text_from_bytes, extract_text_from_file
 from .structure import analyze_cv
 
 __all__ = [
@@ -54,4 +54,6 @@ __all__ = [
     # Parser helpers
     "extract_text_from_file",
     "extract_text_from_bytes",
+    "extract_pages_from_bytes",
+    "PageText",
 ]

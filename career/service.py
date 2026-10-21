@@ -119,6 +119,18 @@ from .profile_import import (
     PROFILE_IMPORT_KINDS,
     parse_profile_text,
 )
+from .candidate_profile import (
+    EXTRACTION_METHOD_EMBEDDED,
+    EXTRACTION_METHOD_OCR,
+    CandidateFact,
+    CandidateProfile,
+    ProfileRuleError,
+    decide_fact,
+    merge_facts,
+    validate_profile,
+)
+from .profile_builder import propose_profile_facts
+from .cv_quality.parser import extract_pages_from_bytes
 from .profile_readiness import assess_profile_readiness
 from .qualification_persistence import (
     decode_qualification_snapshot,
@@ -131,6 +143,11 @@ SCHEMA_VERSION = 8
 # The Stage Hunter brief lives in career_settings as one JSON value: no
 # schema migration, and it is exported with the rest of the local settings.
 STAGE_SEARCH_SETTING_KEY = "stage_search_brief"
+# The structured candidate profile (facts reviewed one by one) lives in the
+# same table for the same reason: adding it must never rewrite the schema of
+# an existing local database.
+CANDIDATE_PROFILE_SETTING_KEY = "candidate_profile_v1"
+MAX_CANDIDATE_PROFILE_SOURCE_CHARS = 200_000
 DISCOVERY_CACHE_SECONDS = 10 * 60
 
 
@@ -1285,6 +1302,317 @@ class CareerService:
                     raise UserFacingError("Le document de profil n’a pas pu être supprimé.") from error
             connection.execute("DELETE FROM profile_imports WHERE id = ?", (identifier,))
             self._audit(connection, "profile_import_deleted", "profile_import", identifier)
+
+    # ------------------------------------------------------------------
+    # Structured candidate profile: facts reviewed one by one.
+    #
+    # The structured profile lives in ``career_settings`` as one JSON value:
+    # no schema migration, and it is exported with the rest of the local
+    # settings.  A fact is only usable for a candidacy once a person has
+    # approved it or corrected it; a proposal, a rejection and a suspension
+    # never justify anything.
+    # ------------------------------------------------------------------
+
+    def get_candidate_profile(self) -> dict[str, Any]:
+        """Return the structured profile and the state of its review."""
+        return self._serialize_candidate_profile(self._load_candidate_profile())
+
+    def build_candidate_profile_proposals(
+        self,
+        *,
+        text: str,
+        pages: list[str] | None = None,
+        source_name: str = "",
+        source_kind: str = "",
+        extraction_method: str = EXTRACTION_METHOD_EMBEDDED,
+        stored_filename: str = "",
+        replace: bool = False,
+    ) -> dict[str, Any]:
+        """Propose facts read from a local document.
+
+        Nothing is approved here: every proposal keeps the ``proposed`` status
+        and the exact place it was read from.  An OCR result is proposed like
+        any other text and is never approved automatically.
+        """
+        source_text = str(text or "")
+        if not source_text.strip():
+            raise UserFacingError("Le document ne contient pas de texte exploitable.")
+        if len(source_text) > MAX_CANDIDATE_PROFILE_SOURCE_CHARS:
+            source_text = source_text[:MAX_CANDIDATE_PROFILE_SOURCE_CHARS]
+        if extraction_method not in (EXTRACTION_METHOD_EMBEDDED, EXTRACTION_METHOD_OCR):
+            extraction_method = EXTRACTION_METHOD_EMBEDDED
+
+        now = utc_now()
+        proposals = propose_profile_facts(
+            source_text,
+            pages=pages,
+            source_name=clean_text(source_name, limit=160),
+            source_kind=clean_text(source_kind, limit=40),
+            extraction_method=extraction_method,
+            created_at=now,
+        )
+        if not proposals:
+            raise UserFacingError(
+                "Aucune proposition n’a pu être lue dans ce document. Vérifie qu’il contient bien des rubriques."
+            )
+
+        profile = self._load_candidate_profile()
+        previous_file = profile.source_file
+        if replace:
+            facts: tuple[CandidateFact, ...] = tuple(proposals)
+        else:
+            facts = merge_facts(profile.facts, proposals)
+        updated = CandidateProfile(
+            id=profile.id,
+            facts=facts,
+            source_name=clean_text(source_name, limit=160) or profile.source_name,
+            source_kind=clean_text(source_kind, limit=40) or profile.source_kind,
+            source_file=clean_text(stored_filename, limit=180) or profile.source_file,
+            extraction_method=extraction_method,
+            created_at=profile.created_at or now,
+            updated_at=now,
+        )
+        self._store_candidate_profile(updated)
+        if previous_file and previous_file != updated.source_file:
+            self._delete_candidate_source_file(previous_file)
+        return self._serialize_candidate_profile(updated)
+
+    def build_candidate_profile_from_document(
+        self,
+        *,
+        original_name: str,
+        temporary_path: Path,
+        content_sha256: str,
+        size_bytes: int,
+        replace: bool = False,
+    ) -> dict[str, Any]:
+        """Store a local document privately and propose the facts read from it."""
+        safe_name = self._safe_profile_source_name(original_name, fallback="document-profil")
+        suffix = Path(safe_name).suffix.lower()
+        if suffix not in ALLOWED_PROFILE_SUFFIXES:
+            raise UserFacingError("Le profil doit être un PDF, DOCX, TXT ou Markdown.")
+        if not content_sha256 or len(content_sha256) != 64:
+            raise UserFacingError("Le document de profil est invalide.")
+        if not isinstance(size_bytes, int) or not 0 < size_bytes <= MAX_PROFILE_IMPORT_BYTES:
+            raise UserFacingError("Document de profil trop volumineux (maximum 10 Mo).")
+        temporary = temporary_path.resolve()
+        if temporary.parent != self.documents_dir.resolve() or temporary.suffix != ".part" or not temporary.is_file():
+            raise UserFacingError("Import de document de profil invalide.")
+        if temporary.stat().st_size != size_bytes:
+            raise UserFacingError("Le document de profil est incomplet ou invalide.")
+
+        # The name starts with ``profile_`` so the existing "delete my Career
+        # data" cleanup removes it with the other private profile sources.
+        destination = self.documents_dir / f"profile_candidat_{uuid.uuid4().hex}{suffix}"
+        try:
+            with temporary.open("rb") as source:
+                signature = source.read(8_192)
+            if suffix == ".pdf" and not signature.startswith(b"%PDF-"):
+                raise UserFacingError("Le fichier PDF de profil est invalide.")
+            if suffix in {".txt", ".md"} and b"\x00" in signature:
+                raise UserFacingError("Le document texte de profil semble binaire.")
+            temporary.replace(destination)
+            try:
+                os.chmod(destination, 0o600)
+            except OSError:
+                pass
+            text, pages, extraction_method, ocr_pages, warnings = self._read_candidate_source(
+                destination, suffix
+            )
+            result = self.build_candidate_profile_proposals(
+                text=text,
+                pages=pages,
+                source_name=safe_name,
+                source_kind="cv",
+                extraction_method=extraction_method,
+                stored_filename=destination.name,
+                replace=replace,
+            )
+            result["ocr_pages"] = ocr_pages
+            result["warnings"] = warnings
+            return result
+        except Exception:
+            destination.unlink(missing_ok=True)
+            raise
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def decide_candidate_fact(
+        self,
+        fact_id: str,
+        *,
+        decision: str,
+        value: str = "",
+        note: str = "",
+    ) -> dict[str, Any]:
+        """Record one explicit human decision on one proposed fact."""
+        profile = self._load_candidate_profile()
+        identifier = clean_text(fact_id, limit=120)
+        fact = profile.fact(identifier)
+        if fact is None:
+            raise UserFacingError("Ce fait de profil n’existe pas.")
+        now = utc_now()
+        try:
+            updated_fact = decide_fact(
+                fact,
+                decision=clean_text(decision, limit=40),
+                value=value,
+                note=note,
+                decided_at=now,
+            )
+        except ProfileRuleError as error:
+            raise UserFacingError(str(error)) from error
+        updated = replace(profile.with_fact(updated_fact), updated_at=now)
+        self._store_candidate_profile(updated)
+        return self._serialize_candidate_profile(updated)
+
+    def require_candidate_profile_evidence(self) -> dict[str, Any]:
+        """Return the facts that may justify a candidacy, or refuse them.
+
+        This is the contract the matching pipeline (SK-11) must use: a fact
+        that is only proposed, rejected or suspended can never be used to
+        justify a candidacy.  When nothing was validated yet, the request is
+        refused instead of silently returning an empty profile.
+        """
+        profile = self._load_candidate_profile()
+        usable = profile.usable_facts
+        if not usable:
+            raise UserFacingError(
+                "Aucun fait du profil candidat n’a encore été validé : approuve ou corrige "
+                "au moins un fait avant de l’utiliser pour justifier une candidature."
+            )
+        return {
+            "facts": [fact.to_dict() for fact in usable],
+            "summary": profile.usable_summary(),
+            "updated_at": profile.updated_at,
+        }
+
+    def delete_candidate_fact(self, fact_id: str) -> dict[str, Any]:
+        """Remove one fact from the structured profile."""
+        profile = self._load_candidate_profile()
+        identifier = clean_text(fact_id, limit=120)
+        if profile.fact(identifier) is None:
+            raise UserFacingError("Ce fait de profil n’existe pas.")
+        updated = replace(profile.without_fact(identifier), updated_at=utc_now())
+        self._store_candidate_profile(updated)
+        return self._serialize_candidate_profile(updated)
+
+    def delete_candidate_profile(self) -> dict[str, Any]:
+        """Remove the whole structured profile and the document it came from."""
+        profile = self._load_candidate_profile()
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                "DELETE FROM career_settings WHERE setting_key = ?",
+                (CANDIDATE_PROFILE_SETTING_KEY,),
+            )
+            self._audit(connection, "candidate_profile_deleted", "candidate_profile", profile.id)
+        if profile.source_file:
+            self._delete_candidate_source_file(profile.source_file)
+        return self._serialize_candidate_profile(CandidateProfile())
+
+    def export_candidate_profile(self) -> Path:
+        """Write a portable copy of the structured profile next to the other exports."""
+        profile = self._load_candidate_profile()
+        created = datetime.now().strftime("%Y%m%d-%H%M%S")
+        target = self.export_dir / f"career_profil_candidat_{created}_{uuid.uuid4().hex[:8]}.json"
+        payload = {
+            "profile": profile.to_dict(),
+            "counts": profile.counts(),
+            "usable": profile.usable_summary(),
+            "exported_at": utc_now(),
+        }
+        target.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        try:
+            os.chmod(target, 0o600)
+        except OSError:
+            pass
+        return target
+
+    def _load_candidate_profile(self) -> CandidateProfile:
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT setting_value FROM career_settings WHERE setting_key = ?",
+                (CANDIDATE_PROFILE_SETTING_KEY,),
+            ).fetchone()
+        if not row:
+            return CandidateProfile()
+        try:
+            payload = json.loads(str(row["setting_value"]))
+        except json.JSONDecodeError:
+            return CandidateProfile()
+        return CandidateProfile.from_dict(payload)
+
+    def _store_candidate_profile(self, profile: CandidateProfile) -> None:
+        payload = json.dumps(profile.to_dict(), ensure_ascii=False)
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO career_settings (setting_key, setting_value) VALUES (?, ?)
+                ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value
+                """,
+                (CANDIDATE_PROFILE_SETTING_KEY, payload),
+            )
+            self._audit(connection, "candidate_profile_updated", "candidate_profile", profile.id)
+
+    def _delete_candidate_source_file(self, stored_filename: str) -> None:
+        if not stored_filename:
+            return
+        try:
+            self._profile_document_path(stored_filename).unlink(missing_ok=True)
+        except (OSError, UserFacingError):
+            pass
+
+    def _read_candidate_source(
+        self, path: Path, suffix: str
+    ) -> tuple[str, list[str], str, int, list[str]]:
+        """Read a private document and return its text, its pages and its method."""
+        filetype = {".pdf": "pdf", ".docx": "docx", ".txt": "txt", ".md": "txt"}.get(suffix, "txt")
+        warnings: list[str] = []
+        ocr_pages = 0
+        text = ""
+        pages: list[str] = []
+        try:
+            page_texts = extract_pages_from_bytes(path.read_bytes(), filetype)
+            text = "\n\n".join(page.text for page in page_texts)
+            pages = [page.text for page in page_texts]
+        except ValueError:
+            text = ""
+            pages = []
+        if suffix == ".pdf" and len(text.strip()) < 120:
+            # A scanned PDF has no usable text layer: the local on-device OCR
+            # reads it, and its result is only ever proposed, never approved.
+            ocr_result: OCRResult = self.ocr.extract_pdf(path)
+            text = ocr_result.text
+            pages = [text] if text else []
+            ocr_pages = ocr_result.pages
+            warnings = list(ocr_result.warnings)
+            extraction_method = EXTRACTION_METHOD_OCR
+        else:
+            extraction_method = EXTRACTION_METHOD_EMBEDDED
+        if not text.strip():
+            raise UserFacingError(
+                "Le document ne contient pas de texte exploitable. Essaie un PDF plus net, un DOCX ou colle le texte."
+            )
+        return text, pages, extraction_method, ocr_pages, warnings
+
+    @staticmethod
+    def _serialize_candidate_profile(profile: CandidateProfile) -> dict[str, Any]:
+        usable = profile.usable_summary()
+        return {
+            "id": profile.id,
+            "source_name": profile.source_name,
+            "source_kind": profile.source_kind,
+            "has_local_file": bool(profile.source_file),
+            "extraction_method": profile.extraction_method,
+            "created_at": profile.created_at,
+            "updated_at": profile.updated_at,
+            "facts": [fact.to_dict() for fact in profile.facts],
+            "counts": profile.counts(),
+            "usable": usable,
+            "usable_facts": [fact.to_dict() for fact in profile.usable_facts],
+            "usable_for_matching": bool(profile.usable_facts),
+            "problems": validate_profile(profile),
+        }
 
     @staticmethod
     def _intake_answers(value: str) -> dict[str, str]:
@@ -4626,6 +4954,9 @@ class CareerService:
     def export_personal_data(self) -> Path:
         created = datetime.now().strftime("%Y%m%d-%H%M%S")
         target = self.export_dir / f"career_donnees_personnelles_{created}_{uuid.uuid4().hex[:8]}.json"
+        # The structured profile is read before the export connection is opened:
+        # it lives in ``career_settings`` and must not be read twice at once.
+        candidate_profile = self._serialize_candidate_profile(self._load_candidate_profile())
         with self._lock, self._connection() as connection:
             preference_rows = connection.execute(
                 "SELECT kind, item_key, label, enabled, priority, scope FROM preference_items ORDER BY kind, priority DESC, label"
@@ -4682,6 +5013,7 @@ class CareerService:
             ).fetchall()
             data = {
                 "profile": self._row_dict(connection.execute("SELECT * FROM candidate_profile WHERE id = 1").fetchone()),
+                "candidate_profile": candidate_profile,
                 "preferences": self._serialize_preferences(preference_rows, settings),
                 "jobs": [self._serialize_job(row) for row in job_rows],
                 "applications": [

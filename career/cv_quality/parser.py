@@ -39,6 +39,21 @@ class VisualBlock:
     page: int = 0
 
 
+@dataclass(frozen=True, slots=True)
+class PageText:
+    """One extracted page and its offsets inside the joined document text.
+
+    The offsets are relative to the text returned by
+    :func:`extract_text_from_bytes`, so a page span always points at the exact
+    passage it holds.
+    """
+
+    page: int
+    text: str
+    start_offset: int
+    end_offset: int
+
+
 def reconstruct_reading_order(
     blocks: list[VisualBlock], *, line_tolerance: float = 6.0
 ) -> str:
@@ -214,13 +229,24 @@ def _extract_pdf(data: bytes) -> tuple[str, int]:
     Raises:
         ValueError: If pypdf is not available or PDF is invalid.
     """
+    page_count, pages = _extract_pdf_pages(data)
+    return "\n\n".join(page_text for _page_number, page_text in pages), page_count
+
+
+def _extract_pdf_pages(data: bytes) -> tuple[int, list[tuple[int, str]]]:
+    """Extract the pages of a PDF, keeping the page number of each text.
+
+    Returns:
+        Tuple of (total_page_count, [(page_index, page_text)]).  Pages whose
+        text cannot be read are skipped, exactly like the joined text does.
+    """
     if not HAS_PYPDF:
         raise ValueError("PDF extraction requires 'pypdf' package. Install with: pip install pypdf")
 
     try:
         reader = pypdf.PdfReader(io.BytesIO(data))
         page_count = len(reader.pages)
-        texts = []
+        pages: list[tuple[int, str]] = []
         for page_number, page in enumerate(reader.pages):
             try:
                 page_text = _extract_positioned_page(page, page_number)
@@ -229,14 +255,57 @@ def _extract_pdf(data: bytes) -> tuple[str, int]:
                     len(page_text.splitlines()) < 0.4 * len(legacy_text.splitlines())
                 ):
                     page_text = legacy_text
-                if page_text:
-                    texts.append(page_text)
             except Exception:
                 # Skip pages that fail to extract
                 continue
-        return "\n\n".join(texts), page_count
+            if page_text:
+                pages.append((page_number, page_text))
+        return page_count, pages
     except Exception as e:
         raise ValueError(f"Failed to parse PDF: {e}") from e
+
+
+def extract_pages_from_bytes(data: bytes, filetype: str) -> list[PageText]:
+    """Extract the pages of a document with their offsets in the joined text.
+
+    The offsets match the text returned by :func:`extract_text_from_bytes`, so
+    a caller can attach a page number to any passage it reads.
+
+    Args:
+        data: Raw file bytes.
+        filetype: One of "txt", "pdf", "docx".
+
+    Returns:
+        The list of pages, in reading order.
+
+    Raises:
+        ValueError: If filetype is unsupported or extraction fails.
+    """
+    if filetype == "txt":
+        text = _extract_txt(data)
+        return [PageText(page=1, text=text, start_offset=0, end_offset=len(text))]
+    if filetype == "docx":
+        text, _page_count = _extract_docx(data)
+        return [PageText(page=1, text=text, start_offset=0, end_offset=len(text))]
+    if filetype != "pdf":
+        raise ValueError(f"Unsupported filetype: {filetype}")
+
+    _page_count, pages = _extract_pdf_pages(data)
+    page_texts: list[PageText] = []
+    offset = 0
+    for page_number, page_text in pages:
+        end_offset = offset + len(page_text)
+        page_texts.append(
+            PageText(
+                page=page_number + 1,
+                text=page_text,
+                start_offset=offset,
+                end_offset=end_offset,
+            )
+        )
+        # The pages are joined with a blank line, exactly like the text.
+        offset = end_offset + 2
+    return page_texts
 
 
 def _extract_docx(data: bytes) -> tuple[str, int]:

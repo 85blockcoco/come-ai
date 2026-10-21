@@ -1,0 +1,18 @@
+Alex Morgan
+alex.morgan@example.org | +44 20 7946 0000
+
+EXPERIENCE
+2022 - Present | Data Analyst | Example Analytics
+Built Power BI dashboards for the finance team.
+
+EDUCATION
+MSc Data Science, Example University (2022)
+
+SKILLS
+Python, SQL, Power BI
+
+LANGUAGES
+English - Native, French - B2
+
+PROJECTS
+Open source validation library (2k+ stars)

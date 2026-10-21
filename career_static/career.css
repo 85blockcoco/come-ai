@@ -541,3 +541,39 @@ button, a, .career-tab { transition: background-color .16s ease, border-color .1
   .application-filters label { flex: 1 1 100%; }
   .application-filters select { width: 100%; }
 }
+
+/* Profil candidat structuré : approbation champ par champ (SK-10). */
+.candidate-profile-panel { display: grid; gap: 13px; margin-top: 16px; padding: 19px; }
+.candidate-profile-panel .panel-heading { justify-content: space-between; gap: 14px; }
+.candidate-profile-panel h3 { margin-top: 3px; font-size: 1.02rem; }
+.candidate-profile-replace-label { display: flex; align-items: flex-start; gap: 8px; color: var(--muted); font-size: .78rem; line-height: 1.4; }
+.candidate-profile-replace-label input { width: auto; margin-top: 2px; }
+.candidate-profile-summary { display: flex; flex-wrap: wrap; gap: 8px; }
+.candidate-profile-counter { display: inline-flex; align-items: baseline; gap: 6px; padding: 7px 11px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-soft); font-size: .74rem; }
+.candidate-profile-counter strong { font-size: .95rem; }
+.candidate-profile-counter span { color: var(--muted); }
+.candidate-profile-usable { display: grid; gap: 8px; padding: 13px; border: 1px solid #cbead8; border-radius: 13px; background: var(--good-soft); }
+.candidate-profile-usable h4 { font-size: .8rem; letter-spacing: .01em; }
+.candidate-profile-usable ul { margin: 5px 0 0; padding-inline-start: 18px; color: var(--ink); font-size: .79rem; line-height: 1.5; }
+.candidate-profile-facts { display: grid; gap: 11px; }
+.candidate-fact { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: #fff; }
+.candidate-fact[data-status="approved"], .candidate-fact[data-status="modified"] { border-color: #b9dfcb; background: var(--good-soft); }
+.candidate-fact[data-status="rejected"] { opacity: .72; background: var(--danger-soft); }
+.candidate-fact[data-status="suspended"] { background: var(--warning-soft); }
+.candidate-fact-head { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.candidate-fact-kind { color: var(--accent); font-size: .68rem; font-weight: 780; letter-spacing: .08em; text-transform: uppercase; }
+.candidate-fact-status { padding: 3px 9px; border-radius: 999px; color: var(--muted); background: var(--surface-soft); font-size: .71rem; font-weight: 700; }
+.candidate-fact-status[data-status="approved"], .candidate-fact-status[data-status="modified"] { color: var(--accent-dark); background: #d5f0e2; }
+.candidate-fact-status[data-status="rejected"] { color: var(--danger); background: #fbdad7; }
+.candidate-fact-status[data-status="suspended"] { color: var(--warning); background: #fbe8c9; }
+.candidate-fact-tag { padding: 3px 9px; border-radius: 999px; color: var(--warning); background: var(--warning-soft); font-size: .71rem; font-weight: 700; }
+.candidate-fact-label { margin: 0; font-size: .92rem; font-weight: 680; line-height: 1.35; }
+.candidate-fact-value { margin: 0; color: var(--muted); font-size: .8rem; line-height: 1.45; white-space: pre-line; }
+.candidate-fact-evidence { padding: 9px 11px; border: 1px dashed var(--border); border-radius: 11px; background: var(--surface-muted); }
+.candidate-fact-evidence summary { color: var(--accent-dark); cursor: pointer; font-size: .76rem; font-weight: 700; }
+.candidate-fact-evidence blockquote { margin: 8px 0 0; padding-inline-start: 10px; border-inline-start: 3px solid var(--accent-soft); color: var(--ink); font-size: .78rem; line-height: 1.5; }
+.candidate-fact-offsets { margin: 6px 0 0; color: var(--faint); font-size: .71rem; }
+.candidate-fact-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.candidate-fact-input { flex: 1 1 220px; min-height: 36px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 9px; font-size: .8rem; }
+.candidate-fact-actions .quiet-button[data-decision="approved"] { color: var(--accent-dark); border-color: #a9d8bd; background: var(--accent-soft); }
+.danger-text { color: var(--danger); }

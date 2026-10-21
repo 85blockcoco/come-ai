@@ -1,0 +1,21 @@
+Jeanne Durand
+jeanne.durand@example.org | +33 6 12 34 56 78
+linkedin.com/in/jeanne-durand
+
+EXPERIENCE
+2021-2024 | Data Analyst | Banque Horizon
+Construction de tableaux de bord Power BI pour la direction financière.
+2020 | Stage | Startup Pixel
+Analyse de données clients et automatisation des rapports mensuels.
+
+FORMATION
+Master Data Science, Universite Exemple Lyon (2021)
+
+COMPETENCES
+Python, SQL, Power BI, Excel
+
+LANGUES
+Anglais - C1, Francais - Natif
+
+CERTIFICATIONS
+Microsoft PL-300 (2023)

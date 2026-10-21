@@ -115,6 +115,17 @@ _SECTION_ALIASES: dict[str, tuple[str, ...]] = {
     ),
 }
 
+# Public vocabulary of section headings.  The structured profile builder
+# (``career.profile_builder``) recognises the same French and English headings,
+# so both parsers agree on where a section starts without duplicating a list.
+PROFILE_SECTION_ALIASES: dict[str, tuple[str, ...]] = _SECTION_ALIASES
+
+
+def normalise_heading(value: str) -> str:
+    """Normalise a possible heading without changing the extracted value."""
+    return _normalise_heading(value)
+
+
 _NAME_STOP_WORDS = {
     "academic",
     "analyst",
