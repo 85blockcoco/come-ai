@@ -25,6 +25,7 @@ from ..source_fields import attach_source_material
 from ..stage_search import default_brief, validate_brief
 
 from .cards import card_attributes, published_fields, time_attribute
+from .http import ssl_context
 
 
 _TALENT_BASE = "https://www.talent.com"
@@ -52,6 +53,18 @@ class TalentComHealth:
 
 _HEALTH = TalentComHealth()
 _LAST_REQUEST_TIME = 0.0
+
+
+def _is_offer_link(href: str) -> bool:
+    """Return whether a link points to a published offer.
+
+    Talent.com publishes its offer links as ``/view?id=<identifier>``: the
+    identifier is a query parameter, not a path segment.  The link is read as
+    published, so the published shape is the one that is accepted — an offer
+    whose link the connector does not recognise would transmit nothing.
+    """
+    path = urllib.parse.urlsplit(href).path
+    return path in {"/view", "/job"} or path.startswith(("/view/", "/job/"))
 
 
 class _TalentJobParser(HTMLParser):
@@ -93,7 +106,7 @@ class _TalentJobParser(HTMLParser):
                     self._current.setdefault("attributes", {})["datetime"] = published
             elif tag == "a" and attrs_dict.get("href"):
                 href = attrs_dict["href"]
-                if "/job/" in href or "/view/" in href:
+                if _is_offer_link(href):
                     self._current["url"] = urllib.parse.urljoin(_TALENT_BASE, href)
             elif tag in ("h2", "h3", "h4", "span", "p", "div"):
                 classes = attrs_dict.get("class", "").lower()
@@ -107,7 +120,8 @@ class _TalentJobParser(HTMLParser):
                     self._current_field = "location"
                 elif "contract" in classes or "type" in classes or "employment" in classes:
                     self._current_field = "contract_type"
-                elif "description" in classes or "excerpt" in classes or "summary" in classes or itemprop == "description":
+                elif "description" in classes or "excerpt" in classes or "snippet" in classes \
+                        or "summary" in classes or itemprop == "description":
                     self._current_field = "description"
 
     def handle_endtag(self, tag: str) -> None:
@@ -146,7 +160,7 @@ def _default_fetch(url: str) -> str | None:
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=_TALENT_TIMEOUT) as resp:
+        with urllib.request.urlopen(req, timeout=_TALENT_TIMEOUT, context=ssl_context()) as resp:
             body = resp.read(_TALENT_MAX_RESPONSE_BYTES + 1)
             if len(body) > _TALENT_MAX_RESPONSE_BYTES:
                 _HEALTH.last_error = "Response too large"

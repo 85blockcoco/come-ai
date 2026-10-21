@@ -1,10 +1,10 @@
 # SPEC-SK08 — Enrichissement des connecteurs existants
 
 Date : 22 octobre 2026
-Mission : **CVBOOST-29** — ordre `cvboost-29-1792619869`
-Branche de travail : `worker/cvboost-29-1792619869`
+Mission : **CVBOOST-29** — ordre `cvboost-29-1792623066` (2ᵉ revue du lot, sur le travail de l'ordre `cvboost-29-1792619869`)
+Branche de travail : `worker/cvboost-29-1792623066` — branche d'intégration `agent/spec-sk08-connectors-enrich`
 Base : `f5b22f2` (*merge(career): ATS diagnostics and targeted CV variants pipeline*)
-Statut : **TERMINÉE — contrat commun livré pour les 8 connecteurs**
+Statut : **TERMINÉE — contrat commun livré pour les 8 connecteurs, 4 défauts de lecture corrigés et prouvés en direct**
 
 ---
 
@@ -14,21 +14,23 @@ Statut : **TERMINÉE — contrat commun livré pour les 8 connecteurs**
 |---------|--------|------|
 | `career/source_fields.py` | **nouveau** | Contrat commun du matériau transmis : collecte bornée des champs publiés, détection des contradictions conservées |
 | `career/connectors/cards.py` | **nouveau** | Lecture des attributs publiés par une carte d'offre (`data-*`, `<time datetime>`) |
+| `career/connectors/http.py` | **nouveau** | Contexte TLS vérifié partagé par les quatre connecteurs HTML (le certificat du serveur est vérifié, comme dans le transport ATS) |
 | `career/exploration.py` | modifié | Nouvelle fonction pure `admit_offer()` : la décision d'admission sort des connecteurs |
-| `career/connectors/public_ats.py` | modifié | Lever, Ashby, SmartRecruiters : champs publiés transmis + admission déplacée |
+| `career/connectors/public_ats.py` | modifié | Lever, Ashby, SmartRecruiters : champs publiés transmis, sections publiées composées sous leur nom, admission déplacée |
 | `career/discovery.py` | modifié | Greenhouse : champs publiés transmis, dates structurées reprises, admission déplacée |
-| `career/connectors/welcome_jungle.py` | modifié | Carte Welcome to the Jungle : champs publiés transmis + admission déplacée |
+| `career/connectors/welcome_jungle.py` | modifié | Carte Welcome to the Jungle : champs publiés transmis, TLS vérifié, admission déplacée |
 | `career/connectors/jobteaser.py` | modifié | Carte JobTeaser : idem |
-| `career/connectors/talent_com.py` | modifié | Carte Talent.com : idem |
+| `career/connectors/talent_com.py` | modifié | Carte Talent.com : idem + lien d'offre publié (`/view?id=`) et résumé publié (`snippet`) lus |
 | `career/connectors/apec.py` | modifié | Carte APEC : idem |
-| `tests/test_connectors_enrich.py` | **nouveau** | 54 tests de contrat, 1 fixture synthétique par fournisseur |
+| `career/offer_requirements/extract.py` | modifié | Une entrée de vocabulaire : « additional information » n'est pas une section de prérequis |
+| `tests/test_connectors_enrich.py` | **nouveau** | 60 tests de contrat, 1 fixture synthétique par fournisseur |
 | `tests/fixtures/connectors_enrich/*.json` | **nouveau** | 8 fixtures (une par fournisseur) |
 | `tests/test_connectors_enrich_live.py` | **nouveau** | Contrôle réel borné, séparé, opt-in |
 
-**Aucun fichier existant hors périmètre n'a été modifié.** Ni `career/service.py`, ni le schéma de
-la base, ni l'interface. La branche est donc fusionnable dans `main` sans conflit possible avec
-SK-01, SK-02, SK-03 ou SK-07 (aucun de ces lots ne touche `career/connectors/` ni
-`career/source_fields.py`).
+**Ni `career/service.py`, ni le schéma de la base, ni l'interface n'ont été modifiés.** La branche est
+donc fusionnable dans `main` sans conflit possible avec SK-01, SK-02, SK-03 ou SK-07 : aucun de ces
+lots ne touche `career/connectors/`, `career/source_fields.py`, `career/exploration.py`,
+`career/discovery.py` ni `career/offer_requirements/`.
 
 ---
 
@@ -103,19 +105,71 @@ l'affaire de `offer_dates` (SK-02), pas du connecteur.
 `department`, `company`, `applyUrl`, `ref`, `jobAd.sections` → `source_fields.smartrecruiters.*`.
 `releasedDate` → `posted_date` ; `postedDate` est transmis brut.
 
-**Gains réels :** les sections publiées (`companyDescription`, `jobDescription`,
-`qualifications`, `additionalInformation`) sont composées dans `description_original`. Les
-**prérequis** publiés par la source parviennent enfin au extracteur
-`offer_requirements`, qui les traitait auparavant sur une description vide.
+**Gain réel :** les sections publiées (`companyDescription`, `jobDescription`, `qualifications`,
+`additionalInformation`) sont composées dans `description_original`, **chacune sous le nom que la
+source lui donne** et dans l'ordre publié :
+
+```
+Company description
+Synthetic Group is a synthetic employer used by the tests.
+
+Job description
+Join our Corporate Finance team for a six-month placement.
+
+Qualifications
+Bachelor's degree in Finance or Economics
+Excel mastery
+
+Additional information
+Start date: 2 March 2027. Duration: 6 months.
+```
+
+Sans le nom de section, la couche des prérequis ne pouvait pas distinguer « prérequis » de
+« description de l'entreprise » : elle lisait la page entière comme une prose neutre et
+**n'extrayait aucun prérequis**. Avec le nom de section, les prérequis publiés parviennent enfin
+à `offer_requirements` (test dédié : § 6).
 
 ### 3.5 Welcome to the Jungle, JobTeaser, Talent.com, APEC (cartes HTML)
 
 Chaque carte publie : `title`, `company`, `location`, `contract_type`, `url` → `source_fields.*`.
 Les attributs de la carte sont transmis **sous leur nom d'attribut** : `data-posted-at`,
-`data-job-id`, `data-rank`, `data-offer-id`, et `datetime` pour un élément `<time datetime="…">`.
+`data-job-id`, `data-new-id`, `data-rank`, `data-offer-id`, et `datetime` pour un élément
+`<time datetime="…">`.
 
 Aucune date n'est déduite : le `<time>` de Talent.com est un « last updated », pas une date de
 publication ; il est transmis tel quel et `posted_date` reste vide.
+
+### 3.6 Champ cité par la mission → champ réellement publié
+
+La mission donnait des **exemples** de champs. Le nom transmis est toujours celui que la source
+publie réellement : voici la correspondance retenue, vérifiée sur le flux public le 22 octobre
+2026 (lecture directe, une requête par source).
+
+| Champ cité par la mission | Champ réellement publié | Transmis sous |
+|---------------------------|-------------------------|---------------|
+| Greenhouse `posted_at` | `first_published` | `source_fields.greenhouse.first_published` → `posted_date` (date seule) |
+| Greenhouse `updated_at` | `updated_at` | `source_fields.greenhouse.updated_at` — métadonnée de maintenance, **jamais** une date de publication |
+| Greenhouse `requisition_id` | `requisition_id` | `source_fields.greenhouse.requisition_id` |
+| Greenhouse `content` | `content` | `description_original` |
+| Lever `posted` | `createdAt` (timestamp en ms, non qualifié de date) | `source_fields.lever.createdAt` — **jamais** `posted_date` |
+| Lever `requisition` | absent du flux public lu (`id`, `text`, `createdAt`, `categories`, `lists`, `workplaceType`, `country`, `hostedUrl`, `applyUrl`, `additional*`, `opening*`, `description*`) | — |
+| Ashby `published_at` | `publishedAt` | `source_fields.ashby.publishedAt` → `posted_date` |
+| Ashby `employment_type` | `employmentType` | `source_fields.ashby.employmentType` |
+| SmartRecruiters `postedDate` | `postedDate` (+ `releasedDate`) | `source_fields.smartrecruiters.postedDate` ; `releasedDate` → `posted_date` |
+| SmartRecruiters `jobAd.sections` | `jobAd.sections` | `source_fields.smartrecruiters["jobAd.sections"]` **et** `description_original` |
+| SmartRecruiters `requisitionId` | `requisitionId` | `source_fields.smartrecruiters.requisitionId` |
+| WJ `date` | `<time datetime="…">` | `source_fields.welcome_jungle.datetime` |
+| WJ `contract_type` | `contract_type` | `source_fields.welcome_jungle.contract_type` |
+| JobTeaser `start_date` | absent de la carte lue | — (aucune date inventée) |
+| JobTeaser `contract_type` | `contract_type` | `source_fields.jobteaser.contract_type` |
+| Talent.com `date_posted` | `<time dateTime="…">` (« Last updated ») | `source_fields.talent_com.datetime` — **jamais** `posted_date` |
+| Talent.com `job_type` | balise de la carte, sans nom de champ | `source_fields.talent_com.*` (attributs `data-*` de la carte) |
+| APEC `date_publication` | `<time datetime="…">` | `source_fields.apec.datetime` |
+| APEC `type_contrat` | `contract_type` | `source_fields.apec.contract_type` |
+
+Les trois seules dates canoniques alimentées (`posted_date`, `deadline_date`) le sont à partir d'un
+champ que la source **qualifie lui-même** comme date. Tout le reste est transmis sous son nom,
+sans conversion.
 
 ---
 
@@ -182,7 +236,76 @@ produit par le connecteur ; c'est une donnée du contrat, pas une décision d'ad
 
 ---
 
-## 6. Les 8 fixtures synthétiques
+## 6. Ce que cette campagne corrige en plus du lot initial
+
+Le lot initial (ordre `cvboost-29-1792619869`) avait livré le contrat et documenté quatre
+défauts qui rendaient l'enrichissement **sans effet** sur quatre sources. Trois d'entre eux
+étaient corrigeables dans le périmètre de la mission ; ils le sont maintenant, et le résultat est
+prouvé en direct (§ 7).
+
+### 6.1 Les quatre connecteurs HTML ne vérifiaient pas le certificat du serveur
+
+**Défaut.** `welcome_jungle`, `jobteaser`, `talent_com` et `apec` appelaient
+`urllib.request.urlopen()` sans contexte TLS. Sur une installation dont le bundle d'autorité par
+défaut est absent ou périmé (le cas de l'environnement de vérification), la connexion échoue en
+`CERTIFICATE_VERIFY_FAILED` : le connecteur renvoie « erreur réseau » et **la matière publiée
+n'atteint jamais le contrat**. Le transport ATS (`UrllibPublicATSTransport`) utilisait déjà
+`certifi` ; les quatre connecteurs HTML, non.
+
+**Correctif.** `career/connectors/http.py` expose un contexte TLS vérifié (avec `certifi` quand
+il est disponible, sinon le contexte par défaut — la vérification n'est jamais relâchée), utilisé
+par les quatre connecteurs. Test : `test_the_html_connectors_verify_the_server_certificate`.
+
+### 6.2 Talent.com publiait ses liens sous une forme que le connecteur ne reconnaissait pas
+
+**Défaut.** La carte publiée utilise `/view?id=<identifiant>` : l'identifiant est un paramètre de
+requête, pas un segment de chemin. Le connecteur exigeait `/view/` ou `/job/` et ne retenait
+donc **aucune** offre : 20 liens `/view?id=…` étaient lus, 0 offre transmise.
+
+**Correctif.** `_is_offer_link()` lit la forme publiée (`/view`, `/view/…`, `/job/…`) et rien
+d'autre. Après correction, la lecture directe de la page publique de recherche restitue **65
+offres** avec leurs champs publiés (`data-job-id`, `data-new-id`, `data-rank`, `datetime`, url).
+
+Le résumé publié par la carte (`JobCard_snippet__…`) est également reconnu comme description :
+sans cela `description_original` restait vide sur cette source.
+
+### 6.3 Les prérequis publiés par SmartRecruiters n'atteignaient pas `offer_requirements`
+
+**Défaut.** Les sections publiées étaient concaténées sans leur nom : la couche des prérequis
+les lisait comme une prose neutre et **n'extrayait aucun prérequis** (0 exigence sur la fixture
+synthétique). Le gain annoncé par le lot initial n'était donc pas réel.
+
+**Correctif.** Chaque section est composée sous le nom que la source lui donne, dans l'ordre
+publié (§ 3.4). Les prérequis publiés sont alors extraits :
+
+```
+- Bachelor's degree in Finance or Economics | required | description_original
+- Excel mastery                            | required | description_original
+```
+
+Une seule entrée de vocabulaire a été ajoutée à la couche des prérequis
+(`career/offer_requirements/extract.py`) : « additional information » (et ses équivalents) est une
+section *neutre*, pas une section de prérequis. Sans elle, le contenu de cette section — publiée
+après les qualifications — était lu comme des prérequis exigés (« Start date: 2 March 2027. »
+deviendrait une exigence de CV). Aucun autre module n'est modifié, et les 62 tests de la couche
+des prérequis restent verts.
+
+### 6.4 Défauts hors périmètre, documentés
+
+- **Welcome to the Jungle** — la page de recherche servie ne contient plus aucun balisage de
+  carte (0 `data-testid="job-card"`, 0 `<article>`, 0 lien `/fr/companies/*/jobs/` sur 556 Ko) :
+  le rendu est fait côté client. Lire la charge utile embarquée ou l'API interne sortirait du
+  périmètre d'un connecteur « HTML lisible » et exigerait un travail propre (SK-09 ?).
+- **JobTeaser** — `/en/jobs` répond **HTTP 410 Gone** : la page a été déplacée. Le nouveau chemin
+  `/en/job-offers` répond **HTTP 403** à un agent automatisé. Le chemin public de recherche doit
+  être revu par une mission dédiée.
+- **APEC** — **HTTP 403 Forbidden**, quel que soit l'agent utilisateur (le contrôle a été tenté
+  avec l'agent du connecteur et avec un agent de navigateur). L'accès automatisé est bloqué ;
+  aucune contournement n'a été tenté, et le connecteur garde ses bornes.
+
+---
+
+## 7. Les 8 fixtures synthétiques
 
 `tests/fixtures/connectors_enrich/` contient **une fixture par fournisseur** :
 `greenhouse.json`, `lever.json`, `ashby.json`, `smartrecruiters.json`, `welcome_jungle.json`,
@@ -195,16 +318,19 @@ Chaque fixture contient deux publications synthétiques :
   CDI) qui prouve que la contradiction survit au pipeline.
 
 Les fixtures sont synthétiques : aucun board réel, aucune donnée personnelle, aucun appel réseau
-pendant les tests.
+pendant les tests. La fixture Talent.com reproduit la forme de lien publiée le 22 octobre 2026
+(`/view?id=…`) et l'attribut `data-new-id` que la carte publie.
 
-`tests/test_connectors_enrich.py` couvre 54 cas : champs transmis et leurs noms exacts, dates
-canoniques, sections SmartRecruiters, attributs de carte, contradictions conservées et non
-tranchées, bornes des valeurs, sérialisation JSON, contrat identique pour les 8 connecteurs,
-absence de logique de qualification.
+`tests/test_connectors_enrich.py` couvre 60 cas : champs transmis et leurs noms exacts, dates
+canoniques, sections SmartRecruiters composées sous leur nom publié, prérequis atteints par la
+couche des exigences, attributs de carte, lien d'offre publié de Talent.com, contradictions
+conservées et non tranchées, bornes des valeurs, sérialisation JSON, contrat identique pour les
+8 connecteurs, matière conservée après la décision d'admission, certificat vérifié, absence de
+logique de qualification.
 
 ---
 
-## 7. Contrôle réel borné et séparé
+## 8. Contrôle réel borné et séparé
 
 `tests/test_connectors_enrich_live.py` est **séparé** de la suite synthétique et **opt-in** :
 
@@ -214,49 +340,39 @@ CAREER_LIVE_SOURCE_CHECK=1 .venv/bin/python -m pytest -q tests/test_connectors_e
 
 Une requête par fournisseur, délai de 10 s, 3 publications examinées au maximum.
 
-### Résultat du 22 octobre 2026
+### Résultat du 22 octobre 2026 (avec le certificat vérifié)
 
 | Fournisseur | Source lue | Résultat du contrôle |
 |-------------|-----------|----------------------|
 | Greenhouse | `alixpartners` | **Contrat tenu** — `first_published`, `updated_at`, `requisition_id`, `metadata` transmis |
 | Lever | `qonto` | **Contrat tenu** — `createdAt`, `categories`, `hostedUrl` transmis |
 | Ashby | `oaknorth` | **Contrat tenu** — `publishedAt`, `employmentType`, `jobUrl` transmis |
+| Talent.com | recherche publique finance | **Contrat tenu** — `data-job-id`, `data-new-id`, `data-rank`, `datetime`, url `/view?id=…` transmis ; description publiée présente |
 | SmartRecruiters | — | **Non contrôlable** : aucun identifiant de board revu disponible (`totalFound=0` sur 12 identifiants testés, `/v1/companies` → 404). Identifiant injectable via `CAREER_LIVE_SR_COMPANY` |
-| Welcome to the Jungle | — | **Non contrôlable** : la page de recherche servie ne contient plus de balisage exploitable (0 `data-testid="job-card"`, 0 `<article>`, 0 lien `/fr/companies/*/jobs/` sur 556 Ko) — rendu côté client |
-| JobTeaser | — | **Non contrôlable** : l'endpoint répond **HTTP 410 Gone** |
-| Talent.com | — | **Non contrôlable** : 40 cartes `data-job-id` et 20 liens `href="/view?id=…"` mais **0** `href="/view/"` — le connecteur exige `/view/` et ne retient donc aucun lien |
-| APEC | — | **Non contrôlable** : l'endpoint répond **HTTP 403 Forbidden** |
+| Welcome to the Jungle | — | **Non contrôlable** : rendu côté client, aucun balisage de carte dans le HTML servi (§ 6.4) |
+| JobTeaser | — | **Non contrôlable** : `/en/jobs` → **HTTP 410 Gone**, `/en/job-offers` → **HTTP 403** |
+| APEC | — | **Non contrôlable** : **HTTP 403 Forbidden** |
 
-Bilan : **4 contrôles réussis** (Greenhouse, Lever, Ashby + le chemin d'erreur explicite),
-**4 sources non contrôlables** pour une raison documentée.
-
-### Deux défauts préexistants à traiter (hors périmètre SK-08)
-
-Ces défauts existaient avant la mission et ne sont pas causés par l'enrichissement ; ils sont
-signalés parce qu'ils rendent l'enrichissement sans effet pour ces quatre sources :
-
-1. **Talent.com** — le test de lien (`"/job/" in href or "/view/" in href`) ne correspond plus au
-   format publié (`/view?id=…`). Correctif ponctuel : accepter `/view?id=`.
-2. **Welcome to the Jungle** — le balisage des cartes n'est plus dans le HTML servi ; le
-   connecteur ne peut rien lire. Il faut lire la charge utile embarquée ou l'API interne.
-3. **JobTeaser** — endpoint 410 : l'URL de recherche doit être revue.
-4. **APEC** — 403 pour cet agent utilisateur : l'accès réel demande un autre mode d'accès.
+Bilan : **5 contrôles réussis** (Greenhouse, Lever, Ashby, Talent.com + le chemin d'erreur
+explicite), **4 sources non contrôlables** pour une raison documentée. Avant cette campagne :
+4 contrôles réussis, et **Talent.com ne transmettait rien** malgré une page parfaitement
+lisible.
 
 ---
 
-## 8. Validation
+## 9. Validation
 
 | Commande | Résultat |
 |----------|----------|
-| `.venv/bin/python -m pytest -q tests/test_connectors_enrich.py` | **54 passed** |
-| `.venv/bin/python -m pytest -q` | **1478 passed, 1 skipped** (base : 1424 passed + 54 nouveaux ; le skip `test_offer_summary_exhaustiveness` est préexistant) |
+| `.venv/bin/python -m pytest -q tests/test_connectors_enrich.py` | **60 passed** |
+| `.venv/bin/python -m pytest -q` | **1484 passed, 10 skipped** (base : 1424 + 60 nouveaux ; le skip `test_offer_summary_exhaustiveness` et les 9 skips du contrôle réel sont préexistants) |
 | `.venv/bin/python -m ruff check .` | **All checks passed** |
 | `git diff --check` | propre |
-| `CAREER_LIVE_SOURCE_CHECK=1 pytest -q tests/test_connectors_enrich_live.py` | 4 passed, 5 skipped (raisons explicites) |
+| `CAREER_LIVE_SOURCE_CHECK=1 pytest -q tests/test_connectors_enrich_live.py` | 5 passed, 4 skipped (raisons explicites) |
 
 ---
 
-## 9. Limites assumées
+## 10. Limites assumées
 
 1. **La persistance en base n'est pas dans cette mission.** `service.import_job()` ne conserve
    que les champs canoniques : le bloc `source_fields` reste dans la charge utile du
@@ -277,14 +393,18 @@ signalés parce qu'ils rendent l'enrichissement sans effet pour ces quatre sourc
    champ d'origine de chaque date.
 4. **Le vocabulaire de détection est explicite et restreint.** Un wording inconnu n'est pas une
    contradiction : mieux vaut manquer un cas qu'inventer un désaccord.
-5. **Les quatre connecteurs HTML restent non observables en direct** (§ 7).
+5. **Trois connecteurs HTML restent non observables en direct** (§ 6.4) : la correction de leur
+   lecture demande une mission propre (chemin public, balisage ou API interne), pas un correctif
+   ponctuel.
 
 ---
 
-## 10. Intégration
+## 11. Intégration
 
-- Branche : `worker/cvboost-29-1792619869` (worktree `/Users/comedelavenne/AI-Excel-Agent-worker-cvboost-29-1792619869`).
-- Base : `f5b22f2` — aucun conflit possible avec SK-01/02/03/07 (`career/connectors/` et
-  `career/source_fields.py` ne sont touchés par aucun de ces lots ; `career/exploration.py`
-  n'y reçoit qu'une fonction ajoutée).
+- Branche d'intégration : `agent/spec-sk08-connectors-enrich` (base `f5b22f2`).
+- Branche de l'ordre : `worker/cvboost-29-1792623066` (worktree
+  `/Users/comedelavenne/AI-Excel-Agent-worker-cvboost-29-1792623066`).
+- Aucun conflit possible avec SK-01/02/03/07 : ces lots ne touchent ni `career/connectors/`, ni
+  `career/source_fields.py`, ni `career/exploration.py`, ni `career/discovery.py`, ni
+  `career/offer_requirements/`.
 - `career/service.py`, le schéma SQLite et l'interface ne sont pas modifiés.

@@ -392,17 +392,33 @@ def _smartrecruiters_description(sections: dict[str, Any]) -> str:
     """Compose the description from the published sections, in published order.
 
     The sections are the prerequisites of the advertisement; they are read as
-    published, never summarised or rewritten.
+    published, never summarised or rewritten.  Each section keeps the name the
+    source publishes it under: the heading is what lets the requirements layer
+    tell a prerequisite section from a description of the company, without the
+    connector deciding anything about the offer.
     """
     parts: list[str] = []
-    for name in ("companyDescription", "jobDescription", "qualifications", "additionalInformation"):
-        value = sections.get(name)
+    for name, value in sections.items():
         if not isinstance(value, str) or not value.strip():
             continue
         text = source_html_to_text(value)
         if text:
-            parts.append(text)
+            parts.append(f"{_published_section_title(name)}\n{text}")
     return "\n\n".join(parts)
+
+
+def _published_section_title(name: str) -> str:
+    """Return the name a section is published under, as a title.
+
+    The name is not renamed: ``companyDescription`` becomes ``Company
+    description`` and ``qualifications`` becomes ``Qualifications``.  A name
+    the source publishes in another language keeps its own words.
+    """
+    words = re.findall(r"[A-Z]+(?![a-z])|[A-Z][a-zÀ-ÖØ-öø-ÿ]*|[a-zÀ-ÖØ-öø-ÿ]+", name)
+    if not words:
+        return name
+    title = " ".join(word if index == 0 else word.lower() for index, word in enumerate(words))
+    return title[:1].upper() + title[1:]
 
 
 def _common_job(provider: str, source: dict[str, Any], job_id: Any, title: Any, official_url: Any,

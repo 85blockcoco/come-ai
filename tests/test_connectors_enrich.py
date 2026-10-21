@@ -383,3 +383,106 @@ def test_connectors_do_not_decide_the_qualification() -> None:
         if module.name in {"public_ats.py", "welcome_jungle.py", "jobteaser.py",
                            "talent_com.py", "apec.py", "discovery.py"}:
             assert "admit_offer" in source, f"{module} does not use the admission layer"
+
+
+def test_the_transmitted_material_survives_the_admission_layer() -> None:
+    """The admission layer decides; it never drops what the source published."""
+    from career.exploration import admit_offer
+    from career.stage_search import default_brief
+
+    job = _material("lever")[0]
+    verdict = admit_offer(job, default_brief())
+    decided = verdict["job"]
+    assert decided[CONTRACT_KEY] == job[CONTRACT_KEY]
+    assert decided[CONFLICTS_KEY] == job[CONFLICTS_KEY]
+    assert decided["description_original"] == job["description_original"]
+
+
+def test_the_published_prerequisites_reach_the_requirements_layer() -> None:
+    """The published sections are what the requirements layer reads.
+
+    SmartRecruiters publishes its prerequisites in the ``qualifications``
+    section of the advertisement.  When the connector transmits that section,
+    the prerequisites are found; when it is dropped, they are lost.
+    """
+    from career.offer_requirements import analyze_offer
+
+    clean, _contradicting = _material("smartrecruiters")
+    analysis = analyze_offer(clean)
+    texts = [record["text"] for record in analysis["requirements"]]
+    assert "Bachelor's degree in Finance or Economics" in texts
+    assert "Excel mastery" in texts
+    # Every requirement points at the published text it was read from.
+    for record in analysis["requirements"]:
+        assert record["source_field"] == "description_original"
+    # The section published after the prerequisites is not a prerequisite.
+    assert "Start date: 2 March 2027." not in texts
+
+
+def test_the_published_sections_keep_the_name_the_source_publishes() -> None:
+    clean, _contradicting = _material("smartrecruiters")
+    description = clean["description_original"]
+    assert "Company description" in description
+    assert "Job description" in description
+    assert "Qualifications" in description
+    assert "Additional information" in description
+    # The sections are composed in the order the source publishes them.
+    assert description.index("Company description") < description.index("Job description")
+    assert description.index("Job description") < description.index("Qualifications")
+    assert description.index("Qualifications") < description.index("Additional information")
+
+
+def test_talent_com_reads_the_published_offer_link() -> None:
+    """Talent.com publishes ``/view?id=<identifier>``: the identifier is a query.
+
+    A link the connector does not recognise is an offer it transmits nothing
+    about, so the published shape is the one that is accepted.
+    """
+    from career.connectors.talent_com import _is_offer_link
+
+    assert _is_offer_link("/view?id=640740450432454540")
+    assert _is_offer_link("/view/640740450432454540")
+    assert _is_offer_link("/job/financial-analyst-intern-london")
+    assert not _is_offer_link("/jobs")
+    assert not _is_offer_link("/viewer")
+
+    clean, _contradicting = _material("talent_com")
+    assert clean["official_url"] == "https://www.talent.com/view?id=synthetic-job-001"
+    assert clean[CONTRACT_KEY]["talent_com"]["url"] == clean["official_url"]
+
+
+def test_a_card_that_publishes_a_snippet_transmits_it_as_description() -> None:
+    """Talent.com publishes the summary of an offer in its snippet."""
+    html = """
+    <div class="job-card" data-job-id="synthetic-job-003">
+        <h2 class="JobCard_title__X32Qk">Synthetic Snippet Intern</h2>
+        <span class="JobCard_company__NmRol">Synthetic Group</span>
+        <span class="JobCard_location__nmTtw">London, United Kingdom</span>
+        <p class="JobCard_snippet__rqX60">Synthetic published summary of the offer.</p>
+        <a href="/view?id=synthetic-job-003"></a>
+    </div>"""
+    jobs = list(talent_com_module._iter_raw_offers(fetch=FixtureFetch([html])))
+    assert len(jobs) == 1
+    assert "Synthetic published summary" in jobs[0]["description_original"]
+    assert jobs[0]["official_url"] == "https://www.talent.com/view?id=synthetic-job-003"
+
+
+def test_the_html_connectors_verify_the_server_certificate() -> None:
+    """A board that cannot be read securely transmits nothing at all.
+
+    Without a CA bundle, the four HTML connectors fail with an opaque network
+    error on every page: the published material never reaches the contract.
+    """
+    import ssl
+
+    from career.connectors.http import ssl_context
+
+    context = ssl_context()
+    assert context.verify_mode == ssl.CERT_REQUIRED
+    assert context.check_hostname is True
+
+    for module in (welcome_jungle_module, jobteaser_module, talent_com_module, apec_module):
+        source = Path(module.__file__).read_text(encoding="utf-8")
+        assert "context=ssl_context()" in source, (
+            f"{module.__name__} reads a public page without verifying the certificate"
+        )

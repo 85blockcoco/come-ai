@@ -65,7 +65,8 @@ def _source(provider: str, **extra: Any) -> dict[str, Any]:
     } | extra
 
 
-def _assert_contract(provider: str, jobs: list[dict[str, Any]]) -> None:
+def _assert_contract(provider: str, jobs: list[dict[str, Any]], *,
+                     description_published: bool) -> None:
     """The contract must hold for every posting the source really published."""
     for job in jobs[:MAX_EXAMINED]:
         block = job.get(CONTRACT_KEY)
@@ -73,13 +74,15 @@ def _assert_contract(provider: str, jobs: list[dict[str, Any]]) -> None:
             f"{provider} did not scope the transmitted fields to its own name"
         )
         assert block[provider], f"{provider} transmitted no published field"
-        assert job.get("description_original", "").strip(), (
-            f"{provider} transmitted no description"
-        )
+        description = job.get("description_original", "")
+        assert isinstance(description, str)
+        if description_published:
+            assert description.strip(), f"{provider} transmitted no description"
         assert isinstance(job.get(CONFLICTS_KEY), list)
 
 
-def _check_contract(provider: str, jobs: list[dict[str, Any]]) -> None:
+def _check_contract(provider: str, jobs: list[dict[str, Any]], *,
+                    description_published: bool) -> None:
     """Check the contract, or record that the source published nothing.
 
     A source that answers with a page the connector cannot read is an
@@ -88,7 +91,7 @@ def _check_contract(provider: str, jobs: list[dict[str, Any]]) -> None:
     """
     if not jobs:
         pytest.skip(f"{provider} published no readable posting on the live page")
-    _assert_contract(provider, jobs)
+    _assert_contract(provider, jobs, description_published=description_published)
 
 
 def test_live_greenhouse_transmits_its_published_fields() -> None:
@@ -96,7 +99,7 @@ def test_live_greenhouse_transmits_its_published_fields() -> None:
     connector = GreenhouseJobBoardConnector()
     payload = connector.transport.get_json(board.endpoint, TIMEOUT_SECONDS)
     jobs = list(GreenhouseJobBoardConnector._normalise(board, payload).jobs)
-    _check_contract("greenhouse", jobs)
+    _check_contract("greenhouse", jobs, description_published=True)
     published = jobs[0][CONTRACT_KEY]["greenhouse"]
     # The board publishes these fields; they are transmitted under their name.
     for name in ("id", "first_published", "updated_at", "requisition_id", "metadata"):
@@ -108,7 +111,7 @@ def test_live_lever_transmits_its_published_fields() -> None:
     source = _source("lever", board_token="qonto")
     pages = connector._pages(source, deadline=None)
     jobs = connector.parse(source, pages[0])
-    _check_contract("lever", jobs)
+    _check_contract("lever", jobs, description_published=True)
     published = jobs[0][CONTRACT_KEY]["lever"]
     for name in ("id", "text", "createdAt", "categories", "hostedUrl"):
         assert name in published, f"lever did not transmit {name!r}"
@@ -119,7 +122,7 @@ def test_live_ashby_transmits_its_published_fields() -> None:
     source = _source("ashby", board_token="oaknorth")
     pages = connector._pages(source, deadline=None)
     jobs = connector.parse(source, pages[0])
-    _check_contract("ashby", jobs)
+    _check_contract("ashby", jobs, description_published=True)
     published = jobs[0][CONTRACT_KEY]["ashby"]
     for name in ("id", "title", "publishedAt", "employmentType", "jobUrl"):
         assert name in published, f"ashby did not transmit {name!r}"
@@ -133,7 +136,7 @@ def test_live_smartrecruiters_transmits_its_published_fields() -> None:
     source = _source("smartrecruiters", company_identifier=company)
     pages = connector._pages(source, deadline=None)
     jobs = connector.parse(source, pages[0])
-    _check_contract("smartrecruiters", jobs)
+    _check_contract("smartrecruiters", jobs, description_published=True)
     published = jobs[0][CONTRACT_KEY]["smartrecruiters"]
     for name in ("id", "name", "requisitionId", "postedDate", "releasedDate", "typeOfEmployment"):
         assert name in published, f"smartrecruiters did not transmit {name!r}"
@@ -142,25 +145,32 @@ def test_live_smartrecruiters_transmits_its_published_fields() -> None:
 def test_live_welcome_jungle_transmits_its_published_fields() -> None:
     fetch = OneShotFetch(welcome_jungle_module._default_fetch)
     jobs = list(welcome_jungle_module._iter_raw_offers(fetch=fetch))
-    _check_contract("welcome_jungle", jobs)
+    _check_contract("welcome_jungle", jobs, description_published=False)
 
 
 def test_live_jobteaser_transmits_its_published_fields() -> None:
     fetch = OneShotFetch(jobteaser_module._default_fetch)
     jobs = list(jobteaser_module._iter_raw_offers(fetch=fetch))
-    _check_contract("jobteaser", jobs)
+    _check_contract("jobteaser", jobs, description_published=False)
 
 
 def test_live_talent_com_transmits_its_published_fields() -> None:
     fetch = OneShotFetch(talent_com_module._default_fetch)
     jobs = list(talent_com_module._iter_raw_offers(fetch=fetch))
-    _check_contract("talent_com", jobs)
+    _check_contract("talent_com", jobs, description_published=True)
+    published = jobs[0][CONTRACT_KEY]["talent_com"]
+    # The board publishes the identifier of the card and the timestamp of its
+    # last update; both are transmitted under their own name.
+    for name in ("data-job-id", "data-rank", "datetime", "url"):
+        assert name in published, f"talent_com did not transmit {name!r}"
+    # The published link carries the identifier as a query parameter.
+    assert "/view?id=" in jobs[0]["official_url"]
 
 
 def test_live_apec_transmits_its_published_fields() -> None:
     fetch = OneShotFetch(apec_module._default_fetch)
     jobs = list(apec_module._iter_raw_offers(fetch=fetch))
-    _check_contract("apec", jobs)
+    _check_contract("apec", jobs, description_published=False)
 
 
 def test_live_source_failures_stay_explicit_and_never_crash() -> None:

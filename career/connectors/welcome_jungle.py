@@ -25,6 +25,7 @@ from ..source_fields import attach_source_material
 from ..stage_search import default_brief, validate_brief
 
 from .cards import card_attributes, published_fields, time_attribute
+from .http import ssl_context
 
 
 _WTJ_BASE = "https://www.welcometothejungle.com"
@@ -140,7 +141,7 @@ def _default_fetch(url: str) -> str | None:
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=_WTJ_TIMEOUT) as resp:
+        with urllib.request.urlopen(req, timeout=_WTJ_TIMEOUT, context=ssl_context()) as resp:
             body = resp.read(_WTJ_MAX_RESPONSE_BYTES + 1)
             if len(body) > _WTJ_MAX_RESPONSE_BYTES:
                 _HEALTH.last_error = "Response too large"

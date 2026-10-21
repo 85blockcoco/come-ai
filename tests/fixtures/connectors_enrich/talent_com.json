@@ -7,9 +7,9 @@
       "company": "Synthetic Group",
       "location": "London, United Kingdom",
       "contract_type": "Internship",
-      "url": "https://www.talent.com/job/financial-analyst-intern-london",
+      "url": "https://www.talent.com/view?id=synthetic-job-001",
       "description": "<p>Financial planning and analysis internship. Six-month duration. Bachelor's degree minimum.</p>",
-      "attributes": {"data-job-id": "synthetic-job-001", "data-rank": "1"},
+      "attributes": {"data-job-id": "synthetic-job-001", "data-new-id": "640740450432454540", "data-rank": "1"},
       "time": "2026-10-06T15:57:18Z"
     },
     {
@@ -17,9 +17,9 @@
       "company": "Synthetic Group",
       "location": "London, United Kingdom",
       "contract_type": "Internship",
-      "url": "https://www.talent.com/job/contradicting-intern-london",
+      "url": "https://www.talent.com/view?id=synthetic-job-002",
       "description": "<p>This is a permanent position (CDI), not an internship. The board publishes it as an internship.</p>",
-      "attributes": {"data-job-id": "synthetic-job-002", "data-rank": "2"},
+      "attributes": {"data-job-id": "synthetic-job-002", "data-new-id": "640740450432454541", "data-rank": "2"},
       "time": "2026-10-07T15:57:18Z"
     }
   ]

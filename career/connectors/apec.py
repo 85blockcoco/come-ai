@@ -26,6 +26,7 @@ from ..source_fields import attach_source_material
 from ..stage_search import default_brief, validate_brief
 
 from .cards import card_attributes, published_fields, time_attribute
+from .http import ssl_context
 
 
 _APEC_BASE = "https://www.apec.fr"
@@ -142,7 +143,7 @@ def _default_fetch(url: str) -> str | None:
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=_APEC_TIMEOUT) as resp:
+        with urllib.request.urlopen(req, timeout=_APEC_TIMEOUT, context=ssl_context()) as resp:
             body = resp.read(_APEC_MAX_RESPONSE_BYTES + 1)
             if len(body) > _APEC_MAX_RESPONSE_BYTES:
                 _HEALTH.last_error = "Response too large"
