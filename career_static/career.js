@@ -922,6 +922,16 @@ function jobCard(job, mode = "discover", qualification = null) {
     details.append(make("p", `Durée annoncée : ${minimum == null ? "non précisée" : minimum === maximum ? `${minimum} mois` : `${minimum} à ${maximum} mois`}`));
     const sourceDate = qualification.provenance?.start_month;
     if (sourceDate?.source === "description_passage") details.append(make("p", `Passage source du début : « ${sourceDate.quote} »`));
+    const geographyLabels = {
+      allowed: "Lieu hors zone exclue confirmé",
+      excluded: "Lieu exclu : France ou Paris",
+      mixed: "Plusieurs lieux dont un lieu exclu — à vérifier",
+      unknown: "Pays inconnu — à vérifier",
+      not_filtered: "Aucune exclusion géographique appliquée",
+    };
+    if (qualification.geography_status) {
+      details.append(make("p", `Contrôle géographique : ${geographyLabels[qualification.geography_status] || "à vérifier"}`));
+    }
   } else if (!job.deadline_date && !job.start_date && !job.end_date && !job.duration_months) details.append(make("p", "Dates non renseignées."));
   if (job.source_name && job.source_name !== "manual") {
     details.append(make("p", `Source officielle : ${job.source_name} · vérifiée : ${formatVerification(job.last_verified_at)}`));
@@ -2462,6 +2472,9 @@ function renderStageBrief(payload) {
   $("#stagehunter-roles").value = (brief.roles || []).join(", ");
   $("#stagehunter-countries").value = (brief.countries || []).join(", ");
   $("#stagehunter-cities").value = (brief.cities || []).join(", ");
+  $("#stagehunter-excluded-countries").value = (brief.excluded_countries || ["France"]).join(", ");
+  $("#stagehunter-excluded-cities").value = (brief.excluded_cities || ["Paris"]).join(", ");
+  $("#stagehunter-require-known-location").checked = brief.require_known_location !== false;
   $("#stagehunter-level").value = brief.study_level || "";
   $("#stagehunter-education-preference").value = brief.education_preference || "bachelor_m1_then_m2";
   $("#stagehunter-languages").value = (brief.languages || []).join(", ");
@@ -2933,6 +2946,9 @@ $("#stagehunter-brief-form")?.addEventListener("submit", async (event) => {
     roles: stageHunterListValue("#stagehunter-roles"),
     countries: stageHunterListValue("#stagehunter-countries"),
     cities: stageHunterListValue("#stagehunter-cities"),
+    excluded_countries: stageHunterListValue("#stagehunter-excluded-countries"),
+    excluded_cities: stageHunterListValue("#stagehunter-excluded-cities"),
+    require_known_location: $("#stagehunter-require-known-location").checked,
     start_date: "",
     duration_months: null,
     contract_types: [...document.querySelectorAll("#stagehunter-contract-types input:checked")].map((box) => box.value),

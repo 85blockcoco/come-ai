@@ -185,6 +185,9 @@ class PublicATSConnector:
                     allowed_contract_types=brief.get("contract_types"),
                     allowed_start_months=brief.get("start_months"),
                     minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
+                    excluded_countries=brief.get("excluded_countries"),
+                    excluded_cities=brief.get("excluded_cities"),
+                    require_known_location=brief.get("require_known_location", False),
                 ).to_dict()
                 job["qualification"] = qualification
                 target = qualification["target_status"]

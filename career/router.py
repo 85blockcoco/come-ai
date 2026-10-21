@@ -91,6 +91,9 @@ class StageSearchPayload(BaseModel):
     roles: list[str] = Field(default_factory=list, max_length=20)
     countries: list[str] = Field(default_factory=list, max_length=20)
     cities: list[str] = Field(default_factory=list, max_length=20)
+    excluded_countries: list[str] = Field(default_factory=lambda: ["France"], max_length=20)
+    excluded_cities: list[str] = Field(default_factory=lambda: ["Paris"], max_length=20)
+    require_known_location: bool = True
     start_date: str = Field(default="", max_length=32)
     duration_months: int | None = Field(default=None, ge=1, le=24)
     contract_types: list[str] = Field(default_factory=lambda: ["stage", "cdd", "cdi", "vie"], max_length=4)

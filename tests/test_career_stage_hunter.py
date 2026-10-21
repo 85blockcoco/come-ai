@@ -757,6 +757,9 @@ def test_first_open_starts_with_useful_finance_defaults_and_explains_itself(tmp_
     assert payload["configured"] is False
     expected = default_brief()
     expected["domains"] = list(STAGE_DOMAINS)
+    expected["excluded_countries"] = ["France"]
+    expected["excluded_cities"] = ["Paris"]
+    expected["require_known_location"] = True
     assert payload["brief"] == expected
     assert payload["stored_brief_invalid"] is False
     assert payload["vocabulary"]["domains"], "le formulaire des domaines doit être renseignable"

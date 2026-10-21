@@ -168,6 +168,9 @@ def default_brief() -> dict[str, Any]:
         "roles": [],
         "countries": [],
         "cities": [],
+        "excluded_countries": [],
+        "excluded_cities": [],
+        "require_known_location": False,
         "start_date": "",
         "duration_months": None,
         "contract_types": ["stage", "cdd", "cdi", "vie"],
@@ -280,12 +283,22 @@ def validate_brief(payload: Any) -> dict[str, Any]:
     education_preference = payload.get("education_preference", "bachelor_m1_then_m2")
     if education_preference not in {"bachelor_m1_then_m2", "any"}:
         raise UserFacingError("Préférence de niveau d’études inconnue.")
+    require_known_location = payload.get("require_known_location", False)
+    if type(require_known_location) is not bool:
+        raise UserFacingError("Le contrôle de localisation doit être activé ou désactivé explicitement.")
     return {
         "domains": domains,
         "other_domains": _string_list(payload.get("other_domains"), "Les autres métiers", max_items=12, max_length=120),
         "roles": _string_list(payload.get("roles"), "Les métiers", max_items=20, max_length=120),
         "countries": _string_list(payload.get("countries"), "Les pays", max_items=20, max_length=120),
         "cities": _string_list(payload.get("cities"), "Les villes", max_items=20, max_length=120),
+        "excluded_countries": _string_list(
+            payload.get("excluded_countries", []), "Les pays exclus", max_items=20, max_length=120
+        ),
+        "excluded_cities": _string_list(
+            payload.get("excluded_cities", []), "Les villes exclues", max_items=20, max_length=120
+        ),
+        "require_known_location": require_known_location,
         "start_date": start_text,
         "duration_months": duration,
         "contract_types": contract_types,
@@ -308,6 +321,9 @@ def brief_is_configured(brief: dict[str, Any]) -> bool:
             brief.get("roles"),
             brief.get("countries"),
             brief.get("cities"),
+            brief.get("excluded_countries"),
+            brief.get("excluded_cities"),
+            brief.get("require_known_location") is True,
             clean_text(brief.get("start_date"), limit=32),
             clean_text(brief.get("duration_months")),
             clean_text(brief.get("study_level"), limit=120),
