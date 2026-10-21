@@ -37,6 +37,7 @@ class QualifiedOffer:
     language: str | None
     country: str | None
     city: str | None
+    geography_status: str
     source_name: str
     source_id: str
     official_url: str
@@ -112,11 +113,33 @@ def _number(value: str | None) -> int | None:
     return number if number and number <= 24 else None
 
 
+_FRANCE_ALIASES = frozenset(
+    {"fr", "fra", "france", "french republic", "republique francaise", "republique de france"}
+)
+
+
+def _place_tokens(value: str | None) -> set[str]:
+    return {part.strip() for part in re.split(r"[,;/|]", _fold(value or "")) if part.strip()}
+
+
+def _matches_excluded_place(value: str | None, excluded: tuple[str, ...], *, country: bool = False) -> bool:
+    folded = _fold(value or "").strip()
+    if not folded:
+        return False
+    excluded_values = {_fold(item).strip() for item in excluded if clean_text(item, limit=120)}
+    if country and "france" in excluded_values:
+        excluded_values.update(_FRANCE_ALIASES)
+    return folded in excluded_values or bool(_place_tokens(value) & excluded_values)
+
+
 def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
                   required_start_month: int | None = None,
                   allowed_contract_types: list[str] | tuple[str, ...] | None = None,
                   allowed_start_months: list[int] | tuple[int, ...] | None = None,
                   minimum_stage_duration_months: int | None = None,
+                  excluded_countries: list[str] | tuple[str, ...] | None = None,
+                  excluded_cities: list[str] | tuple[str, ...] | None = None,
+                  require_known_location: bool = False,
                   as_of: date | None = None) -> QualifiedOffer:
     """Qualify a normalized offer against explicit user-configurable criteria.
 
@@ -141,6 +164,8 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
     aliases = {"stage": "internship", "cdd": "fixed_term", "cdi": "permanent", "vie": "VIE"}
     allowed_contract_types = tuple(dict.fromkeys(aliases.get(str(item).strip().casefold(), str(item).strip())
                                                  for item in allowed_contract_types))
+    excluded_countries = tuple(excluded_countries or ())
+    excluded_cities = tuple(excluded_cities or ())
     today = as_of or date.today()
     description = clean_text(offer.get("description_original"), limit=30_000)
     title = clean_text(offer.get("title"), limit=300)
@@ -252,6 +277,19 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
     language = field("language", "langue")
     country = field("country", "pays")
     city = field("city", "ville")
+    country_excluded = _matches_excluded_place(country, excluded_countries, country=True)
+    city_excluded = _matches_excluded_place(city, excluded_cities)
+    mixed_city = city_excluded and len(_place_tokens(city)) > 1
+    if country_excluded or (city_excluded and not mixed_city):
+        geography_status = "excluded"
+    elif mixed_city:
+        geography_status = "mixed"
+    elif country:
+        geography_status = "allowed"
+    elif require_known_location or excluded_countries or excluded_cities:
+        geography_status = "unknown"
+    else:
+        geography_status = "not_filtered"
     source_name = clean_text(offer.get("source_name"), limit=60)
     source_id = clean_text(offer.get("source_id"), limit=240)
     raw_url = clean_text(offer.get("official_url"), limit=2_000)
@@ -319,6 +357,16 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
                 reasons.append("La date limite de candidature est passée.")
         except ValueError:
             missing.append("date limite vérifiable")
+    if target_status != "non_conforming" and geography_status == "excluded":
+        target_status = "non_conforming"
+        reasons.append(
+            "Offre située dans un pays exclu de la recherche."
+            if country_excluded else "Offre située dans une ville exclue de la recherche."
+        )
+    elif target_status != "non_conforming" and geography_status == "mixed":
+        reasons.append("L’annonce contient à la fois une ville exclue et un autre lieu ; localisation à vérifier.")
+    elif target_status != "non_conforming" and geography_status == "unknown":
+        reasons.append("Le pays manque ; impossible de confirmer que l’offre respecte l’exclusion géographique.")
     if target_status != "non_conforming" and _SENIOR_TITLE.search(title):
         target_status = "non_conforming"
         reasons.append("Le niveau senior ou d’encadrement ne correspond pas à la recherche.")
@@ -354,12 +402,15 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
             reasons.append(f"La durée varie autour du seuil de {minimum_stage_duration_months} mois ; à vérifier.")
         elif verification != "verified":
             reasons.append("La source officielle ou le lien ne sont pas vérifiés.")
+        elif geography_status in {"mixed", "unknown"}:
+            reasons.append("La localisation doit être confirmée avant de déclarer l’offre conforme.")
         else:
             target_status = "conforming"
             reasons.append("Stage confirmé, mois sélectionné et durée minimale satisfaite sur la source vérifiée.")
     elif target_status != "non_conforming" and contract_type == "internship":
         reasons.append("La durée du stage reste inconnue ; vérification nécessaire.")
-    elif target_status != "non_conforming" and start_month is not None and verification == "verified":
+    elif (target_status != "non_conforming" and start_month is not None and verification == "verified"
+          and geography_status not in {"mixed", "unknown"}):
         target_status = "conforming"
         reasons.append("Type de contrat et mois sélectionnés satisfaits sur la source vérifiée.")
     elif target_status != "non_conforming":
@@ -377,6 +428,7 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
         language=language,
         country=country,
         city=city,
+        geography_status=geography_status,
         source_name=source_name,
         source_id=source_id,
         official_url=official_url,

@@ -24,7 +24,7 @@ def source(token: str = "fiction", company: str = "Finance Synthétique") -> dic
 
 def posting(identifier: int, title: str = "Corporate Finance Intern", **changes) -> dict:
     value = {"id": identifier, "title": title, "absolute_url": f"https://careers.example.test/jobs/{identifier}",
-             "location": {"name": "Paris, France"},
+             "location": {"name": "London, United Kingdom"},
              "content": "<p>Financial analysis and valuation. This synthetic internship lasts six months.</p>"}
     value.update(changes)
     return value
@@ -217,9 +217,9 @@ def test_source_failure_is_explicit_and_does_not_erase_tracked_jobs(tmp_path):
 
 
 def test_known_geo_mismatch_is_not_used_to_fill_results_unknown_is_visible(tmp_path):
-    feed = [posting(1), posting(2, location={"name": "London, United Kingdom"}), posting(3, location={})]
+    feed = [posting(1), posting(2, location={"name": "Frankfurt, Germany"}), posting(3, location={})]
     service, _ = service_with(tmp_path, {"fiction": feed})
-    service.update_stage_search({"domains": ["Corporate Finance"], "cities": ["Paris"]})
+    service.update_stage_search({"domains": ["Corporate Finance"], "cities": ["London"]})
     result = service.explore_internships()
     ids = {item["job"]["source_id"].rsplit(":", 1)[-1] for item in result["matches"]}
     assert ids == {"1", "3"}

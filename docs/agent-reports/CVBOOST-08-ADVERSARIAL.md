@@ -1,41 +1,46 @@
-# CVBOOST-08 — Banc adversarial de matching CV/offre (matching deterministe)
+# CVBOOST-08 — Banc adversarial de matching CV/offre (121 cas)
 
-Mission **CVBOOST-08**. Deux livrables complémentaires :
+Mission **CVBOOST-08** : fiabiliser le matching CV/offre contre les faux
+positifs lexicaux, avec un banc de cas synthétiques reproductible et une
+moteur de décision qui ne cite **jamais** une preuve absente du CV.
 
-| Livrable | Emplacement | Rôle |
-|---|---|---|
-| Banc de régression du **produit** | `career/matching_bench/` | Appelle le code applicatif réel sur 118 couples synthétiques et confronte le résultat à une vérité terrain. Rapport : [`CVBOOST-08.md`](CVBOOST-08.md). |
-| Moteur de matching **adversarial** | `career/cv_quality/matching.py` | `match_cv_to_offer()` : fonction pure, déterministe, hors ligne, qui refuse les faux positifs lexicaux. Ce rapport. |
+| | |
+|---|---|
+| Branche | `agent/cvboost-08-adversarial` (base `main` — `3a0d1ee`) |
+| Livrable 1 — moteur de référence | `career/cv_quality/matching.py` + `tests/test_cv_matching_adversarial.py` (121 couples, 856 tests) + ce rapport |
+| Livrable 2 — banc produit | `career/matching_bench/` (118 couples qui appellent le code applicatif réel) + son rapport [`CVBOOST-08.md`](CVBOOST-08.md) |
+| Validation | 856 tests du banc adversarial verts · suite complète verte · ruff clean · `git diff --check` propre |
 
-Base : `bc5db69` (branche `agent/cvboost-08-adversarial`).
-Commandes de validation réellement exécutées :
-
-```bash
-.venv/bin/python -m pytest -q tests/test_cv_matching_adversarial.py   # 856 passed
-.venv/bin/python -m pytest -q                                         # 2398 passed (1542 avant lot)
-.venv/bin/python -m ruff check career/cv_quality/ tests/test_cv_matching_adversarial.py
-# All checks passed!
-```
+> Les deux livrables se complètent : le **moteur** ci-dessous est *juste* (il
+> refuse les faux positifs lexicaux), le **banc produit** est *honnête* (il
+> mesure l'écart entre le comportement applicatif réel et la vérité terrain
+> des 118 couples). Le moteur et son banc de 121 cas adversariaux ont été
+> produits sur la branche de travail `worker/cvboost-08-1792569437` (base
+> `main` identique) puis fusionnés ici : **une seule branche à intégrer**.
 
 ---
 
-## 1. Ce que fait le moteur
+## 1. Ce qui est livré
 
 ```python
 from career.cv_quality import DocumentInput, analyze_cv, match_cv_to_offer
 
 analysis = analyze_cv(DocumentInput(text=cv_text, filename="cv.txt", filetype="txt"))
-result = match_cv_to_offer(analysis, offer)
+result = match_cv_to_offer(analysis, offer)   # -> MatchResult
 ```
 
-* **Pure** : pas de réseau, pas de modèle, pas d'horloge, pas d'aléatoire.
-  Deux exécutions sur les mêmes entrées rendent le même objet.
-* **Traçable** : chaque action cite une **sous-chaîne exacte** du CV, avec
-  son offset. Rien n'est paraphrasé, rien n'est inventé.
-* **Prudent** : une exigence sans preuve rend `DO_NOT_ADD` — ce qui est
-  absent du CV n'est jamais ajouté.
-* **Exigeant** : les exigences sont lues par le contrat CVBOOST-02
-  (`analyze_offer`), jamais par un découpage maison.
+`match_cv_to_offer(cv_result, offer)` est **pure, déterministe et hors ligne** :
+
+* pas de réseau, pas de modèle, pas d'horloge, pas d'aléatoire, pas d'accès
+  disque ;
+* les exigences sont lues par le **contrat CVBOOST-02**
+  (`career.offer_requirements.extract.analyze_offer`), jamais par un
+  découpage maison ;
+* chaque action cite une **sous-chaîne exacte** du CV, avec son offset ;
+* une exigence sans preuve rend `DO_NOT_ADD` — ce qui est absent du CV n'est
+  jamais ajouté ;
+* une exigence **niée** dans l'offre n'est pas une exigence : elle sort du
+  dénominateur et produit un avertissement.
 
 ### Codes d'action
 
@@ -43,33 +48,72 @@ result = match_cv_to_offer(analysis, offer)
 |---|---|
 | `HIGHLIGHT` | Preuve verbatim trouvée : la compétence est dans le CV. |
 | `REPHRASE` | Preuve partielle ou de la même famille : reformuler avec la **preuve du CV**, pas avec le vocabulaire de l'offre. |
-| `DO_NOT_ADD` | Aucune preuve : ne pas ajouter sans preuve. |
-| `QUANTIFY` | La preuve existe mais doit être chiffrée (ou contient déjà un chiffre à expliciter). |
-| `CONFIRM_LANGUAGE` | La langue est là, le niveau exigé ne l'est pas : à confirmer. |
+| `DO_NOT_ADD` | Aucune preuve : *« Aucune preuve dans le CV, ne pas ajouter sans preuve »*. |
+| `QUANTIFY` | La preuve doit être chiffrée, ou contient déjà un chiffre à expliciter. |
+| `CONFIRM_LANGUAGE` | La langue est présente, le niveau exigé ne l'est pas : à confirmer. |
+
+### Contrat de sortie
+
+```python
+MatchAction(code, requirement_text, cv_evidence_text, cv_evidence_offset, reason, confidence, evidence)
+MatchResult(overall_score, matched_requirements, total_requirements,
+            actions, missing_critical, warnings)
+```
+
+* `requirement_text` : extrait **exact** de l'offre ;
+* `cv_evidence_text` / `cv_evidence_offset` : extrait **exact** du CV
+  (`cv_text[offset:offset+len(evidence)] == evidence`, invariant testé) ;
+* `missing_critical` : exigences obligatoires (`modality == "required"`) sans
+  preuve ;
+* `overall_score` : couverture documentaire pondérée par modalité
+  (obligatoire 1.0, souhaitable 0.5, contextuel 0.3) — **pas** une probabilité
+  d'embauche.
 
 ---
 
-## 2. Les 121 cas adversariaux
+## 2. Le banc : 121 couples synthétiques, 10 familles
 
-`tests/test_cv_matching_adversarial.py` — 121 couples synthétiques, 10
-familles, 856 tests (chaque cas est vérifié par 6 invariants).
+`tests/test_cv_matching_adversarial.py` — 121 couples (CV, offre) 100 %
+synthétiques, 856 tests (chaque cas est passé au crible par 6 invariants).
 
-| Famille | Cas | Ce que le piège casse |
+| Famille | Cas | Le piège que la famille mesure |
 |---|---|---|
 | `faux_positif_lexical` | 18 | Excel ≠ analyse financière, Java ≠ JavaScript, PostgreSQL ≠ NoSQL, AWS ≠ Azure, « tableaux de bord » ≠ l'outil Tableau. |
 | `langue` | 15 | « Anglais courant » déclaré, niveau absent, programme enseigné en anglais, niveau insuffisant, profil trilingue. |
 | `contrat` | 12 | Stage ≠ CDI, alternance déclarée ou exclue, CDD, VIE, freelance, contrat non déclaré. |
 | `diplome` | 12 | M1 / M2 / Bachelor / doctorat : le niveau se compare au niveau, pas au mot. |
-| `homonyme` | 12 | Audit financier vs audit IT, gestion de projet vs gestion d'équipe, data analysis vs data engineering. |
+| `homonyme` | 12 | Audit financier ≠ audit IT, gestion de projet ≠ gestion d'équipe, data analysis ≠ data engineering. |
 | `multilingue` | 12 | Profils FR/EN/ES/DE, offres EN, langues jamais déclarées. |
 | `acronyme` | 10 | M&A, Private Equity, Investment Banking, CRM, ERP, KPI. |
 | `negation` | 10 | « Pas de gestion d'équipe », « aucune expérience », « sans déplacement », « not required ». |
 | `absente` | 10 | Compétence 100 % absente → `DO_NOT_ADD`, jamais d'ajout. |
 | `quantification` | 10 | Équipe de 10 personnes, budget de 500 k€, chiffres absents. |
 
-### Matrice de confusion (actions attendues, 125 actions au total)
+Toutes les exigences du prompt sont couvertes : Excel/analyse financière,
+Java/JavaScript, langue déclarée vs programme enseigné, stage vs CDI,
+alternance exclue, M1/M2/Bachelor, mot nié, compétence présente dans l'offre
+seulement, acronymes (M&A, PE, IB), homonymes sectoriels (audit financier vs
+audit IT), profil multilingue.
 
-| Famille | HIGHLIGHT | REPHRASE | DO_NOT_ADD | QUANTIFY | CONFIRM_LANGUAGE | exigence niée |
+---
+
+## 3. Matrice de confusion (mesurée)
+
+Mesure faite sur les **125 exigences** dont la vérité terrain est écrite à la
+main dans le banc (couverture : l'exigence est-elle prouvée par le CV ?).
+
+| | CV prouve | CV ne prouve pas |
+|---|---|---|
+| **Vérité : l'exigence est prouvable** | 57 (TP) | 0 (FN) |
+| **Vérité : l'exigence n'est pas prouvable** | 0 (FP) | 68 (TN) |
+
+* **Précision = 1.0000**, **rappel = 1.0000**
+* **Faux positifs = 0** — aucun cas où le moteur invente une preuve ;
+* **Faux négatifs = 0** — aucun cas où une preuve présente est refusée.
+
+Matrice par code d'action (125 exigences évaluées) :
+
+| Famille | HIGHLIGHT | REPHRASE | DO_NOT_ADD | QUANTIFY | CONFIRM_LANGUAGE | niée (hors dénominateur) |
 |---|---|---|---|---|---|---|
 | faux_positif_lexical | 9 | 0 | 9 | 1 | 0 | 0 |
 | acronyme | 5 | 0 | 5 | 0 | 0 | 0 |
@@ -83,42 +127,42 @@ familles, 856 tests (chaque cas est vérifié par 6 invariants).
 | multilingue | 8 | 0 | 10 | 0 | 0 | 0 |
 | **Total** | **52** | **1** | **68** | **3** | **1** | **6** |
 
-Lecture : 68 exigences sur 125 ne sont **pas** prouvées par le CV. C'est le
+Lecture : **68 exigences sur 125 ne sont pas prouvées** par le CV. C'est le
 cœur du lot — un banc qui ne trouve que des positives ne mesure rien.
 
 ### Les six invariants vérifiés sur *chaque* cas
 
-1. `preuve_toujours_verbatim` — toute preuve est une sous-chaîne exacte du CV,
-   et l'offset announced=redonne exactement cette sous-chaîne ;
+1. `preuve_toujours_verbatim` — toute preuve est une sous-chaîne exacte du CV
+   et l'offset annoncé redonne exactement cette sous-chaîne ;
 2. `absent_jamais_ajoute` — `DO_NOT_ADD` ⟹ aucune preuve, et inversement ;
 3. `determinisme` — deux exécutions rendent le même `MatchResult` ;
 4. `aucune_donnee_de_contact` — ni e-mail, ni téléphone, ni LinkedIn dans la
    surface de décision ;
 5. `score_determine_et_borne` — score borné, cohérent avec les actions ;
-6. `exigence_obligatoire_manquante_signalee` — `missing_critical` ne contient
-   que des exigences réellement traitées.
+6. `exigence_obligatoire_manquante_signalee` — `missing_critical` ne
+   contient que des exigences réellement traitées.
 
 ---
 
-## 3. Comment les pièges sont traités
+## 4. Comment chaque piège est traité
 
 | Piège | Traitement | Cas |
 |---|---|---|
-| Excel ≠ analyse financière | Concepts distincts : « excel » n'est pas dans la famille « finance ». | ADV-001, ADV-004 |
+| Excel ≠ analyse financière | Concepts distincts : `excel` n'est pas dans la famille `finance`. | ADV-001, ADV-004 |
 | Modélisation ≠ analyse financière | Même famille ⇒ `REPHRASE` (reformuler avec la preuve), jamais `HIGHLIGHT`. | ADV-003 |
-| Java ≠ JavaScript | Correspondance par **mot entier** : « java » ne prouve jamais « javascript ». | ADV-005, ADV-006 |
+| Java ≠ JavaScript | Correspondance par **mot entier** : `java` ne prouve jamais `javascript`. | ADV-005, ADV-006 |
 | Un programme enseigné en anglais ≠ un niveau d'anglais | Contexte d'enseignement détecté (même ligne) ⇒ aucune preuve de niveau. | ADV-032, ADV-038 |
 | Stage ≠ CDI | Le contrat déclaré par le CV est comparé à celui de l'offre. | ADV-043, ADV-047 |
 | Alternance exclue | Le CV déclare « CDI » **et** exclut « alternance » : les deux sont tenus séparés. | ADV-045 |
 | M1 ≠ M2 ≠ Bachelor | Niveaux ordonnés, comparaison par rang ; le niveau générique « master » n'écrase pas « master 1 ». | ADV-055, ADV-056 |
 | Mot nié | Une exigence niée **n'est pas une exigence** : elle sort du dénominateur et produit un avertissement. | ADV-067 à ADV-076 |
 | Compétence absente | `DO_NOT_ADD` avec la raison canonique. | ADV-077 à ADV-086 |
-| Acronymes | M&A ↔ fusions-acquisitions, PE ↔ private equity, en majuscules stricts pour les acronymes courts (`PE`, `IB`, `R`). | ADV-019 à ADV-022 |
-| Homonymes | Groupes d'homonymes : audit financier ≠ audit IT, data analysis ≠ data engineering. | ADV-087 à ADV-090 |
-| Multilingue | La preuve est cherchée par langue et par niveau, sur la ligne qui déclare la langue. | ADV-109 à ADV-112 |
+| Acronymes | M&A ↔ fusions-acquisitions, PE ↔ private equity, majuscules strictes pour les acronymes courts (`PE`, `IB`, `R`). | ADV-019 à ADV-022 |
+| Homonymes sectoriels | Groupes d'homonymes : audit financier ≠ audit IT, data analysis ≠ data engineering, gestion de projet ≠ gestion d'équipe. | ADV-087 à ADV-098 |
+| Multilingue | La preuve est cherchée par langue **et** par niveau, sur la ligne qui déclare la langue. | ADV-109 à ADV-112 |
 | Quantification | Preuve chiffrée ⇒ `QUANTIFY` ; exigence d'échelle sans chiffre ⇒ `QUANTIFY`. | ADV-099 à ADV-108 |
 
-Trois pièges supplémentaires que le lot a ajoutés :
+Trois pièges supplémentaires que le lot treats :
 
 * **« EXPERIENCE », « LANGUES »… ne prouvent rien** : les en-têtes de section
   du CV sont exclus du corpus de preuve (ADV-076).
@@ -131,68 +175,103 @@ Trois pièges supplémentaires que le lot a ajoutés :
 
 ---
 
-## 4. Modifications apportées au code existant
+## 5. Modifications apportées au code existant
 
 Le lot **n'ajoute** que ce qui lui est nécessaire, et le signale :
 
 | Fichier | Modification | Pourquoi |
 |---|---|---|
-| `career/cv_quality/models.py` | Ajout de `MatchAction`, `MatchResult`, `MatchEvidence`, `MatchActionCode` et d'un champ `text: str = ""` sur `CVAnalysisResult` (défaut vide, compatible). | Sans le texte analysé, aucune sous-chaîne exacte ne peut être citée ; le champ est donc indispensable à la preuve verbatim. |
+| `career/cv_quality/models.py` | Ajout de `MatchAction`, `MatchResult`, `MatchEvidence`, `MatchActionCode` et d'un champ `text: str = ""` sur `CVAnalysisResult` (défaut vide ⇒ compatible). | Sans le texte analysé, aucune sous-chaîne exacte ne peut être citée : le champ est indispensable à la preuve verbatim. |
 | `career/cv_quality/structure.py` | `analyze_cv()` renseigne `text=document.text`. | Idem, une seule ligne. |
 | `career/cv_quality/__init__.py` | Export de `match_cv_to_offer` et des modèles de matching. | API publique. |
+| `career/cv_quality/matching.py` | **Nouveau** — le moteur (1 358 lignes). | Cœur du lot. |
+| `tests/test_cv_matching_adversarial.py` | **Nouveau** — 121 cas + 6 invariants. | Banc de régression. |
 
 **Aucune règle métier existante n'est modifiée** : `career/service.py`,
-`career/router.py`, `career_static/*`, les migrations et `SCHEMA_VERSION` ne
-sont pas touchés. Le moteur est additif et n'est appelé par aucun flux
-produit : c'est une surface de décision testée, pas un changement de
-comportement.
+`career/router.py`, `career_static/*`, `requirements*.txt`, les migrations et
+`SCHEMA_VERSION` ne sont pas touchés. Le moteur est **additif** et n'est
+appelé par **aucun flux produit** : c'est une surface de décision testée, à
+brancher ensuite (mission 10 — intégration), pas un changement de
+comportement en production.
+
+> **Écart connu, à traiter par l'intégrateur** : le champ `text` de
+> `CVAnalysisResult` (mission 01) n'est pas encore propagé dans
+> `career/cv_quality/ats.py` (mission 04). Le moteur de matching accepte
+> `cv_text=` en paramètre explicite pour ce cas.
 
 ---
 
-## 5. Limites connues (à traiter par l'intégrateur)
+## 6. Limites connues
 
-* **Vocabulaire fermé** : les concepts sont une table curée
-  (`CONCEPTS`). Une compétence hors table passe par le chemin générique
-  (comparaison de mots), qui est plus prudent mais moins fin. La table est
-  le point d'extension naturel.
+* **Vocabulaire fermé** : les concepts sont une table curée (`CONCEPTS`). Une
+  compétence hors table passe par le chemin générique (comparaison de mots),
+  plus prudent mais moins fin. La table est le point d'extension naturel.
 * **Pluriels** : la tolérance singulier/pluriel est volontairement simple
   (un « s » final, mots de 4 lettres et plus).
 * **Niveaux de langue** : `natif`, `courant`, `professionnel`,
   `intermédiaire`, `débutant`, `lu`. Un niveau inconnu reste inconnu : le
   moteur produit `CONFIRM_LANGUAGE` plutôt que de deviner.
-* **Contrat** : la détection porte sur la déclaration du CV
-  (« je recherche un CDI »). Un CV qui n'énonce aucun contrat ne prouve
-  rien sur le contrat : le moteur le dit.
-* **Score** : pondéré par modalité (obligatoire 1.0, souhaitable 0.5,
-  contextuel 0.3). Il mesure la **couverture documentaire**, pas une
-  probabilité d'embauche.
+* **Contrat** : la détection porte sur la déclaration du CV (« je recherche
+  un CDI »). Un CV qui n'énonce aucun contrat ne prouve rien sur le contrat :
+  le moteur le dit.
+* **Score** : couverture documentaire pondérée, pas probabilité d'embauche.
+* **Le banc mesure le moteur, pas le produit** : c'est le complément du banc
+  produit (`career/matching_bench/`, même branche) qui mesure l'écart entre
+  le comportement applicatif réel et la vérité terrain.
 
 ---
 
-## 6. Ce que le banc de produit (`career/matching_bench/`) ajoute
+## 7. Commandes de validation exécutées
 
-Le moteur ci-dessus est *juste*. Le banc de produit est *honnête* : il
-appelle le code applicatif réel (`prepare_application`, `analyze_offer`,
-`score_brief_match`, `assess_education_access`, `qualify_offer`) et mesure
-l'écart entre le comportement réel et la vérité terrain des 118 couples.
+```bash
+.venv/bin/python -m pytest -q tests/test_cv_matching_adversarial.py
+# 856 passed
 
-Résultat de la dernière exécution (reproductible) :
+.venv/bin/python -m pytest -q tests/test_matching_bench_*.py
+# 185 passed  (banc produit, autre commit de la branche)
 
+.venv/bin/python -m pytest -q
+# 2408 passed, 1 skipped in 222.39s   (main + moteur + les deux bancs)
+
+.venv/bin/python -m ruff check .
+# All checks passed!
+
+git diff --check
+# (vide) — aucun espace en fin de ligne, aucun conflit
+
+VENV_PY=/Users/comedelavenne/AI-Excel-Agent/.venv/bin/python ./checklist_codex.sh main
+# TOUT VERT
 ```
-118 cas — défauts durs : 3 (max 3) — écarts sémantiques : 38 (max 38)
-Seuils respectés.
-```
 
-Les 38 écarts sémantiques mesurés sont les faux positifs que ce moteur de
-référence sait éviter ; c'est la mesure qui permet de les réduire ensuite
-dans le produit, sans masquer ce qui reste ouvert.
+Mesures reprises, branche de travail `worker/cvboost-08-1792569437` (base
+`main`, périmètre strict du prompt — sans le banc produit) :
+`tests/test_cv_matching_adversarial.py` → **856 passed**, suite complète
+→ **2223 passed, 1 skipped**, `ruff check .` → **All checks passed!**,
+`git diff --check` → **propre**.
 
 ---
 
-## 7. Provenance
+## 8. Provenance et sécurité
 
-* 100 % synthétique : entreprises, offres et profils fictifs, aucun e-mail
-  réel, aucun appel réseau, aucun secret lu.
-* Les profils de test sont des « Candidat Exemple » ; les domaines
-  réservés restent `exemple-fake.test`.
-* Aucune donnée personnelle, aucun CV réel, aucune base Career lue.
+* 100 % synthétique : entreprises, offres et profils fictifs (« Candidat
+  Exemple », « Groupe Exemple »), aucun e-mail réel, aucun CV réel, aucune
+  base Career lue, aucun secret.
+* Aucun appel réseau : le moteur n'importe que `re`, `unicodedata`,
+  `itertools`, `dataclasses`, `typing` et deux modules internes
+  (`cv_quality.models`, `offer_requirements.extract`).
+* Les preuves citées sont des extraits du CV, jamais des données de contact
+  (invariant 4).
+
+---
+
+## 9. Suite proposée
+
+1. **Brancher le moteur** sur le flux « plan CV » (mission 10) : le moteur
+   produit la surface de décision, l'UI doit alors afficher la preuve et
+   l'action, jamais une reformulation non sourcée.
+2. **Élargir `CONCEPTS`** à partir des écarts mesurés par le banc produit
+   (`career/matching_bench/`) : les 38 écarts sémantiques déjà mesurés
+   sont la liste de travail.
+3. **Remplacer la table de concepts** par les compétences réelles du
+   référentiel `career` quand il existera, en gardant la règle : une
+   compétence hors table ne vaut pas preuve.

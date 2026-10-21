@@ -29,7 +29,7 @@ from career.application_studio import build_local_application_draft, parse_ai_dr
 from career.interview import evaluate_answer, progress_summary, select_question
 from career.profile_import import parse_profile_text
 from career.scoring import SCORING_WEIGHTS, SCORING_VERSION, score_job, scoring_placeholder
-from career.service import CareerService, DELETE_CONFIRMATION
+from career.service import CareerService, DELETE_CONFIRMATION, SCHEMA_VERSION
 from career.sources import LOCAL_LANGUAGE_HINTS, SEARCH_TERMS, discovery_request_for
 from come_ai_web import create_app
 from workspace_core import UserFacingError
@@ -718,7 +718,7 @@ Valuation, Excel
         connection.execute("PRAGMA user_version = 1")
     migrated = CareerService(tmp_path)
     with sqlite3.connect(migrated.db_path) as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 7
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
         columns = {row[1] for row in connection.execute("PRAGMA table_info(candidate_profile)").fetchall()}
     assert {"contact_email", "contact_phone", "linkedin_url", "experience"}.issubset(columns)
     assert migrated.get_profile()["notes"] == "Modifié manuellement après l’extraction"
@@ -742,10 +742,10 @@ def test_v6_database_is_upgraded_additively_and_keeps_profile(tmp_path: Path) ->
     with sqlite3.connect(restored.db_path) as connection:
         version = connection.execute("PRAGMA user_version").fetchone()[0]
         columns = {row[1] for row in connection.execute("PRAGMA table_info(application_drafts)")}
-    assert version == 7
+    assert version == SCHEMA_VERSION
     assert "quality_json" in columns
     assert restored.get_profile()["display_name"] == "Candidate Example"
-    assert list(restored.backups_dir.glob("career-before-v6-to-v7-*.sqlite3"))
+    assert list(restored.backups_dir.glob(f"career-before-v6-to-v{SCHEMA_VERSION}-*.sqlite3"))
 
 
 def test_legacy_schema_migration_creates_private_consistent_backup(tmp_path: Path) -> None:
@@ -798,7 +798,7 @@ def test_legacy_schema_migration_creates_private_consistent_backup(tmp_path: Pat
         connection.execute("PRAGMA user_version = 1")
 
     migrated = CareerService(tmp_path)
-    backups = list(migrated.backups_dir.glob("career-before-v1-to-v7-*.sqlite3"))
+    backups = list(migrated.backups_dir.glob(f"career-before-v1-to-v{SCHEMA_VERSION}-*.sqlite3"))
     assert len(backups) == 1
     backup_path = backups[0]
     assert (stat.S_IMODE(backup_path.stat().st_mode) & 0o077) == 0
@@ -810,7 +810,7 @@ def test_legacy_schema_migration_creates_private_consistent_backup(tmp_path: Pat
     assert "contact_email" not in legacy_columns
 
     with sqlite3.connect(migrated.db_path) as current:
-        assert current.execute("PRAGMA user_version").fetchone()[0] == 7
+        assert current.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
         current_columns = {row[1] for row in current.execute("PRAGMA table_info(candidate_profile)").fetchall()}
     assert {"contact_email", "contact_phone", "linkedin_url", "experience"}.issubset(current_columns)
     assert migrated.get_profile()["notes"] == "donnée v1 à préserver"

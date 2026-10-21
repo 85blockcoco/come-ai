@@ -113,7 +113,17 @@ def test_all_real_handlers_ignore_dotenv_credentials_and_private_memory_override
     monkeypatch.setattr("hybrid_chat._credential", forbidden)
     target = ComeAITarget()
     run = run_suite(target, list(CASES.values()), persist=False)
-    assert run["metrics"]["cases_passed"] == 15
+    failures = [
+        {
+            "id": result.get("case_id"),
+            "outcome": result.get("outcome"),
+            "checks": [check for check in result.get("checks", []) if not check.get("ok")],
+            "structured": (result.get("observation") or {}).get("structured"),
+        }
+        for result in run["results"]
+        if result.get("passed") is False
+    ]
+    assert run["metrics"]["cases_passed"] == 15, failures
     assert run["metrics"]["cases_unsupported"] == 1
     assert not private_store.exists()
     assert "synthetic-sentinel-not-a-key" not in json.dumps(run)

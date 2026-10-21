@@ -403,9 +403,18 @@
                 <input id="stagehunter-roles" maxlength="2500" placeholder="Ex. stagiaire M&A, analyste junior…" />
               </label>
               <div class="form-row two-columns">
-                <label>Pays (facultatif)<input id="stagehunter-countries" maxlength="1500" placeholder="Ex. France, Royaume-Uni" /></label>
-                <label>Villes (facultatif)<input id="stagehunter-cities" maxlength="1500" placeholder="Ex. Paris, Londres" /></label>
+                <label>Pays recherchés (facultatif)<input id="stagehunter-countries" maxlength="1500" placeholder="Ex. Royaume-Uni, Allemagne, Singapour" /></label>
+                <label>Villes recherchées (facultatif)<input id="stagehunter-cities" maxlength="1500" placeholder="Ex. Londres, Francfort, Singapour" /></label>
               </div>
+              <fieldset>
+                <legend>Exclusions géographiques strictes</legend>
+                <div class="form-row two-columns">
+                  <label>Pays exclus<input id="stagehunter-excluded-countries" maxlength="1500" value="France" /></label>
+                  <label>Villes exclues<input id="stagehunter-excluded-cities" maxlength="1500" value="Paris" /></label>
+                </div>
+                <label class="stagehunter-domain"><input id="stagehunter-require-known-location" type="checkbox" checked /> Garder « à vérifier » toute offre dont le pays est inconnu</label>
+                <p class="fixed-period-note">Par défaut, aucune offre située en France ou à Paris n’est recommandée.</p>
+              </fieldset>
               <div class="form-row two-columns">
                 <label>Niveau d’études déclaré<input id="stagehunter-level" maxlength="120" placeholder="Ex. Bac+5, Master 2…" /></label>
                 <label>Langues déclarées<input id="stagehunter-languages" maxlength="1000" placeholder="Ex. anglais C1, français natif…" /></label>
