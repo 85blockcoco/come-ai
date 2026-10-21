@@ -17,6 +17,10 @@ moteur de décision qui ne cite **jamais** une preuve absente du CV.
 > `origin/agent/cvboost-08-adversarial` (commit `31d00b2`). Cette branche ne
 > contient que le périmètre du prompt (moteur de référence + banc de cas
 > adversariaux), afin que la relecture reste lisible.
+>
+> **État final pour l'intégrateur** : les deux livrables ont été fusionnés
+> sur `origin/agent/cvboost-08-adversarial` (base `main`, commit de fusion
+> `a407345`) — **une seule branche à intégrer**.
 
 ---
 
