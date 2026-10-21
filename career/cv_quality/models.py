@@ -116,12 +116,17 @@ class CVAnalysisResult:
         experiences: Parsed experience entries from the Experience section.
         readability: Readability metrics for the full text.
         provenance: Document metadata and extraction info.
+        text: The analysed text itself.  Consumers that must quote the CV
+            verbatim (mission 08 matching) need the exact characters: the
+            offsets of ``findings``, ``sections`` and ``experiences`` are
+            positions inside this text.
     """
     findings: list[Finding]
     sections: list[SectionReading]
     experiences: list[ExperienceEntry]
     readability: ReadabilityScore
     provenance: Provenance
+    text: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,3 +143,72 @@ class DocumentInput:
     filename: str | None
     filetype: Literal["txt", "pdf", "docx"]
     page_count: int | None = None
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Matching models (Mission 08)
+# ──────────────────────────────────────────────────────────────────────
+
+MatchActionCode = Literal["HIGHLIGHT", "REPHRASE", "DO_NOT_ADD", "QUANTIFY", "CONFIRM_LANGUAGE"]
+
+
+@dataclass(frozen=True, slots=True)
+class MatchEvidence:
+    """A verbatim excerpt of the CV that supports a matching decision.
+
+    Attributes:
+        text: The excerpt, byte-for-byte identical to a slice of the CV text.
+        offset: Character index of ``text`` inside the CV text.
+        kind: What the excerpt proves — "skill", "language", …
+        field: Optional label of the concept or language proven.
+    """
+    text: str
+    offset: int
+    kind: str
+    field: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class MatchAction:
+    """A single action resulting from matching one offer requirement against the CV.
+
+    Attributes:
+        code: Action type — HIGHLIGHT (direct evidence), REPHRASE (evidence exists but needs rewording),
+              DO_NOT_ADD (no evidence in CV), QUANTIFY (evidence exists but lacks numbers),
+              CONFIRM_LANGUAGE (language requirement confirmed).
+        requirement_text: Exact excerpt of the requirement from the offer.
+        cv_evidence_text: Exact verbatim substring from the CV that supports this action,
+                          or None if DO_NOT_ADD.
+        cv_evidence_offset: Character index in the raw CV text where cv_evidence_text starts,
+                            or None if DO_NOT_ADD or evidence not found.
+        reason: Human-readable explanation of why this action was chosen.
+        confidence: Deterministic confidence score 0.0–1.0 for this action.
+        evidence: Structured form of the same proof (never more than the text).
+    """
+    code: MatchActionCode
+    requirement_text: str
+    cv_evidence_text: str | None
+    cv_evidence_offset: int | None
+    reason: str
+    confidence: float
+    evidence: MatchEvidence | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class MatchResult:
+    """Complete result of matching a CV against one offer.
+
+    Attributes:
+        overall_score: Global matching score 0.0–1.0 (weighted by requirement importance).
+        matched_requirements: Number of requirements with HIGHLIGHT/REPHRASE/QUANTIFY/CONFIRM_LANGUAGE.
+        total_requirements: Total number of requirements extracted from the offer.
+        actions: List of actions for each requirement, in the same order as extracted.
+        missing_critical: List of requirement texts that are mandatory (modality=required) but have DO_NOT_ADD.
+        warnings: Non-blocking warnings (e.g., "Alternance détectée", "Négation détectée", "Langue programme vs exigence").
+    """
+    overall_score: float
+    matched_requirements: int
+    total_requirements: int
+    actions: list[MatchAction]
+    missing_critical: list[str]
+    warnings: list[str]
