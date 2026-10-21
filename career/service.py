@@ -61,7 +61,7 @@ from .application_dashboard import (
     build_dashboard_payload,
 )
 from .application_prep import prepare_application, summarize_offer
-from .application_sprint import MAX_SPRINT_ITEMS, build_application_sprint
+from .application_sprint import MAX_SPRINT_CANDIDATES, MAX_SPRINT_ITEMS, build_application_sprint
 
 try:
     from consent_guard import ConsentGuard
@@ -111,6 +111,7 @@ from .profile_readiness import assess_profile_readiness
 from .qualification_persistence import (
     decode_qualification_snapshot,
     normalize_qualification_snapshot,
+    snapshot_matches_current_source,
 )
 
 
@@ -1982,17 +1983,20 @@ class CareerService:
             match
             for match in matches
             if (match.get("stage_match") or {}).get("qualification_status") != "non_conforming"
-        ][:bounded_limit]
+        ][:MAX_SPRINT_CANDIDATES]
         preparations = {
             str(match["job"]["id"]): self.get_job_prep(str(match["job"]["id"]))
             for match in eligible_matches
             if isinstance(match.get("job"), dict) and match["job"].get("id")
         }
+        context = self._scoring_context()
         return build_application_sprint(
             matches,
             preparations,
             self.list_applications(),
             limit=bounded_limit,
+            profile=context.get("profile") or {},
+            criteria=self.get_stage_search().get("brief") or {},
         )
 
     def get_job_summary(
@@ -3180,6 +3184,22 @@ class CareerService:
             "qualification_updated_at": result.pop("qualification_updated_at", None),
         }
         result["qualification_facts"] = decode_qualification_snapshot(qualification_row)
+        snapshot_current = snapshot_matches_current_source(result)
+        result["qualification_snapshot_current"] = snapshot_current
+        # Trust is reconstructed only from a current, source-attributed
+        # snapshot or from a job tied to a discovery source after a successful
+        # feed read. A manual import cannot become verified by claiming a flag.
+        result["source_verified"] = bool(
+            result.get("official_url")
+            and result.get("last_verified_at")
+            and (
+                (
+                    snapshot_current
+                    and result["qualification_facts"].get("verification_status") == "verified"
+                )
+                or result.get("discovery_source_id")
+            )
+        )
         result["shortlisted"] = bool(result["shortlisted"])
         result["calendar_reasons"] = json.loads(result.pop("calendar_reasons_json") or "[]")
         result["deadline_status"] = deadline_state(result.get("deadline_date"), result.get("source_status", "unknown"))

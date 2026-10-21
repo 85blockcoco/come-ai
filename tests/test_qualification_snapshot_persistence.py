@@ -6,6 +6,7 @@ import copy
 import sqlite3
 
 from career.application_prep import summarize_offer
+from career.offer_qualification import qualify_offer
 from career.service import CareerService, SCHEMA_VERSION
 
 
@@ -149,3 +150,36 @@ def test_snapshot_is_removed_with_its_job(tmp_path) -> None:
             "SELECT COUNT(*) FROM job_qualification_snapshots WHERE job_id = ?", (job["id"],)
         ).fetchone()[0]
     assert count == 0
+
+
+def test_verified_source_survives_storage_and_restart_for_live_matching(tmp_path) -> None:
+    service = CareerService(tmp_path)
+    service.update_stage_search({
+        "domains": ["M&A"], "contract_types": ["stage"], "start_months": [1],
+        "minimum_stage_duration_months": 6,
+    })
+    payload = _payload()
+    payload.update(
+        start_date="2027-01-05", duration_months=6, employment_type="Internship",
+        language="English", country="United Kingdom", city="London",
+    )
+    payload["qualification"] = qualify_offer(payload).to_dict()
+    created = service.import_job(payload)
+
+    reopened = CareerService(tmp_path)
+    stored = reopened.get_job(created["id"])
+    assert stored["qualification_snapshot_current"] is True
+    assert stored["source_verified"] is True
+    match = reopened.list_stage_matches()["matches"][0]
+    assert match["qualification"]["verification_status"] == "verified"
+    assert match["qualification"]["target_status"] == "conforming"
+
+
+def test_manual_claim_does_not_create_persisted_source_verification(tmp_path) -> None:
+    service = CareerService(tmp_path)
+    payload = _payload()
+    payload.pop("qualification")
+    payload.update(start_date="2027-01-05", duration_months=6, source_verified=True)
+    stored = service.import_job(payload)
+    assert stored["qualification_snapshot_current"] is False
+    assert stored["source_verified"] is False

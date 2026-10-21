@@ -3026,6 +3026,7 @@ function sprintReadinessLabel(value) {
     prepare_now: "Prête à préparer",
     profile_to_complete: "Profil à compléter",
     offer_to_verify: "Offre à vérifier",
+    candidate_to_verify: "Compatibilité candidat à vérifier",
   }[value] || "À vérifier";
 }
 
@@ -3041,6 +3042,7 @@ function renderApplicationSprint(payload) {
     [stats.prepare_now || 0, "prêtes à préparer"],
     [stats.profile_to_complete || 0, "profils à renforcer"],
     [stats.offer_to_verify || 0, "offres à vérifier"],
+    [stats.candidate_to_verify || 0, "compatibilités à vérifier"],
   ].forEach(([value, label]) => {
     const item = make("article", "", "sprint-stat");
     item.append(make("strong", String(value)), make("span", label));
@@ -3060,10 +3062,22 @@ function renderApplicationSprint(payload) {
     card.append(make("h4", item.title));
     card.append(make("p", `${item.location} · langue ${item.language} · correspondance ${item.match_score}/100 · CV ${item.coverage_percent} %`, "sprint-card-meta"));
     card.append(chip(sprintReadinessLabel(item.readiness), item.readiness === "prepare_now" ? "good" : "warning"));
+    if ((item.candidate_warnings || []).length) {
+      const warnings = make("ul", "", "blocked-list");
+      item.candidate_warnings.forEach((warning) => warnings.append(make("li", warning)));
+      card.append(warnings);
+    }
     const actionsList = make("ul");
     (item.next_actions || []).slice(0, 3).forEach((action) => actionsList.append(make("li", action)));
     card.append(actionsList);
     const actions = make("div", "", "job-actions");
+    if (item.official_url) {
+      const official = make("a", "Ouvrir la source officielle ↗", "secondary-button external-link");
+      official.href = item.official_url;
+      official.target = "_blank";
+      official.rel = "noopener noreferrer";
+      actions.append(official);
+    }
     const prepare = make("button", "Préparer", "primary-button");
     prepare.type = "button";
     prepare.addEventListener("click", () => loadStagePrep(item.job_id));
@@ -3108,6 +3122,14 @@ function renderApplicationSprint(payload) {
   });
 
   const cv = make("aside", "", "sprint-cv");
+  const verification = payload.verification_summary || [];
+  if (verification.length) {
+    cv.append(make("h4", "Vérifications groupées"));
+    cv.append(make("p", "Confirme ces faits sur les pages officielles pour débloquer plusieurs dossiers à la fois.", "sprint-card-meta"));
+    const verificationList = make("ul");
+    verification.slice(0, 8).forEach((item) => verificationList.append(make("li", `${item.field} · ${item.offer_count} offre(s)`)));
+    cv.append(verificationList);
+  }
   cv.append(make("h4", "Priorités CV à fort impact"));
   const priorities = payload.cv_advice?.priorities || [];
   if (!priorities.length) cv.append(make("p", "Aucun manque récurrent détecté sur cette file. Relis malgré tout chaque offre et chaque document.", "sprint-card-meta"));

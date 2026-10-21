@@ -9,11 +9,13 @@ unknown and must be reviewed by the person.
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+import re
 from typing import Any
 
 from .models import clean_text, normalized_text
 
 MAX_SPRINT_ITEMS = 30
+MAX_SPRINT_CANDIDATES = 150
 MAX_CV_PRIORITIES = 12
 MAX_STRENGTHS = 10
 
@@ -32,6 +34,23 @@ _GAP_THEMES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("autorisation de travail", ("work authorization", "right to work", "visa", "eligible to work")),
     ("disponibilité", ("availability", "available", "full-time opportunities", "start date")),
 )
+
+_SPEAKER_LANGUAGE = re.compile(
+    r"\b(?P<language>italian|german|spanish|french|dutch|portuguese|arabic|mandarin|japanese|"
+    r"italien|allemand|espagnol|fran[cç]ais|n[ée]erlandais|portugais|arabe|chinois|japonais)\s+speaker\b",
+    re.I,
+)
+_LANGUAGE_ALIASES = {
+    "italian": ("italian", "italien"), "italien": ("italian", "italien"),
+    "german": ("german", "allemand"), "allemand": ("german", "allemand"),
+    "spanish": ("spanish", "espagnol"), "espagnol": ("spanish", "espagnol"),
+    "french": ("french", "francais"), "français": ("french", "francais"),
+    "dutch": ("dutch", "neerlandais"), "néerlandais": ("dutch", "neerlandais"),
+    "portuguese": ("portuguese", "portugais"), "portugais": ("portuguese", "portugais"),
+    "arabic": ("arabic", "arabe"), "arabe": ("arabic", "arabe"),
+    "mandarin": ("mandarin", "chinois"), "chinois": ("mandarin", "chinois"),
+    "japanese": ("japanese", "japonais"), "japonais": ("japanese", "japonais"),
+}
 
 
 def _qualification_status(match: dict[str, Any]) -> str:
@@ -84,9 +103,18 @@ def build_application_sprint(
     applications: list[dict[str, Any]],
     *,
     limit: int = 12,
+    profile: dict[str, Any] | None = None,
+    criteria: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a bounded preparation queue from already-local application facts."""
     bounded_limit = max(1, min(MAX_SPRINT_ITEMS, int(limit or 12)))
+    profile = profile or {}
+    criteria = criteria or {}
+    profile_education = normalized_text(profile.get("education"))
+    profile_languages = normalized_text(profile.get("languages"))
+    selected_months = {
+        month for month in (criteria.get("start_months") or []) if type(month) is int and 1 <= month <= 12
+    }
     application_by_job = {
         clean_text(item.get("job_id"), limit=80): item
         for item in applications
@@ -109,14 +137,13 @@ def build_application_sprint(
     gap_offers: dict[str, set[str]] = defaultdict(set)
     gap_requirements: dict[str, str] = {}
     strength_counts: Counter[str] = Counter()
+    missing_fact_offers: dict[str, set[str]] = defaultdict(set)
     excluded_non_conforming = 0
 
     for match in ordered:
         status = _qualification_status(match)
         if status == "non_conforming":
             excluded_non_conforming += 1
-            continue
-        if len(queue) >= bounded_limit:
             continue
         job = match.get("job") if isinstance(match.get("job"), dict) else {}
         job_id = clean_text(job.get("id"), limit=80)
@@ -127,6 +154,25 @@ def build_application_sprint(
         unverified = prep.get("unverified_elements") if isinstance(prep.get("unverified_elements"), list) else []
         uncertainty = prep.get("uncertainty") if isinstance(prep.get("uncertainty"), list) else []
         missing_facts = (match.get("qualification") or {}).get("missing_fields") or []
+        normalized_title = normalized_text(job.get("title"))
+        candidate_warnings: list[str] = []
+        if re.search(r"\bph\s*d\b|\bdoctoral\b", normalized_title) and not re.search(
+            r"\bph\s*d\b|\bdoctoral\b|\bdoctorat\b", profile_education
+        ):
+            candidate_warnings.append("Le titre demande explicitement un profil PhD/doctoral, non trouvé dans la formation approuvée.")
+        if re.search(r"\bmba\b", normalized_title) and "mba" not in profile_education:
+            candidate_warnings.append("Le titre demande explicitement un MBA, non trouvé dans la formation approuvée.")
+        speaker = _SPEAKER_LANGUAGE.search(clean_text(job.get("title"), limit=300))
+        if speaker:
+            aliases = _LANGUAGE_ALIASES.get(speaker.group("language").casefold(), ())
+            if aliases and not any(normalized_text(alias) in profile_languages for alias in aliases):
+                candidate_warnings.append(
+                    f"Le titre demande {speaker.group('language')} ; cette langue n’est pas trouvée dans le profil approuvé."
+                )
+        if selected_months and re.search(r"\bsummer\b|\bete\b", normalized_title) and not selected_months.intersection({6, 7, 8}):
+            candidate_warnings.append(
+                "Le titre annonce une période Summer, probablement hors des mois sélectionnés ; le mois exact reste à confirmer."
+            )
         blockers: list[str] = []
         if status == "to_verify":
             blockers.append("Des critères de l’offre restent à vérifier avant de décider.")
@@ -136,7 +182,9 @@ def build_application_sprint(
         if unverified:
             blockers.append(f"{len(unverified)} exigence(s) ne sont pas encore étayées par ton profil.")
 
-        if status == "to_verify" or missing_facts or uncertainty:
+        if candidate_warnings:
+            readiness = "candidate_to_verify"
+        elif status == "to_verify" or missing_facts or uncertainty:
             readiness = "offer_to_verify"
         elif unverified:
             readiness = "profile_to_complete"
@@ -168,6 +216,10 @@ def build_application_sprint(
             gap_counts[keyword] += 1
             gap_offers[keyword].add(job_id)
             gap_requirements.setdefault(keyword, clean_text(action.get("requirement"), limit=300))
+        for missing_fact in missing_facts:
+            label = clean_text(missing_fact, limit=120)
+            if label:
+                missing_fact_offers[label].add(job_id)
         for element in prep.get("matched_elements") or []:
             if not isinstance(element, dict):
                 continue
@@ -202,11 +254,28 @@ def build_application_sprint(
                 "supported_requirements": int(coverage.get("supported") or 0),
                 "requirements_to_verify": int(coverage.get("to_verify") or len(unverified)),
                 "blockers": blockers[:8],
+                "candidate_warnings": candidate_warnings,
                 "next_actions": next_actions,
                 "tracking": tracking,
                 "submission_status": "manual_only_not_submitted",
             }
         )
+
+    # Readiness comes before a merely high topical score: the user wants to
+    # complete good applications quickly, not open twenty equally scored ads
+    # whose dates, language and eligibility are all still unknown.
+    queue.sort(
+        key=lambda item: (
+            {"prepare_now": 0, "profile_to_complete": 1, "offer_to_verify": 2}.get(item["readiness"], 3),
+            len(item["blockers"]),
+            item["requirements_to_verify"],
+            -item["coverage_percent"],
+            -item["match_score"],
+            item["company"].casefold(),
+            item["title"].casefold(),
+        )
+    )
+    queue = queue[:bounded_limit]
 
     priorities = [
         {
@@ -236,10 +305,17 @@ def build_application_sprint(
             "prepare_now": readiness_counts["prepare_now"],
             "profile_to_complete": readiness_counts["profile_to_complete"],
             "offer_to_verify": readiness_counts["offer_to_verify"],
+            "candidate_to_verify": readiness_counts["candidate_to_verify"],
             "already_tracked": sum(1 for item in queue if item["tracking"]),
             "excluded_non_conforming": excluded_non_conforming,
         },
         "cv_advice": {"priorities": priorities, "strengths": strengths},
+        "verification_summary": [
+            {"field": field, "offer_count": len(job_ids)}
+            for field, job_ids in sorted(
+                missing_fact_offers.items(), key=lambda item: (-len(item[1]), item[0].casefold())
+            )
+        ],
         "automatic_submission": False,
         "disclaimer": (
             "Cette file automatise la préparation locale, pas le dépôt. Les scores mesurent l’adéquation "

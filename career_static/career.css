@@ -400,7 +400,7 @@ footer { margin: 18px 3px 0; color: var(--muted); font-size: .72rem; line-height
 .stagehunter-prep-section h4 { margin: 0 0 5px; font-size: .85rem; }
 .stagehunter-prep-actions { align-items: end; }
 .stagehunter-sprint { display: grid; gap: 14px; margin-top: 14px; }
-.sprint-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.sprint-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
 .sprint-stat { padding: 11px; border: 1px solid #d8e8df; border-radius: 11px; background: #fff; }
 .sprint-stat strong { display: block; color: var(--accent-dark); font-size: 1.08rem; font-variant-numeric: tabular-nums; }
 .sprint-stat span { color: var(--muted); font-size: .68rem; line-height: 1.3; }

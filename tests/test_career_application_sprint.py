@@ -114,6 +114,53 @@ def test_sprint_uses_existing_job_score_when_brief_match_is_not_available() -> N
     assert payload["queue"][0]["match_score"] == 73
 
 
+def test_sprint_evaluates_readiness_before_result_limit() -> None:
+    noisy = _match("high-score-many-gaps", "conforming", 99)
+    ready = _match("lower-score-ready", "conforming", 70)
+    payload = build_application_sprint(
+        [noisy, ready],
+        {
+            "high-score-many-gaps": _prep("high-score-many-gaps", missing=("Bloomberg", "Python")),
+            "lower-score-ready": _prep("lower-score-ready"),
+        },
+        [],
+        limit=1,
+    )
+    assert [item["job_id"] for item in payload["queue"]] == ["lower-score-ready"]
+
+
+def test_sprint_summarizes_missing_offer_facts_for_batch_verification() -> None:
+    match = _match("one", "to_verify", 80)
+    match["qualification"]["missing_fields"] = ["mois de début", "durée"]
+    payload = build_application_sprint([match], {"one": _prep("one")}, [])
+    assert payload["verification_summary"] == [
+        {"field": "durée", "offer_count": 1},
+        {"field": "mois de début", "offer_count": 1},
+    ]
+
+
+def test_sprint_deprioritizes_explicit_phd_language_and_summer_title_mismatches() -> None:
+    regular = _match("regular", "to_verify", 70)
+    phd = _match("phd", "to_verify", 100)
+    phd["job"]["title"] = "2027 PhD Quantitative Research Intern"
+    italian = _match("italian", "to_verify", 100)
+    italian["job"]["title"] = "Client Relations Associate — Italian Speaker"
+    summer = _match("summer", "to_verify", 100)
+    summer["job"]["title"] = "Investment Banking Summer Internship 2027"
+    matches = [phd, italian, summer, regular]
+    payload = build_application_sprint(
+        matches,
+        {item["job"]["id"]: _prep(item["job"]["id"]) for item in matches},
+        [],
+        profile={"education": "Bachelor in Finance", "languages": "French native, English C1, German B2"},
+        criteria={"start_months": [1, 2, 3]},
+    )
+    assert payload["queue"][0]["job_id"] == "regular"
+    for item in payload["queue"][1:]:
+        assert item["readiness"] == "candidate_to_verify"
+        assert item["candidate_warnings"]
+
+
 def test_sprint_preserves_tracking_and_never_claims_submission() -> None:
     payload = build_application_sprint(
         [_match("tracked", "conforming", 88)],
@@ -179,4 +226,6 @@ def test_application_sprint_ui_contract_is_present() -> None:
     assert "/api/career/application-sprint" in js
     assert "Créer le kit local" in js
     assert "startApplicationKitFlow(item.job_id" in js
+    assert "Vérifications groupées" in js
+    assert "Ouvrir la source officielle" in js
     assert "Aucun envoi automatique" in html
