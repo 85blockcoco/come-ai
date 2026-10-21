@@ -46,6 +46,7 @@ from .models import (
     MatchEvidence,
     MatchResult,
 )
+from .structure import SECTION_KEYWORDS
 
 __all__ = [
     "match_cv_to_offer",
@@ -116,6 +117,14 @@ _REQUIREMENT_NOISE = frozenset(
         "must", "least", "minimum", "at", "souhaite", "souhaitable",
         "apprecie", "appreciee", "atout", "plus", "profil", "candidat",
         "candidature", "poste", "notre", "votre",
+        # Section-label-like prefixes: they introduce a list of skills, they
+        # never are one.  Left in, they dilute the proof and turn a fully
+        # proven requirement into a partial one.
+        "technologies", "technology", "techno", "stack",
+        "outils", "tools", "outillage",
+        "environnement", "environment", "env",
+        "contexte", "context", "taches", "tasks",
+        "missions", "mission", "secteur", "domaine",
     }
 )
 
@@ -223,6 +232,33 @@ _QUANTITY_PATTERN = re.compile(
 #: A figure anywhere in the excerpt.
 _DIGIT_PATTERN = re.compile(r"\d")
 
+#: Dates and phone numbers say *when* (or *who*), never *how much*: they are
+#: not provable figures.  A CV line such as "2020-2023 | Chef de projet"
+#: must not be read as a quantified achievement.
+_DATE_LIKE_PATTERN = re.compile(
+    r"""
+      \d{1,2}[/.]\d{1,2}[/.]\d{2,4}       # 01/2023, 1/2/2020
+    | \d{4}\s*[-–—/]\s*\d{2,4}           # 2020-2023
+    | \d{1,2}\s*[-–—/]\s*\d{4}           # 01-2023
+    | \+\d[\d\s().-]{7,}\d                # +33 6 12 34 56 78
+    """,
+    re.VERBOSE,
+)
+
+#: A bare year is a date too ("2018 | Stage | X"), not a figure.
+_YEAR_PATTERN = re.compile(r"\b(?:19|20)\d{2}\b")
+
+
+def _has_figure(text: str) -> bool:
+    """Whether a text holds a provable figure.
+
+    Dates and phone numbers are stripped first: they describe *when*, not
+    *how much*.  "Géré équipe" on a line dated "2020-2023" carries no figure.
+    """
+    stripped = _DATE_LIKE_PATTERN.sub(" ", text)
+    stripped = _YEAR_PATTERN.sub(" ", stripped)
+    return bool(_DIGIT_PATTERN.search(stripped))
+
 #: Education levels, expressed on the "Bac+X" scale.
 #: The specific markers come first (so "Licence professionnelle" is not read
 #: as a "Licence", and "Master 1" is not read as a "Master"), then the
@@ -232,6 +268,8 @@ _EDUCATION_MARKERS: tuple[tuple[str, int], ...] = (
     ("licence pro", 2),
     ("master 1", 4),
     ("master1", 4),
+    ("master 2", 5),
+    ("master2", 5),
     ("bac+5", 5),
     ("bac 5", 5),
     ("bac+4", 4),
@@ -250,6 +288,7 @@ _EDUCATION_MARKERS: tuple[tuple[str, int], ...] = (
     ("m1", 4),
     ("licence", 3),
     ("bachelor", 3),
+    ("bachelier", 3),
     ("l3", 3),
     ("bts", 2),
     ("dut", 2),
@@ -302,6 +341,78 @@ for _group in _SYNONYM_GROUPS:
 def _fold(text: str) -> str:
     """Lowercase + strip accents (comparison only, never displayed)."""
     return text.lower().translate(_ACCENTS)
+
+
+#: Words of every title a section may carry, per canonical section title.
+#: They are used to tell the *label* of a header ("EXPÉRIENCE PROFESSIONNELLE")
+#: from the *content* that may follow it on the same line.
+_TITLE_VOCABULARY: dict[str, frozenset[str]] = {}
+for _title, _title_keywords in SECTION_KEYWORDS.items():
+    _words: set[str] = set()
+    for _title_keyword in _title_keywords:
+        _words.update(_fold(_title_keyword).split())
+    _TITLE_VOCABULARY[_title] = frozenset(_words)
+
+#: Single-word titles, used to recognize a section label at the start of a
+#: line even when Mission 01 did not detect the section (a header line
+#: carrying its content is too long to be detected as a header).
+_SINGLE_WORD_TITLES: dict[str, str] = {}
+for _title, _title_keywords in SECTION_KEYWORDS.items():
+    for _title_keyword in _title_keywords:
+        if " " not in _title_keyword:
+            _SINGLE_WORD_TITLES.setdefault(_fold(_title_keyword), _title)
+
+#: Characters that close a section label ("COMPETENCES : Python" -> the
+#: label is "COMPETENCES").
+_LABEL_SEPARATORS = ":;|-–—·,("
+
+#: A word is a run of letters (accents included), digits excluded.
+_WORD_PATTERN = re.compile(r"[^\W\d_]+", re.UNICODE)
+
+
+def _first_separator(source: str, start: int, end: int) -> int | None:
+    """Position of the first label separator in a range, if any."""
+    for position in range(start, end):
+        if source[position] in _LABEL_SEPARATORS:
+            return position
+    return None
+
+
+def _label_span(source: str, start: int, title: str) -> tuple[int, int]:
+    """Span of the section label starting at ``start``.
+
+    The label is the leading run of words belonging to the section title
+    ("EXPERIENCE PROFESSIONNELLE"); it stops at the first separator or at
+    the first word that does not belong to it ("COMPETENCES : Python" keeps
+    "Python" out of the label).
+    """
+    line_end = source.find("\n", start)
+    if line_end == -1:
+        line_end = len(source)
+
+    vocabulary = _TITLE_VOCABULARY.get(title, frozenset())
+    label_end = start
+    position = start
+    first = True
+    while position < line_end:
+        match = _WORD_PATTERN.search(source, position, line_end)
+        if match is None:
+            break
+        if not first:
+            gap = source[label_end:match.start()]
+            if any(separator in gap for separator in _LABEL_SEPARATORS):
+                break
+        if _fold(match.group()) not in vocabulary:
+            if first:
+                # Unrecognized label: everything up to the first separator
+                # belongs to it, so that a title is never read as a proof.
+                separator = _first_separator(source, start, line_end)
+                return start, separator if separator is not None else line_end
+            break
+        label_end = match.end()
+        position = match.end()
+        first = False
+    return start, max(start, label_end)
 
 
 def _tokenize(text: str) -> list[str]:
@@ -383,15 +494,14 @@ def _header_spans(cv_result: CVAnalysisResult, source: str) -> list[tuple[int, i
     """Character ranges of the section titles.
 
     A section title is a label, not a proof: a "Projets" header never
-    proves that the candidate has done projects.
+    proves that the candidate has done projects.  Only the **label** is
+    blocked: a header line often carries its content right after the label
+    ("COMPETENCES : Python, SQL"), and that content *is* a proof.
     """
     spans: list[tuple[int, int]] = []
     for section in cv_result.sections:
         start = max(0, min(section.start_offset, len(source)))
-        end = source.find("\n", start)
-        if end == -1:
-            end = len(source)
-        spans.append((start, end))
+        spans.append(_label_span(source, start, section.title))
     return spans
 
 
@@ -400,12 +510,42 @@ def _is_blocked(position: int, spans: list[tuple[int, int]]) -> bool:
     return any(start <= position < end for start, end in spans)
 
 
-def _field_for_position(position: int, regions: list[_Region]) -> str:
-    """Name of the CV field holding the given offset."""
+def _field_for_position(
+    position: int, regions: list[_Region], scopes: list[tuple[int, int, str]]
+) -> str:
+    """Name of the CV field holding the given offset.
+
+    A line that opens with a section label wins over the enclosing region:
+    the "LANGUES : Français, Anglais" line holds languages, even when the
+    section detection did not isolate it.
+    """
+    for start, end, field in scopes:
+        if start <= position < end:
+            return field
     for region in regions:
         if region.start <= position < region.end:
             return region.field
     return DOCUMENT_FIELD
+
+
+def _label_scopes(source: str) -> list[tuple[int, int, str]]:
+    """Lines opening with a section label, with the field they announce."""
+    scopes: list[tuple[int, int, str]] = []
+    length = len(source)
+    position = 0
+    while position < length:
+        line_end = source.find("\n", position)
+        if line_end == -1:
+            line_end = length
+        first_word = _WORD_PATTERN.search(source, position, line_end)
+        if first_word is not None:
+            title = _SINGLE_WORD_TITLES.get(_fold(first_word.group()))
+            if title is not None:
+                scopes.append(
+                    (position, line_end, SECTION_FIELDS.get(title, DOCUMENT_FIELD))
+                )
+        position = line_end + 1
+    return scopes
 
 
 def _snippet_span(source: str, position: int) -> tuple[int, int]:
@@ -583,6 +723,7 @@ def find_evidence_in_cv(
     folded_source = _fold(source)
     blocked = _header_spans(cv_result, source)
     regions = _section_regions(cv_result, len(source))
+    scopes = _label_scopes(source)
 
     language = _requirement_language(requirement, category)
     if language is not None:
@@ -593,7 +734,7 @@ def find_evidence_in_cv(
         return MatchEvidence(
             text=source[start:end],
             offset=start,
-            field=_field_for_position(position, regions),
+            field=_field_for_position(position, regions, scopes),
             confidence=0.9,
         )
 
@@ -625,7 +766,7 @@ def find_evidence_in_cv(
     return MatchEvidence(
         text=source[start:end],
         offset=start,
-        field=_field_for_position(position, regions),
+        field=_field_for_position(position, regions, scopes),
         confidence=confidence,
         coverage=round(coverage, 4),
     )
@@ -715,13 +856,34 @@ def _requirements_of(offer: dict[str, Any]) -> list[_Requirement]:
 # ──────────────────────────────────────────────────────────────────────
 
 def _education_level(text: str) -> int | None:
-    """Education level mentioned in a text, on the "Bac+X" scale."""
+    """Education level mentioned in a text, on the "Bac+X" scale.
+
+    The **highest** level wins: a text mentioning a "Bac+2" and a "Master" is
+    a "Master".  A more specific marker shadows the generic one it contains,
+    so "licence professionnelle" stays a Bac+2 (not a "licence" Bac+3) and
+    "Master 1" stays a Bac+4 (not a "Master" Bac+5).
+    """
     folded = _fold(text)
-    padded = f" {folded} "
+    matches: list[tuple[int, int, int]] = []
     for marker, level in _EDUCATION_MARKERS:
-        if _word_positions(folded, marker) or f" {marker} " in padded:
-            return level
-    return None
+        for start in _word_positions(folded, marker):
+            matches.append((start, start + len(marker), level))
+
+    if not matches:
+        return None
+
+    # A marker contained in a strictly longer marker is shadowed by it.
+    levels = [
+        level
+        for start, end, level in matches
+        if not any(
+            other_start <= start
+            and end <= other_end
+            and (other_end - other_start) > (end - start)
+            for other_start, other_end, _other_level in matches
+        )
+    ]
+    return max(levels) if levels else None
 
 
 def _cv_education_level(cv_result: CVAnalysisResult) -> int | None:
@@ -824,9 +986,7 @@ def _action_code(
             )
         return "HIGHLIGHT", HIGHLIGHT_REASON, evidence.confidence
 
-    if _QUANTITY_PATTERN.search(requirement.text) and not _DIGIT_PATTERN.search(
-        evidence.text
-    ):
+    if _QUANTITY_PATTERN.search(requirement.text) and not _has_figure(evidence.text):
         return "QUANTIFY", QUANTIFY_REASON, evidence.confidence
 
     if evidence.confidence < 0.9:
@@ -910,17 +1070,20 @@ def match_cv_to_offer(cv_result: CVAnalysisResult, offer: dict[str, Any]) -> Mat
             warnings.append(
                 f"Langue mentionnée sans niveau démontré : « {requirement.text} » — à confirmer."
             )
-        if requirement.category == "language":
-            unproven = _missing_languages(cv_result, requirement.text)
-            if unproven:
-                labels = ", ".join(_LANGUAGE_LABELS.get(name, name) for name in unproven)
-                warnings.append(f"Langue requise non prouvée dans le CV : « {labels} ».")
+        # A language the CV never mentions is reported, whatever category the
+        # offer gave the requirement: the warning is about the language, not
+        # about the way the offer was written.
+        unproven = _missing_languages(cv_result, requirement.text)
+        if unproven:
+            labels = ", ".join(_LANGUAGE_LABELS.get(name, name) for name in unproven)
+            warnings.append(f"Langue requise non prouvée dans le CV : « {labels} ».")
 
     warnings.extend(_contract_warnings(offer, requirements))
     warnings.extend(_education_warnings(cv_result, offer, requirements))
 
     matched = sum(1 for action in actions if action.code != "DO_NOT_ADD")
     total = len(requirements)
+    missing_critical = list(dict.fromkeys(missing_critical))
     if missing_critical:
         warnings.append(
             f"{len(missing_critical)} exigence(s) obligatoire(s) sans preuve dans le CV."

@@ -112,6 +112,32 @@ Langues
 Anglais (C1)
 """
 
+#: A CV whose section headers carry their content on the same line — a very
+#: common layout ("COMPETENCES : Python, SQL").
+CV_SECTION_EN_TETE = """
+Jean Dupont
+
+Expérience
+2020-2023 | Chef de projet | TechCorp
+- Géré équipe de consultants
+
+Compétences : Python, SQL
+
+Langues : Français, Anglais
+"""
+
+#: A CV holding two diplomas: the highest one is the candidate's level.
+CV_DEUX_DIPLOMES = """
+Jean Dupont
+
+Formation
+2013-2015 | Licence professionnelle | École X
+2015-2017 | Master Informatique | Université Y
+
+Compétences
+Python
+"""
+
 
 def _analyze(text: str) -> CVAnalysisResult:
     """Analyze a synthetic CV."""
@@ -686,3 +712,98 @@ def test_extract_keywords_ignores_filler_words():
 def test_readability_model_is_untouched():
     """The Mission 01 models keep their shape."""
     assert ReadabilityScore is not None
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Section headers carrying their content
+# ──────────────────────────────────────────────────────────────────────
+
+def test_skill_listed_on_the_header_line_is_proven():
+    """"COMPETENCES : Python, SQL" proves the skills it lists."""
+    result = match_cv_to_offer(
+        _analyze(CV_SECTION_EN_TETE), _offer(_requirement("Python"))
+    )
+
+    action = _action(result, "Python")
+    assert action.code == "HIGHLIGHT"
+    assert action.cv_evidence_text == "Compétences : Python, SQL"
+    assert action.cv_evidence_field == "skills"
+
+
+def test_header_label_is_never_a_proof():
+    """A section title is a label: it proves nothing by itself."""
+    result = match_cv_to_offer(
+        _analyze(CV_SECTION_EN_TETE), _offer(_requirement("Compétences"))
+    )
+
+    action = _action(result, "Compétences")
+    assert action.code == "DO_NOT_ADD"
+    assert action.cv_evidence_text is None
+
+
+def test_evidence_field_of_a_one_line_language_section():
+    """A language listed on the header line is proven in the languages field."""
+    result = match_cv_to_offer(
+        _analyze(CV_SECTION_EN_TETE), _offer(_requirement("Anglais", category="language"))
+    )
+
+    action = _action(result, "Anglais")
+    assert action.cv_evidence_field == "languages"
+    assert "Anglais" in (action.cv_evidence_text or "")
+
+
+def test_requirement_boilerplate_does_not_dilute_the_proof():
+    """"Technologies : Python, Docker" is fully proven, not partly."""
+    result = match_cv_to_offer(
+        _analyze(CV_SECTION_EN_TETE), _offer(_requirement("Technologies : Python, SQL"))
+    )
+
+    action = _action(result, "Technologies : Python, SQL")
+    assert action.code == "HIGHLIGHT"
+    assert "partie" not in action.reason
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Figures and degrees
+# ──────────────────────────────────────────────────────────────────────
+
+def test_quantify_ignores_the_dates_of_the_line():
+    """A date is not a figure: the missing number is still missing."""
+    result = match_cv_to_offer(
+        _analyze(CV_SECTION_EN_TETE),
+        _offer(_requirement("Gestion de projet équipe de 10+")),
+    )
+
+    action = _action(result, "Gestion de projet équipe de 10+")
+    assert action.code == "QUANTIFY"
+    assert "chiffre" in action.reason
+
+
+def test_education_level_takes_the_highest_degree():
+    """Two diplomas: the highest one is the candidate's level."""
+    result = match_cv_to_offer(
+        _analyze(CV_DEUX_DIPLOMES),
+        _offer(_requirement("Python"), education_level="Master 2"),
+    )
+
+    assert not any("Niveau d'études" in warning for warning in result.warnings)
+
+
+def test_education_level_reads_the_specific_diploma():
+    """"Licence professionnelle" is a Bac+2, not a "licence" Bac+3."""
+    result = match_cv_to_offer(
+        _analyze(CV_DEUX_DIPLOMES),
+        _offer(_requirement("Python"), education_level="Master"),
+    )
+
+    assert not any("Niveau d'études" in warning for warning in result.warnings)
+
+
+def test_language_warning_whatever_the_offer_category():
+    """An unproven language is reported even if the offer misclassified it."""
+    result = match_cv_to_offer(
+        _analyze(CV_TEXT),
+        _offer(_requirement("Espagnol", category="other")),
+    )
+
+    assert any("Espagnol" in warning for warning in result.warnings)
