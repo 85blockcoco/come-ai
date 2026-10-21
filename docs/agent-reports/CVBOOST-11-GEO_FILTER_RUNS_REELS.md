@@ -100,5 +100,5 @@ cd AI-Excel-Agent-cvboost-11-geo-filter
 Pour reproduire les chiffres synthétiques du rapport principal :
 
 ```bash
-.venv/bin/python -m pytest -q tests/test_connectors_geo_filter.py   # 31 passed
+.venv/bin/python -m pytest -q tests/test_connectors_geo_filter.py   # 33 passed
 ```
