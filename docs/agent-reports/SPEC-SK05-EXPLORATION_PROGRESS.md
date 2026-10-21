@@ -181,8 +181,13 @@ python scripts/audit_integration.py \
   --allow-path career/router.py \
   --allow-path career_static/js/ \
   --allow-path career_static/index.html \
+  --allow-path career_static/career.js \
   --allow-path tests/test_exploration_progress.py \
   --allow-path tests/test_career_search_ux.py \
   --allow-path docs/agent-reports/SPEC-SK05-EXPLORATION_PROGRESS.md \
   --allow-shared-path career_static/career.js
 ```
+
+Audit réellement exécuté sur la branche : **VERDICT : MERGE AUTORISÉ**
+(base, périmètre, fichiers partagés, motifs interdits, worktree jetable, `pytest`, `ruff`,
+`git diff --check`).
