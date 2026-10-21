@@ -185,6 +185,9 @@ details summary:focus-visible { border-radius: 5px; outline-offset: 4px; }
 .compact-heading h3 { margin-top: 3px; font-size: .94rem; }
 .profile-import-warnings { display: grid; gap: 6px; margin: 10px 0; }
 .profile-import-warning { padding: 8px 9px; border: 1px solid #f0d6ac; border-radius: 8px; color: var(--warning); background: var(--warning-soft); font-size: .74rem; line-height: 1.4; }
+.profile-import-quality { padding: 12px; border: 1px solid #d8e8df; border-radius: 11px; background: #f8fcfa; }
+.profile-import-quality h4 { margin: 0 0 5px; font-size: .84rem; color: var(--accent-dark); }
+.profile-import-quality-actions { margin: 8px 0; padding-left: 20px; font-size: .76rem; line-height: 1.45; }
 .profile-import-field { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: start; padding: 10px; border: 1px solid #dce9e2; border-radius: 9px; background: #fff; }
 .profile-import-field > input[type="checkbox"] { width: 16px; height: 16px; margin-top: 5px; accent-color: var(--accent); }
 .profile-import-field-content { display: grid; gap: 7px; }

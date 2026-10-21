@@ -457,6 +457,22 @@ function renderProfileImportDraft(profileImport) {
   [...new Set([...(profileImport.ocr_warnings || []), ...(profileImport.suggestions?.warnings || [])])].forEach((warning) => {
     elements.profileImportWarnings.append(make("p", warning, "profile-import-warning"));
   });
+  const cvQuality = profileImport.cv_quality;
+  if (cvQuality) {
+    const quality = make("section", "", "profile-import-quality");
+    quality.append(make("h4", "Diagnostic CV local"));
+    const summary = cvQuality.risk_count
+      ? `${cvQuality.risk_count} risque${cvQuality.risk_count > 1 ? "s" : ""} structurel${cvQuality.risk_count > 1 ? "s" : ""} prioritaire${cvQuality.risk_count > 1 ? "s" : ""}.`
+      : "Aucun risque structurel détecté automatiquement — une relecture humaine reste nécessaire.";
+    quality.append(make("p", summary, "profile-import-field-meta"));
+    if ((cvQuality.actions || []).length) {
+      const actions = make("ol", "", "profile-import-quality-actions");
+      cvQuality.actions.forEach((action) => actions.append(make("li", action.message)));
+      quality.append(actions);
+    }
+    quality.append(make("p", cvQuality.disclaimer || "", "profile-import-field-meta"));
+    elements.profileImportWarnings.append(quality);
+  }
   elements.profileImportApplyForm.replaceChildren();
   const values = profileImport.suggestions?.values || {};
   const evidence = profileImport.suggestions?.evidence || {};

@@ -1123,7 +1123,45 @@ class CareerService:
             "suggested_fields": suggested_fields,
         }
         if include_preview:
-            result["preview"] = self._profile_preview(str(row["extracted_text"]))
+            extracted_text = str(row["extracted_text"])
+            result["preview"] = self._profile_preview(extracted_text)
+            if str(row["source_kind"]) == "cv":
+                # Reuse the existing deterministic CV-quality engine on the
+                # text that was already extracted locally. Only actionable
+                # messages and aggregate counts leave this private boundary;
+                # source excerpts are deliberately not repeated in the API.
+                from .cv_quality import DocumentInput, STATUS_INFO, STATUS_RISK, analyze_cv
+
+                suffix = Path(str(row["original_name"] or "cv.txt")).suffix.lower().lstrip(".")
+                filetype = suffix if suffix in {"pdf", "docx", "txt"} else "txt"
+                analysis = analyze_cv(
+                    DocumentInput(
+                        text=extracted_text,
+                        filename=str(row["original_name"] or "cv"),
+                        filetype=filetype,
+                        page_count=int(row["ocr_pages"] or 0) or None,
+                    )
+                )
+                risks = [item for item in analysis.findings if item.status == STATUS_RISK]
+                information = [item for item in analysis.findings if item.status == STATUS_INFO]
+                result["cv_quality"] = {
+                    "status": "action_required" if risks else "review_recommended" if information else "no_structural_risk_detected",
+                    "risk_count": len(risks),
+                    "information_count": len(information),
+                    "detected_sections": [item.title for item in analysis.sections],
+                    "detected_experiences": len(analysis.experiences),
+                    "actions": [
+                        {"code": item.code, "priority": "high", "message": item.message}
+                        for item in risks[:8]
+                    ] + [
+                        {"code": item.code, "priority": "review", "message": item.message}
+                        for item in information[:4]
+                    ],
+                    "disclaimer": (
+                        "Diagnostic structurel local : il signale des risques ATS, pas une note de recrutement. "
+                        "Vérifie visuellement le PDF avant toute candidature."
+                    ),
+                }
         return result
 
     @staticmethod

@@ -229,3 +229,11 @@ def test_application_sprint_ui_contract_is_present() -> None:
     assert "Vérifications groupées" in js
     assert "Ouvrir la source officielle" in js
     assert "Aucun envoi automatique" in html
+
+
+def test_cv_import_review_displays_local_structural_diagnostic() -> None:
+    root = Path(__file__).resolve().parents[1]
+    js = (root / "career_static" / "career.js").read_text(encoding="utf-8")
+    assert "Diagnostic CV local" in js
+    assert "cv_quality" in js
+    assert "une relecture humaine reste nécessaire" in js
