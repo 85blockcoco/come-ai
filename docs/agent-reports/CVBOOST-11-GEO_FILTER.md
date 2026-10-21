@@ -162,6 +162,14 @@ aucune écriture locale. Les compteurs proviennent de `health_check()` et de
 et 149 offres écartées pour cause de pays** (les 3 offres françaises de la
 board *Lincoln International*, 74 sur Lever, 72 sur Ashby).
 
+Une campagne plus large est publiée en
+[annexe](CVBOOST-11-GEO_FILTER_RUNS_REELS.md) : 75 lectures (15 boards
+Greenhouse, 3 sources Lever, 3 sources Ashby), **5 286 lignes brutes lues,
+630 offres écartées pour pays, 0 offre française retournée**. Les deux
+campagnes, menées indépendamment, donnent les mêmes compteurs par run sur
+les sources communes (Lever : 203 lignes brutes et `{"FR": 74}` ; Ashby :
+190 lignes brutes et `{"FR": 72}`).
+
 **Fait constaté sur les 4 connecteurs HTML** : les pages publiques
 répondent (Welcome to the Jungle : 556 Ko ; Talent.com : 625 Ko) mais les
 cartes d'offres sont rendues côté client : le parseur n'extrait 0 ligne sur
