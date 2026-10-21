@@ -11,9 +11,10 @@
 | Fichier | Rôle | État |
 |---|---|---|
 | `career/cv_quality/ats.py` | **nouveau** — 9 détecteurs + score pondéré + label | 100 % local, déterministe |
-| `career/cv_quality/models.py` | étendu — `ATSFinding`, `ATSCheckResult`, `ATSRiskLevel` | compatible Mission 01 |
+| `career/cv_quality/models.py` | étendu — `ATSFinding`, `ATSCheckResult`, `ATSRiskLevel`, `DocumentInput.raw_bytes` | compatible Mission 01 |
+| `career/cv_quality/parser.py` | conserve les octets bruts du fichier dans `DocumentInput.raw_bytes` | 1 ligne |
 | `career/cv_quality/__init__.py` | export de `run_ats_check`, `run_ats_check_bytes`, `run_ats_check_file` | API publique |
-| `tests/test_cv_quality_ats.py` | **42 tests** — fixtures PDF/DOCX synthétiques | tous verts |
+| `tests/test_cv_quality_ats.py` | **43 tests** — fixtures PDF/DOCX synthétiques | tous verts |
 | `docs/agent-reports/CVBOOST-04-ATS.md` | ce rapport | — |
 
 **Hors périmètre respecté** : `career/service.py`, `career/router.py`, `career_static/*`,
@@ -38,14 +39,18 @@ result = run_ats_check(document, expected_sections=None)
 
 | Argument | Rôle |
 |---|---|
-| `document` | `DocumentInput` (Mission 01) — texte + métadonnées |
+| `document` | `DocumentInput` (Mission 01) — texte + métadonnées (+ `raw_bytes` si le parser les a conservés) |
 | `expected_sections` | sections attendues ; défaut `["Expérience", "Formation", "Compétences"]` |
 | `file_bytes` | octets bruts optionnels : active l'analyse **structurelle** complète |
 
 > `file_bytes` est **optionnel** : sans lui l'analyse reste correcte mais porte sur le
-> texte aplati (pas de position, pas d'image, pas de tableau natif). Les octets sont
-> réinjectés par `run_ats_check_bytes` / `run_ats_check_file`, qui sont les points
-> d'entrée recommandés côté application.
+> texte aplati (pas de position, pas d'image, pas de tableau natif). Depuis la Mission 04,
+> `parser.extract_text_from_bytes` / `extract_text_from_file` conservent les octets dans
+> `DocumentInput.raw_bytes` : `run_ats_check(document)` utilise donc automatiquement la
+> structure réelle du fichier quand elle est disponible (voir le test
+> `test_run_ats_check_uses_the_bytes_kept_by_the_parser`).
+> `run_ats_check_bytes` / `run_ats_check_file` restent les points d'entrée recommandés
+> côté application.
 
 ### Sortie
 
@@ -224,10 +229,10 @@ MISSING_SECTION  HIGH  page=1
 
 ```bash
 /Users/comedelavenne/AI-Excel-Agent/.venv/bin/python -m pytest -q tests/test_cv_quality_ats.py
-→ 42 passed
+→ 43 passed
 
 /Users/comedelavenne/AI-Excel-Agent/.venv/bin/python -m pytest -q
-→ 1399 passed      (aucune régression)
+→ 1464 passed      (aucune régression)
 
 /Users/comedelavenne/AI-Excel-Agent/.venv/bin/python -m ruff check .
 → All checks passed!
@@ -236,7 +241,7 @@ git diff --check
 → propre
 ```
 
-### Répartition des 42 tests
+### Répartition des 43 tests
 
 | Famille | Tests |
 |---|---|
@@ -253,7 +258,7 @@ git diff --check
 | DOCX décoratif / URL | 4 |
 | Sections attendues (défaut, personnalisées, faux positif `information`/`formation`) | 3 |
 | Score, label, interprétation | 4 |
-| Contrat d'API, déterminisme, hors-ligne, performance | 6 |
+| Contrat d'API, déterminisme, hors-ligne, performance | 7 |
 | Détecteurs unitaires sur `PageContent` synthétique | 5 |
 
 **Performance mesurée** : PDF de 5 pages analysé en < 3 s (budget de la mission) — le
@@ -303,3 +308,25 @@ réseau n'est effectué.
   c'est suffisant pour un ratio, pas pour une mesure exacte.
 * Le document est analysé tel qu'il est exporté : le contrôle porte sur le rendu ATS du
   fichier, pas sur la qualité rédactionnelle du CV (c'est le rôle de `cv_quality.structure`).
+
+---
+
+## 9. Consolidation (deux workers en parallèle)
+
+Deux workers ont exécuté la Mission 04 simultanément sur la même base (`bc5db69`) :
+les commits `0e633a1` et `6e0e3bb` sont **conservés** dans l'historique de la branche
+`agent/cvboost-04-ats`, la version retenue étant celle du commit de consolidation
+`8fd5e98` (merge des deux, résolution en faveur de la version la plus exacte).
+
+Écarts corrigés lors de la consolidation, constatés en rejouant les **mêmes fixtures**
+synthétiques sur les deux implémentations :
+
+| Cas | Version écartée | Version retenue |
+|---|---|---|
+| DOCX mis en page sur 2 colonnes (`w:cols`) | non détecté | `MULTIPLE_COLUMNS` (MEDIUM) |
+| « Informations » (et non « Formation ») dans le texte | « Formation » considérée comme présente (faux négatif) | section « Formation » correctement signalée manquante (HIGH) |
+| Tableau PDF | `NESTED_TABLE` + `MULTIPLE_COLUMNS` (double comptage) | `NESTED_TABLE` + `READING_ORDER` (lecture ligne à ligne) |
+
+Apport conservé de l'autre worker : le parser conserve les octets bruts dans
+`DocumentInput.raw_bytes`, ce qui permet à l'analyse ATS de travailler sur la mise en
+page réelle sans changer l'API publique de la Mission 01.
