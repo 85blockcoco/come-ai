@@ -132,6 +132,10 @@ KIND_PROFILE_FIELD: dict[str, str] = {
     KIND_LANGUAGE: "languages",
 }
 
+#: Profile fields a contact fact can complete.  They only fill an empty
+#: field: a value written by the person is never replaced.
+PROFILE_CONTACT_FIELDS: frozenset[str] = frozenset({"contact_email", "contact_phone"})
+
 
 # ── Extraction sources ──────────────────────────────────────────────────────
 SOURCE_EMBEDDED_TEXT = "embedded_text"
@@ -399,6 +403,126 @@ def _field_lines(value: object) -> list[str]:
     return [line.strip() for line in str(value or "").splitlines() if line.strip()]
 
 
+def profile_target(fact: Fact) -> tuple[str, str]:
+    """Return the profile field and the exact text a fact writes into it.
+
+    An empty field name means the fact has no place in the profile fields:
+    a project, a certification or a date stay in the portable profile but
+    never rewrite a profile field.
+    """
+    if fact.kind == KIND_CONTACT:
+        field_name = str(fact.meta.get("field", "") or "")
+        if field_name not in PROFILE_CONTACT_FIELDS:
+            return "", ""
+        value = (fact.value or fact.label).strip()
+        return (field_name, value) if value else ("", "")
+    field_name = KIND_PROFILE_FIELD.get(fact.kind, "")
+    if not field_name:
+        return "", ""
+    line = fact_line(fact).strip()
+    return (field_name, line) if line else ("", "")
+
+
+def remove_profile_line(value: str, line: str) -> str:
+    """Remove one line from a profile field, keeping the other lines intact.
+
+    The line is matched exactly (blanks aside).  A line that is not there is
+    left alone: the profile may have been edited by the person in between.
+    """
+    target = str(line or "").strip()
+    if not target:
+        return value
+    lines = str(value or "").split("\n")
+    for index, existing in enumerate(lines):
+        if existing.strip() == target:
+            lines.pop(index)
+            return "\n".join(lines)
+    return value
+
+
+def merge_usable_facts_with_sources(
+    profile: Mapping[str, Any],
+    facts: Iterable[Fact],
+    *,
+    limits: Mapping[str, int] | None = None,
+) -> tuple[dict[str, Any], dict[str, tuple[str, str]], set[str]]:
+    """Return the merged profile, what each fact wrote, and the applied facts.
+
+    Proposed, rejected and suspended facts are never added: they cannot
+    justify a candidature.  The manual profile fields are kept as they are.
+
+    The second element maps a fact id to the ``(field, text)`` it really
+    added to the profile.  A fact whose content was already in the profile
+    contributes nothing: the manual value stays the person's own, and
+    reversing that fact must never remove it.
+
+    The third element lists the facts whose content is present in the merged
+    profile, whether they wrote it themselves or it was already there.
+    """
+    merged = dict(profile)
+    usable = [fact for fact in facts if fact.is_usable]
+    if not usable:
+        return merged, {}, set()
+    field_limits = dict(PROFILE_FIELD_LIMITS)
+    if limits:
+        field_limits.update(limits)
+
+    contributions: dict[str, tuple[str, str]] = {}
+    applied: set[str] = set()
+
+    for fact in usable:
+        if fact.kind != KIND_CONTACT:
+            continue
+        field_name = str(fact.meta.get("field", "") or "")
+        if field_name not in PROFILE_CONTACT_FIELDS:
+            continue
+        value = (fact.value or fact.label).strip()
+        if not value or str(merged.get(field_name, "")).strip():
+            # The person already wrote a contact: theirs wins.
+            continue
+        merged[field_name] = value
+        contributions[fact.id] = (field_name, value)
+        applied.add(fact.id)
+
+    for kind, field_name in KIND_PROFILE_FIELD.items():
+        existing_lines = _field_lines(merged.get(field_name, ""))
+        existing_keys = {normalize_text(line) for line in existing_lines}
+        added: list[tuple[Fact, str]] = []
+        for fact in usable:
+            if fact.kind != kind:
+                continue
+            line = fact_line(fact).strip()
+            if not line:
+                continue
+            key = normalize_text(line)
+            if not key or key in existing_keys:
+                # Already in the profile: the fact is applied, but it did
+                # not write this line and must not remove it later.
+                if any(existing.strip() == line for existing in existing_lines):
+                    applied.add(fact.id)
+                continue
+            existing_keys.add(key)
+            added.append((fact, line))
+        if not added:
+            continue
+        combined = existing_lines + [line for _, line in added]
+        limit = field_limits.get(field_name, 0)
+        kept: list[str] = []
+        used = 0
+        for line in combined:
+            if limit and used + len(line) + 1 > limit:
+                break
+            kept.append(line)
+            used += len(line) + 1
+        merged[field_name] = "\n".join(kept)
+        for fact, line in added:
+            if line in kept:
+                contributions[fact.id] = (field_name, line)
+                applied.add(fact.id)
+
+    return merged, contributions, applied
+
+
 def merge_usable_facts(
     profile: Mapping[str, Any],
     facts: Iterable[Fact],
@@ -410,54 +534,7 @@ def merge_usable_facts(
     Proposed, rejected and suspended facts are never added: they cannot
     justify a candidature.  The manual profile fields are kept as they are.
     """
-    merged = dict(profile)
-    usable = [fact for fact in facts if fact.is_usable]
-    if not usable:
-        return merged
-    field_limits = dict(PROFILE_FIELD_LIMITS)
-    if limits:
-        field_limits.update(limits)
-
-    for fact in usable:
-        if fact.kind != KIND_CONTACT:
-            continue
-        field_name = str(fact.meta.get("field", "") or "")
-        if field_name not in {"contact_email", "contact_phone"}:
-            continue
-        value = (fact.value or fact.label).strip()
-        if value and not str(merged.get(field_name, "")).strip():
-            merged[field_name] = value
-
-    for kind, field_name in KIND_PROFILE_FIELD.items():
-        existing_lines = _field_lines(merged.get(field_name, ""))
-        existing_keys = {normalize_text(line) for line in existing_lines}
-        added: list[str] = []
-        for fact in usable:
-            if fact.kind != kind:
-                continue
-            line = fact_line(fact).strip()
-            if not line:
-                continue
-            key = normalize_text(line)
-            if not key or key in existing_keys:
-                continue
-            existing_keys.add(key)
-            added.append(line)
-        if not added:
-            continue
-        combined = existing_lines + added
-        limit = field_limits.get(field_name, 0)
-        if limit:
-            trimmed: list[str] = []
-            used = 0
-            for line in combined:
-                if used + len(line) + 1 > limit:
-                    break
-                trimmed.append(line)
-                used += len(line) + 1
-            combined = trimmed
-        merged[field_name] = "\n".join(combined)
-
+    merged, _, _ = merge_usable_facts_with_sources(profile, facts, limits=limits)
     return merged
 
 

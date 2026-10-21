@@ -604,3 +604,260 @@ def test_the_manual_check_script_reads_a_document_outside_the_repository(tmp_pat
     assert "Faits proposés" in completed.stdout
     assert "Aucun fait n'est approuvé" in completed.stdout
     assert "Excel" in completed.stdout
+
+
+# ── 8. Campagne adversariale : un fait appliqué puis revenu ─────────────────
+#
+# Ces tests figent les défauts trouvés à la relecture de la livraison
+# précédente : un fait appliqué au profil puis rejeté continuait d'y figurer
+# et justificait donc encore une candidature.
+
+
+def approved_skill(service: CareerService, label: str) -> str:
+    """Approve one skill fact of the synthetic CV and return its id."""
+    result = service.build_candidate_facts(text=CV_SYNTHETIQUE, filename="cv_synthetique.txt")
+    fact = [item for item in result["facts"] if item["label"] == label][0]
+    service.decide_candidate_fact(fact["id"], "approve")
+    return fact["id"]
+
+
+def test_a_rejected_fact_leaves_the_profile_it_had_been_applied_to(tmp_path):
+    service = service_with_profile(tmp_path)
+    job = synthetic_job(service)
+    fact_id = approved_skill(service, "Power BI")
+    service.apply_candidate_facts([fact_id])
+    assert "Power BI" in service.get_profile()["skills"]
+
+    service.decide_candidate_fact(fact_id, "reject")
+
+    assert "Power BI" not in service.get_profile()["skills"]
+    draft = service.create_application_draft(job["id"], "fr")
+    assert "Power BI" not in skills_section(draft)
+
+
+def test_a_suspended_fact_leaves_the_profile_it_had_been_applied_to(tmp_path):
+    service = service_with_profile(tmp_path)
+    fact_id = approved_skill(service, "Power BI")
+    service.apply_candidate_facts([fact_id])
+    service.decide_candidate_fact(fact_id, "suspend")
+    assert "Power BI" not in service.get_profile()["skills"]
+
+
+def test_a_deleted_fact_leaves_the_profile_it_had_been_applied_to(tmp_path):
+    service = service_with_profile(tmp_path)
+    fact_id = approved_skill(service, "Power BI")
+    service.apply_candidate_facts([fact_id])
+    service.delete_candidate_fact(fact_id)
+    assert "Power BI" not in service.get_profile()["skills"]
+
+
+def test_a_reopened_fact_leaves_the_profile_it_had_been_applied_to(tmp_path):
+    service = service_with_profile(tmp_path)
+    fact_id = approved_skill(service, "Power BI")
+    service.apply_candidate_facts([fact_id])
+    service.decide_candidate_fact(fact_id, "reopen")
+    assert "Power BI" not in service.get_profile()["skills"]
+
+
+def test_the_manual_profile_value_is_never_removed_by_a_fact_decision(tmp_path):
+    """A line the person wrote stays theirs, even if a fact carries it too."""
+    service = service_with_profile(tmp_path)
+    assert service.get_profile()["skills"] == "Excel"
+    fact_id = approved_skill(service, "Excel")
+    service.apply_candidate_facts([fact_id])
+    service.decide_candidate_fact(fact_id, "reject")
+    assert service.get_profile()["skills"] == "Excel"
+
+
+def test_a_corrected_fact_replaces_its_line_in_the_profile(tmp_path):
+    service = service_with_profile(tmp_path)
+    fact_id = approved_skill(service, "Power BI")
+    service.apply_candidate_facts([fact_id])
+    service.decide_candidate_fact(fact_id, "modify", value="Power BI Avancé")
+    skills = service.get_profile()["skills"]
+    assert "Power BI Avancé" in skills
+    assert "Power BI\n" not in skills
+
+
+def test_an_approved_contact_fact_fills_the_empty_profile_field(tmp_path):
+    service = CareerService(tmp_path)
+    result = service.build_candidate_facts(text=CV_SYNTHETIQUE, filename="cv_synthetique.txt")
+    contact = [item for item in result["facts"] if item["kind"] == "contact"][0]
+    service.decide_candidate_fact(contact["id"], "approve")
+    service.apply_candidate_facts([contact["id"]])
+    assert service.get_profile()["contact_email"] == "camille.exemple@example.test"
+
+
+def test_a_contact_fact_never_replaces_a_value_written_by_the_person(tmp_path):
+    service = service_with_profile(tmp_path)
+    result = service.build_candidate_facts(text=CV_SYNTHETIQUE, filename="cv_synthetique.txt")
+    contact = [item for item in result["facts"] if item["kind"] == "contact"][0]
+    service.decide_candidate_fact(contact["id"], "approve")
+    service.apply_candidate_facts([contact["id"]])
+    assert service.get_profile()["contact_email"] == "camille.exemple@example.test"
+
+
+def test_the_apply_result_tells_what_was_really_written(tmp_path):
+    service = service_with_profile(tmp_path)
+    result = service.build_candidate_facts(text=CV_SYNTHETIQUE, filename="cv_synthetique.txt")
+    skill = [item for item in result["facts"] if item["kind"] == "skill" and item["label"] == "SQL"][0]
+    date = [item for item in result["facts"] if item["kind"] == "date"][0]
+    service.decide_candidate_fact(skill["id"], "approve")
+    service.decide_candidate_fact(date["id"], "approve")
+    applied = service.apply_candidate_facts([skill["id"], date["id"]])
+    # The date has no place in the profile fields: it is counted as ignored.
+    assert applied["applied"] == 1
+    assert applied["ignored"] == 1
+    assert "SQL" in applied["profile"]["skills"]
+
+
+def test_the_migration_repairs_a_profile_built_before_the_reversible_apply(tmp_path):
+    """A profile written by the previous version is cleaned at the migration."""
+    service = CareerService(tmp_path)
+    fact_id = approved_skill(service, "Power BI")
+    service.apply_candidate_facts([fact_id])
+    with sqlite3.connect(service.db_path) as connection:
+        # The state the previous version could leave: a rejected fact whose
+        # line is still written in the profile.
+        connection.execute(
+            "UPDATE candidate_facts SET status = 'rejected', applied_field = '', applied_line = '' WHERE id = ?",
+            (fact_id,),
+        )
+        connection.execute("ALTER TABLE candidate_facts DROP COLUMN applied_field")
+        connection.execute("ALTER TABLE candidate_facts DROP COLUMN applied_line")
+        connection.execute("PRAGMA user_version = 9")
+
+    reopened = CareerService(tmp_path)
+    assert "Power BI" not in reopened.get_profile()["skills"]
+
+
+def test_the_status_filter_rejects_an_unknown_status(tmp_path):
+    service = CareerService(tmp_path)
+    with pytest.raises(UserFacingError):
+        service.list_candidate_facts("inconnu")
+
+
+def test_the_export_lists_every_source_document(tmp_path):
+    service = CareerService(tmp_path)
+    service.build_candidate_facts(text=CV_SYNTHETIQUE, filename="cv-un.txt")
+    service.build_candidate_facts(text=CV_OCR_SYNTHETIQUE, filename="cv-deux.txt")
+    payload = json.loads(service.export_candidate_profile().read_text(encoding="utf-8"))
+    assert payload["source_documents"] == ["cv-deux.txt", "cv-un.txt"]
+
+
+# ── 9. Provenance exacte et propositions bornées ────────────────────────────
+
+
+def test_the_quote_is_the_verbatim_source_passage():
+    """The stored quote is the source text itself, blanks included."""
+    document = "Compétences\nPython   et   SQL\n"
+    facts = build_fact_proposals(document, filename="cv.txt")
+    fact = [item for item in facts if item.kind == "skill"][0]
+    excerpt = document[fact.evidence.start_offset : fact.evidence.end_offset]
+    assert excerpt == fact.evidence.quote
+    assert fact.label == "Python et SQL"
+
+
+def test_every_proposed_fact_points_at_its_own_source_passage():
+    """For each fact of the synthetic CV, the offsets hold its own text."""
+    facts = build_fact_proposals(CV_SYNTHETIQUE, filename="cv_synthetique.txt")
+    for fact in facts:
+        evidence = fact.evidence
+        excerpt = CV_SYNTHETIQUE[evidence.start_offset : evidence.end_offset]
+        assert excerpt.strip(), fact.label
+        assert evidence.quote == excerpt or evidence.quote.endswith("…")
+        assert fact.label[:30] in excerpt or fact.value[:30] in excerpt
+
+
+def test_a_full_section_does_not_hide_the_other_sections():
+    """A kind at its cap is skipped, never fatal for the whole document."""
+    document = "Compétences\n" + "\n".join(f"Skill{index}" for index in range(70)) + "\n\nLangues\nAnglais - C1\n"
+    facts = build_fact_proposals(document, filename="cv-long.txt")
+    kinds = {fact.kind for fact in facts}
+    assert "skill" in kinds
+    assert "language" in kinds
+    assert len([fact for fact in facts if fact.kind == "skill"]) == 60
+
+
+# ── 10. Interface : corriger un fait déjà approuvé ───────────────────────────
+
+
+def test_the_interface_allows_correcting_an_approved_fact():
+    root = Path(__file__).resolve().parents[1]
+    script = (root / "career_static" / "js" / "profile-builder.js").read_text(encoding="utf-8")
+    assert "Corriger" in script
+    # The correction is offered for an approved fact, not only for a proposed one.
+    assert 'fact.status === "approved" || fact.status === "modified"' in script
+
+
+# ── 11. Une justification partagée : le fait qui reste décide ───────────────
+
+
+def test_a_shared_line_leaves_the_profile_only_with_the_fact_that_justifies_it(tmp_path):
+    """Two facts carry the same content: the line follows the last one."""
+    service = CareerService(tmp_path)
+    service.update_profile({"display_name": "C", "skills": "", "experience": "", "education": "", "languages": ""})
+    first = service.build_candidate_facts(text="Compétences\nExcel\n", filename="doc-a.txt")
+    second = service.build_candidate_facts(text="Compétences\nExcel\n", filename="doc-b.txt")
+    ids = [item["id"] for item in first["facts"] + second["facts"] if item["kind"] == "skill"]
+    assert len(ids) == 2
+
+    service.decide_candidate_fact(ids[0], "approve")
+    service.apply_candidate_facts([ids[0]])
+    service.decide_candidate_fact(ids[1], "approve")
+
+    service.decide_candidate_fact(ids[0], "reject")
+    assert "Excel" in service.get_profile()["skills"]
+
+    service.decide_candidate_fact(ids[1], "reject")
+    assert "Excel" not in service.get_profile()["skills"]
+
+
+# ── 12. Honnêteté de la page ─────────────────────────────────────────────────
+
+
+def test_a_docx_import_never_claims_an_exact_page(tmp_path):
+    """A DOCX has no page information: the page stays an estimate."""
+    docx = pytest.importorskip("docx")
+    service = CareerService(tmp_path)
+    document = docx.Document()
+    document.add_paragraph("Camille Exemple")
+    document.add_paragraph("camille.exemple@example.test")
+    document.add_paragraph("COMPETENCES")
+    document.add_paragraph("Excel, Power BI")
+    stored = service.documents_dir / "cv-synthetique.docx"
+    document.save(str(stored))
+    imported = service._create_profile_import(
+        source_kind="cv",
+        original_name="cv-synthetique.docx",
+        stored_filename=stored.name,
+        content_sha256="1" * 64,
+        size_bytes=stored.stat().st_size,
+        extracted_text="",
+        extraction_method="embedded_text",
+    )
+    result = service.build_candidate_facts(import_id=imported["id"])
+    assert result["facts"]
+    assert {fact["evidence"]["page_confidence"] for fact in result["facts"]} == {"estimated"}
+
+
+def test_an_ocr_import_proposes_the_reading_the_person_saw(tmp_path):
+    """The stored OCR reading is used, never another reading of the file."""
+    service = CareerService(tmp_path)
+    imported = service._create_profile_import(
+        source_kind="cv",
+        original_name="cv-scanné-synthetique.pdf",
+        stored_filename="",
+        content_sha256="2" * 64,
+        size_bytes=len(CV_OCR_SYNTHETIQUE),
+        extracted_text=CV_OCR_SYNTHETIQUE,
+        extraction_method="macos_vision",
+        ocr_pages=2,
+    )
+    result = service.build_candidate_facts(import_id=imported["id"])
+    assert result["source"]["from_ocr"] is True
+    assert {fact["evidence"]["page_confidence"] for fact in result["facts"]} <= {"estimated"}
+    # The quote is a passage of the reading stored with the import.
+    for fact in result["facts"]:
+        excerpt = CV_OCR_SYNTHETIQUE[fact["evidence"]["start_offset"] : fact["evidence"]["end_offset"]]
+        assert excerpt.strip() == fact["evidence"]["quote"].strip()

@@ -124,6 +124,7 @@ from .candidate_profile import (
     CandidateProfile,
     Evidence,
     Fact,
+    FACT_STATUSES,
     SOURCE_EMBEDDED_TEXT,
     SOURCE_OCR,
     STATUS_APPROVED,
@@ -132,6 +133,9 @@ from .candidate_profile import (
     apply_decision,
     export_profile,
     merge_usable_facts,
+    merge_usable_facts_with_sources,
+    profile_target,
+    remove_profile_line,
     serialize_fact,
 )
 from .profile_builder import build_fact_proposals
@@ -143,7 +147,7 @@ from .qualification_persistence import (
 )
 
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 # The Stage Hunter brief lives in career_settings as one JSON value: no
 # schema migration, and it is exported with the rest of the local settings.
 STAGE_SEARCH_SETTING_KEY = "stage_search_brief"
@@ -542,6 +546,8 @@ class CareerService:
                         note TEXT NOT NULL DEFAULT '',
                         source_document TEXT NOT NULL DEFAULT '',
                         source_method TEXT NOT NULL DEFAULT 'embedded_text',
+                        applied_field TEXT NOT NULL DEFAULT '',
+                        applied_line TEXT NOT NULL DEFAULT '',
                         created_at TEXT NOT NULL,
                         updated_at TEXT NOT NULL,
                         decided_at TEXT
@@ -621,7 +627,7 @@ class CareerService:
 
     def _migrate(self, connection: sqlite3.Connection, version: int) -> None:
         """Migrate in-place without touching a person's existing Career data."""
-        if version < 1 or version > 8:
+        if version < 1 or version > 9:
             raise UserFacingError("La base Career locale ne peut pas être mise à jour automatiquement.")
         if version == 1:
             self._migrate_to_v2(connection)
@@ -648,6 +654,9 @@ class CareerService:
             version = 8
         if version == 8:
             self._migrate_to_v9(connection)
+            version = 9
+        if version == 9:
+            self._migrate_to_v10(connection)
 
     def _migrate_to_v2(self, connection: sqlite3.Connection) -> None:
         self._add_column_if_missing(connection, "candidate_profile", "contact_email", "TEXT NOT NULL DEFAULT ''")
@@ -821,6 +830,53 @@ class CareerService:
             CREATE INDEX IF NOT EXISTS candidate_facts_batch_idx ON candidate_facts(batch_id);
             """
         )
+
+    def _migrate_to_v10(self, connection: sqlite3.Connection) -> None:
+        """Remember what each applied fact wrote into the profile (additive).
+
+        Two columns are added to ``candidate_facts``: the profile field and
+        the exact line the fact contributed when it was applied.  They make
+        a decision reversible: a fact that is rejected, suspended or deleted
+        can no longer justify a candidature through a line it had written.
+
+        The migration also repairs the profiles built before this version:
+        the line of a fact that is not usable any more is removed from the
+        profile fields.
+        """
+        self._add_column_if_missing(
+            connection, "candidate_facts", "applied_field", "TEXT NOT NULL DEFAULT ''"
+        )
+        self._add_column_if_missing(
+            connection, "candidate_facts", "applied_line", "TEXT NOT NULL DEFAULT ''"
+        )
+        rows = connection.execute(
+            "SELECT * FROM candidate_facts WHERE status NOT IN (?, ?)",
+            (STATUS_APPROVED, STATUS_MODIFIED),
+        ).fetchall()
+        for row in rows:
+            fact = self._candidate_fact_from_row(row)
+            field_name, line = profile_target(fact)
+            if not field_name or not line:
+                continue
+            self._remove_profile_line(connection, field_name, line)
+
+    @staticmethod
+    def _remove_profile_line(connection: sqlite3.Connection, field_name: str, line: str) -> bool:
+        """Remove one line from a profile field, keeping the other lines."""
+        if field_name not in PROFILE_EDITABLE_FIELDS or not line:
+            return False
+        row = connection.execute("SELECT * FROM candidate_profile WHERE id = 1").fetchone()
+        if not row:
+            return False
+        current = str(row[field_name] or "")
+        updated = remove_profile_line(current, line)
+        if updated == current:
+            return False
+        connection.execute(
+            f"UPDATE candidate_profile SET {field_name} = ?, updated_at = ? WHERE id = 1",
+            (clean_text(updated, limit=PROFILE_FIELD_LIMITS.get(field_name, 0)), utc_now()),
+        )
+        return True
 
     def _seed_defaults(self, connection: sqlite3.Connection) -> None:
         now = utc_now()
@@ -1433,6 +1489,8 @@ class CareerService:
     def list_candidate_facts(self, status: str = "") -> list[dict[str, Any]]:
         """Return the facts of the local profile, most urgent review first."""
         wanted = clean_text(status, limit=20)
+        if wanted and wanted not in FACT_STATUSES:
+            raise UserFacingError("Ce statut de fait n’existe pas.")
         with self._lock, self._connection() as connection:
             if wanted:
                 rows = connection.execute(
@@ -1472,6 +1530,7 @@ class CareerService:
         source_text = ""
         pages: list[str] | None = None
         page_count: int | None = None
+        page_confidence = "exact"
         source_method = SOURCE_EMBEDDED_TEXT
         source_document = ""
 
@@ -1486,7 +1545,18 @@ class CareerService:
             source_document = str(row["original_name"] or "")
             extraction_method = str(row["extraction_method"] or SOURCE_EMBEDDED_TEXT)
             stored_filename = str(row["stored_filename"] or "")
-            if stored_filename:
+            if extraction_method != SOURCE_EMBEDDED_TEXT:
+                # The document was read by OCR: the reading stored with the
+                # import is the one the person saw in the preview, so the
+                # facts are proposed from it and never from another reading.
+                source_text = str(row["extracted_text"] or "")
+                source_method = SOURCE_OCR
+                pages = None
+                try:
+                    page_count = int(row["ocr_pages"] or 0) or None
+                except (TypeError, ValueError):
+                    page_count = None
+            elif stored_filename:
                 path = self._profile_document_path(stored_filename)
                 if path.is_file():
                     suffix = path.suffix.lower().lstrip(".")
@@ -1498,10 +1568,14 @@ class CareerService:
                     if pages:
                         source_text = "\n\n".join(pages)
                         source_method = SOURCE_EMBEDDED_TEXT
+                        # A DOCX has no page information: its single block is
+                        # an estimate, never an exact page.
+                        page_confidence = "estimated" if filetype == "docx" else "exact"
             if not source_text:
                 source_text = str(row["extracted_text"] or "")
                 source_method = SOURCE_OCR if extraction_method != SOURCE_EMBEDDED_TEXT else SOURCE_EMBEDDED_TEXT
                 pages = None
+                page_confidence = "estimated"
                 try:
                     page_count = int(row["ocr_pages"] or 0) or None
                 except (TypeError, ValueError):
@@ -1523,6 +1597,7 @@ class CareerService:
             source_method=source_method,
             pages=pages,
             page_count=page_count,
+            page_confidence=page_confidence,
             batch_id=batch_id,
             created_at=now,
         )
@@ -1621,10 +1696,113 @@ class CareerService:
                 ),
             )
             self._audit(connection, f"candidate_fact_{updated.status}", "candidate_fact", identifier)
+            if not updated.is_usable:
+                # A fact that is no longer approved must stop justifying a
+                # candidature: the line it had written in the profile goes.
+                self._revoke_fact_contribution(connection, identifier)
+            elif updated.status == STATUS_MODIFIED:
+                # A correction replaces what the fact had written.
+                self._refresh_fact_contribution(connection, updated)
         return {
             "fact": serialize_fact(updated),
             "counts": self.candidate_fact_counts(),
         }
+
+    def _revoke_fact_contribution(self, connection: sqlite3.Connection, fact_id: str) -> None:
+        """Remove from the profile what a fact had written when it was applied.
+
+        The line is only removed when the fact really wrote it: a line the
+        person had written themselves is never touched.  When another usable
+        fact carries the same content, the line stays and that fact takes
+        over the responsibility for it.
+        """
+        row = connection.execute(
+            "SELECT applied_field, applied_line FROM candidate_facts WHERE id = ?", (fact_id,)
+        ).fetchone()
+        if not row:
+            return
+        field_name = str(row["applied_field"] or "")
+        line = str(row["applied_line"] or "")
+        if field_name and line:
+            self._remove_profile_line(connection, field_name, line)
+            successor = self._successor_fact_for(connection, fact_id, field_name, line)
+            if successor:
+                # The line stays: another approved fact still justifies it.
+                self._write_profile_line(connection, field_name, line)
+                connection.execute(
+                    "UPDATE candidate_facts SET applied_field = ?, applied_line = ? WHERE id = ?",
+                    (field_name, line, successor.id),
+                )
+        connection.execute(
+            "UPDATE candidate_facts SET applied_field = '', applied_line = '' WHERE id = ?",
+            (fact_id,),
+        )
+
+    @staticmethod
+    def _successor_fact_for(
+        connection: sqlite3.Connection, fact_id: str, field_name: str, line: str
+    ) -> Fact | None:
+        """Return another usable fact that carries the same profile content."""
+        for fact in CareerService._candidate_facts_of(connection, usable_only=True):
+            if fact.id == fact_id:
+                continue
+            if profile_target(fact) == (field_name, line):
+                return fact
+        return None
+
+    def _refresh_fact_contribution(self, connection: sqlite3.Connection, fact: Fact) -> None:
+        """Re-write a corrected fact in the profile, where it had been applied."""
+        row = connection.execute(
+            "SELECT applied_line FROM candidate_facts WHERE id = ?", (fact.id,)
+        ).fetchone()
+        if not row or not str(row["applied_line"] or ""):
+            return
+        self._revoke_fact_contribution(connection, fact.id)
+        field_name, line = profile_target(fact)
+        if field_name and line:
+            self._write_profile_line(connection, field_name, line)
+            connection.execute(
+                "UPDATE candidate_facts SET applied_field = ?, applied_line = ? WHERE id = ?",
+                (field_name, line, fact.id),
+            )
+
+    @staticmethod
+    def _write_profile_line(connection: sqlite3.Connection, field_name: str, line: str) -> bool:
+        """Write one line in a profile field, keeping the field limit."""
+        if field_name not in PROFILE_EDITABLE_FIELDS or not line:
+            return False
+        row = connection.execute("SELECT * FROM candidate_profile WHERE id = 1").fetchone()
+        if not row:
+            return False
+        current = str(row[field_name] or "")
+        lines = [item for item in current.split("\n") if item.strip()]
+        if any(item.strip() == line.strip() for item in lines):
+            return False
+        limit = PROFILE_FIELD_LIMITS.get(field_name, 0)
+        if limit and len(current) + len(line) + 1 > limit:
+            return False
+        updated = "\n".join(lines + [line.strip()])
+        connection.execute(
+            f"UPDATE candidate_profile SET {field_name} = ?, updated_at = ? WHERE id = 1",
+            (updated, utc_now()),
+        )
+        return True
+
+    @staticmethod
+    def _candidate_facts_of(
+        connection: sqlite3.Connection, *, usable_only: bool = False
+    ) -> list[Fact]:
+        """Return the stored facts, optionally only the usable ones."""
+        if usable_only:
+            rows = connection.execute(
+                "SELECT * FROM candidate_facts WHERE status IN (?, ?) ORDER BY created_at ASC, rowid ASC",
+                (STATUS_APPROVED, STATUS_MODIFIED),
+            ).fetchall()
+        else:
+            rows = connection.execute(
+                "SELECT * FROM candidate_facts ORDER BY created_at ASC, rowid ASC"
+            ).fetchall()
+        return [CareerService._candidate_fact_from_row(row) for row in rows]
 
     def delete_candidate_fact(self, fact_id: str) -> None:
         """Delete one fact and its evidence from the local profile."""
@@ -1635,6 +1813,7 @@ class CareerService:
             ).fetchone()
             if not row:
                 raise UserFacingError("Ce fait de profil n’existe pas.")
+            self._revoke_fact_contribution(connection, identifier)
             connection.execute("DELETE FROM candidate_facts WHERE id = ?", (identifier,))
             self._audit(connection, "candidate_fact_deleted", "candidate_fact", identifier)
 
@@ -1685,7 +1864,7 @@ class CareerService:
             profile = self._row_dict(
                 connection.execute("SELECT * FROM candidate_profile WHERE id = 1").fetchone()
             )
-            merged = merge_usable_facts(profile, facts)
+            merged, contributions, applied = merge_usable_facts_with_sources(profile, facts)
             changed: dict[str, str] = {}
             for field_name in (
                 "education",
@@ -1706,9 +1885,18 @@ class CareerService:
                     changed | {"updated_at": now},
                 )
                 self._audit(connection, "candidate_facts_applied", "candidate_profile", "1")
+            # What each fact really wrote is remembered: a later decision can
+            # then take it back out of the profile.
+            for fact_id, (field_name, line) in contributions.items():
+                connection.execute(
+                    "UPDATE candidate_facts SET applied_field = ?, applied_line = ? WHERE id = ?",
+                    (field_name, line, fact_id),
+                )
         return {
             "profile": self.get_profile(),
-            "applied": len(identifiers),
+            "applied": len(applied),
+            "written": len(contributions),
+            "ignored": len(identifiers) - len(applied),
             "counts": self.candidate_fact_counts(),
         }
 
@@ -1725,6 +1913,11 @@ class CareerService:
             source_document=rows[0]["source_document"] if rows else "",
         )
         payload["counts"] = self.candidate_fact_counts()
+        # The export may hold facts coming from several documents: they are
+        # all listed, so the portable profile never pretends a single source.
+        payload["source_documents"] = sorted(
+            {str(row["source_document"] or "") for row in rows if str(row["source_document"] or "")}
+        )
         target.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         try:
             os.chmod(target, 0o600)

@@ -126,7 +126,8 @@ _MONTH_YEAR_RE = re.compile(
 
 _LIST_SEPARATORS = re.compile(r"[,;•·]")
 
-_BULLET_PREFIX = re.compile(r"^[-–—*•·\s]+")
+#: Characters that introduce a bullet item.  They are never part of the fact.
+_BULLET_CHARS = "-–—*•·"
 
 _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 
@@ -185,7 +186,11 @@ def _clean_line(value: str) -> str:
 
 
 def page_spans(
-    text: str, pages: Sequence[str] | None = None, page_count: int | None = None
+    text: str,
+    pages: Sequence[str] | None = None,
+    page_count: int | None = None,
+    *,
+    page_confidence: str = "exact",
 ) -> list[PageSpan]:
     """Return the page boundaries inside the extracted text.
 
@@ -193,12 +198,15 @@ def page_spans(
     number of pages is known (a flat OCR reading), the text is split evenly
     and the confidence is ``estimated``.  Otherwise the whole text is one
     block: the page is then a hint, never a proof.
+
+    ``page_confidence`` qualifies the known-pages case: a DOCX has no page
+    information, so its single block stays ``estimated``.
     """
     if pages:
         spans: list[PageSpan] = []
         cursor = 0
         for number, page in enumerate(pages, start=1):
-            spans.append(PageSpan(number, cursor, cursor + len(page), "exact"))
+            spans.append(PageSpan(number, cursor, cursor + len(page), page_confidence))
             cursor += len(page) + 2
         return spans
 
@@ -224,47 +232,86 @@ def page_for_offset(spans: Sequence[PageSpan], offset: int) -> tuple[int, str]:
     return 0, "unknown"
 
 
+def _content_span(raw_line: str) -> tuple[int, int]:
+    """Return the span of the line content, without its bullet nor its blanks."""
+    start = 0
+    length = len(raw_line)
+    while start < length and (raw_line[start].isspace() or raw_line[start] in _BULLET_CHARS):
+        start += 1
+    end = length
+    while end > start and raw_line[end - 1].isspace():
+        end -= 1
+    return start, end
+
+
+def _trim_span(raw_line: str, start: int, end: int) -> tuple[int, int]:
+    """Return a span without its leading and trailing blanks."""
+    while start < end and raw_line[start].isspace():
+        start += 1
+    while end > start and raw_line[end - 1].isspace():
+        end -= 1
+    return start, end
+
+
+def _split_spans(raw_line: str, content_start: int, content_end: int) -> list[tuple[int, int]]:
+    """Split a list item on its separators, keeping the exact span of each piece."""
+    spans: list[tuple[int, int]] = []
+    cursor = content_start
+    for match in _LIST_SEPARATORS.finditer(raw_line, content_start, content_end):
+        piece_start, piece_end = _trim_span(raw_line, cursor, match.start())
+        if piece_end > piece_start:
+            spans.append((piece_start, piece_end))
+        cursor = match.end()
+    piece_start, piece_end = _trim_span(raw_line, cursor, content_end)
+    if piece_end > piece_start:
+        spans.append((piece_start, piece_end))
+    return spans
+
+
 def _section_items(text: str, start: int, end: int, *, split_lists: bool) -> list[_Item]:
-    """Return the candidate items of one section, with absolute offsets."""
+    """Return the candidate items of one section, with exact source offsets.
+
+    The offsets always point at the raw source text: the passage
+    ``text[start:end]`` is the verbatim item the fact comes from, so the
+    stored quote can be checked against the document character by character.
+    Only the displayed label is normalised (blanks collapsed).
+    """
     items: list[_Item] = []
     cursor = start
     for raw_line in text[start:end].split("\n"):
         line_start = cursor
         cursor += len(raw_line) + 1
-        stripped = _BULLET_PREFIX.sub("", _clean_line(raw_line))
-        if not stripped:
+        content_start, content_end = _content_span(raw_line)
+        if content_end <= content_start:
             continue
-        offset_in_line = raw_line.find(stripped)
-        item_start = line_start + (offset_in_line if offset_in_line >= 0 else 0)
         if split_lists:
-            for piece, piece_offset in _split_list(stripped):
+            for piece_start, piece_end in _split_spans(raw_line, content_start, content_end):
                 items.append(
-                    _Item(piece, item_start + piece_offset, item_start + piece_offset + len(piece))
+                    _Item(
+                        _clean_line(raw_line[piece_start:piece_end]),
+                        line_start + piece_start,
+                        line_start + piece_end,
+                    )
                 )
-        else:
-            items.append(_Item(stripped, item_start, item_start + len(stripped)))
+            continue
+        items.append(
+            _Item(
+                _clean_line(raw_line[content_start:content_end]),
+                line_start + content_start,
+                line_start + content_end,
+            )
+        )
     return items
 
 
-def _split_list(value: str) -> list[tuple[str, int]]:
-    """Split a comma/semicolon separated list, keeping each piece offset."""
-    pieces: list[tuple[str, int]] = []
-    cursor = 0
-    for match in _LIST_SEPARATORS.finditer(value):
-        piece = value[cursor : match.start()].strip()
-        if piece:
-            pieces.append((piece, cursor + value[cursor : match.start()].find(piece)))
-        cursor = match.end()
-    piece = value[cursor:].strip()
-    if piece:
-        pieces.append((piece, cursor + value[cursor:].find(piece)))
-    return pieces
-
-
 def _quote(text: str, start: int, end: int) -> str:
-    """Return the verbatim passage of a fact, bounded for a readable review."""
-    excerpt = text[start:end].strip()
-    excerpt = re.sub(r"[ \t]+", " ", excerpt)
+    """Return the verbatim passage of a fact, bounded for a readable review.
+
+    The quote is the source text itself: ``text[start:end]``.  Only a very
+    long passage is shortened, and the shortening is visible (it ends with
+    an ellipsis).
+    """
+    excerpt = text[start:end]
     if len(excerpt) > MAX_QUOTE_CHARS:
         excerpt = excerpt[:MAX_QUOTE_CHARS].rstrip() + "…"
     return excerpt
@@ -737,6 +784,7 @@ def build_fact_proposals(
     source_method: str = SOURCE_EMBEDDED_TEXT,
     pages: Sequence[str] | None = None,
     page_count: int | None = None,
+    page_confidence: str = "exact",
     batch_id: str = "",
     created_at: str = "",
 ) -> list[Fact]:
@@ -750,7 +798,7 @@ def build_fact_proposals(
         return []
 
     batch = batch_id or f"batch_{uuid.uuid4().hex}"
-    spans = page_spans(source_text, pages, page_count)
+    spans = page_spans(source_text, pages, page_count, page_confidence=page_confidence)
     analysis = analyze_cv(
         DocumentInput(text=source_text, filename=filename or None, filetype="txt")
     )
@@ -795,11 +843,15 @@ def build_fact_proposals(
             facts.extend(_simple_facts(source_text, kind, start, end, section.title, **common))
 
     # Bounded proposals: a very long document never floods the review screen.
+    # A kind that reached its own cap is skipped, never fatal: the other
+    # sections of the document still deserve their review.
     per_kind: dict[str, int] = {}
     bounded: list[Fact] = []
     for fact in facts:
         count = per_kind.get(fact.kind, 0)
-        if count >= MAX_FACTS_PER_KIND or len(bounded) >= MAX_FACTS_TOTAL:
+        if count >= MAX_FACTS_PER_KIND:
+            continue
+        if len(bounded) >= MAX_FACTS_TOTAL:
             break
         per_kind[fact.kind] = count + 1
         bounded.append(fact)

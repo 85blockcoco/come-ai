@@ -178,6 +178,7 @@ function renderCandidateFacts() {
       const actions = candidateElement("div", "", "candidate-fact-actions");
       if (fact.status === "approved" || fact.status === "modified") {
         actions.append(
+          candidateActionButton("Corriger", "secondary-button", () => openCandidateCorrection(card, fact)),
           candidateActionButton("Mettre de côté", "quiet-button", async () => {
             await candidateDecision(fact, "suspend");
             await candidateRefresh();
