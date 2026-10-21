@@ -16,6 +16,21 @@ AVAILABILITY_END = date(2027, 6, 30)
 MIN_DURATION_MONTHS = 3
 MAX_DURATION_MONTHS = 6
 
+# Countries a person targets when their search brief names none.  These are
+# explicit ISO-2 codes written by the person or by a source, never a guess
+# built from a city name.
+DEFAULT_PREFERRED_COUNTRIES: tuple[str, ...] = (
+    "DE", "GB", "CH", "NL", "LU", "BE", "IE", "AT", "SE", "NO", "DK", "FI",
+    "ES", "IT", "PT", "PL", "CZ", "HU", "RO", "BG", "HR", "SI", "SK", "EE",
+    "LV", "LT", "MT", "CY",
+)
+# The country the ranking penalises when the person has not configured one.
+DEFAULT_GEO_EXCLUDED_COUNTRIES: tuple[str, ...] = ("FR",)
+# Points added once to an offer published in a targeted country.
+GEO_PREFERRED_BOOST = 20
+# Points removed once from an offer published in an excluded country.
+GEO_EXCLUDED_PENALTY = -50
+
 JOB_FAMILIES = (
     "M&A / Investment Banking",
     "Private Equity",

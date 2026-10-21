@@ -14,7 +14,15 @@ from datetime import date
 from typing import Any
 
 from .exploration import _SENIOR_TITLE, classify_internship
-from .models import canonical_url, clean_text
+from .models import (
+    DEFAULT_GEO_EXCLUDED_COUNTRIES,
+    DEFAULT_PREFERRED_COUNTRIES,
+    GEO_EXCLUDED_PENALTY,
+    GEO_PREFERRED_BOOST,
+    canonical_url,
+    clean_text,
+    normalized_text,
+)
 
 
 @dataclass(frozen=True)
@@ -46,6 +54,10 @@ class QualifiedOffer:
     missing_fields: tuple[str, ...]
     provenance: dict[str, FactEvidence]
     reasons: tuple[str, ...]
+    # Geographic ranking signal: points added or removed for the country the
+    # source wrote, and the reason that produced them.
+    geo_score: int = 0
+    geo_reason: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -132,6 +144,97 @@ def _matches_excluded_place(value: str | None, excluded: tuple[str, ...], *, cou
     return folded in excluded_values or bool(_place_tokens(value) & excluded_values)
 
 
+# Closed list of the country wordings a source may write.  A value that is not
+# in this table names no country: it stays unknown instead of being resolved
+# through a city, a region or a guess.
+_COUNTRY_ALIASES: dict[str, str] = {
+    "at": "AT", "austria": "AT", "autriche": "AT", "osterreich": "AT",
+    "be": "BE", "belgium": "BE", "belgique": "BE", "belgie": "BE",
+    "bg": "BG", "bulgaria": "BG", "bulgarie": "BG",
+    "ca": "CA", "canada": "CA",
+    "ch": "CH", "switzerland": "CH", "suisse": "CH", "schweiz": "CH",
+    "cy": "CY", "cyprus": "CY", "chypre": "CY",
+    "cz": "CZ", "czechia": "CZ", "czech republic": "CZ", "republique tcheque": "CZ",
+    "de": "DE", "germany": "DE", "deutschland": "DE", "allemagne": "DE",
+    "dk": "DK", "denmark": "DK", "danemark": "DK", "danmark": "DK",
+    "ee": "EE", "estonia": "EE", "estonie": "EE",
+    "es": "ES", "spain": "ES", "espagne": "ES", "espana": "ES",
+    "fi": "FI", "finland": "FI", "finlande": "FI", "suomi": "FI",
+    "fr": "FR", "fra": "FR", "france": "FR", "french republic": "FR",
+    "republique francaise": "FR", "republique de france": "FR",
+    "gb": "GB", "gbr": "GB", "uk": "GB", "united kingdom": "GB",
+    "great britain": "GB", "royaume uni": "GB", "angleterre": "GB",
+    "gr": "GR", "greece": "GR", "grece": "GR",
+    "hr": "HR", "croatia": "HR", "croatie": "HR",
+    "hu": "HU", "hungary": "HU", "hongrie": "HU", "magyarorszag": "HU",
+    "ie": "IE", "irl": "IE", "ireland": "IE", "irlande": "IE",
+    "it": "IT", "italy": "IT", "italie": "IT", "italia": "IT",
+    "lt": "LT", "lithuania": "LT", "lituanie": "LT",
+    "lu": "LU", "luxembourg": "LU",
+    "lv": "LV", "latvia": "LV", "lettonie": "LV",
+    "mt": "MT", "malta": "MT",
+    "nl": "NL", "nld": "NL", "netherlands": "NL", "holland": "NL", "pays bas": "NL",
+    "no": "NO", "norway": "NO", "norvege": "NO", "norge": "NO",
+    "pl": "PL", "poland": "PL", "pologne": "PL", "polska": "PL",
+    "pt": "PT", "portugal": "PT",
+    "ro": "RO", "romania": "RO", "roumanie": "RO",
+    "se": "SE", "sweden": "SE", "suede": "SE", "sverige": "SE",
+    "si": "SI", "slovenia": "SI", "slovenie": "SI",
+    "sk": "SK", "slovakia": "SK", "slovaquie": "SK",
+    "us": "US", "usa": "US", "united states": "US",
+    "united states of america": "US", "etats unis": "US", "etats unis d amerique": "US",
+}
+
+
+def country_code_for(value: Any) -> str:
+    """ISO-2 code of the country a source wrote, or ``''`` when it names none.
+
+    The lookup is a closed list of country names and codes.  A city name
+    ("Frankfurt") is never resolved into a country: an offer whose country is
+    unknown stays unknown, because a city never proves a country.
+    """
+    text = clean_text(value, limit=120)
+    if not text:
+        return ""
+    for part in re.split(r"[,;/|]", text):
+        token = normalized_text(part)
+        if not token:
+            continue
+        code = _COUNTRY_ALIASES.get(token)
+        if code:
+            return code
+        # "Remote Germany" or "Germany (Berlin)": keep looking for a word that
+        # names a country, never resolve the city that stands next to it.
+        for word in token.split(" "):
+            code = _COUNTRY_ALIASES.get(word)
+            if code:
+                return code
+    return ""
+
+
+def geo_score_for(country: Any, *, preferred_countries: Any = None,
+                  excluded_countries: Any = None) -> tuple[int, str]:
+    """Score the country of an offer for the ranking, with the reason.
+
+    Only the country a source wrote is read: nothing is inferred from a city,
+    so an offer whose country is unknown stays neutral instead of being
+    resolved.  An excluded country is penalised once, a targeted country is
+    rewarded once, and the two never accumulate.
+    """
+    code = country_code_for(country)
+    if not code:
+        return 0, "Pays inconnu"
+    excluded = {country_code_for(item) for item in (excluded_countries or ())}
+    preferred = {country_code_for(item) for item in (preferred_countries or ())}
+    excluded.discard("")
+    preferred.discard("")
+    if code in excluded:
+        return GEO_EXCLUDED_PENALTY, f"Pays exclu ({code})"
+    if code in preferred:
+        return GEO_PREFERRED_BOOST, f"Pays ciblé ({code})"
+    return 0, f"Pays neutre ({code})"
+
+
 def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
                   required_start_month: int | None = None,
                   allowed_contract_types: list[str] | tuple[str, ...] | None = None,
@@ -140,12 +243,19 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
                   excluded_countries: list[str] | tuple[str, ...] | None = None,
                   excluded_cities: list[str] | tuple[str, ...] | None = None,
                   require_known_location: bool = False,
+                  preferred_countries: list[str] | tuple[str, ...] | None = None,
+                  geo_excluded_countries: list[str] | tuple[str, ...] | None = None,
                   as_of: date | None = None) -> QualifiedOffer:
     """Qualify a normalized offer against explicit user-configurable criteria.
 
     ``source_verified`` must be set by a connector after a successful read of
     its official feed. Synthetic inputs can set it only to test this decision
     path; such tests are not evidence of live source coverage.
+
+    The geographic score is a ranking signal only: it never changes
+    ``target_status`` and never excludes an offer.  An offer published in an
+    excluded country is penalized in the score, so it can never lead the list,
+    but the hard exclusion of the brief still decides admissibility.
     """
     if not isinstance(offer, dict):
         raise TypeError("offer must be an object")
@@ -164,8 +274,19 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
     aliases = {"stage": "internship", "cdd": "fixed_term", "cdi": "permanent", "vie": "VIE"}
     allowed_contract_types = tuple(dict.fromkeys(aliases.get(str(item).strip().casefold(), str(item).strip())
                                                  for item in allowed_contract_types))
+    excluded_countries_given = excluded_countries is not None
     excluded_countries = tuple(excluded_countries or ())
     excluded_cities = tuple(excluded_cities or ())
+    # The ranking penalty follows the person's explicit exclusions.  When the
+    # brief names none, France stays penalized by default; an explicitly empty
+    # list means the person turned the penalty off.
+    if geo_excluded_countries is None:
+        if excluded_countries_given:
+            geo_excluded_countries = excluded_countries
+        else:
+            geo_excluded_countries = DEFAULT_GEO_EXCLUDED_COUNTRIES
+    if preferred_countries is None:
+        preferred_countries = DEFAULT_PREFERRED_COUNTRIES
     today = as_of or date.today()
     description = clean_text(offer.get("description_original"), limit=30_000)
     title = clean_text(offer.get("title"), limit=300)
@@ -277,6 +398,14 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
     language = field("language", "langue")
     country = field("country", "pays")
     city = field("city", "ville")
+    # The country the source wrote decides the ranking points.  A city never
+    # does: "Frankfurt" stays an unknown country, it is never turned into a
+    # French offer.
+    geo_score, geo_reason = geo_score_for(
+        country,
+        preferred_countries=preferred_countries,
+        excluded_countries=geo_excluded_countries,
+    )
     country_excluded = _matches_excluded_place(country, excluded_countries, country=True)
     city_excluded = _matches_excluded_place(city, excluded_cities)
     mixed_city = city_excluded and len(_place_tokens(city)) > 1
@@ -437,4 +566,6 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
         missing_fields=tuple(dict.fromkeys(missing)),
         provenance=evidence,
         reasons=tuple(reasons),
+        geo_score=geo_score,
+        geo_reason=geo_reason,
     )
