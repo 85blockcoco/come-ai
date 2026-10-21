@@ -259,3 +259,41 @@ git diff --check   # propre
 | `career/cv_quality/__init__.py` | **étendu** — exports `run_ats_check`, `run_ats_check_bytes`, `run_ats_check_file`, `describe_risk` |
 | `tests/test_cv_quality_ats.py` | **nouveau** — 51 tests synthétiques |
 | `docs/agent-reports/CVBOOST-04-ATS.md` | **nouveau** — ce rapport |
+
+---
+
+## Note d'historique — exécution en parallèle
+
+La Mission 04 a été lancée **trois fois en parallèle** par l'orchestrateur (trois workers sur
+la même mission, worktrees distincts). Trois implémentations ont donc coexisté :
+
+| Commit | Contenu |
+|---|---|
+| `0e633a1` | première version (branche `agent/cvboost-04-ats-v2`) |
+| `6e0e3bb` | deuxième version (analyse positionnelle) |
+| `8fd5e98` | commit de consolidation des deux versions |
+
+La consolidation `8fd5e98` a **introduit des régressions** (vérifié sur 14 fixtures
+synthétiques) :
+
+| Fixture | Consolidation `8fd5e98` | Cette implémentation |
+|---|---|---|
+| PDF 2 colonnes | `NESTED_TABLE` (mauvais détecteur) | `MULTIPLE_COLUMNS` ✓ |
+| PDF avec tableau | `READING_ORDER` + `NESTED_TABLE` | `NESTED_TABLE` seul ✓ |
+| PDF réaliste (titre centré + photo) | `TEXT_IN_IMAGES` → **faux positif** | aucun risque ✓ |
+| DOCX 2 colonnes | `MULTIPLE_COLUMNS` ✓ | `MULTIPLE_COLUMNS` ✓ |
+| TXT avec URL brute | `UNREADABLE_LINKS` ✓ | `UNREADABLE_LINKS` ✓ |
+
+Les gains de cette implémentation (non couverts par la consolidation) :
+
+- **colonnes DOCX** : la lecture de `w:cols` cherchait le **premier** élément `w:cols` de la
+  section — or le gabarit Word en contient déjà un par défaut. La version livrée parcourt
+  **tous** les éléments (`findall`) et retient le plus grand nombre de colonnes ;
+- **détection des colonnes PDF** : gouttière verticale réelle (bande sans texte) au lieu d'un
+  simple écart de `x`, ce qui supprime les faux positifs sur les titres centrés et les photos ;
+- **URL brutes** : une seule URL visible est déjà signalée (les adresses e-mail sont exclues) ;
+- **sections manquantes** : le détecteur n'est pas exécuté quand aucune page n'a de texte
+  extractible (le risque « texte dans image » couvre déjà ce cas).
+
+Les commits des autres workers (`0e633a1`, `6e0e3bb`, `8fd5e98`) sont conservés dans
+l'historique de la branche.
