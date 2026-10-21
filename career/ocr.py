@@ -36,6 +36,10 @@ class OCRResult:
     truncated: bool
     warnings: list[str]
     engine: str = "macos_vision"
+    #: One entry per recognised page, in page order.  When present, the
+    #: offsets of ``text`` can be mapped back to the exact page, so a fact
+    #: read by OCR still knows where it was read.
+    page_texts: tuple[str, ...] = ()
 
 
 class LocalVisionOCR:
@@ -142,11 +146,16 @@ class LocalVisionOCR:
         warnings = [str(item)[:300] for item in payload.get("warnings", []) if str(item).strip()]
         if len(str(payload.get("text") or "")) > len(text):
             warnings.append("Texte OCR limité à 100 000 caractères.")
+        raw_pages = payload.get("page_texts")
+        page_texts: tuple[str, ...] = ()
+        if isinstance(raw_pages, list):
+            page_texts = tuple(str(item) for item in raw_pages if str(item).strip())
         return OCRResult(
             text=text,
             pages=max(0, int(payload.get("pages") or 0)),
             truncated=truncated,
             warnings=warnings[:4],
+            page_texts=page_texts,
         )
 
     def _ensure_helper(self) -> Path:

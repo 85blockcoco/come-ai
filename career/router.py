@@ -438,6 +438,15 @@ def create_career_router(
         """Return the active profile: only the facts a person validated."""
         return await local(service.get_active_candidate_profile)
 
+    @router.get("/api/career/candidate-profile/evidence")
+    async def candidate_profile_evidence() -> Any:
+        """Return the facts that may justify a candidacy, or refuse them.
+
+        This is the contract the matching pipeline (SK-11) has to consume: the
+        request is refused while nothing was validated by a person.
+        """
+        return await local(service.require_candidate_profile_evidence)
+
     @router.post("/api/career/candidate-profile/proposals", status_code=201)
     async def candidate_profile_proposals(payload: CandidateProfileProposalsPayload) -> Any:
         """Propose reviewable facts read locally from pasted text.

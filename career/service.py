@@ -125,6 +125,7 @@ from .candidate_profile import (
     CandidateFact,
     CandidateProfile,
     ProfileRuleError,
+    active_profile_fields,
     decide_fact,
     merge_facts,
     validate_profile,
@@ -1321,15 +1322,19 @@ class CareerService:
         """Return the active profile: only the facts a person validated.
 
         A proposal, a rejection and a suspension are left out: they can never
-        justify a candidacy.
+        justify a candidacy.  ``profile_fields`` is the projection of those
+        validated facts onto the Career profile fields: it is the contract the
+        matching pipeline (SK-11) has to consume.
         """
         profile = self._load_candidate_profile()
+        usable = profile.usable_facts
         return {
             "id": profile.id,
             "updated_at": profile.updated_at,
-            "facts": [fact.to_dict() for fact in profile.usable_facts],
+            "facts": [fact.to_dict() for fact in usable],
             "summary": profile.usable_summary(),
-            "usable_for_matching": bool(profile.usable_facts),
+            "profile_fields": active_profile_fields(usable),
+            "usable_for_matching": bool(usable),
         }
 
     def build_candidate_profile_proposals(
@@ -1499,6 +1504,7 @@ class CareerService:
         return {
             "facts": [fact.to_dict() for fact in usable],
             "summary": profile.usable_summary(),
+            "profile_fields": active_profile_fields(usable),
             "updated_at": profile.updated_at,
         }
 
@@ -1557,6 +1563,23 @@ class CareerService:
             return CandidateProfile()
         return CandidateProfile.from_dict(payload)
 
+    @staticmethod
+    def _candidate_profile_stamp(connection: sqlite3.Connection) -> str:
+        """Return the moment the structured profile was last changed."""
+        row = connection.execute(
+            "SELECT setting_value FROM career_settings WHERE setting_key = ?",
+            (CANDIDATE_PROFILE_SETTING_KEY,),
+        ).fetchone()
+        if not row:
+            return ""
+        try:
+            payload = json.loads(str(row["setting_value"]))
+        except json.JSONDecodeError:
+            return ""
+        if not isinstance(payload, dict):
+            return ""
+        return str(payload.get("updated_at") or "")
+
     def _store_candidate_profile(self, profile: CandidateProfile) -> None:
         payload = json.dumps(profile.to_dict(), ensure_ascii=False)
         with self._lock, self._connection() as connection:
@@ -1598,7 +1621,10 @@ class CareerService:
             # reads it, and its result is only ever proposed, never approved.
             ocr_result: OCRResult = self.ocr.extract_pdf(path)
             text = ocr_result.text
-            pages = [text] if text else []
+            # The OCR engine returns one text per page: a fact read by OCR
+            # still knows the page it was read from.
+            ocr_page_texts = [page.strip() for page in ocr_result.page_texts if page.strip()]
+            pages = ocr_page_texts or ([text] if text else [])
             ocr_pages = ocr_result.pages
             warnings = list(ocr_result.warnings)
             extraction_method = EXTRACTION_METHOD_OCR
@@ -1628,6 +1654,45 @@ class CareerService:
             "usable_for_matching": bool(profile.usable_facts),
             "problems": validate_profile(profile),
         }
+
+    # ------------------------------------------------------------------
+    # SK-10 — the profile used for matching and candidacy.
+    #
+    # The structured profile is the reviewed source of truth for the facts it
+    # covers.  A field covered by at least one validated fact is taken from
+    # those facts alone; a field no validated fact covers keeps the value the
+    # person typed by hand.  A proposal, a rejection and a suspension never
+    # reach a candidacy: they are not read at all here.
+    # ------------------------------------------------------------------
+
+    def _candidate_profile_overlay(self, profile: dict[str, Any]) -> dict[str, Any]:
+        """Return the profile with the validated facts laid over it."""
+        candidate_profile = self._load_candidate_profile()
+        facts = candidate_profile.usable_facts
+        if not facts:
+            return profile
+        merged = dict(profile)
+        for field, value in active_profile_fields(facts).items():
+            if value:
+                merged[field] = value
+        merged["candidate_profile_active"] = True
+        # The stamp lets the caller notice that a decision changed between the
+        # moment the profile was read and the moment the document was saved.
+        merged["candidate_profile_updated_at"] = candidate_profile.updated_at
+        return merged
+
+    def get_matching_profile(self) -> dict[str, Any]:
+        """Return the profile used for matching and candidacy generation.
+
+        Same content as :meth:`get_profile`, plus the facts the person
+        validated in the structured candidate profile.  When no fact was
+        validated, the typed profile is returned unchanged.
+        """
+        profile = self.get_profile()
+        merged = self._candidate_profile_overlay(profile)
+        if merged.get("candidate_profile_active"):
+            merged["readiness"] = assess_profile_readiness(merged)
+        return merged
 
     @staticmethod
     def _intake_answers(value: str) -> dict[str, str]:
@@ -1905,7 +1970,15 @@ class CareerService:
             raise UserFacingError("Cette offre Career n’existe pas.")
         if not intake_row:
             raise UserFacingError("Le mini-entretien Career local est indisponible.")
-        return profile, self._serialize_intake_row(intake_row), dict(job_row), normalized_language
+        # SK-10: the draft is built from the validated facts only.  A fact that
+        # is still a proposal, that was rejected or that was set aside never
+        # justifies a candidature.
+        return (
+            self._candidate_profile_overlay(profile),
+            self._serialize_intake_row(intake_row),
+            dict(job_row),
+            normalized_language,
+        )
 
     def create_application_draft(
         self,
@@ -1953,6 +2026,15 @@ class CareerService:
                 or str(current_profile["updated_at"]) != str(profile["updated_at"])
             ):
                 raise UserFacingError("L’offre ou le profil a changé pendant la préparation du brouillon. Réessaie.")
+            # SK-10: a decision taken while the draft was being prepared must
+            # not be silently ignored — the draft is rebuilt instead.
+            candidate_stamp = str(profile.get("candidate_profile_updated_at") or "")
+            if candidate_stamp:
+                current_candidate = self._candidate_profile_stamp(connection)
+                if current_candidate != candidate_stamp:
+                    raise UserFacingError(
+                        "Le profil candidat a changé pendant la préparation du brouillon. Reprends la relecture."
+                    )
             connection.execute(
                 """
                 INSERT INTO application_drafts (
@@ -4245,7 +4327,7 @@ class CareerService:
         self, job_id: str, variant_id: str
     ) -> dict[str, Any]:
         variant = self._variant_config(variant_id)
-        profile = self.get_profile()
+        profile = self.get_matching_profile()
         job = self.get_job(job_id)
         prep = self.get_job_prep(job_id)
         cv_analysis = self._current_cv_analysis()

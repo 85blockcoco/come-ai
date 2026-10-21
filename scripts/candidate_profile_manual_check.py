@@ -82,6 +82,11 @@ def main() -> int:
     facts = propose_profile_facts(text, pages=pages, source_name=path.name)
     if not facts:
         print("Aucune proposition n’a pu être lue dans ce document.")
+        if path.suffix.lower() == ".pdf":
+            print(
+                "Un PDF scanné n’a pas de couche texte : lis-le dans l’application Career, "
+                "où l’OCR local produit les propositions."
+            )
         return 0
 
     print(f"{len(facts)} proposition(s) — aucune n’est approuvée.\n")

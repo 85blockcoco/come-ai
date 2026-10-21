@@ -169,6 +169,19 @@ def test_a_profile_with_an_approval_without_a_decision_is_reported() -> None:
     assert "décision humaine" in problems[0]
 
 
+def test_a_validated_decision_without_a_date_is_refused() -> None:
+    """An approval that carries no decision can never be recorded."""
+    fact = build_fact(fact_id="fact_1", kind="skill", label="Python", value="Python")
+    with pytest.raises(ProfileRuleError):
+        decide_fact(fact, decision=FACT_STATUS_APPROVED)
+    with pytest.raises(ProfileRuleError):
+        decide_fact(fact, decision=FACT_STATUS_MODIFIED, value="Python")
+    # A rejection needs no timestamp: it justifies nothing.
+    rejected = decide_fact(fact, decision=FACT_STATUS_REJECTED)
+    assert rejected.status == FACT_STATUS_REJECTED
+    assert rejected.is_usable is False
+
+
 def test_only_validated_facts_are_usable() -> None:
     proposal = build_fact(fact_id="fact_1", kind="skill", label="Python", value="Python")
     approved = decide_fact(
@@ -579,6 +592,37 @@ def test_an_ocr_document_upload_is_only_ever_proposed(tmp_path: Path, monkeypatc
     assert profile["usable_for_matching"] is False
 
 
+def test_an_ocr_fact_keeps_the_page_it_was_read_from(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A fact read by OCR still knows its page, like a fact read in the text."""
+    service = CareerService(tmp_path)
+    first_page = "COMPETENCES\nPython"
+    second_page = "FORMATION\nMaster Démo"
+    monkeypatch.setattr(
+        service.ocr,
+        "extract_pdf",
+        lambda path, **kwargs: OCRResult(
+            text=f"{first_page}\n\n{second_page}",
+            pages=2,
+            truncated=False,
+            warnings=[],
+            page_texts=(first_page, second_page),
+        ),
+    )
+    payload = b"%PDF-1.4 synthetic"
+    temporary = service.profile_upload_temp_path()
+    temporary.write_bytes(payload)
+    profile = service.build_candidate_profile_from_document(
+        original_name="cv_scanné.pdf",
+        temporary_path=temporary,
+        content_sha256=hashlib.sha256(payload).hexdigest(),
+        size_bytes=len(payload),
+    )
+    assert profile["extraction_method"] == "ocr"
+    pages = {fact["value"]: fact["provenance"]["page"] for fact in profile["facts"]}
+    assert pages.get("Python") == 1
+    assert pages.get("Master Démo") == 2
+
+
 
 # ──────────────────────────────────────────────────────────────────────
 # HTTP: the review endpoints
@@ -691,6 +735,234 @@ def test_an_unknown_fact_is_refused_by_the_api(tmp_path: Path) -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────
+# SK-10, criterion 5: a candidacy is justified by the validated facts only
+#
+# The strongest place to check the rule is the document the person actually
+# sends: the CV draft.  A fact that is still a proposal, that was rejected or
+# that was set aside must not appear in it.
+# ──────────────────────────────────────────────────────────────────────
+
+
+def _profile_with_skills(tmp_path: Path) -> tuple[CareerService, list[dict]]:
+    service = CareerService(tmp_path)
+    profile = service.build_candidate_profile_proposals(
+        text=read_fixture("cv_synthetique.txt"),
+        source_name="cv_synthetique.txt",
+        source_kind="cv",
+    )
+    skills = sorted(
+        (fact for fact in profile["facts"] if fact["kind"] == "skill"),
+        key=lambda fact: fact["value"],
+    )
+    assert len(skills) >= 2, "La fixture doit proposer au moins deux compétences."
+    return service, skills
+
+
+def _demo_job(service: CareerService) -> dict:
+    return service.import_job(
+        {
+            "company": "Banque Démo",
+            "title": "Stagiaire M&A",
+            "requirements": "Analyse de transactions et modélisation financière.",
+            "description_original": "Mission de démonstration, données synthétiques.",
+        }
+    )
+
+
+def test_an_unapproved_fact_never_reaches_the_application_draft(tmp_path: Path) -> None:
+    service, skills = _profile_with_skills(tmp_path)
+    job = _demo_job(service)
+    approved, pending = skills[0], skills[1]
+    service.decide_candidate_fact(approved["id"], decision=FACT_STATUS_APPROVED)
+
+    draft = service.create_application_draft(job["id"], "fr")
+    assert approved["value"] in draft["cv_markdown"]
+    assert pending["value"] not in draft["cv_markdown"]
+
+
+def test_a_rejected_fact_never_reaches_the_application_draft(tmp_path: Path) -> None:
+    service, skills = _profile_with_skills(tmp_path)
+    job = _demo_job(service)
+    rejected = skills[0]
+    service.decide_candidate_fact(rejected["id"], decision=FACT_STATUS_REJECTED)
+
+    draft = service.create_application_draft(job["id"], "fr")
+    assert rejected["value"] not in draft["cv_markdown"]
+
+
+def test_a_suspended_fact_never_reaches_the_application_draft(tmp_path: Path) -> None:
+    service, skills = _profile_with_skills(tmp_path)
+    job = _demo_job(service)
+    suspended = skills[0]
+    service.decide_candidate_fact(suspended["id"], decision=FACT_STATUS_SUSPENDED)
+
+    draft = service.create_application_draft(job["id"], "fr")
+    assert suspended["value"] not in draft["cv_markdown"]
+
+
+def test_a_validated_fact_reaches_the_application_draft(tmp_path: Path) -> None:
+    service, skills = _profile_with_skills(tmp_path)
+    job = _demo_job(service)
+    approved = skills[0]
+    service.decide_candidate_fact(approved["id"], decision=FACT_STATUS_APPROVED)
+
+    draft = service.create_application_draft(job["id"], "fr")
+    assert approved["value"] in draft["cv_markdown"]
+
+
+def test_a_corrected_fact_reaches_the_application_draft(tmp_path: Path) -> None:
+    service = CareerService(tmp_path)
+    profile = service.build_candidate_profile_proposals(
+        text=read_fixture("cv_synthetique.txt"), source_name="cv_synthetique.txt"
+    )
+    job = _demo_job(service)
+    target = next(
+        fact for fact in profile["facts"] if fact["kind"] == "language" and "Anglais" in fact["value"]
+    )
+    service.decide_candidate_fact(target["id"], decision=FACT_STATUS_MODIFIED, value="Anglais - C2")
+
+    draft = service.create_application_draft(job["id"], "fr")
+    assert "Anglais - C2" in draft["cv_markdown"]
+
+
+def test_the_typed_profile_still_works_without_any_candidate_profile(tmp_path: Path) -> None:
+    """Building no structured profile must not change the existing behaviour."""
+    service = CareerService(tmp_path)
+    service.update_profile({"skills": "Excel", "education": "Master Démo"})
+    matching = service.get_matching_profile()
+    assert matching["skills"] == "Excel"
+    assert matching["education"] == "Master Démo"
+    assert matching.get("candidate_profile_active") is None
+
+
+def test_the_facts_survive_a_restart_of_the_local_service(tmp_path: Path) -> None:
+    """A decision taken yesterday is still there after the app is closed."""
+    service = CareerService(tmp_path)
+    profile = service.build_candidate_profile_proposals(
+        text=read_fixture("cv_synthetique.txt"), source_name="cv_synthetique.txt"
+    )
+    target = next(fact for fact in profile["facts"] if fact["kind"] == "skill")
+    service.decide_candidate_fact(target["id"], decision=FACT_STATUS_APPROVED)
+
+    restarted = CareerService(tmp_path)
+    stored = restarted.get_candidate_profile()
+    kept = next(fact for fact in stored["facts"] if fact["id"] == target["id"])
+    assert kept["status"] == FACT_STATUS_APPROVED
+    assert kept["decided_at"]
+    assert restarted.get_active_candidate_profile()["profile_fields"]["skills"] == target["value"]
+
+
+def test_the_matching_profile_carries_only_the_validated_facts(tmp_path: Path) -> None:
+    service, skills = _profile_with_skills(tmp_path)
+    service.update_profile({"skills": "Excel", "education": "Master Démo"})
+    approved, pending = skills[0], skills[1]
+    service.decide_candidate_fact(approved["id"], decision=FACT_STATUS_APPROVED)
+
+    matching = service.get_matching_profile()
+    assert matching["candidate_profile_active"] is True
+    assert approved["value"] in matching["skills"]
+    assert pending["value"] not in matching["skills"]
+    # A field no validated fact covers keeps the value typed by hand.
+    assert matching["education"] == "Master Démo"
+
+
+def test_the_active_profile_exposes_the_projected_fields(tmp_path: Path) -> None:
+    service, skills = _profile_with_skills(tmp_path)
+    approved = skills[0]
+    service.decide_candidate_fact(approved["id"], decision=FACT_STATUS_APPROVED)
+
+    active = service.get_active_candidate_profile()
+    assert active["profile_fields"]["skills"] == approved["value"]
+    assert active["usable_for_matching"] is True
+
+
+def test_the_api_never_justifies_a_candidature_without_a_decision(tmp_path: Path) -> None:
+    client = TestClient(create_app(tmp_path, agent_override=FakeAgent()))
+    created = client.post(
+        "/api/career/candidate-profile/proposals",
+        json={"text": read_fixture("cv_synthetique.txt")},
+    )
+    assert created.status_code == 201
+    active = client.get("/api/career/candidate-profile/active").json()
+    assert active["facts"] == []
+    assert active["usable_for_matching"] is False
+    assert set(active["profile_fields"].values()) == {""}
+    # The evidence contract refuses to justify anything.
+    refused = client.get("/api/career/candidate-profile/evidence")
+    assert refused.status_code == 400
+
+
+def test_the_evidence_contract_serves_the_validated_facts(tmp_path: Path) -> None:
+    client = TestClient(create_app(tmp_path, agent_override=FakeAgent()))
+    created = client.post(
+        "/api/career/candidate-profile/proposals",
+        json={"text": read_fixture("cv_synthetique.txt")},
+    )
+    target = next(
+        fact for fact in created.json()["facts"] if fact["kind"] == "skill"
+    )
+    approved = client.post(
+        f"/api/career/candidate-profile/facts/{target['id']}/decision",
+        json={"decision": "approved"},
+    )
+    assert approved.status_code == 200
+    evidence = client.get("/api/career/candidate-profile/evidence")
+    assert evidence.status_code == 200
+    payload = evidence.json()
+    assert [fact["id"] for fact in payload["facts"]] == [target["id"]]
+    assert target["value"] in payload["profile_fields"]["skills"]
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Provenance: the offsets always describe exactly the passage that was quoted
+# ──────────────────────────────────────────────────────────────────────
+
+
+def test_the_quote_is_exactly_the_quoted_passage(tmp_path: Path) -> None:
+    """A long passage is cut with its offsets, never with an ellipsis."""
+    long_line = "Experience — " + ("mission détaillée " * 40)
+    text = f"COMPETENCES\nPython\nEXPERIENCE\n{long_line}"
+    facts = propose_profile_facts(text)
+    experience = fact_by_kind(facts, "experience")
+    start = experience.provenance.start_offset
+    end = experience.provenance.end_offset
+    assert text[start:end].strip()
+    assert " ".join(text[start:end].split()) == experience.provenance.quote
+    assert len(experience.provenance.quote) <= 240
+    assert "…" not in experience.provenance.quote
+
+
+def test_every_quote_describes_its_own_offsets(tmp_path: Path) -> None:
+    text = read_fixture("cv_synthetique.txt")
+    for fact in propose_profile_facts(text):
+        provenance = fact.provenance
+        passage = text[provenance.start_offset : provenance.end_offset]
+        assert " ".join(passage.split()) == provenance.quote
+        assert len(provenance.quote) <= 240
+
+
+def test_the_page_of_a_fact_survives_normalised_line_endings() -> None:
+    """A document written with CRLF keeps the right page for every fact."""
+    first_page = "\r\n".join(["Premiere page"] + ["ligne de contexte"] * 40)
+    pages = [first_page + "\r\nFORMATION\r\nMaster Démo", "FORMATION\r\nLicence Démo"]
+    text = "\r\n\r\n".join(pages)
+    facts = propose_profile_facts(text, pages=pages)
+    licence = fact_by_kind(facts, "education", contains="Licence Démo")
+    assert licence.provenance.page == 2
+
+
+def test_a_truncated_source_does_not_get_a_wrong_page(tmp_path: Path) -> None:
+    """A page that is not in the text gets no span rather than a wrong one."""
+    pages = ["Premiere page\nCompétences\nPython", "Seconde page\nExpérience\n2020 - Stage"]
+    text = "\n\n".join(pages)
+    truncated = text[: len(pages[0]) + 2]
+    facts = propose_profile_facts(truncated, pages=pages)
+    python = fact_by_kind(facts, "skill", contains="Python")
+    assert python.provenance.page == 1
+    assert python.provenance.start_offset < len(truncated)
+
+
+# ──────────────────────────────────────────────────────────────────────
 # UI guards: the review screen exists and never approves on its own
 # ──────────────────────────────────────────────────────────────────────
 
@@ -718,6 +990,34 @@ def test_the_review_panel_is_served_with_its_script() -> None:
     # The screen never approves anything by itself.
     assert "automatic_approval" not in script
     assert script.count('decision: "approved"') == 0
+
+
+def test_the_ui_offers_exactly_the_transitions_the_model_allows() -> None:
+    """A click must never end on a transition the model would refuse."""
+    root = Path(__file__).resolve().parents[1]
+    script_path = root / "career_static" / "js" / "profile-builder.js"
+    expected = {status: sorted(choices) for status, choices in ALLOWED_FACT_TRANSITIONS.items()}
+    program = r'''
+const assert = require("assert");
+const fs = require("fs");
+const source = fs.readFileSync(SCRIPT_PATH, "utf8");
+const start = source.indexOf("const CANDIDATE_PROFILE_TRANSITIONS");
+assert.ok(start >= 0, "la table des transitions est absente du script");
+const end = source.indexOf("};", start);
+assert.ok(end > start, "la table des transitions est illisible");
+const table = new Function(source.slice(start, end + 2) + "\nreturn CANDIDATE_PROFILE_TRANSITIONS;")();
+const sorted = {};
+for (const [status, decisions] of Object.entries(table)) sorted[status] = decisions.slice().sort();
+assert.deepStrictEqual(sorted, EXPECTED);
+// The interface must not offer a transition the model would refuse.
+for (const [status, decisions] of Object.entries(table)) {
+  assert.ok(!decisions.includes(status), "une décision identique au statut ne doit pas être proposée");
+}
+'''.replace("SCRIPT_PATH", json.dumps(str(script_path))).replace(
+        "EXPECTED", json.dumps(expected)
+    )
+    completed = subprocess.run([_node(), "-e", program], text=True, capture_output=True, timeout=8)
+    assert completed.returncode == 0, completed.stderr
 
 
 def test_the_ui_sends_the_decision_the_person_chose() -> None:

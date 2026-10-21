@@ -1,19 +1,33 @@
 # SPEC-SK10 — Profil candidat avec preuves approuvées
 
-> ⚠️ **À lire en premier.** Une implémentation parallèle de SK-10 existe déjà
-> sur `agent/spec-sk10-candidate-profile` (commande antérieure, commit
-> `2448d28`, même base `f5b22f2`). Les deux branches touchent les **mêmes
-> fichiers** : il ne faut **pas** les fusionner ensemble. Cette branche est le
-> sur-ensemble de l'autre (voir §7 pour le détail point par point).
-> **Recommandation : n'intégrer que `worker/cvboost-31-1792615600`.**
-> L'autre branche n'a été ni modifiée ni écrasée : sa suppression n'est pas
-> une décision que l'agent puisse prendre seul.
-
-**Mission** : CVBOOST-31 (SPEC Kit SK-10)
-**Branche** : `worker/cvboost-31-1792615600` (alias `agent/spec-sk10-candidate-profile`)
+**Mission** : CVBOOST-31 (Spec Kit SK-10)
+**Branche de livraison** : `worker/cvboost-31-1792617513`
 **Base** : `main` — `f5b22f2` (merge ATS diagnostics + targeted CV variants pipeline)
 **Date** : 2026-10-21
 **Périmètre** : 100 % local, hors ligne, sans modèle et sans appel réseau
+
+> ⚠️ **À lire en premier — quatre implémentations parallèles existaient.**
+> La mission SK-10 a été traitée quatre fois sur la **même base** (`f5b22f2`),
+> par quatre agents concurrents. Les quatre branches touchent les **mêmes
+> fichiers** : elles ne doivent **pas** être fusionnées ensemble.
+>
+> | Branche | Lot | État |
+> |---------|-----|-------|
+> | `worker/cvboost-31-1792607995` | A | `career/profile_store.py` dédié, sans `career/service.py` |
+> | `worker/cvboost-31-1792614191` | B | tables SQLite dédiées, premier câblage du critère 5 |
+> | `agent/spec-sk10-candidate-profile` (= `worker/cvboost-31-1792614464`) | C | variante du lot B, portee par le registre |
+> | `worker/cvboost-31-1792615600` | D | modèle `decided_at`, builder, service, UI, 46 tests |
+> | **`worker/cvboost-31-1792617513` (cette branche)** | **E** | **= D + audit adversariale + consolidation** |
+>
+> **Recommandation : n'intégrer que `worker/cvboost-31-1792617513`.**
+> Cette branche reprend le lot D (le plus abouti) et y ajoute ce qui manquait
+> aux quatre lots : le **câblage effectif du critère 5** (les faits validés
+> nourrissent la candidature, les autres n'y touchent pas), la **provenance
+> exacte** (les offsets décrivent toujours la citation affichée), l'
+> **attribution de page robuste** et le **contrat d'interface** (le clic ne
+> peut plus finir sur une transition refusée). Voir §6 pour le détail.
+> Les trois autres branches n'ont été ni modifiées ni écrasées : leur
+> suppression n'est pas une décision que l'agent puisse prendre seul.
 
 ---
 
@@ -21,18 +35,19 @@
 
 Le CV importé devient un **profil structuré fait de faits reviewables un par un**.
 Chaque fait porte sa source (page, offsets exacts, citation) et son statut.
-Seuls les faits qu'une personne a **approuvés** ou **corrigés** peuvent
-justifier une candidature ; une proposition, un rejet et une mise de côté ne
-justifient jamais rien.
+**Seuls les faits qu'une personne a approuvés ou corrigés peuvent justifier
+une candidature** : une proposition, un rejet et une mise de côté n'y touchent
+jamais — pas même le brouillon de CV envoyé à une offre.
 
 ```
-PDF / DOCX / TXT
+PDF / DOCX / TXT / MD
   → extraction locale (Mission 01 : career/cv_quality/parser.py)
   → OCR local macOS Vision si le PDF n'a pas de couche texte
   → propositions de faits (compétences, expériences, dates, diplômes, langues…)
-  → provenance exacte (page, offsets, quote)
+  → provenance exacte (page, offsets, citation)
   → approbation champ par champ (UI)
   → profil actif (seuls les faits validés)
+  → candidature (uniquement les faits validés)
 ```
 
 ---
@@ -43,11 +58,11 @@ PDF / DOCX / TXT
 
 | Fichier | Rôle |
 |---------|------|
-| `career/candidate_profile.py` | Modèle pur : `CandidateFact`, `CandidateProfile`, `FactProvenance`, les 5 statuts, les transitions autorisées, la validation des invariants, le merge, la sérialisation. |
+| `career/candidate_profile.py` | Modèle pur : `CandidateFact`, `CandidateProfile`, `FactProvenance`, les 5 statuts, les transitions autorisées, la validation des invariants, la projection sur le profil Career, le merge, la sérialisation. |
 | `career/profile_builder.py` | Pipeline pur : texte local → propositions avec provenance exacte. Aucune E/S, aucun réseau, aucun modèle. |
 | `career_static/js/profile-builder.js` | UI d'approbation champ par champ (script autonome, CSP `script-src 'self'` respecté). |
 | `scripts/candidate_profile_manual_check.py` | **Essai utilisateur réel, hors dépôt** : lit un CV que la personne possède, affiche les propositions avec leur passage source, et refuse de lire un fichier stocké dans le dépôt. N'écrit rien, n'envoie rien, n'approuve rien. |
-| `tests/test_candidate_profile.py` | 46 tests : modèle, builder, service, HTTP, garde-fous JavaScript (Node), script manuel. |
+| `tests/test_candidate_profile.py` | **64 tests** : modèle, builder, service, HTTP, garde-fous JavaScript (Node), essai manuel exécuté. |
 | `tests/fixtures/candidate_profile/cv_synthetique.txt` | Fixture synthétique FR. |
 | `tests/fixtures/candidate_profile/cv_ocr_synthetique.txt` | Fixture synthétique simulant une sortie OCR bruitée. |
 | `tests/fixtures/candidate_profile/cv_anglais_synthetique.txt` | Fixture synthétique EN. |
@@ -61,17 +76,23 @@ PDF / DOCX / TXT
 | `career/cv_quality/parser.py` | Ajout de `PageText` et `extract_pages_from_bytes()` : le texte extrait est désormais accompagné des offsets de chaque page. `_extract_pdf()` a été refactoré sur `_extract_pdf_pages()` **sans changer le texte produit** (mêmes pages vides ignorées, même jointure `"\n\n"`). |
 | `career/cv_quality/__init__.py` | Export de `PageText` et `extract_pages_from_bytes`. |
 | `career/profile_import.py` | Deux ajouts additifs et publics : `PROFILE_SECTION_ALIASES` et `normalise_heading()`, pour partager un seul vocabulaire de rubriques entre l'ancien parseur plat et le nouveau builder. |
-| `career/service.py` | Persistence et règles : 8 méthodes CareerService, la clé `career_settings` `candidate_profile_v1`, l'export JSON du profil, l'ajout du profil structuré à l'export de confidentialité. |
-| `career/router.py` | 7 endpoints profil + 2 modèles de payload, l'upload de document, la capacité dans `/api/career/health`. |
+| `career/candidate_profile.py` | **+ `active_profile_fields()`** : la projection des faits validés sur les champs du profil Career (contrat du critère 5). |
+| `career/service.py` | Persistence et règles : 10 méthodes `CareerService`, la clé `career_settings` `candidate_profile_v1`, **la projection des faits validés sur le profil de candidature**, l'export JSON du profil, l'ajout du profil structuré à l'export de confidentialité. |
+| `career/router.py` | 8 endpoints profil + 2 modèles de payload, l'upload de document, le contrat `/evidence`, la capacité dans `/api/career/health`. |
+| `career/ocr.py` | `OCRResult.page_texts` : l'OCR renvoie désormais le texte **page par page**, pour qu'un fait lu par OCR sache sa page. |
+| `career/vision_ocr.m` | Le payload JSON de l'OCR expose `page_texts`. |
+| `come_ai_web.py` | Le plafond de taille de corps s'applique aussi à l'upload du profil candidat. |
 | `career_static/index.html` | Panneau « Valider chaque information » dans l'onglet *Mon profil* + chargement du script. |
 | `career_static/career.css` | Styles du panneau, des compteurs, des faits et de leurs états. |
+| `career_static/js/profile-builder.js` | **+ table des transitions** : l'interface n'offre plus une transition que le modèle refuserait. |
 
 ### 2.3 Endpoints
 
 | Méthode | Chemin | Rôle |
 |---------|--------|------|
-| `GET` | `/api/career/candidate-profile` | Profil structuré + état de la relecture. |
+| `GET` | `/api/career/candidate-profile` | Profil structuré + état de la relecture + `problems` (invariants cassés). |
 | `GET` | `/api/career/candidate-profile/active` | **Profil actif** : uniquement les faits validés, et rien d'autre. |
+| `GET` | `/api/career/candidate-profile/evidence` | **Contrat SK-11** : les faits qui peuvent justifier une candidature, sinon refus explicite (400). |
 | `POST` | `/api/career/candidate-profile/proposals` | Propositions depuis un texte collé. |
 | `POST` | `/api/career/candidate-profile/proposals/document` | Propositions depuis un document téléversé (OCR local si besoin). |
 | `POST` | `/api/career/candidate-profile/facts/{fact_id}/decision` | Une décision humaine explicite sur un fait. |
@@ -85,11 +106,11 @@ PDF / DOCX / TXT
 
 | # | Critère | Comment il est tenu | Preuve |
 |---|---------|----------------------|--------|
-| 1 | **Résultat OCR jamais automatiquement approuvé** | L'OCR ne peut produire qu'une proposition : `propose_profile_facts()` crée toujours les faits en `proposed`, et un fait utilisable exige un `decided_at` (décision humaine horodatée) sinon `validate_profile()` le signale. | `test_an_ocr_document_is_only_ever_proposed`, `test_an_ocr_document_upload_is_only_ever_proposed`, `test_a_profile_with_an_approval_without_a_decision_is_reported` |
-| 2 | **Chaque compétence, expérience, date, diplôme garde sa source** | Chaque fait porte `Provenance(page, start_offset, end_offset, quote, source_name, extraction_method)`. Les dates sont des faits à part entière (`kind = date`), avec leur propre offset. Les offsets sont vérifiés dans les tests : le passage `text[start:end]` est exactement la citation stockée. | `test_every_proposal_keeps_the_exact_place_it_was_read_from`, `test_the_offsets_point_at_the_quote_that_is_stored`, `test_the_page_of_a_fact_follows_the_document`, `test_a_date_is_a_fact_of_its_own_with_its_own_source` |
+| 1 | **Résultat OCR jamais automatiquement approuvé** | L'OCR ne peut produire qu'une proposition : `propose_profile_facts()` crée toujours les faits en `proposed`. Un fait utilisable exige un `decided_at` (décision humaine horodatée) **et** `decide_fact()` refuse d'enregistrer une approbation sans date. `validate_profile()` signale tout fait utilisable sans décision. | `test_an_ocr_document_is_only_ever_proposed`, `test_an_ocr_document_upload_is_only_ever_proposed`, `test_a_validated_decision_without_a_date_is_refused`, `test_a_profile_with_an_approval_without_a_decision_is_reported` |
+| 2 | **Chaque compétence, expérience, date, diplôme garde sa source** | Chaque fait porte `Provenance(page, start_offset, end_offset, quote, source_name, extraction_method)`. Les dates sont des faits à part entière (`kind = date`), avec leur propre offset. **Les offsets décrivent toujours exactement la citation affichée** : un passage trop long est coupé *avec* ses offsets, jamais avec des points de suspension. Un fait lu par OCR garde sa page. | `test_every_proposal_keeps_the_exact_place_it_was_read_from`, `test_the_offsets_point_at_the_quote_that_is_stored`, `test_the_quote_is_exactly_the_quoted_passage`, `test_every_quote_describes_its_own_offsets`, `test_the_page_of_a_fact_follows_the_document`, `test_the_page_of_a_fact_survives_normalised_line_endings`, `test_an_ocr_fact_keeps_the_page_it_was_read_from`, `test_a_date_is_a_fact_of_its_own_with_its_own_source` |
 | 3 | **Suppression et export fonctionnent (profil portable)** | Suppression d'un fait, suppression du profil (avec le document source privé), export JSON, et présence du profil structuré dans l'export de confidentialité. | `test_a_fact_can_be_deleted_and_the_profile_can_be_deleted`, `test_the_profile_can_be_exported_as_a_portable_file`, `test_the_private_export_contains_the_structured_profile` |
 | 4 | **Aucun document réel dans les tests** | Trois fixtures 100 % synthétiques (noms fictifs, `example.org`, entreprises inventées) + un PDF fabriqué en mémoire. Aucun CV réel, aucune donnée personnelle. | `tests/fixtures/candidate_profile/` |
-| 5 | **Faits non approuvés ≠ justifier une candidature (bloquant pour SK-11)** | `usable_facts` / `usable_summary()` / `usable_for_matching` n'exposent que les faits `approved` et `modified`. `require_candidate_profile_evidence()` **refuse** (400) tant que rien n'a été validé : c'est le contrat à consommer par SK-11. | `test_nothing_may_justify_a_candidature_before_a_fact_is_validated`, `test_a_rejected_fact_never_reaches_the_matching_summary`, `test_a_suspended_fact_never_reaches_the_matching_summary` |
+| 5 | **Faits non approuvés ≠ justifier une candidature (bloquant pour SK-11)** | **Câblé, pas seulement documenté** : les faits validés (`approved`/`modified` + `decided_at`) sont projetés sur le profil Career (`active_profile_fields()`), et c'est ce profil **projeté** qui alimente le brouillon de candidature (`_application_context`) et la couverture des variantes de CV. Un fait proposé, rejeté ou mis de côté n'est jamais lu. `require_candidate_profile_evidence()` refuse (400) tant que rien n'a été validé. | `test_an_unapproved_fact_never_reaches_the_application_draft`, `test_a_rejected_fact_never_reaches_the_application_draft`, `test_a_suspended_fact_never_reaches_the_application_draft`, `test_a_validated_fact_reaches_the_application_draft`, `test_a_corrected_fact_reaches_the_application_draft`, `test_the_matching_profile_carries_only_the_validated_facts`, `test_the_api_never_justifies_a_candidature_without_a_decision`, `test_the_evidence_contract_serves_the_validated_facts` |
 | 6 | **Vrais essais utilisateur séparés des fixtures Git** | `scripts/candidate_profile_manual_check.py` lit un CV réel **hors du dépôt** (il refuse explicitement un fichier situé dans le dépôt), affiche les propositions avec leur passage source, et n'approuve rien. Les fixtures Git restent 100 % synthétiques. | `test_the_manual_check_script_refuses_a_file_stored_in_the_repository`, `test_the_manual_check_script_works_outside_the_repository` |
 
 ---
@@ -99,7 +120,7 @@ PDF / DOCX / TXT
 | Statut | Sémantique | Utilisable pour une candidature | Transition sortante |
 |--------|------------|-------------------------------|---------------------|
 | `proposed` | Extrait automatiquement, en attente de validation | ❌ | → `approved`, `rejected`, `modified`, `suspended` |
-| `approved` | Validé par la personne | ✅ | → `rejected`, `modified`, `suspended` |
+| `approved` | Validé par la personne | ✅ | → `modified`, `rejected`, `suspended` |
 | `rejected` | Rejeté (erreur OCR, hors sujet) | ❌ | → `proposed`, `modified`, `suspended` |
 | `modified` | Corrigé par la personne | ✅ | → `approved`, `rejected`, `suspended` |
 | `suspended` | Mis de côté temporairement | ❌ | → `proposed`, `approved`, `rejected`, `modified` |
@@ -109,9 +130,14 @@ valeur avec ses propres mots : la valeur est la sienne, pas celle de la
 machine. La valeur d'origine (`original_value`) est conservée pour l'audit.
 
 **`decided_at` est le verrou.** Un fait `approved` ou `modified` sans
-`decided_at` est invalide : `validate_profile()` le signale et
-`decide_fact()` refuse de l'obtenir autrement. C'est cette contrainte, et non
-une simple convention, qui rend l'approbation automatique impossible.
+`decided_at` est inutilisable : `decide_fact()` refuse de produire cet état
+et `validate_profile()` le signale. C'est cette contrainte, et non une simple
+convention, qui rend l'approbation automatique impossible.
+
+**Le tableau des transitions est partagé.** `career_static/js/profile-builder.js`
+miroite `ALLOWED_FACT_TRANSITIONS` : l'interface n'offre jamais une
+transition que le modèle refuserait (un clic ne peut pas finir sur un 400),
+et un test Node compare les deux tables à chaque exécution.
 
 ---
 
@@ -125,11 +151,16 @@ une simple convention, qui rend l'approbation automatique impossible.
   `pending_facts`, `counts()`, `usable_summary()`, `with_fact()`, `without_fact()`.
 * `decide_fact()` : une seule porte d'entrée pour les décisions ; refuse une
   transition interdite, refuse une correction sans valeur, refuse une
-  approbation sans valeur.
+  approbation sans valeur **et** sans date de décision.
 * `merge_facts()` : un second import ne remplace jamais une décision déjà
   prise (déduplication sur `kind` + valeur normalisée).
 * `validate_profile()` : liste les règles cassées (statut inconnu, décision
   humaine absente, source perdue, offsets incohérents).
+* **`active_profile_fields()`** : projection des faits validés sur les champs
+  du profil Career (`display_name`, `contact_email`, `contact_phone`,
+  `linkedin_url`, `education`, `experience`, `skills`, `languages`).
+  `eligibility` n'y figure **pas** : c'est une déclaration de la personne,
+  aucune extraction ne doit la remplir.
 
 ### 5.2 `career/profile_builder.py` — pipeline pur
 
@@ -148,10 +179,12 @@ une simple convention, qui rend l'approbation automatique impossible.
 * Identité et coordonnées : propositions localisées dans le texte
   (`_locate`), avec un garde-fou `_looks_like_person_name()` qui empêche de
   proposer une phrase comme identité.
-* `build_source_pages()` / `page_for_offset()` : attribution de page à partir
-  des pages fournies par `extract_pages_from_bytes()`.
+* `build_source_pages()` / `page_for_offset()` : attribution de page. Chaque
+  page est **localisée dans le texte** plutôt que déduite de sa longueur :
+  un document dont les fins de ligne sont normalisées (CRLF) ou dont la
+  source a été tronquée garde la bonne page.
 
-### 5.3 `career/service.py` — persistence et règles
+### 5.3 `career/service.py` — persistence, règles et projection
 
 * Stockage : `career_settings` clé `candidate_profile_v1` (une valeur JSON).
   **Aucune migration de schéma** : `SCHEMA_VERSION` reste à 8, la base d'un
@@ -160,6 +193,11 @@ une simple convention, qui rend l'approbation automatique impossible.
 * Le document source est stocké sous `career_data/documents/profile_candidat_<uuid><ext>`
   en `0600`. Le nom commence par `profile_` pour que le nettoyage « Supprimer
   mes données Career » l'emporte avec les autres sources privées.
+* **`_candidate_profile_overlay()`** : pose les faits validés sur le profil
+  utilisé pour la candidature. Un champ couvert par au moins un fait validé
+  vient des faits validés seuls ; un champ qu'aucun fait validé ne couvre
+  garde la valeur saisie à la main. `get_matching_profile()` expose ce profil
+  (c'est le contrat pour SK-11 et pour les variantes de CV).
 * `require_candidate_profile_evidence()` : garde-fou SK-11, refuse tant que
   rien n'est validé.
 * `export_candidate_profile()` : JSON portable dans `career_data/exports/`,
@@ -173,96 +211,91 @@ Panneau « Valider chaque information » dans l'onglet *Mon profil* :
 * compteur par statut ;
 * rappel des **faits utilisables** (ceux qui peuvent justifier une candidature) ;
 * une carte par fait : type, statut, badge `OCR`, source dépliable
-  (page, citation, offsets), champ de correction, et les cinq décisions ;
+  (page, citation, offsets), champ de correction, et les décisions permises ;
 * export et suppression du profil.
 
-Le script est autonome : il ne dépend d'aucun autre fichier JS et n'envoie
+Le script est autonome : il ne dépend d'aucun autre fichier JS, n'utilise
+que `textContent` (aucun `innerHTML`, donc aucune injection) et n'envoie
 aucune décision qu'après un clic explicite.
 
 ---
 
-## 6. Vérifications
+## 6. Audit adversariale : cinq défauts réels corrigés
 
-```bash
-.venv/bin/python -m pytest -q tests/test_candidate_profile.py   # 46 passed
-.venv/bin/python -m pytest -q                                    # 1470 passed, 1 skipped
-.venv/bin/python -m ruff check .                                 # All checks passed!
-git diff --check                                                 # propre
-```
+L'héritage repris (lot D) était propre mais incomplet. La relecture a
+trouvé cinq défauts **réels**, tous reproduits par un test qui échoue sur le
+code d'origine :
 
-Le contrôleur `checklist_codex.sh` passe aussi (`main`, `lint`, `secrets`,
-`devkit` au vert ; les étapes mémoire / studio-coach sont ignorées quand le
-worktree correspondant n'existe pas).
+| # | Défaut | Effet | Correction | Test |
+|---|--------|-------|------------|------|
+| 1 | **Le critère 5 n'était pas câblé** : les faits validés n'alimentaient ni le brouillon de candidature ni le matching. La règle était vraie par construction (les faits n'atteignaient rien) mais vide : même un fait approuvé ne justifiait rien. | La fonctionnalité ne servait à rien en pratique, et SK-11 n'avait aucun contrat réel à consommer. | `active_profile_fields()` + `_candidate_profile_overlay()` + `get_matching_profile()`, appliqué au contexte de candidature et aux variantes de CV. | 8 tests |
+| 2 | **Provenance incohérente sur un passage long** : la citation était tronquée avec « … » alors que les offsets continuaient de désigner le passage entier — les offsets pointaient *past* la citation. | La preuve affichée n'était pas celle que les offsets désignaient : le critère 2 n'était pas tenu au sens strict. | `_bounded_span()` : le passage est coupé **avec** ses offsets ; la citation est exactement `text[start:end]` normalisé, sans points de suspension. | `test_the_quote_is_exactly_the_quoted_passage`, `test_every_quote_describes_its_own_offsets` |
+| 3 | **Page fausse sur un document CRLF** : les pages étaient déduites de leur longueur, alors que la normalisation des fins de ligne raccourcit le texte → dérive des offsets → un fait de la page 2 était attribué à la page 1. | La provenance de page était fausse sur tout document Windows ou tout `.txt` à fins de ligne CRLF. | `build_source_pages()` localise chaque page **dans** le texte ; une page absente (source tronquée) ne reçoit aucune span plutôt qu'une span fausse. | `test_the_page_of_a_fact_survives_normalised_line_endings`, `test_a_truncated_source_does_not_get_a_wrong_page` |
+| 4 | **L'interface offrait des transitions refusées** : « Approuver » était proposé sur un fait déjà approuvé (toujours un 400), et « Mettre de côté » manquait sur un fait rejeté. | Un clic sur un bouton visible échouait toujours. | Table des transitions dans le JS, mirroring du modèle, vérifiée par un test Node qui compare les deux tables. | `test_the_ui_offers_exactly_the_transitions_the_model_allows` |
+| 5 | **Une approbation sans date pouvait être enregistrée** : `decide_fact()` acceptait `decided_at=""` et produisait un fait marqué approuvé mais inutilisable — un état à moitié enregistré. | Le verrou d'approbation humaine reposait sur le `decided_at` mais la porte le laissait passer sans date. | `decide_fact()` refuse une décision validée sans date ; `validate_profile()` reste le filet de sécurité pour un profil chargé depuis le disque. | `test_a_validated_decision_without_a_date_is_refused` |
+
+Trois apports des lots parallèles ont été **conservés** parce qu'ils
+complétaient le lot D :
+
+* le **plafond de taille de corps** appliqué au nouvel upload
+  (`come_ai_web.py`) — sinon un document trop gros n'était refusé qu'au
+  moment du parcours, pas avant ;
+* les **textes de page de l'OCR** (`career/ocr.py`, `career/vision_ocr.m`) —
+  un fait lu par OCR garde ainsi sa page ;
+* la **survie des faits au redémarrage** de l'application, désormais prouvée
+  par un test (`test_the_facts_survive_a_restart_of_the_local_service`).
 
 ---
 
-## 7. Note de relecture : une implémentation parallèle existe
+## 7. Vérifications
 
-La mission SK-10 a déjà été traitée par une commande antérieure, poussée sur
-`agent/spec-sk10-candidate-profile` (commit `2448d28`, base `f5b22f2` — la
-même base que cette branche). **Les deux branches touchent les mêmes
-fichiers** (`career/candidate_profile.py`, `career/profile_builder.py`,
-`career_static/js/profile-builder.js`, `tests/test_candidate_profile.py`,
-`docs/agent-reports/SPEC-SK10-CANDIDATE_PROFILE.md`) : **elles ne doivent pas
-être fusionnées ensemble**, cela produirait des conflits sur tous ces
-fichiers.
+```bash
+.venv/bin/python -m pytest -q tests/test_candidate_profile.py   # 64 passed
+.venv/bin/python -m pytest -q                                    # 1488 passed, 1 skipped
+.venv/bin/python -m ruff check .                                 # All checks passed!
+git diff --check                                                 # propre
+./checklist_codex.sh                                             # TOUT VERT
+```
 
-Cette branche-ci est **le sur-ensemble** de l'autre :
-
-| Point | `agent/spec-sk10-candidate-profile` (antérieur) | Cette branche |
-|-------|--------------------------------------------------|---------------|
-| Stockage | 2 tables SQLite dédiées (`career/profile_store.py`) | 1 valeur JSON dans `career_settings` : **aucune** table ajoutée, aucun risque de migration |
-| Persistance du texte source | le texte du document est gardé en base | le document privé est gardé en `0600` sur disque, la citation dans chaque fait |
-| Verrou d'approbation | acteur `user` / `system` + `AutoApprovalError` | `decided_at` obligatoire + `validate_profile()` : invariant vérifié, pas seulement conventionnel |
-| Dates | faits `date` de première classe | faits `date` de première classe |
-| Profil actif | `/api/career/profile-facts/active` | `/api/career/candidate-profile/active` |
-| Garde-fou SK-11 | — (à faire) | `require_candidate_profile_evidence()` : refus explicite tant que rien n'est validé |
-| Export de confidentialité | — | le profil structuré est dans `export_personal_data()` |
-| Reset global | traité dans le router | traité par `career_settings` + le motif `profile_*` existant |
-| Essai manuel hors dépôt | `scripts/candidate_profile_manual_check.py` | `scripts/candidate_profile_manual_check.py` (équivalent) |
-| Tests | 37 | 46 (dont garde-fous Node et essai manuel exécuté) |
-| `career/service.py` | non modifié | intégré (persistance + garde-fou + export) |
-
-**Recommandation : n'intégrer que cette branche** (`worker/cvboost-31-1792615600`)
-et laisser l'autre de côté. L'autre branche n'a pas été modifiée ni écrasée :
-sa destruction n'est pas une décision que l'agent puisse prendre seul.
+Les étapes mémoire / studio-coach du contrôleur sont ignorées quand le
+worktree correspondant n'existe pas (état normal d'un worktree de mission).
 
 ---
 
 ## 8. Limites connues et suite SK-11
 
-1. **Le chemin de candidature existant n'a pas été réécrit.** Il utilise le
-   profil *plat* (`candidate_profile`), que la personne remplit à la main :
-   ces données sont déjà validées par leur auteur. Le profil *structuré*
-   concerne les faits **extraits par la machine**, et c'est lui qui est
-   verrouillé. SK-11 doit consommer `require_candidate_profile_evidence()` /
-   `usable_summary()` et jamais `facts`.
-2. **La proposes-from-document passe par `profile_imports` ?** Non : le
-   profil structuré a son propre chemin (`build_candidate_profile_from_document`)
-   et son propre fichier privé. Les deux fonctionnalités restent
-   indépendantes ; la source plate n'est pas dupliquée.
-3. **Heuristiques de lecture** : une mise en page très atypique (colonnes,
+1. **Ce que SK-11 doit consommer** : `get_matching_profile()` (profil
+   projeté), `get_active_candidate_profile()` et
+   `require_candidate_profile_evidence()` — **jamais** `facts`, qui contient
+   les propositions non validées. Le contrat HTTP est
+   `GET /api/career/candidate-profile/evidence` (400 tant que rien n'est
+   validé) et `GET /api/career/candidate-profile/active`.
+2. **Le profil plat reste la source du formulaire « Mon profil »** : il est
+   saisi à la main, donc déjà validé par son auteur. `get_profile()` n'est pas
+   modifié ; c'est `get_matching_profile()` qui porte la projection.
+3. **Réimportation** : l'export existe, la réimportation n'est pas
+   implémentée. Le format d'export est documenté et stable
+   (`profile` / `counts` / `usable` / `exported_at`).
+4. **Heuristiques de lecture** : une mise en page très atypique (colonnes,
    tableaux PDF) peut produire des propositions mal segmentées. C'est
    précisément le rôle de la relecture champ par champ : la personne corrige
    ou rejette. La régression des propositions est couverte par les offsets
    exacts, pas par un score.
-4. **Pas d'import de profil structuré** : l'export existe, la réimportation
-   n'est pas implémentée. Le format d'export est documenté et stable
-   (`profile` / `counts` / `usable` / `exported_at`).
 5. **Aucun OCR réel dans les tests** : le moteur macOS Vision n'est pas
    exécutable de façon fiable en CI ; le test injecte un faux OCR et vérifie
-   le contrat (propositions uniquement, jamais approuvées).
+   le contrat (propositions uniquement, jamais approuvées, page conservée).
 
 ---
 
 ## 9. Points de relecture recommandés
 
-1. `career/candidate_profile.py` — la table des transitions et la règle
-   `decided_at`.
-2. `career/profile_builder.py` — `_heading_kind()`, `_group_experience_entries()`.
-3. `career/service.py` — les 8 méthodes `*_candidate_profile*` et la clé
-   `career_settings`.
-4. `career/router.py` — les 7 endpoints et `_store_candidate_profile_document()`.
+1. `career/candidate_profile.py` — la table des transitions, la règle
+   `decided_at` et `active_profile_fields()`.
+2. `career/profile_builder.py` — `_bounded_span()`, `build_source_pages()`,
+   `_heading_kind()`, `_group_experience_entries()`.
+3. `career/service.py` — `_candidate_profile_overlay()`,
+   `_application_context()`, `require_candidate_profile_evidence()`.
+4. `career/router.py` — les 8 endpoints et `_store_candidate_profile_document()`.
 5. `career/cv_quality/parser.py` — le refactor de `_extract_pdf()` :
    **le texte produit est inchangé** (pages vides ignorées, jointure `"\n\n"`),
    seul `extract_pages_from_bytes()` est ajouté.

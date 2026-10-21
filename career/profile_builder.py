@@ -31,6 +31,7 @@ from .candidate_profile import (
     FACT_KIND_LANGUAGE,
     FACT_KIND_PROJECT,
     FACT_KIND_SKILL,
+    MAX_QUOTE_CHARS,
     CandidateFact,
     FactProvenance,
     build_fact,
@@ -147,18 +148,31 @@ def build_source_pages(text: str, pages: Sequence[str] | None = None) -> list[So
             joined with :data:`PAGE_SEPARATOR`, exactly like the extractor does.
 
     Returns:
-        The list of page spans, in reading order.
+        The list of page spans, in reading order.  Each span is located inside
+        ``text`` itself, so the offsets stay exact even when the text and the
+        pages were not joined in exactly the same way (a truncated source, a
+        different separator, normalised line endings).
     """
     if not pages:
         return [SourcePage(page=1, start_offset=0, end_offset=len(text))]
     spans: list[SourcePage] = []
-    offset = 0
+    cursor = 0
     for index, page_text in enumerate(pages):
-        length = len(page_text)
+        needle = _normalise_source(page_text)
+        if not needle:
+            continue
+        position = text.find(needle, cursor)
+        if position < 0:
+            # The page is not in the text (the source was truncated): it gets
+            # no span rather than a wrong one.
+            continue
+        end_offset = position + len(needle)
         spans.append(
-            SourcePage(page=index + 1, start_offset=offset, end_offset=offset + length)
+            SourcePage(page=index + 1, start_offset=position, end_offset=end_offset)
         )
-        offset += length + len(PAGE_SEPARATOR)
+        cursor = end_offset
+    if not spans:
+        return [SourcePage(page=1, start_offset=0, end_offset=len(text))]
     return spans
 
 
@@ -654,6 +668,7 @@ def _make_fact(
     metadata: dict[str, Any] | None = None,
 ) -> CandidateFact:
     """Build one proposal with its provenance."""
+    start, end = _bounded_span(context.text, start, end)
     provenance = FactProvenance(
         page=page_for_offset(context.spans, start),
         start_offset=start,
@@ -680,11 +695,40 @@ def _fact_id(kind: str, value: str, offset: int) -> str:
     return f"fact_{digest[:12]}"
 
 
-def _quote(text: str, start: int, end: int, *, limit: int = 240) -> str:
-    """Return the quoted passage of a fact, whitespace-normalised."""
+def _quote(text: str, start: int, end: int) -> str:
+    """Return the quoted passage of a fact, whitespace-normalised.
+
+    The passage is never shortened here: the span is already bounded by
+    :func:`_bounded_span`, so the quote always describes exactly the characters
+    between ``start_offset`` and ``end_offset``.
+    """
     if start < 0 or end > len(text) or end <= start:
         return ""
-    snippet = re.sub(r"\s+", " ", text[start:end]).strip()
-    if len(snippet) > limit:
-        return snippet[: limit - 1].rstrip() + "…"
-    return snippet
+    return re.sub(r"\s+", " ", text[start:end]).strip()
+
+
+def _normalised_length(passage: str) -> int:
+    """Return the length of a passage once its whitespace is normalised."""
+    return len(re.sub(r"\s+", " ", passage).strip())
+
+
+def _bounded_span(text: str, start: int, end: int, *, limit: int = MAX_QUOTE_CHARS) -> tuple[int, int]:
+    """Return a span that a single quote can describe exactly.
+
+    A very long passage (a whole experience entry, for instance) is cut to
+    the first characters that fit in the quote, and the offsets are cut with
+    it.  The offsets therefore always point at the passage that was quoted,
+    instead of pointing past it.
+    """
+    if start < 0 or end > len(text) or end <= start:
+        return start, end
+    if _normalised_length(text[start:end]) <= limit:
+        return start, end
+    low, high = start, end
+    while low < high:
+        middle = (low + high + 1) // 2
+        if _normalised_length(text[start:middle]) <= limit:
+            low = middle
+        else:
+            high = middle - 1
+    return start, max(low, start)

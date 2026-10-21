@@ -99,6 +99,7 @@ int main(int argc, const char * argv[]) {
             @"pages": @(pages),
             @"truncated": @(truncated),
             @"warnings": warnings,
+            @"page_texts": page_texts,
         };
         NSError *json_error = nil;
         NSData *json = [NSJSONSerialization dataWithJSONObject:payload options:0 error:&json_error];

@@ -137,6 +137,37 @@ FACT_KIND_LABELS: dict[str, str] = {
     FACT_KIND_DATE: "Date",
 }
 
+#: The Career profile fields a fact can feed.  ``eligibility`` is deliberately
+#: absent: it stays a field the person declares by hand, and no extraction
+#: may ever fill it.
+FACT_KIND_TO_PROFILE_FIELD: dict[str, str] = {
+    FACT_KIND_IDENTITY: "display_name",
+    FACT_KIND_SKILL: "skills",
+    FACT_KIND_EXPERIENCE: "experience",
+    FACT_KIND_EDUCATION: "education",
+    FACT_KIND_LANGUAGE: "languages",
+}
+
+#: The contact fields a contact fact may feed.  A contact fact names the
+#: field it fills in its metadata (``field``), so the projection never guesses.
+CONTACT_PROFILE_FIELDS: tuple[str, ...] = (
+    "contact_email",
+    "contact_phone",
+    "linkedin_url",
+)
+
+#: Every profile field the projection may write.
+PROJECTED_PROFILE_FIELDS: tuple[str, ...] = (
+    "display_name",
+    "contact_email",
+    "contact_phone",
+    "linkedin_url",
+    "education",
+    "experience",
+    "skills",
+    "languages",
+)
+
 #: How the text of a fact was obtained.  ``ocr`` is explicitly listed because
 #: an OCR result must never be trusted without a human reading it.
 EXTRACTION_METHOD_EMBEDDED = "embedded_text"
@@ -510,6 +541,11 @@ def decide_fact(
     if decision in USER_VALIDATED_STATUSES and not new_value.strip():
         raise ProfileRuleError("Un fait approuvé doit garder une valeur.")
     timestamp = str(decided_at or "")[:64]
+    if decision in USER_VALIDATED_STATUSES and not timestamp.strip():
+        # A fact that may justify a candidacy always carries the moment the
+        # person decided.  Without it the fact could never be used, so the
+        # decision is refused instead of being recorded half-way.
+        raise ProfileRuleError("Une décision validée doit porter une date de décision.")
     if decision == FACT_STATUS_PROPOSED:
         # Reopening a fact clears the decision: the fact is pending again.
         return replace(
@@ -590,6 +626,48 @@ def merge_facts(existing: Iterable[CandidateFact], proposals: Iterable[Candidate
         known.add(key)
         kept.append(proposal)
     return tuple(kept)
+
+
+def active_profile_fields(facts: Iterable[CandidateFact]) -> dict[str, str]:
+    """Project the validated facts onto the Career profile fields.
+
+    This is the contract of the feature for the rest of the application: only
+    a fact a person validated (approved or corrected, with a recorded
+    decision) may reach a profile field.  A proposal, a rejection and a
+    suspension are never read here, so an unapproved fact cannot justify a
+    candidacy.
+
+    Returns:
+        The profile fields built from the validated facts.  A field no
+        validated fact feeds is returned empty, and the caller keeps the value
+        the person typed by hand.
+    """
+    fields: dict[str, str] = {field: "" for field in PROJECTED_PROFILE_FIELDS}
+    grouped: dict[str, list[str]] = {field: [] for field in PROJECTED_PROFILE_FIELDS}
+
+    for fact in facts:
+        if not fact.is_usable:
+            continue
+        if fact.kind == FACT_KIND_CONTACT:
+            # A contact fact names the field it fills: the projection never
+            # guesses which contact it is.
+            target = str(fact.metadata.get("field") or "")
+            if target not in CONTACT_PROFILE_FIELDS:
+                continue
+        else:
+            target = FACT_KIND_TO_PROFILE_FIELD.get(fact.kind, "")
+        if target not in grouped:
+            continue
+        if target in {"skills", "languages", "education", "experience"}:
+            grouped[target].append(fact.value)
+        else:
+            fields[target] = fields[target] or fact.value
+
+    fields["skills"] = ", ".join(grouped["skills"])
+    fields["languages"] = ", ".join(grouped["languages"])
+    fields["education"] = "\n".join(grouped["education"])
+    fields["experience"] = "\n".join(grouped["experience"])
+    return fields
 
 
 def _normalise_value(value: str) -> str:

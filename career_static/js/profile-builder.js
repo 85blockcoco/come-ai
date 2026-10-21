@@ -13,6 +13,21 @@
 
 const CANDIDATE_PROFILE_ENDPOINT = "/api/career/candidate-profile";
 
+/**
+ * The decisions the person may take from each status.
+ *
+ * This table mirrors ALLOWED_FACT_TRANSITIONS in career/candidate_profile.py:
+ * the interface never offers a transition the model would refuse, so no click
+ * can end on a 400.
+ */
+const CANDIDATE_PROFILE_TRANSITIONS = {
+  proposed: ["approved", "modified", "rejected", "suspended"],
+  approved: ["modified", "rejected", "suspended"],
+  rejected: ["proposed", "modified", "suspended"],
+  modified: ["approved", "rejected", "suspended"],
+  suspended: ["proposed", "approved", "rejected", "modified"],
+};
+
 const candidateProfileState = {
   profile: null,
   loading: false,
@@ -186,11 +201,7 @@ function renderCandidateProfileFact(fact) {
   input.className = "candidate-fact-input";
   actions.append(input);
 
-  const allowed = fact.status === "proposed"
-    ? ["approved", "modified", "rejected", "suspended"]
-    : fact.status === "rejected" || fact.status === "suspended"
-      ? ["proposed", "modified", "rejected"]
-      : ["approved", "modified", "rejected", "suspended"];
+  const allowed = CANDIDATE_PROFILE_TRANSITIONS[fact.status] || [];
 
   allowed.forEach((decision) => {
     const button = candidateProfileElement("button", decisionLabels[decision] || decision, "quiet-button");
