@@ -1,0 +1,148 @@
+{
+  "schema": "career.offer_intelligence.fixtures/2",
+  "note": "Offres 100% synthétiques : aucune entreprise, aucun poste et aucune donnée réelle. Ce corpus porte sur la PRÉCISION des contradictions : deux énoncés compatibles ne doivent jamais être présentés comme contradictoires, et deux énoncés réellement incompatibles doivent toujours l'être.",
+  "cases": [
+    {
+      "id": "month_and_exact_agree",
+      "description": "Le champ structuré donne le 15 janvier, le texte donne le mois de janvier : les deux énoncés sont compatibles.",
+      "offer": {
+        "id": "job_adv_month_exact",
+        "title": "Data Analyst Intern",
+        "company": "Synthetic Analytics",
+        "city": "Berlin",
+        "country": "Germany",
+        "source_name": "greenhouse",
+        "source_id": "9101",
+        "official_url": "https://boards.greenhouse.io/syntheticanalytics/jobs/9101",
+        "start_date": "2027-01-15",
+        "requirements": "SQL for data analysis",
+        "description_original": "The programme starts in January 2027."
+      },
+      "expected": {
+        "contradictions": 0,
+        "kinds": []
+      }
+    },
+    {
+      "id": "upper_bound_and_exact_duration_agree",
+      "description": "« up to six months » est un maximum, « six months » une durée exacte : les deux sont compatibles.",
+      "offer": {
+        "id": "job_adv_bounds",
+        "title": "Data Analyst Intern",
+        "company": "Synthetic Analytics",
+        "city": "London",
+        "country": "United Kingdom",
+        "source_name": "lever",
+        "source_id": "9102",
+        "official_url": "https://jobs.lever.co/syntheticanalytics/9102",
+        "requirements": "Advanced Excel",
+        "description_original": "The placement lasts up to six months.\nThe placement lasts six months."
+      },
+      "expected": {
+        "contradictions": 0,
+        "kinds": []
+      }
+    },
+    {
+      "id": "two_exact_dates_conflict",
+      "description": "Deux dates exactes incompatibles : la contradiction reste visible.",
+      "offer": {
+        "id": "job_adv_two_dates",
+        "title": "Data Analyst Intern",
+        "company": "Synthetic Analytics",
+        "city": "Berlin",
+        "country": "Germany",
+        "source_name": "greenhouse",
+        "source_id": "9103",
+        "official_url": "https://boards.greenhouse.io/syntheticanalytics/jobs/9103",
+        "requirements": "SQL for data analysis",
+        "description_original": "The programme starts 5 January 2027.\nThe programme starts 12 January 2027."
+      },
+      "expected": {
+        "contradictions": 1,
+        "kinds": ["temporal_conflict"]
+      }
+    },
+    {
+      "id": "structured_and_text_conflict",
+      "description": "Le champ structuré et le texte donnent deux échéances différentes : les deux versions restent visibles.",
+      "offer": {
+        "id": "job_adv_structured",
+        "title": "Quantitative Analyst Intern",
+        "company": "Synthetic Capital",
+        "city": "Dublin",
+        "country": "Ireland",
+        "source_name": "greenhouse",
+        "source_id": "9104",
+        "official_url": "https://boards.greenhouse.io/syntheticcapital/jobs/9104",
+        "deadline_date": "2026-12-15",
+        "requirements": "Probability and statistics required",
+        "description_original": "Apply by 15 November 2026."
+      },
+      "expected": {
+        "contradictions": 2,
+        "kinds": ["temporal_conflict", "structured_vs_description"]
+      }
+    },
+    {
+      "id": "two_months_conflict",
+      "description": "Deux mois de début incompatibles : la contradiction reste visible.",
+      "offer": {
+        "id": "job_adv_two_months",
+        "title": "Data Analyst Intern",
+        "company": "Synthetic Analytics",
+        "city": "Berlin",
+        "country": "Germany",
+        "source_name": "greenhouse",
+        "source_id": "9105",
+        "official_url": "https://boards.greenhouse.io/syntheticanalytics/jobs/9105",
+        "requirements": "SQL for data analysis",
+        "description_original": "The programme starts in January 2027.\nThe programme starts in February 2027."
+      },
+      "expected": {
+        "contradictions": 1,
+        "kinds": ["temporal_conflict"]
+      }
+    },
+    {
+      "id": "disjoint_duration_bounds_conflict",
+      "description": "« at least eight months » et « up to four months » ne peuvent pas être vrais en même temps.",
+      "offer": {
+        "id": "job_adv_disjoint",
+        "title": "Data Analyst Intern",
+        "company": "Synthetic Analytics",
+        "city": "Berlin",
+        "country": "Germany",
+        "source_name": "greenhouse",
+        "source_id": "9106",
+        "official_url": "https://boards.greenhouse.io/syntheticanalytics/jobs/9106",
+        "requirements": "SQL for data analysis",
+        "description_original": "The placement lasts at least eight months.\nThe placement lasts up to four months."
+      },
+      "expected": {
+        "contradictions": 1,
+        "kinds": ["temporal_conflict"]
+      }
+    },
+    {
+      "id": "no_date_never_conflicts",
+      "description": "Aucune date : rien n'est inventé, donc aucune contradiction.",
+      "offer": {
+        "id": "job_adv_no_date",
+        "title": "Data Analyst Intern",
+        "company": "Synthetic Analytics",
+        "city": "Berlin",
+        "country": "Germany",
+        "source_name": "greenhouse",
+        "source_id": "9107",
+        "official_url": "https://boards.greenhouse.io/syntheticanalytics/jobs/9107",
+        "requirements": "SQL for data analysis",
+        "description_original": "You will join our team in Berlin and support the analysts."
+      },
+      "expected": {
+        "contradictions": 0,
+        "kinds": []
+      }
+    }
+  ]
+}

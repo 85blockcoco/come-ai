@@ -99,11 +99,19 @@ QUALIFICATION_FIELDS: tuple[str, ...] = (
     "verification_status",
 )
 
+# The evidence and the unknown fields of the contractual qualification.  They
+# describe the offer, never the person, so they belong to the snapshot: every
+# qualification fact resolves to a passage instead of floating without proof.
+QUALIFICATION_EVIDENCE_FIELDS: tuple[str, ...] = ("provenance", "missing_fields")
+
 MAX_FACTS = 200
 MAX_REQUIREMENTS = 200
 MAX_MISSING = 40
 MAX_CONTRADICTIONS = 40
 MAX_QUOTE = 400
+# The fingerprint covers the whole source text: a change beyond the window the
+# analyzers read still creates a new version of the analysis.
+MAX_HASHED_FIELD_CHARS = 500_000
 
 
 def _sha256(payload: str) -> str:
@@ -413,7 +421,9 @@ def compute_source_hash(offer: Mapping[str, Any]) -> str:
     """Return the stable fingerprint of the exact source content of an offer.
 
     Only source fields participate: a personal note, a shortlist flag or an
-    application stage never invalidates an analysis.
+    application stage never invalidates an analysis.  The whole text is
+    hashed — not only the part the analyzers read — so that any change of the
+    source really produces a new analysis.
     """
     payload = {}
     for name in SOURCE_FIELDS:
@@ -423,7 +433,7 @@ def compute_source_hash(offer: Mapping[str, Any]) -> str:
         if isinstance(value, (int, float, bool)):
             payload[name] = value
         else:
-            payload[name] = _bounded(value, limit=30_000)
+            payload[name] = _bounded(value, limit=MAX_HASHED_FIELD_CHARS)
     return _sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True))
 
 
@@ -752,17 +762,84 @@ def _fact_side(fact: TemporalFact) -> dict[str, Any]:
     }
 
 
+def _date_interval(value: str | None, precision: str) -> tuple[str | None, str | None]:
+    """Return the interval a date value proves, at the precision it carries.
+
+    A month-only statement covers its whole month: it is compatible with every
+    day of that month and it contradicts another month.  An unknown value
+    proves nothing and contradicts nothing.
+    """
+    if not value:
+        return None, None
+    if precision == "exact_date" and len(value) == 10:
+        return value, value
+    if precision == "month" and len(value) == 7:
+        return f"{value}-01", f"{value}-31"
+    if precision == "year" and len(value) == 4:
+        return f"{value}-01-01", f"{value}-12-31"
+    return None, None
+
+
+def _infer_date_interval(value: str | None) -> tuple[str | None, str | None]:
+    """Return the interval a structured date proves, whatever its precision."""
+    if not value:
+        return None, None
+    candidate = value.strip()
+    if len(candidate) >= 10:
+        candidate = candidate[:10]
+        if len(candidate) == 10:
+            return _date_interval(candidate, "exact_date")
+    if len(candidate) == 7:
+        return _date_interval(candidate, "month")
+    if len(candidate) == 4:
+        return _date_interval(candidate, "year")
+    return None, None
+
+
+def _duration_interval(fact: TemporalFact) -> tuple[int | None, int | None]:
+    """Return the proven bounds of a duration; a missing bound stays unbounded."""
+    lower = int(fact.lower_bound) if str(fact.lower_bound or "").isdigit() else None
+    upper = int(fact.upper_bound) if str(fact.upper_bound or "").isdigit() else None
+    return lower, upper
+
+
+def _intervals_conflict(
+    left: tuple[Any, Any], right: tuple[Any, Any]
+) -> bool:
+    """Tell whether two proven intervals cannot both hold.
+
+    An interval that proves nothing (``None, None``) contradicts nothing: an
+    unknown value stays unknown instead of becoming an invented conflict.  A
+    single missing bound means "unbounded" on that side, which is how an upper
+    bound ("up to six months") stays compatible with an exact duration.
+    """
+    left_min, left_max = left
+    right_min, right_max = right
+    if (left_min is None and left_max is None) or (right_min is None and right_max is None):
+        return False
+    if left_max is not None and right_min is not None and left_max < right_min:
+        return True
+    if right_max is not None and left_min is not None and right_max < left_min:
+        return True
+    return False
+
+
 def _facts_conflict(left: TemporalFact, right: TemporalFact) -> bool:
-    """Two facts conflict when they are the same kind with different values."""
+    """Two facts conflict when their proven intervals cannot both hold.
+
+    The comparison is done on the intervals, not on the raw strings: a
+    month-only statement and the exact day it contains agree, and an upper
+    bound and the duration it allows agree too.  Only genuinely incompatible
+    statements are exposed as a contradiction.
+    """
     if left.kind != right.kind:
         return False
-    if left.value and right.value and left.value != right.value:
-        return True
-    if left.lower_bound != right.lower_bound or left.upper_bound != right.upper_bound:
-        if left.lower_bound is not None or right.lower_bound is not None:
-            if left.upper_bound is not None or right.upper_bound is not None:
-                return True
-    return False
+    if left.kind == "duration":
+        return _intervals_conflict(_duration_interval(left), _duration_interval(right))
+    return _intervals_conflict(
+        _date_interval(left.value, left.precision),
+        _date_interval(right.value, right.precision),
+    )
 
 
 def _requirement_contradictions(
@@ -802,7 +879,12 @@ def _requirement_contradictions(
 def _structured_vs_text_contradictions(
     offer: Mapping[str, Any], facts: Iterable[TemporalFact]
 ) -> list[Contradiction]:
-    """Compare the structured dates of the offer with the dates of its text."""
+    """Compare the structured dates of the offer with the dates of its text.
+
+    The comparison respects the precision of each side: a structured day and a
+    month-only sentence about the same month agree, only genuinely different
+    dates are exposed as a contradiction.
+    """
     contradictions: list[Contradiction] = []
     structured_map = {
         "posted_date": "publication",
@@ -815,26 +897,31 @@ def _structured_vs_text_contradictions(
         if not isinstance(raw, str) or not raw.strip():
             continue
         structured_value = raw.strip()[:10]
+        structured_interval = _infer_date_interval(structured_value)
+        if structured_interval == (None, None):
+            continue
         for fact in facts:
-            if fact.kind != kind or not fact.value:
+            if fact.kind != kind:
                 continue
             if fact.evidence.source_field == name:
                 continue
-            if fact.value != structured_value:
-                contradictions.append(
-                    Contradiction(
-                        id="ctr_" + _digest(name, fact.id, structured_value)[:16],
-                        topic=kind,
-                        kind="structured_vs_description",
-                        left={
-                            "source_field": name,
-                            "value": structured_value,
-                            "quote": _bounded(raw),
-                            "confidence_state": "confirmed",
-                        },
-                        right=_fact_side(fact),
-                    )
+            fact_interval = _date_interval(fact.value, fact.precision)
+            if not _intervals_conflict(structured_interval, fact_interval):
+                continue
+            contradictions.append(
+                Contradiction(
+                    id="ctr_" + _digest(name, fact.id, structured_value)[:16],
+                    topic=kind,
+                    kind="structured_vs_description",
+                    left={
+                        "source_field": name,
+                        "value": structured_value,
+                        "quote": _bounded(raw),
+                        "confidence_state": "confirmed",
+                    },
+                    right=_fact_side(fact),
                 )
+            )
     return contradictions[:MAX_CONTRADICTIONS]
 
 
@@ -1058,6 +1145,18 @@ def build_snapshot(
             for key in QUALIFICATION_FIELDS
             if key in qualified_data
         }
+        # The evidence of the qualification travels with it: a contractual fact
+        # without a passage would be a fact nobody can check.
+        provenance = qualified_data.get("provenance")
+        if isinstance(provenance, Mapping):
+            qualifications["provenance"] = {
+                str(name): dict(block)
+                for name, block in provenance.items()
+                if isinstance(block, Mapping)
+            }
+        missing_fields = qualified_data.get("missing_fields")
+        if isinstance(missing_fields, (list, tuple)):
+            qualifications["missing_fields"] = [str(item) for item in missing_fields]
 
     contradictions = _temporal_contradictions(facts, temporal_links)
     contradictions.extend(_requirement_contradictions(raw_contradictions))
@@ -1141,6 +1240,8 @@ def snapshot_summary(snapshot: OfferIntelligenceSnapshot | Mapping[str, Any]) ->
             if isinstance(item, Mapping)
         ],
         "trust_status": str((payload.get("trust") or {}).get("status") or "missing"),
+        "geo_status": str((payload.get("geo") or {}).get("status") or "to_verify"),
+        "lang_status": str((payload.get("lang") or {}).get("status") or "to_verify"),
         "contract_status": str((payload.get("qualifications") or {}).get("contract_status") or ""),
         "contract_type": str((payload.get("qualifications") or {}).get("contract_type") or ""),
     }
