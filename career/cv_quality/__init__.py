@@ -4,7 +4,7 @@
 Detects ATS-blocking issues and human readability problems.
 
 Usage:
-    from career.cv_quality import analyze_cv, DocumentInput
+    from career.cv_quality import analyze_cv, DocumentInput, match_cv_to_offer
     from career.cv_quality.parser import extract_text_from_file
 
     # From file
@@ -14,6 +14,9 @@ Usage:
     # From raw text
     doc = DocumentInput(text="...", filename="cv.txt", filetype="txt")
     result = analyze_cv(doc)
+
+    # Match CV against offer
+    match_result = match_cv_to_offer(result, offer_dict)
 """
 
 from __future__ import annotations
@@ -23,6 +26,10 @@ from .models import (
     DocumentInput,
     ExperienceEntry,
     Finding,
+    MatchAction,
+    MatchActionCode,
+    MatchEvidence,
+    MatchResult,
     Provenance,
     ReadabilityScore,
     SectionReading,
@@ -33,10 +40,12 @@ from .models import (
 )
 from .parser import extract_text_from_bytes, extract_text_from_file
 from .structure import analyze_cv
+from .matching import match_cv_to_offer
 
 __all__ = [
-    # Main entry point
+    # Main entry points
     "analyze_cv",
+    "match_cv_to_offer",
     # Input/Output types
     "DocumentInput",
     "CVAnalysisResult",
@@ -46,6 +55,11 @@ __all__ = [
     "ExperienceEntry",
     "ReadabilityScore",
     "Provenance",
+    # Matching models
+    "MatchAction",
+    "MatchActionCode",
+    "MatchEvidence",
+    "MatchResult",
     # Status constants
     "STATUS_OK",
     "STATUS_INFO",
