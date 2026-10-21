@@ -19,7 +19,14 @@ import urllib.parse
 import urllib.request
 from typing import Any, Callable, Protocol
 
-from ..discovery import DiscoveryPayload, PublicSourceError, _location_parts, source_html_to_text
+from ..discovery import (
+    CountryFilter,
+    DiscoveryPayload,
+    GeoExclusionMetrics,
+    PublicSourceError,
+    _location_parts,
+    source_html_to_text,
+)
 from ..exploration import EXPLORATION_MAX_RESULTS, criteria_admit, ranking_key, classify_internship
 from ..offer_qualification import qualify_offer
 from ..scoring import classify_job_family
@@ -112,6 +119,7 @@ class PublicATSConnector:
         self.page_size = max(1, min(PAGE_SIZE, int(page_size)))
         self.max_results = max(1, min(EXPLORATION_MAX_RESULTS, int(max_results)))
         self._last_request_at = 0.0
+        self._geo_metrics = GeoExclusionMetrics()
 
     @staticmethod
     def _identifier(source: dict[str, Any], *keys: str) -> str:
@@ -161,6 +169,8 @@ class PublicATSConnector:
             raise PublicSourceError("Une source officielle vérifiée est requise avant toute consultation.",
                                     code="unverified_source")
         brief = validate_brief(selection_brief) if selection_brief else default_brief()
+        self._geo_metrics = GeoExclusionMetrics()
+        geo = CountryFilter(brief.get("countries_exclude"), self._geo_metrics)
         pages = self._pages(source, deadline=deadline)
         raw_count = evaluated = invalid = confirmed = uncertain = excluded = relevant = filtered = 0
         ranked: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
@@ -170,14 +180,24 @@ class PublicATSConnector:
             if raw_count > MAX_ROWS:
                 raise PublicSourceError("Le flux dépasse la limite d’offres évaluées.", code="too_many_rows")
             for raw in items:
+                geo.metrics.record_raw()
                 if not isinstance(raw, dict):
                     invalid += 1
+                    continue
+                country_values, location_values = self._country_evidence(raw)
+                countries = geo.resolve(country_values, location_values)
+                # Source-side exclusion: a posting located in an unwanted
+                # country is dropped here, before it becomes an offer.
+                if geo.evaluate(countries):
+                    evaluated += 1
+                    excluded += 1
                     continue
                 try:
                     job = self._normalise_one(source, raw)
                 except (KeyError, TypeError, ValueError):
                     invalid += 1
                     continue
+                job["country_canonical"] = countries[0] if countries else ""
                 evaluated += 1
                 classification = classify_internship(job)
                 qualification = qualify_offer(
@@ -222,6 +242,19 @@ class PublicATSConnector:
     def _raw_items(self, payload: Any) -> list[Any]:
         raise NotImplementedError
 
+    def _country_evidence(self, raw: dict[str, Any]) -> tuple[tuple[Any, ...], tuple[Any, ...]]:
+        """The country fields and free-form location fields the source states.
+
+        A provider overrides this to point at the fields its own documented
+        feed uses.  Nothing else is read: the country is never guessed from a
+        title, a company or a salary.
+        """
+        return (), ()
+
+    def health_check(self) -> dict[str, Any]:
+        """What the last read excluded, and for which country."""
+        return self._geo_metrics.as_dict()
+
 
 class LeverConnector(PublicATSConnector):
     """Lever public postings feed (official docs: https://github.com/lever/postings-api)."""
@@ -260,6 +293,10 @@ class LeverConnector(PublicATSConnector):
                            raw.get("hostedUrl"), raw.get("applyUrl"), raw.get("descriptionPlain"),
                            categories.get("location"), raw.get("country"), categories.get("commitment"), "")
 
+    def _country_evidence(self, raw: dict[str, Any]) -> tuple[tuple[Any, ...], tuple[Any, ...]]:
+        categories = raw.get("categories") if isinstance(raw.get("categories"), dict) else {}
+        return (raw.get("country"),), (clean_text(categories.get("location"), limit=300),)
+
 
 class AshbyConnector(PublicATSConnector):
     """Ashby public job-board feed (official docs: https://developers.ashbyhq.com/docs/public-job-posting-api)."""
@@ -295,6 +332,11 @@ class AshbyConnector(PublicATSConnector):
         return _common_job(self.provider, source, raw.get("id") or fallback_id, raw.get("title"),
                            job_url, raw.get("applyUrl"), raw.get("descriptionPlain"),
                            location, country, raw.get("employmentType"), raw.get("publishedAt"))
+
+    def _country_evidence(self, raw: dict[str, Any]) -> tuple[tuple[Any, ...], tuple[Any, ...]]:
+        address = raw.get("address") if isinstance(raw.get("address"), dict) else {}
+        postal = address.get("postalAddress") if isinstance(address.get("postalAddress"), dict) else {}
+        return (postal.get("addressCountry"),), (clean_text(raw.get("location"), limit=300),)
 
 
 class SmartRecruitersConnector(PublicATSConnector):
@@ -343,6 +385,11 @@ class SmartRecruitersConnector(PublicATSConnector):
                            raw.get("applyUrl"), raw.get("description"), location.get("city"),
                            location.get("country"), contract.get("label"), raw.get("releasedDate"),
                            company_name=company.get("name"))
+
+    def _country_evidence(self, raw: dict[str, Any]) -> tuple[tuple[Any, ...], tuple[Any, ...]]:
+        location = raw.get("location") if isinstance(raw.get("location"), dict) else {}
+        return (location.get("country"),), (clean_text(location.get("city"), limit=300),
+                                            clean_text(location.get("region"), limit=300))
 
 
 def _common_job(provider: str, source: dict[str, Any], job_id: Any, title: Any, official_url: Any,

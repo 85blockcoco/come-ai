@@ -119,9 +119,11 @@ def test_apec_health_check_returns_metrics():
     assert set(health.keys()) == {
         "last_ok", "last_error", "consecutive_failures",
         "raw_offers", "valid_offers", "finance_offers",
-        "stage_offers", "conforming_offers", "to_verify_offers"
+        "stage_offers", "conforming_offers", "to_verify_offers",
+        "raw_count", "kept_count", "filtered_count", "excluded_count",
+        "mixed_count", "unknown_count", "excluded_by_country", "mixed_by_country"
     }
-    assert all(isinstance(v, (bool, int, str, type(None))) for v in health.values())
+    assert isinstance(health["excluded_by_country"], dict)
 
 
 def test_apec_france_exclusion(fixtures):

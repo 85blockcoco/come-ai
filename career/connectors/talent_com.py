@@ -7,7 +7,6 @@ Documentation: No public API; uses search HTML with structured data.
 
 from __future__ import annotations
 
-import re
 import socket
 import time
 import urllib.error
@@ -18,7 +17,15 @@ from datetime import datetime, timezone
 from html.parser import HTMLParser
 from typing import Any, Callable, Iterator
 
-from ..discovery import DiscoveryPayload, PublicSourceError, source_html_to_text
+from ..discovery import (
+    CountryFilter,
+    DiscoveryPayload,
+    GeoExclusionMetrics,
+    PublicSourceError,
+    https_opener,
+    source_html_to_text,
+    split_location,
+)
 from ..models import clean_text, canonical_url
 from ..exploration import classify_internship, criteria_admit, ranking_key
 from ..offer_qualification import qualify_offer
@@ -50,6 +57,7 @@ class TalentComHealth:
 
 _HEALTH = TalentComHealth()
 _LAST_REQUEST_TIME = 0.0
+_GEO = GeoExclusionMetrics()
 
 
 class _TalentJobParser(HTMLParser):
@@ -78,12 +86,18 @@ class _TalentJobParser(HTMLParser):
                 "contract_type": "",
                 "url": "",
                 "description": "",
+                "country_code": "",
             }
             self._depth = 1
             if attrs_dict.get("data-job-id"):
                 self._current["source_id"] = attrs_dict["data-job-id"]
         elif self._in_job_card:
             self._depth += 1
+            # The board publishes the posting country as an office attribute;
+            # read it whenever it is present, whatever its exact name.
+            for name, value in attrs:
+                if name and "country" in name.lower() and value and not self._current["country_code"]:
+                    self._current["country_code"] = clean_text(value, limit=8)
             if tag == "a" and attrs_dict.get("href"):
                 href = attrs_dict["href"]
                 if "/job/" in href or "/view/" in href:
@@ -139,7 +153,7 @@ def _default_fetch(url: str) -> str | None:
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=_TALENT_TIMEOUT) as resp:
+        with https_opener().open(req, timeout=_TALENT_TIMEOUT) as resp:
             body = resp.read(_TALENT_MAX_RESPONSE_BYTES + 1)
             if len(body) > _TALENT_MAX_RESPONSE_BYTES:
                 _HEALTH.last_error = "Response too large"
@@ -177,33 +191,12 @@ def _parse_location(location_text: str) -> tuple[str, str]:
     location_text = clean_text(location_text, limit=160)
     if not location_text:
         return "", ""
-    parts = [p.strip() for p in re.split(r"[,(]", location_text) if p.strip()]
+    parts = split_location(location_text)
     if len(parts) >= 2:
         city = parts[0]
         country = parts[-1]
         return city, country
     return location_text, ""
-
-
-def _is_france_location(city: str, country: str) -> bool:
-    """Check if location is in France (to be excluded per R1)."""
-    france_indicators = {"france", "fr", "paris", "lyon", "marseille", "toulouse", "nice", "nantes",
-                         "strasbourg", "montpellier", "bordeaux", "lille", "rennes", "reims",
-                         "le havre", "saint-etienne", "toulon", "grenoble", "dijon", "angers",
-                         "villeurbanne", "nanterre", "creteil", "aubervilliers", "asnieres",
-                         "colombes", "courbevoie", "levallois-perret", "neuilly-sur-seine"}
-    city_norm = city.lower().strip()
-    country_norm = country.lower().strip()
-    if country_norm in {"france", "fr"}:
-        return True
-    for ind in france_indicators:
-        if ind == "fr":
-            continue
-        if ind in city_norm.split():
-            return True
-        if f"-{ind}" in city_norm or f"{ind}-" in city_norm:
-            return True
-    return False
 
 
 def _is_finance_role(title: str, description: str) -> bool:
@@ -236,9 +229,11 @@ def _iter_raw_offers(
     query: str = "finance internship",
     location: str = "Europe",
     fetch: Callable[[str], str | None] | None = None,
+    country_filter: CountryFilter | None = None,
 ) -> Iterator[dict[str, Any]]:
     """Iterate over raw internship offers from Talent.com."""
     fetch_fn = fetch or _default_fetch
+    geo = country_filter if country_filter is not None else CountryFilter()
     for page in range(1, _TALENT_MAX_PAGES + 1):
         url = _build_search_url(query, location, page)
         html = fetch_fn(url)
@@ -260,6 +255,7 @@ def _iter_raw_offers(
 
         for raw in page_jobs:
             _HEALTH.raw_offers += 1
+            geo.metrics.record_raw()
 
             title = clean_text(raw.get("title", ""), limit=300)
             company = clean_text(raw.get("company", ""), limit=240)
@@ -278,7 +274,10 @@ def _iter_raw_offers(
 
             city, country = _parse_location(location_text)
 
-            if _is_france_location(city, country):
+            # Source-side exclusion: an excluded posting is dropped here,
+            # before it becomes an offer.
+            countries = geo.resolve_with_city_hints((raw.get("country_code"), country), (location_text,))
+            if geo.evaluate(countries):
                 continue
 
             _HEALTH.valid_offers += 1
@@ -310,6 +309,7 @@ def _iter_raw_offers(
                 "apply_url": official_url,
                 "city": city,
                 "country": country,
+                "country_canonical": countries[0] if countries else "",
                 "posted_date": "",
                 "deadline_date": "",
                 "start_date": "",
@@ -371,11 +371,13 @@ class TalentComConnector:
         _HEALTH.stage_offers = 0
         _HEALTH.conforming_offers = 0
         _HEALTH.to_verify_offers = 0
+        _GEO.reset()
+        country_filter = CountryFilter(brief.get("countries_exclude"), _GEO)
 
         raw_count = evaluated = invalid = confirmed = uncertain = excluded = relevant = filtered = 0
         ranked: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
 
-        for raw in _iter_raw_offers(fetch=self._fetch):
+        for raw in _iter_raw_offers(fetch=self._fetch, country_filter=country_filter):
             if deadline is not None and self.monotonic() >= deadline:
                 raise PublicSourceError("Le budget de recherche est atteint.", code="budget")
             raw_count += 1
@@ -447,6 +449,7 @@ class TalentComConnector:
             "stage_offers": _HEALTH.stage_offers,
             "conforming_offers": _HEALTH.conforming_offers,
             "to_verify_offers": _HEALTH.to_verify_offers,
+            **_GEO.as_dict(),
         }
 
 

@@ -9,6 +9,7 @@ tests remain offline.
 
 from __future__ import annotations
 
+import functools
 import html
 import hashlib
 import heapq
@@ -20,16 +21,23 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from html.parser import HTMLParser
-from typing import Any, Protocol
+from typing import Any, Iterable, Protocol
 
 from workspace_core import UserFacingError
 
 from .models import canonical_url, clean_text, normalized_text
 from .scoring import classify_job_family
-from .stage_search import default_brief, score_brief_match, validate_brief
+from .stage_search import (
+    canonicalize_country,
+    city_hint_countries,
+    default_brief,
+    resolve_countries,
+    score_brief_match,
+    validate_brief,
+)
 from .exploration import classify_internship, criteria_admit
 from .offer_qualification import qualify_offer
 
@@ -86,6 +94,132 @@ class DiscoveryPayload:
     excluded_count: int = 0
     relevant_count: int = 0
     filtered_criteria_count: int = 0
+
+
+@dataclass
+class GeoExclusionMetrics:
+    """What a connector saw, kept and excluded for one run.
+
+    The counters are factual: they count postings, never estimate a share of
+    the source.  ``excluded_by_country`` says which country caused each
+    refusal, so an operator can audit why a posting never reached the base.
+    """
+
+    raw_count: int = 0
+    kept_count: int = 0
+    excluded_count: int = 0
+    mixed_count: int = 0
+    unknown_count: int = 0
+    excluded_by_country: dict[str, int] = field(default_factory=dict)
+    mixed_by_country: dict[str, int] = field(default_factory=dict)
+
+    def record_raw(self, count: int = 1) -> None:
+        self.raw_count += max(0, int(count))
+
+    def reset(self) -> None:
+        """Forget the previous run so a new read starts from zero."""
+        self.raw_count = 0
+        self.kept_count = 0
+        self.excluded_count = 0
+        self.mixed_count = 0
+        self.unknown_count = 0
+        self.excluded_by_country.clear()
+        self.mixed_by_country.clear()
+
+    def record_excluded(self, codes: Iterable[str]) -> None:
+        self.excluded_count += 1
+        for code in codes:
+            self.excluded_by_country[code] = self.excluded_by_country.get(code, 0) + 1
+
+    def record_kept(self, countries: Iterable[str]) -> None:
+        self.kept_count += 1
+        if not tuple(countries):
+            self.unknown_count += 1
+
+    def record_mixed(self, codes: Iterable[str]) -> None:
+        """A posting placed in an excluded country *and* in another one."""
+        self.mixed_count += 1
+        for code in codes:
+            self.mixed_by_country[code] = self.mixed_by_country.get(code, 0) + 1
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "raw_count": self.raw_count,
+            "kept_count": self.kept_count,
+            "filtered_count": self.kept_count,
+            "excluded_count": self.excluded_count,
+            "mixed_count": self.mixed_count,
+            "unknown_count": self.unknown_count,
+            "excluded_by_country": dict(self.excluded_by_country),
+            "mixed_by_country": dict(self.mixed_by_country),
+        }
+
+
+class CountryFilter:
+    """The source-side country exclusion shared by every connector.
+
+    A connector resolves the countries a posting actually states and then
+    asks this object whether the posting may be returned.  A posting is
+    dropped only when *every* country it states is excluded; a posting that
+    states several countries, one excluded and one not, stays visible as a
+    mixed posting because the source itself places it outside the excluded
+    country as well.
+    """
+
+    def __init__(self, excluded: Iterable[Any] | None = None,
+                 metrics: GeoExclusionMetrics | None = None) -> None:
+        self.metrics = metrics if metrics is not None else GeoExclusionMetrics()
+        codes: list[str] = []
+        for entry in excluded or ():
+            code = canonicalize_country(entry)
+            if code and code not in codes:
+                codes.append(code)
+        self.excluded_codes: frozenset[str] = frozenset(codes)
+
+    @property
+    def active(self) -> bool:
+        """Whether any country is excluded at all."""
+        return bool(self.excluded_codes)
+
+    def resolve(self, country_values: Iterable[Any] = (),
+                location_values: Iterable[Any] = ()) -> tuple[str, ...]:
+        """Every country the source states explicitly.
+
+        Only what the source writes counts: a country code or a country name.
+        A city name is never turned into a country, so a posting located in
+        "Paris" without a country stays a candidate with an unknown country
+        instead of being silently refused.
+        """
+        return resolve_countries(*country_values, *location_values)
+
+    def resolve_with_city_hints(self, country_values: Iterable[Any] = (),
+                                location_values: Iterable[Any] = ()) -> tuple[str, ...]:
+        """The stated countries, or the countries the named cities belong to.
+
+        Used by the boards that publish a free-form location and no country
+        field at all.  The city is a weaker evidence and is only read when
+        the source states no country, never against a written country.
+        """
+        countries = self.resolve(country_values, location_values)
+        if not countries:
+            countries = city_hint_countries(*country_values, *location_values)
+        return countries
+
+    def evaluate(self, countries: Iterable[str]) -> str:
+        """Return the excluded country code when the posting must be dropped."""
+        stated = tuple(countries)
+        if not self.active or not stated:
+            self.metrics.record_kept(stated)
+            return ""
+        blocked = [code for code in stated if code in self.excluded_codes]
+        if not blocked:
+            self.metrics.record_kept(stated)
+            return ""
+        if len(blocked) == len(stated):
+            self.metrics.record_excluded(blocked)
+            return blocked[0]
+        self.metrics.record_mixed(blocked)
+        return ""
 
 
 def parse_greenhouse_board_token(value: Any) -> str:
@@ -296,6 +430,47 @@ def _location_parts(value: Any, *, preserve_multi_locations: bool = False) -> tu
     return clean_text(location, limit=160), ""
 
 
+# The separators a public source uses between a city and its country.  A
+# dash only separates when it is spaced, so "Saint-Étienne" stays one word.
+_LOCATION_SEPARATORS = re.compile(r"\s*[,;|/]\s*|\s+[–—-]\s+")
+_LOCATION_BRACKETS = re.compile(r"[()\[\]]")
+
+
+def split_location(value: Any) -> list[str]:
+    """Split a free-form location into the parts the source wrote.
+
+    "Paris, France", "Paris - France", "Paris (France)" and "Paris/France"
+    all read as a city and a country; "Saint-Étienne" stays one part.
+    """
+    location = clean_text(value, limit=300)
+    if not location:
+        return []
+    location = _LOCATION_BRACKETS.sub(", ", location)
+    parts = [clean_text(part, limit=160) for part in _LOCATION_SEPARATORS.split(location)]
+    return [part for part in parts if part]
+
+
+@functools.lru_cache(maxsize=1)
+def https_opener() -> urllib.request.OpenerDirector:
+    """An opener that also trusts the certifi root bundle when installed.
+
+    macOS Python installers often leave the system keychain without the
+    Mozilla root bundle, which makes a plain default context reject every
+    public site with CERTIFICATE_VERIFY_FAILED.  ``certifi`` solves this
+    without weakening certificate verification; the stdlib context stays the
+    fallback when certifi is absent.  The same fallback already backs the
+    Greenhouse transport below.
+    """
+    context = ssl.create_default_context()
+    try:
+        import certifi  # noqa: PLC0415 - optional, keep the stdlib-only fallback
+
+        context = ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        pass
+    return urllib.request.build_opener(urllib.request.HTTPSHandler(context=context))
+
+
 def _explicit_employment_type(raw: dict[str, Any]) -> str:
     """Read only named ATS contract metadata and explicitly recognized values.
 
@@ -331,6 +506,7 @@ class GreenhouseJobBoardConnector:
 
     def __init__(self, transport: GreenhouseTransport | None = None) -> None:
         self.transport = transport or UrllibGreenhouseTransport()
+        self._geo_metrics = GeoExclusionMetrics()
 
     def discover(self, board: GreenhouseBoard) -> DiscoveryPayload:
         """Compatibility entry point: deterministic, preference-free selection."""
@@ -346,6 +522,8 @@ class GreenhouseJobBoardConnector:
         unchanged and never contains profile or preference data.
         """
         brief = validate_brief(selection_brief) if selection_brief is not None else default_brief()
+        self._geo_metrics = GeoExclusionMetrics()
+        country_filter = CountryFilter(brief.get("countries_exclude"), self._geo_metrics)
         error: PublicSourceError | None = None
         for attempt in range(2):
             try:
@@ -353,7 +531,8 @@ class GreenhouseJobBoardConnector:
                 if remaining <= 0:
                     raise PublicSourceError("Le budget de recherche est atteint ; cette source n’a pas été relancée.", code="budget")
                 payload = self.transport.get_json(board.endpoint, min(GREENHOUSE_TIMEOUT_SECONDS, remaining))
-                return self._normalise(board, payload, selection_brief=brief, internships_only=internships_only)
+                return self._normalise(board, payload, selection_brief=brief,
+                                       internships_only=internships_only, country_filter=country_filter)
             except PublicSourceError as caught:
                 error = caught
                 if not caught.retryable or attempt:
@@ -371,10 +550,14 @@ class GreenhouseJobBoardConnector:
         return self.discover_ranked(board, selection_brief=selection_brief,
                                     internships_only=True, deadline=deadline)
 
+    def health_check(self) -> dict[str, Any]:
+        """What the last read excluded, and for which country."""
+        return self._geo_metrics.as_dict()
+
     @staticmethod
     def _normalise(
         board: GreenhouseBoard, payload: Any, *, selection_brief: dict[str, Any] | None = None,
-        internships_only: bool = False,
+        internships_only: bool = False, country_filter: CountryFilter | None = None,
     ) -> DiscoveryPayload:
         if not isinstance(payload, dict) or not isinstance(payload.get("jobs"), list):
             raise PublicSourceError("Greenhouse a renvoyé un format d’offres inattendu.", code="invalid_payload")
@@ -386,6 +569,7 @@ class GreenhouseJobBoardConnector:
                 code="too_many_rows",
             )
         brief = validate_brief(selection_brief) if selection_brief is not None else default_brief()
+        geo = country_filter if country_filter is not None else CountryFilter(brief.get("countries_exclude"))
         evaluated_count = invalid_count = 0
         confirmed_count = uncertain_count = excluded_count = relevant_count = filtered_criteria_count = 0
 
@@ -393,6 +577,7 @@ class GreenhouseJobBoardConnector:
             nonlocal evaluated_count, invalid_count, confirmed_count, uncertain_count, excluded_count
             nonlocal relevant_count, filtered_criteria_count
             for raw in raw_jobs:
+                geo.metrics.record_raw()
                 if not isinstance(raw, dict):
                     invalid_count += 1
                     continue
@@ -410,7 +595,21 @@ class GreenhouseJobBoardConnector:
                     invalid_count += 1
                     continue
                 location = raw.get("location") if isinstance(raw.get("location"), dict) else {}
-                city, country = _location_parts(location.get("name"), preserve_multi_locations=internships_only)
+                location_name = clean_text(location.get("name"), limit=300)
+                offices = raw.get("offices") if isinstance(raw.get("offices"), list) else []
+                office_locations = [
+                    clean_text(office.get("location"), limit=300)
+                    for office in offices[:20] if isinstance(office, dict)
+                ]
+                city, country = _location_parts(location_name, preserve_multi_locations=internships_only)
+                countries = geo.resolve((country,), (location_name, *office_locations))
+                # Source-side exclusion: a posting located in an unwanted
+                # country is dropped before it becomes an offer, so it never
+                # reaches the database and never costs a re-read.
+                if geo.evaluate(countries):
+                    evaluated_count += 1
+                    excluded_count += 1
+                    continue
                 description = source_html_to_text(raw.get("content"))
                 job = {
                     "company": board.company,
@@ -420,6 +619,7 @@ class GreenhouseJobBoardConnector:
                     "official_url": official_url,
                     "city": city,
                     "country": country,
+                    "country_canonical": countries[0] if countries else "",
                     # ``updated_at`` is source maintenance metadata, not a
                     # posting or internship date.  We deliberately leave the
                     # calendar unknown unless the ATS exposes it structurally.

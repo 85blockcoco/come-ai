@@ -20,12 +20,12 @@ from career.service import CareerService
 BOARD = GreenhouseBoard(id="synthetic-board", company="Synthetic Bank", board_token="synthetic-bank")
 
 
-def raw_job(job_id: str, *, title: str = "Software intern", city: str = "Paris", **changes: Any) -> dict[str, Any]:
+def raw_job(job_id: str, *, title: str = "Software intern", city: str = "London", **changes: Any) -> dict[str, Any]:
     job = {
         "id": job_id,
         "title": title,
         "absolute_url": f"https://careers.example.test/jobs/{job_id}",
-        "location": {"name": f"{city}, France"},
+        "location": {"name": f"{city}, United Kingdom"},
         "content": "<p>Synthetic software engineering internship.</p>",
     }
     job.update(changes)
@@ -52,7 +52,7 @@ def test_finance_offer_after_position_150_is_scored_before_selection() -> None:
     jobs = [raw_job(f"software-{index:04}") for index in range(160)]
     jobs.append(raw_job("late-finance", title="M&A Investment Banking Intern", content="<p>Fusion acquisition.</p>"))
     connector = GreenhouseJobBoardConnector(SyntheticTransport({"jobs": jobs}))
-    result = connector.discover_ranked(BOARD, selection_brief={"domains": ["M&A"], "cities": ["Paris"]})
+    result = connector.discover_ranked(BOARD, selection_brief={"domains": ["M&A"], "cities": ["London"]})
     assert len(result.jobs) == GREENHOUSE_MAX_JOBS
     assert result.jobs[0]["source_id"] == "late-finance"
     assert result.evaluated_count == 161
@@ -91,18 +91,18 @@ def test_selected_jobs_and_tie_order_are_invariant_to_feed_reordering() -> None:
 
 
 def test_selection_uses_the_persons_saved_weights_not_hardcoded_finance_preferences() -> None:
-    jobs = [raw_job(f"finance-{index:04}", title="M&A Intern", city="Lyon") for index in range(150)]
-    jobs.append(raw_job("late-paris", title="Software Intern", city="Paris"))
+    jobs = [raw_job(f"finance-{index:04}", title="M&A Intern", city="Manchester") for index in range(150)]
+    jobs.append(raw_job("late-london", title="Software Intern", city="London"))
     normal = GreenhouseJobBoardConnector._normalise(
-        BOARD, {"jobs": jobs}, selection_brief={"domains": ["M&A"], "cities": ["Paris"]}
+        BOARD, {"jobs": jobs}, selection_brief={"domains": ["M&A"], "cities": ["London"]}
     )
     location_first = GreenhouseJobBoardConnector._normalise(
         BOARD,
         {"jobs": jobs},
-        selection_brief={"domains": ["M&A"], "cities": ["Paris"], "ranking": {"domaine": 0.5, "localisation": 2.0}},
+        selection_brief={"domains": ["M&A"], "cities": ["London"], "ranking": {"domaine": 0.5, "localisation": 2.0}},
     )
-    assert "late-paris" not in {job["source_id"] for job in normal.jobs}
-    assert location_first.jobs[0]["source_id"] == "late-paris"
+    assert "late-london" not in {job["source_id"] for job in normal.jobs}
+    assert location_first.jobs[0]["source_id"] == "late-london"
 
 
 def test_invalid_rows_before_position_150_do_not_occupy_selection_places() -> None:
@@ -147,7 +147,7 @@ def test_service_imports_late_finance_offer_using_saved_brief(tmp_path: Path) ->
     transport = SyntheticTransport({"jobs": jobs})
     service = CareerService(tmp_path, discovery_connector=GreenhouseJobBoardConnector(transport))
     service.create_discovery_source({"company": BOARD.company, "board_reference": BOARD.board_token})
-    service.update_stage_search({"domains": ["M&A"], "cities": ["Paris"]})
+    service.update_stage_search({"domains": ["M&A"], "cities": ["London"]})
     outcome = service.discover_opportunities()["outcomes"][0]
     assert outcome["status"] == "success"
     assert outcome["imported_count"] == 150

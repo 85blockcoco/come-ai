@@ -9,6 +9,8 @@ the reason that produced it so the ranking stays auditable.
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from typing import Any
 
 from .models import JOB_FAMILIES, clean_text, normalized_text, parse_date
@@ -160,6 +162,275 @@ MONTHS: tuple[tuple[int, str], ...] = (
 )
 
 
+# ---------------------------------------------------------------------------
+# Geographic vocabulary — the country exclusion applied by the connectors
+# ---------------------------------------------------------------------------
+#
+# The exclusion is a *source-side* decision: a connector never returns an
+# offer located in an unwanted country, so a rejected posting never reaches
+# the database and never consumes source quota.  The rules below only read
+# what the source itself states.  They never guess a country from a company
+# name, a job title or a salary.
+
+# The person never wants French offers unless they explicitly reopen the list.
+DEFAULT_COUNTRIES_EXCLUDE: tuple[str, ...] = ("FR",)
+
+# ISO 3166-1 alpha-2 codes.  A two-letter token is only read as a country
+# when the source wrote it in capitals, so "am" in "Frankfurt am Main" stays
+# an ordinary word and never becomes Armenia.
+_ISO_ALPHA2: frozenset[str] = frozenset("""
+AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL
+BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV
+CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD
+GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM
+IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK
+LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW
+MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR
+PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS
+ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY
+UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW
+""".split())
+
+# A readable selection of ISO 3166-1 alpha-3 codes.
+_ISO_ALPHA3: dict[str, str] = {
+    "AFG": "AF", "ALB": "AL", "DZA": "DZ", "AGO": "AO", "ARG": "AR", "ARM": "AM", "AUS": "AU",
+    "AUT": "AT", "AZE": "AZ", "BHR": "BH", "BGD": "BD", "BEL": "BE", "BOL": "BO", "BIH": "BA",
+    "BWA": "BW", "BRA": "BR", "BGR": "BG", "BFA": "BF", "BDI": "BI", "KHM": "KH", "CMR": "CM",
+    "CAN": "CA", "CPV": "CV", "CAF": "CF", "TCD": "TD", "CHL": "CL", "CHN": "CN", "COL": "CO",
+    "CIV": "CI", "HRV": "HR", "CUB": "CU", "CYP": "CY", "CZE": "CZ", "DNK": "DK", "DJI": "DJ",
+    "DOM": "DO", "ECU": "EC", "EGY": "EG", "SLV": "SV", "EST": "EE", "ETH": "ET", "FIN": "FI",
+    "FRA": "FR", "GAB": "GA", "GEO": "GE", "DEU": "DE", "GHA": "GH", "GRC": "GR", "GRD": "GD",
+    "GTM": "GT", "HND": "HN", "HKG": "HK", "HUN": "HU", "ISL": "IS", "IND": "IN", "IDN": "ID",
+    "IRN": "IR", "IRQ": "IQ", "IRL": "IE", "ISR": "IL", "ITA": "IT", "JPN": "JP", "JOR": "JO",
+    "KAZ": "KZ", "KEN": "KE", "PRK": "KP", "KOR": "KR", "KWT": "KW", "LVA": "LV", "LBN": "LB",
+    "LBY": "LY", "LTU": "LT", "LUX": "LU", "MAC": "MO", "MDG": "MG", "MYS": "MY", "MLT": "MT",
+    "MEX": "MX", "MDA": "MD", "MCO": "MC", "MNG": "MN", "MAR": "MA", "MMR": "MM", "NLD": "NL",
+    "NZL": "NZ", "NGA": "NG", "NOR": "NO", "OMN": "OM", "PAK": "PK", "PAN": "PA", "PRY": "PY",
+    "PER": "PE", "PHL": "PH", "POL": "PL", "PRT": "PT", "QAT": "QA", "ROU": "RO", "RUS": "RU",
+    "RWA": "RW", "SAU": "SA", "SEN": "SN", "SRB": "RS", "SGP": "SG", "SVK": "SK", "SVN": "SI",
+    "ZAF": "ZA", "ESP": "ES", "LKA": "LK", "SDN": "SD", "SWE": "SE", "CHE": "CH", "SYR": "SY",
+    "TWN": "TW", "TZA": "TZ", "THA": "TH", "TUN": "TN", "TUR": "TR", "UGA": "UG", "UKR": "UA",
+    "ARE": "AE", "GBR": "GB", "USA": "US", "URY": "UY", "UZB": "UZ", "VEN": "VE", "VNM": "VN",
+}
+
+# Country names as a source may write them, in English and in French.
+# The key is the accent-free, lowercase phrase; the value is the alpha-2 code.
+_COUNTRY_NAMES: dict[str, str] = {
+    "france": "FR", "french republic": "FR", "republique francaise": "FR",
+    "republique de france": "FR", "fra": "FR",
+    "united kingdom": "GB", "great britain": "GB", "britain": "GB", "england": "GB",
+    "scotland": "GB", "wales": "GB", "northern ireland": "GB", "uk": "GB",
+    "royaume uni": "GB", "grande bretagne": "GB", "angleterre": "GB",
+    "germany": "DE", "deutschland": "DE", "allemagne": "DE",
+    "netherlands": "NL", "the netherlands": "NL", "holland": "NL", "pays bas": "NL",
+    "belgium": "BE", "belgique": "BE", "luxembourg": "LU",
+    "switzerland": "CH", "suisse": "CH", "schweiz": "CH",
+    "ireland": "IE", "irlande": "IE", "austria": "AT", "autriche": "AT",
+    "spain": "ES", "espagne": "ES", "italy": "IT", "italie": "IT", "italia": "IT",
+    "portugal": "PT", "greece": "GR", "grece": "GR", "sweden": "SE", "suede": "SE",
+    "norway": "NO", "norvege": "NO", "denmark": "DK", "danemark": "DK",
+    "finland": "FI", "finlande": "FI", "poland": "PL", "pologne": "PL",
+    "czech republic": "CZ", "czechia": "CZ", "republique tcheque": "CZ",
+    "hungary": "HU", "hongrie": "HU", "romania": "RO", "roumanie": "RO",
+    "bulgaria": "BG", "bulgarie": "BG", "croatia": "HR", "croatie": "HR",
+    "slovenia": "SI", "slovenie": "SI", "slovakia": "SK", "slovaquie": "SK",
+    "estonia": "EE", "estonie": "EE", "latvia": "LV", "lettonie": "LV",
+    "lithuania": "LT", "lituanie": "LT", "cyprus": "CY", "chypre": "CY",
+    "malta": "MT", "malte": "MT", "iceland": "IS", "islande": "IS",
+    "serbia": "RS", "serbie": "RS", "albania": "AL", "albanie": "AL",
+    "moldova": "MD", "moldavie": "MD", "montenegro": "ME", "ukraine": "UA",
+    "belarus": "BY", "kazakhstan": "KZ", "russia": "RU", "russie": "RU", "turkey": "TR",
+    "turquie": "TR", "georgia": "GE", "armenia": "AM", "azerbaijan": "AZ",
+    "united states": "US", "united states of america": "US", "usa": "US", "us": "US",
+    "etats unis": "US", "etats unis d amerique": "US", "america": "US",
+    "canada": "CA", "mexico": "MX", "brazil": "BR", "bresil": "BR", "argentina": "AR",
+    "chile": "CL", "colombia": "CO", "peru": "PE", "venezuela": "VE", "uruguay": "UY",
+    "paraguay": "PY", "bolivia": "BO", "ecuador": "EC", "costa rica": "CR",
+    "el salvador": "SV", "guatemala": "GT", "honduras": "HN", "nicaragua": "NI",
+    "panama": "PA", "cuba": "CU", "jamaica": "JM", "trinidad and tobago": "TT",
+    "australia": "AU", "australie": "AU", "new zealand": "NZ", "nouvelle zelande": "NZ",
+    "singapore": "SG", "singapour": "SG", "hong kong": "HK", "china": "CN", "chine": "CN",
+    "japan": "JP", "japon": "JP", "south korea": "KR", "coree du sud": "KR",
+    "north korea": "KP", "coree du nord": "KP", "taiwan": "TW",
+    "india": "IN", "inde": "IN", "indonesia": "ID", "indonesie": "ID",
+    "malaysia": "MY", "malaisie": "MY", "philippines": "PH", "vietnam": "VN",
+    "thailand": "TH", "thailande": "TH", "myanmar": "MM", "cambodia": "KH",
+    "pakistan": "PK", "bangladesh": "BD", "sri lanka": "LK", "nepal": "NP",
+    "united arab emirates": "AE", "emirats arabes unis": "AE", "uae": "AE",
+    "saudi arabia": "SA", "arabie saoudite": "SA", "qatar": "QA", "kuwait": "KW",
+    "bahrain": "BH", "oman": "OM", "jordan": "JO", "israel": "IL", "lebanon": "LB",
+    "egypt": "EG", "egypte": "EG", "morocco": "MA", "maroc": "MA", "tunisia": "TN",
+    "algeria": "DZ", "algerie": "DZ", "south africa": "ZA", "afrique du sud": "ZA",
+    "kenya": "KE", "nigeria": "NG", "ghana": "GH", "senegal": "SN",
+}
+
+# Known cities per country.  They are a *fallback* used only when the source
+# states no country at all: a posting located in "Paris" and located nowhere
+# else is treated as French, while "London, Paris" stays a mixed posting that
+# a person can still judge.
+_COUNTRY_CITY_HINTS: dict[str, tuple[str, ...]] = {
+    "FR": (
+        "paris", "lyon", "marseille", "toulouse", "nice", "nantes", "strasbourg",
+        "montpellier", "bordeaux", "lille", "rennes", "reims", "le havre",
+        "saint etienne", "toulon", "grenoble", "dijon", "angers",
+        "villeurbanne", "nanterre", "creteil", "aubervilliers", "asnieres",
+        "colombes", "courbevoie", "levallois perret", "neuilly sur seine",
+        "ile de france", "provence", "alsace", "aquitaine", "bretagne",
+        "normandie", "occitanie", "pays de la loire", "hauts de france",
+        "grand est", "nouvelle aquitaine", "auvergne rhone alpes",
+        "bourgogne franche comte", "centre val de loire", "corse",
+    ),
+    "GB": (
+        "london", "manchester", "birmingham", "edinburgh", "glasgow", "bristol",
+        "leeds", "cambridge", "oxford", "reading", "aberdeen", "cardiff", "belfast",
+    ),
+    "DE": (
+        "frankfurt", "berlin", "munich", "hamburg", "cologne", "dusseldorf",
+        "stuttgart", "dresden", "leipzig", "hannover", "duisburg", "nuremberg",
+    ),
+    "NL": ("amsterdam", "rotterdam", "utrecht", "eindhoven", "the hague", "amersfoort"),
+    "BE": ("brussels", "antwerp", "ghent", "bruges", "charleroi", "liege"),
+    "LU": ("luxembourg", "esch sur alzette", "differdange"),
+    "CH": ("zurich", "geneva", "basel", "bern", "lausanne", "lugano", "zug"),
+    "IE": ("dublin", "cork", "galway", "limerick", "waterford"),
+}
+
+# Longest phrase first so "northern ireland" is not also read as "ireland".
+_MAX_COUNTRY_NAME_WORDS = 5
+_COUNTRY_TOKEN_RE = re.compile(r"[A-Za-z]+")
+
+
+def _strip_accents(text: str) -> str:
+    """Remove diacritics while keeping the case of every letter.
+
+    "République française" must read like "Republique francaise", and an
+    uppercase ISO code must stay uppercase to be read as a code.
+    """
+    decomposed = unicodedata.normalize("NFKD", text)
+    return "".join(character for character in decomposed if not unicodedata.combining(character))
+
+
+def _country_tokens(text: str) -> list[tuple[str, str]]:
+    """Split a source value into ``(original, folded)`` letter tokens."""
+    return [(token, token.casefold()) for token in _COUNTRY_TOKEN_RE.findall(_strip_accents(text))]
+
+
+def canonicalize_country(value: Any) -> str:
+    """Canonical ISO 3166-1 alpha-2 code for a dedicated country field.
+
+    ``""`` means the source stated no country we can read.  A city name is
+    never turned into a country here: "Frankfurt" is not Germany and not
+    France, it is simply unknown.
+    """
+    text = clean_text(value, limit=160)
+    if not text:
+        return ""
+    tokens = _country_tokens(text)
+    if not tokens:
+        return ""
+    if len(tokens) == 1:
+        folded = tokens[0][1]
+        if len(folded) == 2 and folded.upper() in _ISO_ALPHA2:
+            return folded.upper()
+        if len(folded) == 3 and folded.upper() in _ISO_ALPHA3:
+            return _ISO_ALPHA3[folded.upper()]
+    phrase = " ".join(folded for _, folded in tokens)
+    code = _COUNTRY_NAMES.get(phrase)
+    if code:
+        return code
+    for size in range(min(len(tokens), _MAX_COUNTRY_NAME_WORDS), 0, -1):
+        code = _COUNTRY_NAMES.get(" ".join(folded for _, folded in tokens[-size:]))
+        if code:
+            return code
+    return ""
+
+
+def resolve_countries(*values: Any) -> tuple[str, ...]:
+    """Every country a source explicitly states in the given free-form values.
+
+    Country names are read anywhere in the text ("Paris, France", "France -
+    Paris").  ISO codes are read only when the source wrote them in capitals,
+    so an ordinary word is never mistaken for a country.
+    """
+    found: list[str] = []
+
+    def remember(code: str) -> None:
+        if code and code not in found:
+            found.append(code)
+
+    for value in values:
+        text = clean_text(value, limit=300)
+        if not text:
+            continue
+        tokens = _country_tokens(text)
+        if not tokens:
+            continue
+        index = 0
+        while index < len(tokens):
+            matched = False
+            for size in range(min(_MAX_COUNTRY_NAME_WORDS, len(tokens) - index), 0, -1):
+                phrase = " ".join(folded for _, folded in tokens[index:index + size])
+                code = _COUNTRY_NAMES.get(phrase)
+                if code:
+                    remember(code)
+                    index += size
+                    matched = True
+                    break
+            if not matched:
+                index += 1
+        for token, folded in tokens:
+            if not token.isupper():
+                continue
+            if len(folded) == 2 and folded.upper() in _ISO_ALPHA2:
+                remember(folded.upper())
+            elif len(folded) == 3 and folded.upper() in _ISO_ALPHA3:
+                remember(_ISO_ALPHA3[folded.upper()])
+    return tuple(found)
+
+
+def city_hint_countries(*values: Any) -> tuple[str, ...]:
+    """Countries whose known cities appear in the given text.
+
+    Only used as a fallback when the source states no country at all.
+    """
+    found: list[str] = []
+    for value in values:
+        text = normalized_text(value)
+        if not text:
+            continue
+        padded = f" {text} "
+        for code, cities in _COUNTRY_CITY_HINTS.items():
+            if code in found:
+                continue
+            if any(f" {city} " in padded for city in cities):
+                found.append(code)
+    return tuple(found)
+
+
+def canonical_country_codes(values: Any, label: str = "Les pays exclus") -> list[str]:
+    """Canonicalize the person's country choices into sorted unique codes."""
+    if values is None:
+        return list(DEFAULT_COUNTRIES_EXCLUDE)
+    if not isinstance(values, list):
+        raise UserFacingError(f"{label} doivent être une liste.")
+    if len(values) > 20:
+        raise UserFacingError(f"{label} contiennent trop d’éléments (maximum 20).")
+    codes: list[str] = []
+    for item in values:
+        text = clean_text(item, limit=120)
+        if not text:
+            continue
+        code = canonicalize_country(text)
+        if not code:
+            raise UserFacingError(
+                f"Le pays « {text} » n’est pas reconnu. Utilise un code ISO "
+                "(FR, GB, DE…) ou le nom du pays en anglais ou en français."
+            )
+        if code not in codes:
+            codes.append(code)
+    return sorted(codes)
+
+
 def default_brief() -> dict[str, Any]:
     """Default search criteria; optional personal preferences remain empty."""
     return {
@@ -170,6 +441,7 @@ def default_brief() -> dict[str, Any]:
         "cities": [],
         "excluded_countries": [],
         "excluded_cities": [],
+        "countries_exclude": list(DEFAULT_COUNTRIES_EXCLUDE),
         "require_known_location": False,
         "start_date": "",
         "duration_months": None,
@@ -298,6 +570,12 @@ def validate_brief(payload: Any) -> dict[str, Any]:
         "excluded_cities": _string_list(
             payload.get("excluded_cities", []), "Les villes exclues", max_items=20, max_length=120
         ),
+        # The source-side country exclusion: applied by the connectors, never
+        # as a post-filter.  Absent means the default (France is excluded);
+        # an explicit empty list reopens every country.
+        "countries_exclude": canonical_country_codes(
+            payload.get("countries_exclude"), "Les pays exclus à la source"
+        ),
         "require_known_location": require_known_location,
         "start_date": start_text,
         "duration_months": duration,
@@ -347,6 +625,11 @@ def vocabulary() -> dict[str, Any]:
         ],
         "ranking_min": RANKING_MIN_MULTIPLIER,
         "ranking_max": RANKING_MAX_MULTIPLIER,
+        # The source-side country exclusion the connectors apply.
+        "countries_exclude": {
+            "default": list(DEFAULT_COUNTRIES_EXCLUDE),
+            "available": sorted({*_ISO_ALPHA2, *_COUNTRY_NAMES.values()}),
+        },
     }
 
 
