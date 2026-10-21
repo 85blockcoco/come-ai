@@ -1,0 +1,361 @@
+{
+  "note": "Cas synthétiques de la mission SK-01. Aucune donnée réelle : domains, employers et URLs sont inventés (suffixe .example réservé à la documentation).",
+  "checked_at": "2026-10-21T09:00:00+00:00",
+  "cases": [
+    {
+      "name": "greenhouse_official",
+      "mission_case": "Greenhouse officiel",
+      "url": "https://job-boards.greenhouse.io/acmecorp/jobs/12345",
+      "employer_hint": "Acme Corp",
+      "expected": {
+        "status": "verified",
+        "provider": "greenhouse",
+        "canonical_host": "job-boards.greenhouse.io",
+        "employer_match": "confirmed",
+        "registry_evidence": "registry:greenhouse:acmecorp"
+      },
+      "expected_reason_contains": ["registry:greenhouse:acmecorp", "Acme Corp"]
+    },
+    {
+      "name": "greenhouse_embed_official",
+      "mission_case": "Greenhouse officiel (board embarqué)",
+      "url": "https://boards.greenhouse.io/embed/job_board?for=acmecorp",
+      "employer_hint": "Acme Corp",
+      "expected": {
+        "status": "verified",
+        "provider": "greenhouse",
+        "canonical_host": "boards.greenhouse.io",
+        "employer_match": "confirmed",
+        "registry_evidence": "registry:greenhouse:acmecorp"
+      },
+      "expected_reason_contains": ["registry:greenhouse:acmecorp"]
+    },
+    {
+      "name": "lever_official",
+      "mission_case": "Lever officiel",
+      "url": "https://jobs.lever.co/globex/1f2e3d4e-5a6b-7c8d-9e0f-112233445566",
+      "employer_hint": "Globex",
+      "expected": {
+        "status": "verified",
+        "provider": "lever",
+        "canonical_host": "jobs.lever.co",
+        "employer_match": "confirmed",
+        "registry_evidence": "registry:lever:globex"
+      },
+      "expected_reason_contains": ["registry:lever:globex"]
+    },
+    {
+      "name": "lever_eu_official",
+      "mission_case": "Lever officiel (hôte UE)",
+      "url": "https://jobs.eu.lever.co/globex/1f2e3d4e-5a6b",
+      "employer_hint": "Globex",
+      "expected": {
+        "status": "verified",
+        "provider": "lever",
+        "canonical_host": "jobs.eu.lever.co",
+        "employer_match": "confirmed",
+        "registry_evidence": "registry:lever:globex"
+      },
+      "expected_reason_contains": ["registry:lever:globex"]
+    },
+    {
+      "name": "ashby_official",
+      "mission_case": "Ashby officiel",
+      "url": "https://jobs.ashbyhq.com/initech/8f2c-job-internship",
+      "employer_hint": "Initech",
+      "expected": {
+        "status": "verified",
+        "provider": "ashby",
+        "canonical_host": "jobs.ashbyhq.com",
+        "employer_match": "confirmed",
+        "registry_evidence": "registry:ashby:initech"
+      },
+      "expected_reason_contains": ["registry:ashby:initech"]
+    },
+    {
+      "name": "smartrecruiters_official",
+      "mission_case": "SmartRecruiters officiel",
+      "url": "https://careers.smartrecruiters.com/Umbrella/8472",
+      "employer_hint": "Umbrella",
+      "expected": {
+        "status": "verified",
+        "provider": "smartrecruiters",
+        "canonical_host": "careers.smartrecruiters.com",
+        "employer_match": "confirmed",
+        "registry_evidence": "registry:smartrecruiters:umbrella"
+      },
+      "expected_reason_contains": ["registry:smartrecruiters:umbrella"]
+    },
+    {
+      "name": "employer_careers_page",
+      "mission_case": "Page carrière employeur",
+      "url": "https://careers.acmecorp.example/jobs/42",
+      "employer_hint": "Acme Corp",
+      "expected": {
+        "status": "verified",
+        "provider": "employer",
+        "canonical_host": "careers.acmecorp.example",
+        "employer_match": "confirmed",
+        "registry_evidence": "registry:employer:acmecorp"
+      },
+      "expected_reason_contains": ["registry:employer:acmecorp"]
+    },
+    {
+      "name": "employer_careers_page_without_hint",
+      "mission_case": "Page carrière employeur (preuve par registre)",
+      "url": "https://careers.acmecorp.example/jobs/42",
+      "expected": {
+        "status": "verified",
+        "provider": "employer",
+        "canonical_host": "careers.acmecorp.example",
+        "employer_match": "confirmed",
+        "registry_evidence": "registry:employer:acmecorp"
+      },
+      "expected_reason_contains": ["registry:employer:acmecorp"]
+    },
+    {
+      "name": "employer_careers_page_without_registry",
+      "mission_case": "Page carrière employeur (sans registre)",
+      "url": "https://jobs.contoso.example/careers/12",
+      "employer_hint": "Contoso",
+      "expected": {
+        "status": "verified",
+        "provider": "employer",
+        "canonical_host": "jobs.contoso.example",
+        "employer_match": "confirmed",
+        "registry_evidence": null
+      },
+      "expected_reason_contains": ["Contoso"]
+    },
+    {
+      "name": "lookalike_official_domain",
+      "mission_case": "Domaine ressemblant officiel",
+      "url": "https://greenhouse-jobs.example.net/acmecorp",
+      "employer_hint": "Acme Corp",
+      "expected": {
+        "status": "unverified",
+        "provider": "unknown",
+        "canonical_host": "greenhouse-jobs.example.net",
+        "employer_match": "unknown",
+        "registry_evidence": null
+      },
+      "expected_reason_contains": ["greenhouse-jobs.example.net"]
+    },
+    {
+      "name": "deceptive_subdomain",
+      "mission_case": "Sous-domaine trompeur",
+      "url": "https://greenhouse.acmecorp.example/jobs/42",
+      "employer_hint": "Acme Corp",
+      "expected": {
+        "status": "contradictory",
+        "provider": "unknown",
+        "canonical_host": "greenhouse.acmecorp.example",
+        "employer_match": "unknown",
+        "registry_evidence": null
+      },
+      "expected_reason_contains": ["greenhouse"]
+    },
+    {
+      "name": "deceptive_suffix",
+      "mission_case": "Sous-domaine trompeur (suffixe collé)",
+      "url": "https://job-boards.greenhouse.io.acmecorp.example/jobs/42",
+      "employer_hint": "Acme Corp",
+      "expected": {
+        "status": "contradictory",
+        "provider": "unknown",
+        "canonical_host": "job-boards.greenhouse.io.acmecorp.example",
+        "employer_match": "unknown",
+        "registry_evidence": null
+      },
+      "expected_reason_contains": ["greenhouse"]
+    },
+    {
+      "name": "shortened_url",
+      "mission_case": "URL raccourcie",
+      "url": "https://bit.ly/3xYzAbc",
+      "employer_hint": "Acme Corp",
+      "expected": {
+        "status": "unverified",
+        "provider": "unknown",
+        "canonical_host": "bit.ly",
+        "employer_match": "unknown",
+        "registry_evidence": null
+      },
+      "expected_reason_contains": ["bit.ly"]
+    },
+    {
+      "name": "redirect_to_greenhouse",
+      "mission_case": "Redirection (fixture) — selon cible finale",
+      "url": "https://bit.ly/3xYzAbc",
+      "employer_hint": "Acme Corp",
+      "redirects": {
+        "https://bit.ly/3xYzAbc": "https://job-boards.greenhouse.io/acmecorp/jobs/12345"
+      },
+      "expected": {
+        "status": "verified",
+        "provider": "greenhouse",
+        "canonical_host": "job-boards.greenhouse.io",
+        "employer_match": "confirmed",
+        "registry_evidence": "registry:greenhouse:acmecorp"
+      },
+      "expected_reason_contains": ["Redirection locale résolue"]
+    },
+    {
+      "name": "redirect_to_contradictory_target",
+      "mission_case": "Redirection (fixture) — cible contradictoire",
+      "url": "https://bit.ly/3xYzAbc",
+      "employer_hint": "Acme Corp",
+      "redirects": {
+        "https://bit.ly/3xYzAbc": "https://job-boards.greenhouse.io.acmecorp.example/jobs/42"
+      },
+      "expected": {
+        "status": "contradictory",
+        "provider": "unknown",
+        "canonical_host": "job-boards.greenhouse.io.acmecorp.example",
+        "employer_match": "unknown",
+        "registry_evidence": null
+      },
+      "expected_reason_contains": ["Redirection locale résolue"]
+    },
+    {
+      "name": "missing_url",
+      "mission_case": "URL manquante",
+      "url": "",
+      "employer_hint": "Acme Corp",
+      "expected": {
+        "status": "missing",
+        "provider": null,
+        "canonical_host": null,
+        "employer_match": "unknown",
+        "registry_evidence": null
+      },
+      "expected_reason_contains": ["Aucune URL"]
+    },
+    {
+      "name": "known_provider_other_company",
+      "mission_case": "Fournisseur connu, entreprise incohérente",
+      "url": "https://job-boards.greenhouse.io/acmecorp/jobs/1",
+      "employer_hint": "Globex",
+      "expected": {
+        "status": "contradictory",
+        "provider": "greenhouse",
+        "canonical_host": "job-boards.greenhouse.io",
+        "employer_match": "mismatch",
+        "registry_evidence": "registry:greenhouse:acmecorp"
+      },
+      "expected_reason_contains": ["Globex"]
+    },
+    {
+      "name": "known_provider_other_board_without_registry",
+      "mission_case": "Fournisseur connu, board d’une autre entreprise (hors registre)",
+      "url": "https://job-boards.greenhouse.io/unknownboard/jobs/1",
+      "employer_hint": "Globex",
+      "expected": {
+        "status": "contradictory",
+        "provider": "greenhouse",
+        "canonical_host": "job-boards.greenhouse.io",
+        "employer_match": "mismatch",
+        "registry_evidence": null
+      },
+      "expected_reason_contains": ["unknownboard"]
+    },
+    {
+      "name": "employer_page_other_company",
+      "mission_case": "Page employeur d’une autre entreprise",
+      "url": "https://careers.acmecorp.example/jobs/42",
+      "employer_hint": "Globex",
+      "expected": {
+        "status": "contradictory",
+        "provider": "employer",
+        "canonical_host": "careers.acmecorp.example",
+        "employer_match": "mismatch",
+        "registry_evidence": "registry:employer:acmecorp"
+      },
+      "expected_reason_contains": ["Globex"]
+    },
+    {
+      "name": "metadata_claim_without_proof",
+      "mission_case": "Métadonnée « officielle » sans preuve",
+      "url": "https://greenhouse-jobs.example.net/acmecorp",
+      "employer_hint": "Acme Corp",
+      "claimed_official": true,
+      "expected": {
+        "status": "unverified",
+        "provider": "unknown",
+        "canonical_host": "greenhouse-jobs.example.net",
+        "employer_match": "unknown",
+        "registry_evidence": null
+      },
+      "expected_reason_contains": ["déclaration, pas une preuve"]
+    },
+    {
+      "name": "secondary_vendor_host",
+      "mission_case": "Hôte secondaire du fournisseur",
+      "url": "https://boards-api.greenhouse.io/acmecorp/jobs/1",
+      "employer_hint": "Acme Corp",
+      "expected": {
+        "status": "unverified",
+        "provider": "greenhouse",
+        "canonical_host": "boards-api.greenhouse.io",
+        "employer_match": "confirmed",
+        "registry_evidence": "registry:greenhouse:acmecorp"
+      },
+      "expected_reason_contains": ["hôte secondaire"]
+    },
+    {
+      "name": "known_provider_without_employer_context",
+      "mission_case": "Fournisseur connu sans élément employeur",
+      "url": "https://job-boards.greenhouse.io/unknownboard/jobs/1",
+      "expected": {
+        "status": "unverified",
+        "provider": "greenhouse",
+        "canonical_host": "job-boards.greenhouse.io",
+        "employer_match": "unknown",
+        "registry_evidence": null
+      },
+      "expected_reason_contains": ["cohérence employeur"]
+    },
+    {
+      "name": "loose_slug_is_not_a_contradiction",
+      "mission_case": "Board au slug souple (compatible, pas contradictoire)",
+      "url": "https://job-boards.greenhouse.io/wnsglobal/jobs/1",
+      "employer_hint": "WNS",
+      "expected": {
+        "status": "unverified",
+        "provider": "greenhouse",
+        "canonical_host": "job-boards.greenhouse.io",
+        "employer_match": "unknown",
+        "registry_evidence": null
+      },
+      "expected_reason_contains": ["compatible"]
+    },
+    {
+      "name": "non_http_scheme",
+      "mission_case": "Schéma non http(s)",
+      "url": "javascript:void(0)",
+      "employer_hint": "Acme Corp",
+      "expected": {
+        "status": "unverified",
+        "provider": "unknown",
+        "canonical_host": null,
+        "employer_match": "unknown",
+        "registry_evidence": null
+      },
+      "expected_reason_contains": ["http(s)"]
+    },
+    {
+      "name": "credentials_in_url",
+      "mission_case": "URL porteuse d’identifiants",
+      "url": "https://user:secret@job-boards.greenhouse.io/acmecorp/jobs/1",
+      "employer_hint": "Acme Corp",
+      "expected": {
+        "status": "unverified",
+        "provider": "unknown",
+        "canonical_host": "job-boards.greenhouse.io",
+        "employer_match": "unknown",
+        "registry_evidence": null
+      },
+      "expected_reason_contains": ["identifiant"]
+    }
+  ]
+}

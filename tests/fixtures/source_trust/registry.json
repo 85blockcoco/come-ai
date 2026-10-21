@@ -1,0 +1,59 @@
+{
+  "note": "Registre synthétique de la mission SK-01. Aucune donnée réelle : employers, URLs et domaines sont inventés et servent uniquement aux tests locaux.",
+  "sources": [
+    {
+      "id": "registry:greenhouse:acmecorp",
+      "provider": "greenhouse",
+      "company": "Acme Corp",
+      "board_token": "acmecorp",
+      "public_url": "https://job-boards.greenhouse.io/acmecorp",
+      "provenance_url": "https://careers.acmecorp.example/jobs",
+      "verified_at": "2026-10-21T08:00:00+00:00"
+    },
+    {
+      "id": "registry:lever:globex",
+      "provider": "lever",
+      "company": "Globex",
+      "board_token": "globex",
+      "public_url": "https://jobs.lever.co/globex",
+      "provenance_url": "https://careers.globex.example/jobs",
+      "verified_at": "2026-10-21T08:01:00+00:00"
+    },
+    {
+      "id": "registry:ashby:initech",
+      "provider": "ashby",
+      "company": "Initech",
+      "board_token": "initech",
+      "public_url": "https://jobs.ashbyhq.com/initech",
+      "provenance_url": "https://careers.initech.example/jobs",
+      "verified_at": "2026-10-21T08:02:00+00:00"
+    },
+    {
+      "id": "registry:smartrecruiters:umbrella",
+      "provider": "smartrecruiters",
+      "company": "Umbrella",
+      "board_token": "umbrella",
+      "public_url": "https://careers.smartrecruiters.com/Umbrella",
+      "provenance_url": "https://umbrella.example/careers",
+      "verified_at": "2026-10-21T08:03:00+00:00"
+    },
+    {
+      "id": "registry:employer:acmecorp",
+      "provider": "employer",
+      "company": "Acme Corp",
+      "board_token": "acmecorp",
+      "public_url": "https://careers.acmecorp.example/jobs",
+      "provenance_url": "https://careers.acmecorp.example/jobs",
+      "verified_at": "2026-10-21T08:04:00+00:00"
+    },
+    {
+      "id": "registry:greenhouse:unregistered",
+      "provider": "greenhouse",
+      "company": "Unregistered Board",
+      "board_token": "unregistered",
+      "public_url": "https://job-boards.greenhouse.io/unregistered",
+      "provenance_url": "https://careers.unregistered.example/jobs",
+      "verified_at": "2026-10-21T08:05:00+00:00"
+    }
+  ]
+}
