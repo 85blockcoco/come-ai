@@ -138,3 +138,56 @@ class DocumentInput:
     filename: str | None
     filetype: Literal["txt", "pdf", "docx"]
     page_count: int | None = None
+
+
+# ──────────────────────────────────────────────────────────────────────
+# ATS models (Mission 04 — contrôle ATS local PDF/DOCX)
+# ──────────────────────────────────────────────────────────────────────
+
+ATSRiskLevel = Literal["LOW", "MEDIUM", "HIGH"]
+
+
+@dataclass(frozen=True, slots=True)
+class ATSFinding:
+    """A single ATS risk detected in the analysed document.
+
+    Attributes:
+        code: Machine readable code of the detector (e.g. "READING_ORDER").
+        risk_level: Severity of the risk — LOW, MEDIUM or HIGH.
+        message: Human readable description, phrased as a risk (never a verdict).
+        page: 1-based page number (0 when the finding is document-wide).
+        bbox: Approximate bounding box in PDF points (x0, y0, x1, y1), None when unknown.
+        evidence_excerpt: Short excerpt proving the finding.
+        error: Technical error code when the finding comes from a failed
+            extraction ("PARSE_ERROR"), None otherwise.
+    """
+
+    code: str
+    risk_level: ATSRiskLevel
+    message: str
+    page: int
+    bbox: tuple[float, float, float, float] | None
+    evidence_excerpt: str
+    error: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ATSCheckResult:
+    """Complete result of the local ATS risk analysis.
+
+    Attributes:
+        findings: All the detected ATS risks.
+        risk_score: Weighted risk score 0-100 (LOW=5, MEDIUM=20, HIGH=50, capped at 100).
+        risk_label: Overall label — "LOW", "MEDIUM" or "HIGH".
+        pages_analyzed: Number of pages analysed.
+        parse_errors: Parsing errors met while reading the file.
+        risk_interpretation: User facing interpretation of the label
+            ("Faible risque", "Risque modéré — relecture conseillée", ...).
+    """
+
+    findings: list[ATSFinding]
+    risk_score: int
+    risk_label: Literal["LOW", "MEDIUM", "HIGH"]
+    pages_analyzed: int
+    parse_errors: list[str]
+    risk_interpretation: str = ""
