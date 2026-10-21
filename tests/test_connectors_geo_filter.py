@@ -509,3 +509,86 @@ def test_case_insensitive_exclusion_list(wording):
     )
     assert [job["source_id"] for job in payload.jobs] == ["de-1"]
     assert payload.excluded_by_country == {"FR": 1}
+
+
+# --- The service flows: a French offer never reaches the local base ---------
+#
+# The connector tests above prove the filter works.  These two tests prove it
+# survives the two flows the person actually uses, where the brief is read
+# back from the local database instead of being passed by hand.
+
+
+def _service(tmp_path, *, jobs: list[dict[str, Any]]):
+    """A CareerService reading one synthetic Greenhouse board."""
+    from career.service import CareerService
+
+    connector = GreenhouseJobBoardConnector(FeedTransport({"jobs": jobs}))
+    service = CareerService(tmp_path, discovery_connector=connector)
+    return service, connector
+
+
+def test_personal_board_flow_never_stores_a_french_offer(tmp_path):
+    """A board the person follows drops France before the local database."""
+    service, connector = _service(tmp_path, jobs=[
+        greenhouse_job("fr-1", location=FRANCE),
+        greenhouse_job("uk-1", location=UNITED_KINGDOM),
+    ])
+    service.create_discovery_source({"company": "Synthetic Finance", "board_reference": "synthetic-board"})
+    service.update_stage_search({"domains": ["Corporate Finance"], "cities": ["Paris", "London"]})
+
+    outcome = service.discover_opportunities()["outcomes"][0]
+    assert outcome["status"] == "success"
+
+    stored = [str(job.get("city") or "") for job in service.list_jobs()]
+    assert "Paris" not in stored
+    assert "London" in stored
+    # The offer was dropped on the source side, not after the import.
+    assert connector.health_check()["country_excluded_count"] == 1
+    assert connector.health_check()["excluded_by_country"] == {"FR": 1}
+
+
+def test_explorer_flow_never_shows_a_french_offer(tmp_path):
+    """The curated-board explorer drops France before the offer is shown."""
+    from career.service import CareerService
+
+    connector = GreenhouseJobBoardConnector(FeedTransport({"jobs": [
+        greenhouse_job("fr-1", location=FRANCE),
+        greenhouse_job("uk-1", location=UNITED_KINGDOM),
+    ]}))
+    service = CareerService(
+        tmp_path,
+        discovery_connector=connector,
+        curated_sources=({
+            "id": "synthetic:greenhouse:board",
+            "provider": "greenhouse",
+            "company": "Synthetic Finance",
+            "board_token": "synthetic-board",
+            "verified_at": "2026-10-20T00:00:00Z",
+            "provenance_url": "https://www.example.test/jobs",
+        },),
+    )
+
+    result = service.explore_internships(force=True)
+    assert [match["job"].get("city") for match in result["matches"]] == ["London"]
+    assert connector.health_check()["country_excluded_count"] == 1
+    assert connector.health_check()["excluded_by_country"] == {"FR": 1}
+
+
+def test_emptied_country_exclusion_brings_france_back_through_the_brief(tmp_path):
+    """The override the interface offers still reaches the source filter."""
+    service, connector = _service(tmp_path, jobs=[
+        greenhouse_job("fr-1", location=FRANCE),
+        greenhouse_job("uk-1", location=UNITED_KINGDOM),
+    ])
+    service.create_discovery_source({"company": "Synthetic Finance", "board_reference": "synthetic-board"})
+    service.update_stage_search({
+        "domains": ["Corporate Finance"],
+        "cities": ["Paris", "London"],
+        "excluded_countries": [],
+    })
+
+    assert service.get_stage_search()["brief"]["countries_exclude"] == []
+    service.discover_opportunities()
+    stored = [str(job.get("city") or "") for job in service.list_jobs()]
+    assert "Paris" in stored
+    assert connector.health_check()["country_excluded_count"] == 0
