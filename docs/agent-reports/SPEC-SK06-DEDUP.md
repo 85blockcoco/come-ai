@@ -242,6 +242,19 @@ en parallèle de SK-01 (confiance), SK-02 (dates) et SK-03 (adéquation).
    `tests/test_career_job_deduplication.py` étaient présents **non suivis**
    dans le répertoire principal. Ils sont repris et corrigés ici (niveau de
    rôle, ordre de décision, contradictions, confiance).
+   ⚠️ **Conflit de fusion à lever** : le fichier non suivi
+   `career/job_deduplication.py` du répertoire principal est **à la même
+   adresse** que le fichier livré. `git merge agent/spec-sk06-dedup` échoue
+   alors avec « untracked working tree files would be overwritten ». Le lot B
+   étant entièrement repris et corrigé dans la livraison, il suffit de
+   supprimer l'unique copie non suivie avant la fusion :
+   ```bash
+   git rm --cached career/job_deduplication.py 2>/dev/null || true
+   rm -f career/job_deduplication.py
+   ```
+   Le test non suivi `tests/test_career_job_deduplication.py` (lot B) **peut
+   rester** : ses 64 cas passent également contre le module consolidé
+   (vérifié).
 3. **Contrôle de la confiance.** Le champ `source_trust` n'est pas encore
    alimenté par la chaîne de collecte : tant que SK-01 n'est pas raccordé,
    toutes les sources sont à `missing` et l'élection se fait sur le tier et
