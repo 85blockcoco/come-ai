@@ -200,6 +200,22 @@ def _normalise_heading(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", text).strip()
 
 
+def normalise_heading(value: str) -> str:
+    """Public wrapper around the heading normalisation.
+
+    The candidate-profile builder recognises the same headings as this
+    module, so both extractors always agree on what a section is called.
+    """
+    return _normalise_heading(value)
+
+
+#: Public, read-only view of the recognised CV headings.  The candidate
+#: profile builder reuses it so a CV is split the same way everywhere.
+SECTION_ALIASES: dict[str, tuple[str, ...]] = {
+    field: tuple(aliases) for field, aliases in _SECTION_ALIASES.items()
+}
+
+
 _FIELD_BY_HEADING: dict[str, str] = {
     _normalise_heading(alias): field
     for field, aliases in _SECTION_ALIASES.items()

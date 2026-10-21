@@ -408,7 +408,7 @@ def create_app(
     app.add_middleware(
         UploadBodyLimitMiddleware,
         max_bytes=MAX_CAREER_PROFILE_IMPORT_BYTES,
-        paths=("/api/career/profile-imports",),
+        paths=("/api/career/profile-imports", "/api/career/candidate-profile/document"),
         prefix=True,
         error_message="Document de profil trop volumineux (maximum 10 Mo).",
     )

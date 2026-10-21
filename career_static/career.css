@@ -541,3 +541,40 @@ button, a, .career-tab { transition: background-color .16s ease, border-color .1
   .application-filters label { flex: 1 1 100%; }
   .application-filters select { width: 100%; }
 }
+
+/* ─── Profil candidat (SK-10) : approbation champ par champ ─── */
+.candidate-profile-panel { margin-bottom: 22px; }
+.candidate-profile-actions { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin-bottom: 12px; }
+.candidate-profile-file { display: grid; gap: 4px; color: var(--muted); font-size: .76rem; }
+.candidate-profile-file input { font-size: .78rem; }
+.candidate-profile-confirm-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; color: var(--muted); font-size: .76rem; }
+.candidate-profile-confirm-row input { min-width: 160px; }
+.candidate-profile-paste { margin-bottom: 12px; }
+.candidate-profile-paste summary { cursor: pointer; color: var(--accent-dark); font-size: .8rem; font-weight: 600; }
+.candidate-profile-paste textarea { display: block; width: 100%; margin: 10px 0 8px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-muted); font-size: .8rem; }
+.candidate-profile-message { margin-bottom: 10px; padding: 9px 11px; border: 1px solid #bfe3d0; border-radius: 10px; color: var(--accent-dark); background: var(--good-soft); font-size: .8rem; }
+.candidate-profile-message.error { border-color: #e6aaa4; color: var(--danger); background: var(--danger-soft); }
+.candidate-profile-summary { margin-bottom: 12px; color: var(--muted); font-size: .8rem; }
+.candidate-profile-summary p { margin-bottom: 4px; }
+.candidate-profile-warning { color: var(--warning); }
+.candidate-fact-group { margin-bottom: 18px; }
+.candidate-fact-group-title { margin: 0 0 8px; color: var(--accent-dark); font-size: .74rem; letter-spacing: .06em; text-transform: uppercase; }
+.candidate-fact { margin-bottom: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); }
+.candidate-fact[data-status="approved"], .candidate-fact[data-status="modified"] { border-color: #b9ddc9; background: var(--good-soft); }
+.candidate-fact[data-status="rejected"] { opacity: .68; }
+.candidate-fact[data-status="suspended"] { border-style: dashed; }
+.candidate-fact-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.candidate-fact-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.fact-status { padding: 3px 8px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); background: var(--surface-muted); font-size: .68rem; white-space: nowrap; }
+.fact-status[data-status="approved"], .fact-status[data-status="modified"] { border-color: #a9d5be; color: var(--good); background: #fff; }
+.fact-status[data-status="rejected"] { border-color: #e6aaa4; color: var(--danger); background: #fff; }
+.fact-review-flag { padding: 3px 8px; border: 1px solid #f0c99b; border-radius: 999px; color: var(--warning); background: var(--warning-soft); font-size: .68rem; }
+.candidate-fact-value { margin: 7px 0 4px; color: var(--ink); font-size: .85rem; line-height: 1.45; white-space: pre-wrap; }
+.candidate-fact-provenance { color: var(--faint); font-size: .72rem; line-height: 1.5; }
+.fact-original { color: var(--muted); font-style: italic; }
+.candidate-fact-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+.candidate-fact-editor { display: grid; gap: 8px; margin-top: 10px; padding: 10px; border: 1px dashed var(--border); border-radius: 10px; background: var(--surface-muted); }
+.candidate-fact-editor textarea { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 8px; font-size: .8rem; }
+.candidate-profile-active-title { margin-top: 10px; color: var(--accent-dark); font-weight: 600; }
+.candidate-profile-active-value { padding: 6px 9px; border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; background: var(--surface-soft); white-space: pre-wrap; }
+.candidate-profile-active-empty { color: var(--warning); }

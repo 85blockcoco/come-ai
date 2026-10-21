@@ -1,0 +1,53 @@
+{
+  "label": "synthetic candidate-profile fixtures; no real person, no real company, no real document",
+  "documents": [
+    {
+      "file": "synthetic_cv_fr.txt",
+      "source_kind": "cv",
+      "expected_kinds": {
+        "identity": 1,
+        "contact": 3,
+        "skill": 3,
+        "language": 2,
+        "education": 2,
+        "experience": 2
+      },
+      "expected_skills": ["Excel", "Python", "SQL"],
+      "expected_language_values": ["Anglais C1", "Français courant"],
+      "expected_experience_labels": ["Analyste M&A", "Stagiaire Finance"],
+      "expected_education_labels": ["Licence Économie", "Master Data Science"]
+    },
+    {
+      "file": "synthetic_cv_en.txt",
+      "source_kind": "cv",
+      "expected_kinds": {
+        "identity": 1,
+        "contact": 2,
+        "skill": 3,
+        "language": 2,
+        "education": 1,
+        "experience": 1
+      },
+      "expected_skills": ["Excel", "SQL", "Python"],
+      "expected_language_values": ["English C1", "French B2"],
+      "expected_experience_labels": ["Data Analyst"],
+      "expected_education_labels": ["BSc Economics"]
+    },
+    {
+      "file": "synthetic_cv_irregular.txt",
+      "source_kind": "cv",
+      "expected_kinds": {
+        "identity": 1,
+        "contact": 1,
+        "skill": 3,
+        "language": 1,
+        "education": 1,
+        "experience": 1
+      },
+      "expected_skills": ["Excel", "R", "Power BI"],
+      "expected_language_values": ["Anglais C1"],
+      "expected_experience_labels": ["Chargée de reporting"],
+      "expected_education_labels": ["Master Gestion"]
+    }
+  ]
+}

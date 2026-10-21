@@ -1,0 +1,19 @@
+Alex Demo
+alex.demo@example.test
++44 20 7946 0958
+London, United Kingdom
+
+PROFESSIONAL EXPERIENCE
+
+2021 - Present | Data Analyst | Example Bank
+- Built 20 forecast models
+
+EDUCATION
+
+2017 - 2020 | BSc Economics | Example University
+
+SKILLS
+Excel, SQL, Python
+
+LANGUAGES
+English C1, French B2

@@ -21,7 +21,7 @@ from contextlib import contextmanager
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 from .models import (
     AVAILABILITY_STATES,
@@ -116,6 +116,7 @@ from workspace_core import UserFacingError, extract_text, safe_error
 from .profile_import import (
     ALLOWED_PROFILE_SUFFIXES,
     MAX_PROFILE_IMPORT_BYTES,
+    MAX_PROFILE_TEXT_CHARS,
     PROFILE_IMPORT_KINDS,
     parse_profile_text,
 )
@@ -125,6 +126,20 @@ from .qualification_persistence import (
     normalize_qualification_snapshot,
     snapshot_matches_current_source,
 )
+from .candidate_profile import (
+    CandidateFact,
+    CandidateProfile,
+    CONTACT_KIND_TO_PROFILE_FIELD,
+    FACT_KIND_CONTACT,
+    FACT_KIND_TO_PROFILE_FIELD,
+    FACT_STATUS_PROPOSED,
+    FACT_STATUSES,
+    FactProvenance,
+    active_profile_fields,
+    apply_review,
+)
+from .cv_quality import PageText, PagedDocument, extract_paged_text_from_bytes
+from .profile_builder import build_candidate_profile
 
 
 SCHEMA_VERSION = 8
@@ -132,6 +147,11 @@ SCHEMA_VERSION = 8
 # schema migration, and it is exported with the rest of the local settings.
 STAGE_SEARCH_SETTING_KEY = "stage_search_brief"
 DISCOVERY_CACHE_SECONDS = 10 * 60
+# SK-10: the candidate profile holds one reviewed document at a time.  Its
+# facts live in their own table and never touch the legacy profile rows.
+CANDIDATE_PROFILE_DOCUMENT_ID = "current"
+# A PDF shorter than this is treated as a scan and sent to the local OCR.
+CANDIDATE_PROFILE_OCR_THRESHOLD = 120
 
 
 def _attach_qualification_presentation(match: dict[str, Any], qualification: dict[str, Any]) -> dict[str, Any]:
@@ -523,11 +543,62 @@ class CareerService:
                 "variant",
                 "TEXT NOT NULL DEFAULT ''",
             )
+            self._ensure_candidate_profile_tables(connection)
             self._seed_defaults(connection)
         try:
             os.chmod(self.db_path, 0o600)
         except OSError:
             pass
+
+    @staticmethod
+    def _ensure_candidate_profile_tables(connection: sqlite3.Connection) -> None:
+        """Create the SK-10 candidate-profile tables when they are missing.
+
+        The tables are additive: no existing table is altered and the schema
+        version of the local database is left untouched, so an older local
+        database keeps working exactly as before.
+        """
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS candidate_profile_documents (
+                id TEXT PRIMARY KEY,
+                source_document TEXT NOT NULL DEFAULT '',
+                source_kind TEXT NOT NULL DEFAULT 'cv',
+                extraction TEXT NOT NULL DEFAULT 'text_layer',
+                page_count INTEGER,
+                warnings_json TEXT NOT NULL DEFAULT '[]',
+                stored_filename TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS candidate_profile_facts (
+                id TEXT PRIMARY KEY,
+                kind TEXT NOT NULL,
+                label TEXT NOT NULL,
+                value TEXT NOT NULL,
+                status TEXT NOT NULL CHECK (
+                    status IN ('proposed', 'approved', 'rejected', 'modified', 'suspended')
+                ),
+                original_value TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT '',
+                source_document TEXT NOT NULL DEFAULT '',
+                source_kind TEXT NOT NULL DEFAULT 'cv',
+                extraction TEXT NOT NULL DEFAULT '',
+                page INTEGER,
+                start_offset INTEGER NOT NULL DEFAULT 0,
+                end_offset INTEGER NOT NULL DEFAULT 0,
+                quote TEXT NOT NULL DEFAULT '',
+                corrected INTEGER NOT NULL DEFAULT 0,
+                requires_review INTEGER NOT NULL DEFAULT 0,
+                confidence REAL NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS candidate_profile_facts_status_idx
+                ON candidate_profile_facts(status);
+            """
+        )
 
     def _backup_before_migration(self, connection: sqlite3.Connection, version: int) -> Path:
         """Create one private, consistent snapshot before an in-place migration.
@@ -1286,6 +1357,466 @@ class CareerService:
             connection.execute("DELETE FROM profile_imports WHERE id = ?", (identifier,))
             self._audit(connection, "profile_import_deleted", "profile_import", identifier)
 
+    # ─────────────────────────────────────────────────────────────────────
+    # Candidate profile (SK-10) — facts with exact provenance, reviewed one
+    # by one by the person.  Only approved facts may justify an application.
+    # ─────────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _candidate_fact_from_row(row: sqlite3.Row) -> CandidateFact:
+        """Rebuild one fact from its stored row."""
+        page = row["page"]
+        return CandidateFact(
+            id=str(row["id"]),
+            kind=str(row["kind"]),
+            label=str(row["label"]),
+            value=str(row["value"]),
+            status=str(row["status"]),
+            provenance=FactProvenance(
+                source_document=str(row["source_document"] or ""),
+                source_kind=str(row["source_kind"] or "cv"),
+                extraction=str(row["extraction"] or "text_layer"),
+                page=int(page) if page is not None else None,
+                start_offset=int(row["start_offset"] or 0),
+                end_offset=int(row["end_offset"] or 0),
+                quote=str(row["quote"] or ""),
+            ),
+            original_value=str(row["original_value"] or ""),
+            note=str(row["note"] or ""),
+            corrected=bool(row["corrected"]),
+            requires_review=bool(row["requires_review"]),
+            confidence=float(row["confidence"] or 0.0),
+            created_at=str(row["created_at"] or ""),
+            updated_at=str(row["updated_at"] or ""),
+        )
+
+    @staticmethod
+    def _store_candidate_fact(connection: sqlite3.Connection, fact: CandidateFact) -> None:
+        """Write one reviewed fact back to the database."""
+        connection.execute(
+            """
+            INSERT INTO candidate_profile_facts (
+                id, kind, label, value, status, original_value, note,
+                source_document, source_kind, extraction, page,
+                start_offset, end_offset, quote, corrected, requires_review,
+                confidence, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                label = excluded.label,
+                value = excluded.value,
+                status = excluded.status,
+                original_value = excluded.original_value,
+                note = excluded.note,
+                corrected = excluded.corrected,
+                requires_review = excluded.requires_review,
+                confidence = excluded.confidence,
+                updated_at = excluded.updated_at
+            """,
+            (
+                fact.id,
+                fact.kind,
+                fact.label,
+                fact.value,
+                fact.status,
+                fact.original_value,
+                fact.note,
+                fact.provenance.source_document,
+                fact.provenance.source_kind,
+                fact.provenance.extraction,
+                fact.provenance.page,
+                fact.provenance.start_offset,
+                fact.provenance.end_offset,
+                fact.provenance.quote,
+                int(fact.corrected),
+                int(fact.requires_review),
+                fact.confidence,
+                fact.created_at or utc_now(),
+                fact.updated_at or utc_now(),
+            ),
+        )
+
+    @staticmethod
+    def _candidate_profile_document_row(connection: sqlite3.Connection) -> dict[str, Any]:
+        row = connection.execute(
+            "SELECT * FROM candidate_profile_documents WHERE id = ?",
+            (CANDIDATE_PROFILE_DOCUMENT_ID,),
+        ).fetchone()
+        if not row:
+            return {}
+        document = dict(row)
+        try:
+            document["warnings"] = json.loads(document.pop("warnings_json") or "[]")
+        except json.JSONDecodeError:
+            document["warnings"] = []
+        return document
+
+    def get_candidate_profile(self) -> dict[str, Any]:
+        """Return the reviewable candidate profile with every fact."""
+        with self._lock, self._connection() as connection:
+            document = self._candidate_profile_document_row(connection)
+            rows = connection.execute(
+                "SELECT * FROM candidate_profile_facts ORDER BY kind, rowid"
+            ).fetchall()
+        facts = [self._candidate_fact_from_row(row) for row in rows]
+        counts = {status: 0 for status in FACT_STATUSES}
+        for fact in facts:
+            counts[fact.status] = counts.get(fact.status, 0) + 1
+        return {
+            "document": document,
+            "facts": [fact.to_dict() for fact in facts],
+            "counts": counts,
+            "total": len(facts),
+            "usable": len([fact for fact in facts if fact.usable]),
+            "active_profile": active_profile_fields(facts),
+            "updated_at": document.get("updated_at", ""),
+        }
+
+    def get_active_candidate_profile(self) -> dict[str, str]:
+        """Return the profile fields built from the approved facts only."""
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM candidate_profile_facts
+                WHERE status IN ('approved', 'modified')
+                ORDER BY kind, rowid
+                """
+            ).fetchall()
+        return active_profile_fields([self._candidate_fact_from_row(row) for row in rows])
+
+    def _matching_profile(
+        self, connection: sqlite3.Connection, profile: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Overlay the approved candidate-profile facts on the stored profile.
+
+        SK-10: only the facts the person approved may justify an application.
+        A field covered by at least one approved fact is taken from those
+        facts alone; a field with no approved fact keeps the value the
+        person typed by hand.  When no candidate profile has been built, the
+        typed profile is used unchanged.
+        """
+        document = connection.execute(
+            "SELECT id FROM candidate_profile_documents WHERE id = ?",
+            (CANDIDATE_PROFILE_DOCUMENT_ID,),
+        ).fetchone()
+        if not document:
+            return profile
+        rows = connection.execute(
+            """
+            SELECT * FROM candidate_profile_facts
+            WHERE status IN ('approved', 'modified')
+            ORDER BY kind, rowid
+            """
+        ).fetchall()
+        facts = [self._candidate_fact_from_row(row) for row in rows]
+        covered: set[str] = set()
+        for fact in facts:
+            if fact.kind == FACT_KIND_CONTACT:
+                target = CONTACT_KIND_TO_PROFILE_FIELD.get(fact.label.lower())
+            else:
+                target = FACT_KIND_TO_PROFILE_FIELD.get(fact.kind)
+            if target:
+                covered.add(target)
+        merged = dict(profile)
+        for field, value in active_profile_fields(facts).items():
+            if field in covered:
+                merged[field] = value
+        merged["candidate_profile_active"] = True
+        return merged
+
+    def get_matching_profile(self) -> dict[str, Any]:
+        """Return the profile used for matching and candidacy generation."""
+        profile = self.get_profile()
+        with self._lock, self._connection() as connection:
+            merged = self._matching_profile(connection, profile)
+        if merged.get("candidate_profile_active"):
+            merged["readiness"] = assess_profile_readiness(merged)
+        return merged
+
+    def save_candidate_profile(
+        self, profile: CandidateProfile, *, stored_filename: str = ""
+    ) -> dict[str, Any]:
+        """Store a freshly built candidate profile and its reviewable facts.
+
+        Reviews already given on an identical fact are carried over, so
+        rebuilding from the same document never loses an approval.
+        """
+        now = utc_now()
+        with self._lock, self._connection() as connection:
+            previous_rows = connection.execute(
+                "SELECT * FROM candidate_profile_facts"
+            ).fetchall()
+            previous = {
+                (str(row["kind"]), str(row["value"]).casefold()): self._candidate_fact_from_row(row)
+                for row in previous_rows
+            }
+            connection.execute("DELETE FROM candidate_profile_facts")
+            connection.execute(
+                """
+                INSERT INTO candidate_profile_documents (
+                    id, source_document, source_kind, extraction, page_count,
+                    warnings_json, stored_filename, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    source_document = excluded.source_document,
+                    source_kind = excluded.source_kind,
+                    extraction = excluded.extraction,
+                    page_count = excluded.page_count,
+                    warnings_json = excluded.warnings_json,
+                    stored_filename = excluded.stored_filename,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    CANDIDATE_PROFILE_DOCUMENT_ID,
+                    profile.source_document,
+                    profile.source_kind,
+                    profile.extraction,
+                    profile.page_count,
+                    json.dumps(list(profile.warnings), ensure_ascii=False),
+                    stored_filename or "",
+                    profile.created_at or now,
+                    now,
+                ),
+            )
+            for fact in profile.facts:
+                stored = fact
+                kept = previous.get((fact.kind, fact.value.casefold()))
+                if kept is not None and kept.status != FACT_STATUS_PROPOSED:
+                    stored = replace(
+                        fact,
+                        status=kept.status,
+                        note=kept.note or fact.note,
+                        original_value=kept.original_value or fact.original_value,
+                        corrected=kept.corrected or fact.corrected,
+                    )
+                self._store_candidate_fact(connection, stored)
+            self._audit(
+                connection,
+                "candidate_profile_built",
+                "candidate_profile",
+                CANDIDATE_PROFILE_DOCUMENT_ID,
+            )
+        return self.get_candidate_profile()
+
+    def review_candidate_fact(
+        self,
+        fact_id: str,
+        *,
+        status: str | None = None,
+        value: str | None = None,
+        note: str | None = None,
+    ) -> dict[str, Any]:
+        """Apply one review action to one fact of the candidate profile."""
+        identifier = clean_text(fact_id, limit=80)
+        if not identifier:
+            raise UserFacingError("Ce fait de profil n’existe pas.")
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM candidate_profile_facts WHERE id = ?", (identifier,)
+            ).fetchone()
+            if not row:
+                raise UserFacingError("Ce fait de profil n’existe pas.")
+            fact = self._candidate_fact_from_row(row)
+            try:
+                reviewed = apply_review(
+                    fact, status=status, value=value, note=note, updated_at=utc_now()
+                )
+            except ValueError as error:
+                raise UserFacingError(str(error)) from error
+            self._store_candidate_fact(connection, reviewed)
+            self._audit(
+                connection, f"candidate_fact_{reviewed.status}", "candidate_fact", identifier
+            )
+        return self.get_candidate_profile()
+
+    def delete_candidate_fact(self, fact_id: str) -> dict[str, Any]:
+        """Delete one fact of the candidate profile."""
+        identifier = clean_text(fact_id, limit=80)
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT id FROM candidate_profile_facts WHERE id = ?", (identifier,)
+            ).fetchone()
+            if not row:
+                raise UserFacingError("Ce fait de profil n’existe pas.")
+            connection.execute(
+                "DELETE FROM candidate_profile_facts WHERE id = ?", (identifier,)
+            )
+            self._audit(connection, "candidate_fact_deleted", "candidate_fact", identifier)
+        return self.get_candidate_profile()
+
+    def delete_candidate_profile(self) -> dict[str, Any]:
+        """Delete the whole candidate profile and its private source document."""
+        with self._lock, self._connection() as connection:
+            document = self._candidate_profile_document_row(connection)
+            stored_filename = str(document.get("stored_filename") or "")
+            connection.execute("DELETE FROM candidate_profile_facts")
+            connection.execute("DELETE FROM candidate_profile_documents")
+            self._audit(
+                connection, "candidate_profile_deleted", "candidate_profile", CANDIDATE_PROFILE_DOCUMENT_ID
+            )
+        if stored_filename:
+            try:
+                self._profile_document_path(stored_filename).unlink(missing_ok=True)
+            except OSError:
+                pass
+        return {"deleted": True, "profile": self.get_candidate_profile()}
+
+    def export_candidate_profile(self) -> Path:
+        """Write a portable JSON copy of the candidate profile."""
+        created = datetime.now().strftime("%Y%m%d-%H%M%S")
+        target = self.export_dir / f"profil_candidat_{created}_{uuid.uuid4().hex[:8]}.json"
+        profile = self.get_candidate_profile()
+        target.write_text(json.dumps(profile, ensure_ascii=False, indent=2), encoding="utf-8")
+        try:
+            os.chmod(target, 0o600)
+        except OSError:
+            pass
+        return target
+
+    @staticmethod
+    def _paged_document_from_ocr(result: OCRResult, filename: str) -> PagedDocument:
+        """Rebuild a paged document from a local OCR result."""
+        pages: list[PageText] = []
+        offset = 0
+        for index, page_text in enumerate(result.page_texts):
+            if not page_text.strip():
+                continue
+            if pages:
+                offset += 2
+            pages.append(
+                PageText(
+                    page=index + 1,
+                    text=page_text,
+                    start_offset=offset,
+                    end_offset=offset + len(page_text),
+                )
+            )
+            offset += len(page_text)
+        if not pages:
+            text = result.text
+            pages = [PageText(page=1, text=text, start_offset=0, end_offset=len(text))]
+        return PagedDocument(
+            text="\n\n".join(page.text for page in pages),
+            pages=tuple(pages),
+            filename=filename,
+            filetype="pdf",
+            page_count=result.pages,
+            extraction="ocr",
+        )
+
+    @staticmethod
+    def _candidate_fact_ids() -> Callable[[], str]:
+        """Return a factory of unique local fact identifiers."""
+        return lambda: f"fact_{uuid.uuid4().hex[:12]}"
+
+    def build_candidate_profile_from_document(
+        self,
+        *,
+        source_kind: str,
+        original_name: str | None,
+        temporary_path: Path,
+        content_sha256: str,
+        size_bytes: int,
+    ) -> dict[str, Any]:
+        """Build the reviewable candidate profile of one uploaded document.
+
+        The document is extracted locally.  When a PDF has no usable text
+        layer, the local OCR takes over; the facts it produces are flagged
+        ``requires_review`` and are never approved automatically.
+        """
+        kind = self._validate_profile_import_kind(source_kind)
+        safe_name = self._safe_profile_source_name(original_name, fallback="document-profil")
+        suffix = Path(safe_name).suffix.lower()
+        if suffix not in ALLOWED_PROFILE_SUFFIXES:
+            raise UserFacingError("Le profil doit être un PDF, DOCX, TXT ou Markdown.")
+        if not content_sha256 or len(content_sha256) != 64:
+            raise UserFacingError("Le document de profil est invalide.")
+        if not isinstance(size_bytes, int) or not 0 < size_bytes <= MAX_PROFILE_IMPORT_BYTES:
+            raise UserFacingError("Document de profil trop volumineux (maximum 10 Mo).")
+        temporary = temporary_path.resolve()
+        if temporary.parent != self.documents_dir.resolve() or temporary.suffix != ".part" or not temporary.is_file():
+            raise UserFacingError("Import de document de profil invalide.")
+        if temporary.stat().st_size != size_bytes:
+            raise UserFacingError("Le document de profil est incomplet ou invalide.")
+
+        destination = self.documents_dir / f"candidate_profile_{uuid.uuid4().hex}{suffix}"
+        try:
+            with temporary.open("rb") as source:
+                signature = source.read(8_192)
+            if suffix == ".pdf" and not signature.startswith(b"%PDF-"):
+                raise UserFacingError("Le fichier PDF de profil est invalide.")
+            if suffix in {".txt", ".md"} and b"\x00" in signature:
+                raise UserFacingError("Le document texte de profil semble binaire.")
+            temporary.replace(destination)
+            try:
+                os.chmod(destination, 0o600)
+            except OSError:
+                pass
+
+            filetype = "pdf" if suffix == ".pdf" else "docx" if suffix in {".docx", ".doc"} else "txt"
+            warnings: list[str] = []
+            try:
+                document = extract_paged_text_from_bytes(
+                    destination.read_bytes(), filetype, filename=safe_name
+                )
+            except ValueError as error:
+                raise UserFacingError(
+                    "Le document ne contient pas de texte exploitable. Essaie un PDF plus net, un DOCX ou colle le texte."
+                ) from error
+
+            if filetype == "pdf" and len(document.text.strip()) < CANDIDATE_PROFILE_OCR_THRESHOLD:
+                ocr_result = self.ocr.extract_pdf(destination)
+                document = self._paged_document_from_ocr(ocr_result, safe_name)
+                warnings.extend(ocr_result.warnings)
+                warnings.append(
+                    "Ce document a été lu par OCR local : chaque fait doit être vérifié avant d’être approuvé."
+                )
+            if not document.text.strip():
+                raise UserFacingError(
+                    "Le document ne contient pas de texte exploitable. Essaie un PDF plus net, un DOCX ou colle le texte."
+                )
+
+            now = utc_now()
+            profile = build_candidate_profile(
+                document,
+                source_kind=kind,
+                fact_id_factory=self._candidate_fact_ids(),
+                created_at=now,
+            )
+            profile = replace(profile, warnings=tuple(warnings))
+        except Exception:
+            destination.unlink(missing_ok=True)
+            raise
+
+        return self.save_candidate_profile(profile, stored_filename=destination.name)
+
+    def build_candidate_profile_from_text(
+        self, *, source_kind: str, text: str, original_name: str
+    ) -> dict[str, Any]:
+        """Build the reviewable candidate profile of pasted text."""
+        kind = self._validate_profile_import_kind(source_kind)
+        source_text = str(text or "").replace("\r\n", "\n").replace("\r", "\n")
+        if not source_text.strip():
+            raise UserFacingError("Le texte du profil est vide.")
+        if len(source_text) > MAX_PROFILE_TEXT_CHARS:
+            raise UserFacingError("Le texte du profil est trop long (100 000 caractères maximum).")
+        safe_name = self._safe_profile_source_name(original_name, fallback="texte-profil")
+        document = PagedDocument(
+            text=source_text,
+            pages=(PageText(page=1, text=source_text, start_offset=0, end_offset=len(source_text)),),
+            filename=safe_name,
+            filetype="txt",
+            page_count=1,
+            extraction="text_layer",
+        )
+        now = utc_now()
+        profile = build_candidate_profile(
+            document,
+            source_kind=kind,
+            fact_id_factory=self._candidate_fact_ids(),
+            created_at=now,
+        )
+        return self.save_candidate_profile(profile)
+
     @staticmethod
     def _intake_answers(value: str) -> dict[str, str]:
         try:
@@ -1556,6 +2087,8 @@ class CareerService:
         normalized_language = normalize_language(language)
         with self._lock, self._connection() as connection:
             profile = self._row_dict(connection.execute("SELECT * FROM candidate_profile WHERE id = 1").fetchone())
+            # SK-10: a CV or a letter may only repeat the approved facts.
+            profile = self._matching_profile(connection, profile)
             intake_row = connection.execute("SELECT * FROM career_intake WHERE id = 1").fetchone()
             job_row = connection.execute("SELECT * FROM jobs WHERE id = ?", (identifier,)).fetchone()
         if not job_row:
@@ -3426,6 +3959,8 @@ class CareerService:
                 for row in connection.execute("SELECT setting_key, setting_value FROM career_settings").fetchall()
             }
             intake_row = connection.execute("SELECT * FROM career_intake WHERE id = 1").fetchone()
+            # SK-10: only the facts the person approved may score an offer.
+            profile = self._matching_profile(connection, profile)
         return {
             "profile": profile,
             "preferences": self._serialize_preferences(preference_rows, settings),
@@ -3902,7 +4437,8 @@ class CareerService:
         self, job_id: str, variant_id: str
     ) -> dict[str, Any]:
         variant = self._variant_config(variant_id)
-        profile = self.get_profile()
+        # SK-10: the targeted CV may only use the approved facts.
+        profile = self.get_matching_profile()
         job = self.get_job(job_id)
         prep = self.get_job_prep(job_id)
         cv_analysis = self._current_cv_analysis()
@@ -4623,6 +5159,19 @@ class CareerService:
         sheet.auto_filter.ref = sheet.dimensions
         workbook.save(target)
 
+    def _serialize_candidate_profile(self, connection: sqlite3.Connection) -> dict[str, Any]:
+        """Return the reviewable candidate profile for an export."""
+        document = self._candidate_profile_document_row(connection)
+        rows = connection.execute(
+            "SELECT * FROM candidate_profile_facts ORDER BY kind, rowid"
+        ).fetchall()
+        facts = [self._candidate_fact_from_row(row) for row in rows]
+        return {
+            "document": document,
+            "facts": [fact.to_dict() for fact in facts],
+            "active_profile": active_profile_fields(facts),
+        }
+
     def export_personal_data(self) -> Path:
         created = datetime.now().strftime("%Y%m%d-%H%M%S")
         target = self.export_dir / f"career_donnees_personnelles_{created}_{uuid.uuid4().hex[:8]}.json"
@@ -4682,6 +5231,9 @@ class CareerService:
             ).fetchall()
             data = {
                 "profile": self._row_dict(connection.execute("SELECT * FROM candidate_profile WHERE id = 1").fetchone()),
+                # SK-10: the reviewed facts travel with the export, provenance
+                # included, so the person keeps the evidence for their profile.
+                "candidate_profile": self._serialize_candidate_profile(connection),
                 "preferences": self._serialize_preferences(preference_rows, settings),
                 "jobs": [self._serialize_job(row) for row in job_rows],
                 "applications": [
@@ -4767,6 +5319,8 @@ class CareerService:
             connection.execute("DELETE FROM discovery_sources")
             connection.execute("DELETE FROM jobs")
             connection.execute("DELETE FROM candidate_profile")
+            connection.execute("DELETE FROM candidate_profile_facts")
+            connection.execute("DELETE FROM candidate_profile_documents")
             connection.execute("DELETE FROM preference_items")
             connection.execute("DELETE FROM career_settings")
             connection.execute("DELETE FROM career_audit_log")
@@ -4779,7 +5333,7 @@ class CareerService:
                 pass
         # Delete interrupted upload parts and any prior opaque source left by
         # an interrupted process. This directory is exclusively Career-owned.
-        for pattern in (".profile-upload-*.part", "profile_*"):
+        for pattern in (".profile-upload-*.part", "profile_*", "candidate_profile_*"):
             for path in self.documents_dir.glob(pattern):
                 try:
                     if path.is_file():

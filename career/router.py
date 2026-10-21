@@ -236,6 +236,22 @@ class CVAnalyzeResponse(BaseModel):
     provenance: dict[str, Any]
 
 
+class CandidateProfileTextPayload(BaseModel):
+    """Pasted text used to build the reviewable candidate profile."""
+
+    source_kind: str = Field(default="cv", min_length=2, max_length=40)
+    text: str = Field(min_length=1, max_length=100_000)
+    original_name: str = Field(default="texte-profil", max_length=180)
+
+
+class CandidateFactReviewPayload(BaseModel):
+    """One review action on one fact: approve, refuse, correct or suspend."""
+
+    status: str | None = Field(default=None, max_length=20)
+    value: str | None = Field(default=None, max_length=4_000)
+    note: str | None = Field(default=None, max_length=1_000)
+
+
 def create_career_router(
     service: CareerService,
     *,
@@ -404,6 +420,78 @@ def create_career_router(
     async def delete_profile_import(import_id: str) -> dict[str, bool]:
         await local(lambda: service.delete_profile_import(import_id))
         return {"deleted": True}
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Candidate profile (SK-10): facts with exact provenance, approved one
+    # by one.  Nothing is ever sent anywhere; nothing is approved by itself.
+    # ─────────────────────────────────────────────────────────────────────
+
+    @router.get("/api/career/candidate-profile")
+    async def candidate_profile() -> Any:
+        return await local(service.get_candidate_profile)
+
+    @router.post("/api/career/candidate-profile/document", status_code=201)
+    async def build_candidate_profile_document(request: Request) -> Any:
+        form = None
+        try:
+            form = await request.form(max_files=1, max_fields=2, max_part_size=64 * 1024)
+        except (HTTPException, ValueError) as error:
+            raise UserFacingError(
+                "Import de profil invalide : envoie un document et un type de source court."
+            ) from error
+        try:
+            upload_items = [
+                (key, value) for key, value in form.multi_items() if isinstance(value, UploadFile)
+            ]
+            if len(upload_items) != 1 or upload_items[0][0] != "document":
+                raise UserFacingError("Sélectionne un seul fichier dans le champ « document ».")
+            text_fields = [key for key, value in form.multi_items() if not isinstance(value, UploadFile)]
+            if any(key != "source_kind" for key in text_fields):
+                raise UserFacingError("L’import de profil contient un champ inattendu.")
+            source_kind = str(form.get("source_kind", "cv"))
+            return await _store_candidate_profile_document(service, upload_items[0][1], source_kind)
+        finally:
+            if form is not None:
+                await form.close()
+
+    @router.post("/api/career/candidate-profile/text", status_code=201)
+    async def build_candidate_profile_text(payload: CandidateProfileTextPayload) -> Any:
+        return await local(
+            lambda: service.build_candidate_profile_from_text(
+                source_kind=payload.source_kind,
+                text=payload.text,
+                original_name=payload.original_name,
+            )
+        )
+
+    @router.patch("/api/career/candidate-profile/facts/{fact_id}")
+    async def review_candidate_fact(fact_id: str, payload: CandidateFactReviewPayload) -> Any:
+        return await local(
+            lambda: service.review_candidate_fact(
+                fact_id,
+                status=payload.status,
+                value=payload.value,
+                note=payload.note,
+            )
+        )
+
+    @router.delete("/api/career/candidate-profile/facts/{fact_id}")
+    async def delete_candidate_fact(fact_id: str) -> Any:
+        return await local(lambda: service.delete_candidate_fact(fact_id))
+
+    @router.get("/api/career/candidate-profile/export")
+    async def export_candidate_profile() -> FileResponse:
+        path = await run_in_threadpool(service.export_candidate_profile)
+        return FileResponse(
+            path,
+            filename=path.name,
+            media_type="application/json",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.delete("/api/career/candidate-profile")
+    async def delete_candidate_profile() -> Any:
+        return await local(service.delete_candidate_profile)
 
     @router.get("/api/career/intake")
     async def intake() -> Any:
@@ -773,6 +861,43 @@ async def _store_profile_document(
                 destination.write(chunk)
         return await run_in_threadpool(
             lambda: service.import_profile_document(
+                source_kind=source_kind,
+                original_name=original_name,
+                temporary_path=temporary,
+                content_sha256=digest.hexdigest(),
+                size_bytes=bytes_written,
+            )
+        )
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+async def _store_candidate_profile_document(
+    service: CareerService, uploaded: UploadFile, source_kind: str
+) -> Any:
+    """Stream one document into the private Career directory for SK-10.
+
+    The file never reaches the general V3 workspace: it is stored under an
+    opaque name, checksummed, and handed to the candidate-profile builder.
+    """
+    original_name = CareerService._safe_profile_source_name(uploaded.filename, fallback="document-profil")
+    temporary = service.profile_upload_temp_path()
+    digest = hashlib.sha256()
+    bytes_written = 0
+    try:
+        with temporary.open("xb") as destination:
+            try:
+                os.chmod(temporary, 0o600)
+            except OSError:
+                pass
+            while chunk := await uploaded.read(PROFILE_UPLOAD_CHUNK_SIZE):
+                bytes_written += len(chunk)
+                if bytes_written > MAX_PROFILE_IMPORT_BYTES:
+                    raise UserFacingError("Document de profil trop volumineux (maximum 10 Mo).")
+                digest.update(chunk)
+                destination.write(chunk)
+        return await run_in_threadpool(
+            lambda: service.build_candidate_profile_from_document(
                 source_kind=source_kind,
                 original_name=original_name,
                 temporary_path=temporary,

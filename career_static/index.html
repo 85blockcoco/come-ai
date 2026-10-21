@@ -568,6 +568,37 @@
             <h2 id="profile-title">Mon profil</h2>
             <p>Garde ici les informations que tu veux réutiliser dans tes recherches et brouillons. Tout reste local tant que tu ne choisis pas explicitement un mode IA.</p>
           </header>
+          <section class="panel candidate-profile-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Preuves approuvées</p>
+                <h3>Profil candidat</h3>
+              </div>
+              <span class="local-tag">Données locales</span>
+            </div>
+            <p class="panel-help">Analyse un CV pour obtenir des faits proposés avec leur source exacte (page, offsets, citation). Rien n’est approuvé automatiquement : seuls les faits que tu valides peuvent justifier une candidature.</p>
+            <div class="candidate-profile-actions">
+              <label class="candidate-profile-file">Document (PDF, DOCX, TXT)
+                <input type="file" id="candidate-profile-file" accept=".pdf,.docx,.doc,.txt,.md" />
+              </label>
+              <button type="button" id="candidate-profile-build" class="quiet-button">Analyser le document</button>
+              <button type="button" id="candidate-profile-export" class="quiet-button">Exporter le profil</button>
+              <button type="button" id="candidate-profile-delete" class="quiet-button danger-button">Supprimer le profil</button>
+            </div>
+            <div class="candidate-profile-confirm-row">
+              <label for="candidate-profile-confirm">Confirmation de suppression</label>
+              <input type="text" id="candidate-profile-confirm" maxlength="20" autocomplete="off" placeholder="SUPPRIMER" />
+            </div>
+            <details class="candidate-profile-paste">
+              <summary>Coller un texte de CV</summary>
+              <textarea id="candidate-profile-text" rows="8" maxlength="100000" placeholder="Colle ici le texte de ton CV"></textarea>
+              <button type="button" id="candidate-profile-build-text" class="quiet-button">Analyser le texte</button>
+            </details>
+            <p id="candidate-profile-message" class="candidate-profile-message" role="status" hidden></p>
+            <div id="candidate-profile-summary" class="candidate-profile-summary"></div>
+            <div id="candidate-profile-facts" class="candidate-profile-facts"></div>
+            <p id="candidate-profile-empty" class="empty-state">Aucun profil candidat construit pour l’instant. Importe un document ou colle un texte pour obtenir des faits à valider.</p>
+          </section>
           <div id="profile-content" class="single-view-content"></div>
         </section>
 
@@ -734,5 +765,6 @@
     </div>
     <script src="/career-static/cv_plan.js" defer></script>
     <script src="/career-static/career.js" defer></script>
+    <script src="/career-static/js/profile-builder.js" defer></script>
   </body>
 </html>

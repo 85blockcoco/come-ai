@@ -1,0 +1,26 @@
+Camille Démo
+camille.demo@example.test
++33 6 12 34 56 78
+https://www.linkedin.com/in/camilledemo
+Paris, France
+
+EXPERIENCE
+
+2020 - 2023 | Analyste M&A | Banque Démo
+- Construction de 12 modèles de valorisation
+- Publication de 3 notes de marché
+
+2022 - 2024 | Stagiaire Finance | Cabinet Démo
+- Revue de 8 budgets de trésorerie
+
+FORMATION
+
+2019 - 2022 | Licence Économie | Université Démo
+
+2017 - 2019 | Master Data Science | École Démo
+
+COMPÉTENCES
+Excel, Python, SQL
+
+LANGUES
+Anglais C1, Français courant
