@@ -10,7 +10,10 @@ Usage:
     # From file
     doc = extract_text_from_file("cv.pdf")
     result = analyze_cv(doc)
-    ats_result = run_ats_check(doc)
+
+    # ATS risk analysis (Mission 04)
+    ats = run_ats_check_file("cv.pdf")     # full PDF/DOCX structure
+    ats = run_ats_check(doc)              # text only fallback
 
     # From raw text
     doc = DocumentInput(text="...", filename="cv.txt", filetype="txt")
@@ -20,6 +23,9 @@ Usage:
 from __future__ import annotations
 
 from .models import (
+    ATSCheckResult,
+    ATSFinding,
+    ATSRiskLevel,
     CVAnalysisResult,
     DocumentInput,
     ExperienceEntry,
@@ -31,10 +37,6 @@ from .models import (
     STATUS_OK,
     STATUS_RISK,
     STATUS_UNKNOWN,
-    # ATS models (Mission 04)
-    ATSFinding,
-    ATSCheckResult,
-    ATSRiskLevel,
 )
 from .parser import extract_text_from_bytes, extract_text_from_file
 from .structure import analyze_cv
@@ -56,7 +58,7 @@ __all__ = [
     "ExperienceEntry",
     "ReadabilityScore",
     "Provenance",
-    # ATS models
+    # ATS models (Mission 04)
     "ATSFinding",
     "ATSRiskLevel",
     # Status constants

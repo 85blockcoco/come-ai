@@ -134,8 +134,8 @@ class DocumentInput:
         filetype: Document type — "txt", "pdf", or "docx".
         page_count: Estimated page count (optional, set by parser).
         raw_bytes: Original file bytes (optional, set by the parser). Kept so
-            that layout level analysis (columns, tables, images) can run on the
-            exported file instead of the flattened text.
+            that the ATS analysis can inspect the real layout of the exported
+            file instead of the flattened text.
     """
     text: str
     filename: str | None
@@ -145,7 +145,7 @@ class DocumentInput:
 
 
 # ──────────────────────────────────────────────────────────────────────
-# ATS-specific models (Mission 04)
+# ATS models (Mission 04 — contrôle ATS local PDF/DOCX)
 # ──────────────────────────────────────────────────────────────────────
 
 ATSRiskLevel = Literal["LOW", "MEDIUM", "HIGH"]
@@ -153,18 +153,19 @@ ATSRiskLevel = Literal["LOW", "MEDIUM", "HIGH"]
 
 @dataclass(frozen=True, slots=True)
 class ATSFinding:
-    """A single ATS risk finding detected in the document.
+    """A single ATS risk detected in the analysed document.
 
     Attributes:
-        code: Machine-readable code identifying the detector (e.g., "READING_ORDER").
-        risk_level: Severity level — LOW, MEDIUM, HIGH.
-        message: Human-readable description of the finding.
-        page: 1-based page number where the issue was detected.
-        bbox: Approximate bounding box in PDF points (x0, y0, x1, y1), or None if not available.
-        evidence_excerpt: Text excerpt (≤ 120 chars) evidencing the finding.
+        code: Machine readable code of the detector (e.g. "READING_ORDER").
+        risk_level: Severity of the risk — LOW, MEDIUM or HIGH.
+        message: Human readable description, phrased as a risk (never a verdict).
+        page: 1-based page number (0 when the finding is document-wide).
+        bbox: Approximate bounding box in PDF points (x0, y0, x1, y1), None when unknown.
+        evidence_excerpt: Short excerpt proving the finding.
         error: Technical error code when the finding comes from a failed
-            extraction (e.g. "PARSE_ERROR"), None otherwise.
+            extraction ("PARSE_ERROR"), None otherwise.
     """
+
     code: str
     risk_level: ATSRiskLevel
     message: str
@@ -176,17 +177,18 @@ class ATSFinding:
 
 @dataclass(frozen=True, slots=True)
 class ATSCheckResult:
-    """Complete result of ATS risk analysis.
+    """Complete result of the local ATS risk analysis.
 
     Attributes:
-        findings: All detected ATS risk findings.
-        risk_score: Weighted risk score 0–100 (LOW=5, MEDIUM=20, HIGH=50, capped at 100).
-        risk_label: Overall risk interpretation — "LOW", "MEDIUM", or "HIGH".
-        pages_analyzed: Number of pages analyzed.
-        parse_errors: List of parse error messages (e.g., encrypted PDF, corrupt DOCX).
-        risk_interpretation: Human-readable interpretation of the label
+        findings: All the detected ATS risks.
+        risk_score: Weighted risk score 0-100 (LOW=5, MEDIUM=20, HIGH=50, capped at 100).
+        risk_label: Overall label — "LOW", "MEDIUM" or "HIGH".
+        pages_analyzed: Number of pages analysed.
+        parse_errors: Parsing errors met while reading the file.
+        risk_interpretation: User facing interpretation of the label
             ("Faible risque", "Risque modéré — relecture conseillée", ...).
     """
+
     findings: list[ATSFinding]
     risk_score: int
     risk_label: Literal["LOW", "MEDIUM", "HIGH"]

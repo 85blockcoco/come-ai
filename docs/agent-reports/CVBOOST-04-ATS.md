@@ -1,366 +1,305 @@
-# Mission 04 — Contrôle ATS local PDF/DOCX
+# CVBOOST-04 — Contrôle ATS local PDF/DOCX
 
-**Date** : 2026-10-21
-**Branche** : `agent/cvboost-04-ats`
-**Base** : `main` (tag `v3-cvboost-sources-2026-10-20`)
-**Dépendance** : Mission 01 (`career.cv_quality.parser`, `career.cv_quality.models`)
-**Statut** : ✅ Implémentation complète, 9 détecteurs, 74 tests dédiés, suite globale verte
+> **Mission 04** — analyser le fichier exporté (PDF / DOCX / TXT) pour repérer les
+> **risques ATS** (Applicant Tracking System), **sans jamais appeler de service distant**.
+> Base : `main` / branche `agent/cvboost-04-ats` — 100 % local, déterministe, hors-ligne.
 
 ---
 
-## Résumé
+## 1. Livrable
 
-Module `career.cv_quality.ats` : analyse de **risque ATS** (Applicant Tracking System)
-**100 % locale** sur les fichiers PDF / DOCX / TXT exportés par l'utilisateur.
-Aucun appel réseau, aucun LLM, aucune clé API, aucune dépendance ajoutée.
+| Fichier | Rôle | État |
+|---|---|---|
+| `career/cv_quality/ats.py` | **nouveau** — 9 détecteurs + score pondéré + label | 100 % local, déterministe |
+| `career/cv_quality/models.py` | étendu — `ATSFinding`, `ATSCheckResult`, `ATSRiskLevel` | compatible Mission 01 |
+| `career/cv_quality/__init__.py` | export de `run_ats_check`, `run_ats_check_bytes`, `run_ats_check_file` | API publique |
+| `tests/test_cv_quality_ats.py` | **42 tests** — fixtures PDF/DOCX synthétiques | tous verts |
+| `docs/agent-reports/CVBOOST-04-ATS.md` | ce rapport | — |
 
-L'analyse est **consciente de la mise en page** :
-
-* **PDF** — les coordonnées réelles des glyphes sont lues via le hook
-  `visitor_text` de `pypdf`, la position des images via le flux de contenu
-  (`cm` / `Do`), les grilles tabulaires via l'alignement des cellules ;
-* **DOCX** — les colonnes déclarées (`w:cols`), les tables natives et leur
-  imbrication, les en-têtes / pieds de page des parties `header` / `footer` ;
-* **TXT / texte seul** — heuristiques textuelles conservatrices en repli.
-
-Neuf catégories de risques, un score pondéré 0–100 et une interprétation prudente.
+**Hors périmètre respecté** : `career/service.py`, `career/router.py`, `career_static/*`,
+`requirements*.txt`, migrations, `SCHEMA_VERSION` — **aucun fichier touché**.
 
 ---
 
-## Fichiers
-
-| Fichier | Type | Description |
-|---------|------|-------------|
-| `career/cv_quality/ats.py` | **Nouveau** | Module principal : extraction structurée + 9 détecteurs + `run_ats_check()` |
-| `career/cv_quality/models.py` | Extension | `ATSFinding` (avec `error`), `ATSCheckResult` (avec `risk_interpretation`), `ATSRiskLevel`, `DocumentInput.raw_bytes` |
-| `career/cv_quality/parser.py` | Extension | `extract_text_from_bytes` conserve les octets bruts (`raw_bytes`) |
-| `career/cv_quality/__init__.py` | Extension | Exporte `run_ats_check`, `run_ats_check_bytes`, `run_ats_check_file`, `ATSFinding`, `ATSCheckResult`, `ATSRiskLevel` |
-| `tests/test_cv_quality_ats.py` | **Nouveau** | 74 tests, fixtures PDF/DOCX **réelles** construites à la volée |
-| `docs/agent-reports/CVBOOST-04-ATS.md` | **Nouveau** | Ce rapport |
-
-Aucune modification de `career/service.py`, `career/router.py`, `career_static/*`,
-`requirements*.txt`, de migration ou de `SCHEMA_VERSION`.
-
----
-
-## API publique
+## 2. API publique
 
 ```python
-from career.cv_quality import (
-    run_ats_check,          # (DocumentInput, *, expected_sections=None, file_bytes=None)
-    run_ats_check_bytes,   # (bytes, filetype, *, filename=None, expected_sections=None)
-    run_ats_check_file,    # (path, *, expected_sections=None)
-    ATSCheckResult, ATSFinding, ATSRiskLevel,
+from career.cv_quality import run_ats_check, run_ats_check_bytes, run_ats_check_file
+
+# 1) Analyse complète (structure PDF/DOCX réelle : positions, images, tableaux, colonnes)
+result = run_ats_check_file("cv.pdf")
+result = run_ats_check_bytes(data, "pdf", expected_sections=["Expérience", "Projets"])
+
+# 2) Analyse à partir d'un DocumentInput existant (Mission 01) — repli texte
+result = run_ats_check(document, expected_sections=None)
+```
+
+`run_ats_check(document, *, expected_sections=None, file_bytes=None)` :
+
+| Argument | Rôle |
+|---|---|
+| `document` | `DocumentInput` (Mission 01) — texte + métadonnées |
+| `expected_sections` | sections attendues ; défaut `["Expérience", "Formation", "Compétences"]` |
+| `file_bytes` | octets bruts optionnels : active l'analyse **structurelle** complète |
+
+> `file_bytes` est **optionnel** : sans lui l'analyse reste correcte mais porte sur le
+> texte aplati (pas de position, pas d'image, pas de tableau natif). Les octets sont
+> réinjectés par `run_ats_check_bytes` / `run_ats_check_file`, qui sont les points
+> d'entrée recommandés côté application.
+
+### Sortie
+
+```python
+ATSCheckResult(
+    findings=[ATSFinding(code, risk_level, message, page, bbox, evidence_excerpt, error)],
+    risk_score=0,          # 0-100, pondéré (LOW=5, MEDIUM=20, HIGH=50), plafonné à 100
+    risk_label="LOW",      # "LOW" | "MEDIUM" | "HIGH"
+    pages_analyzed=1,
+    parse_errors=[],
+    risk_interpretation="Faible risque",
 )
-
-result = run_ats_check_file("cv.pdf", expected_sections=["Expérience", "Formation", "Compétences"])
-print(result.risk_score, result.risk_label, result.risk_interpretation)
-# 40 MEDIUM "Risque modéré — relecture conseillée"
 ```
 
-`ATSCheckResult(findings, risk_score, risk_label, pages_analyzed, parse_errors, risk_interpretation)`.
-
-Les octets bruts sont utilisés automatiquement s'ils sont présents :
-`run_ats_check(doc)` lit `doc.raw_bytes` (renseigné par le parser), sinon le
-paramètre explicite `file_bytes=`.
+* `ATSFinding.page` : numéro de page **1-based** (`0` = constat global au document).
+* `ATSFinding.bbox` : `(x0, y0, x1, y1)` en points PDF, ou `None` quand la position
+  n'est pas connue (DOCX).
+* `ATSFinding.evidence_excerpt` : extrait vérifiable (≤ 160 caractères, une seule ligne).
+* `ATSFinding.error` : `"PARSE_ERROR"` pour les constats d'échec d'extraction.
 
 ---
 
-## Architecture
+## 3. Vocabulaire prudent
+
+Le module parle exclusivement de **risques** et de **relecture conseillée** :
+
+| Label | Interprétation affichée |
+|---|---|
+| `LOW` | « Faible risque » |
+| `MEDIUM` | « Risque modéré — relecture conseillée » |
+| `HIGH` | « Risque élevé — restructuration recommandée » |
+
+Aucun verdict binaire « pass/fail », aucune formulation de « rejet certain ».
+
+---
+
+## 4. Les 9 détecteurs
+
+| # | Code | Niveau | Heuristique |
+|---|---|---|---|
+| 1 | `READING_ORDER` | MEDIUM | Flux non linéaire : > 2 sauts par page — sauts verticaux inversés (y remonte) **ou** sauts latéraux entre colonnes sur la même ligne (lecture ligne à ligne d'un tableau) |
+| 2 | `TEXT_IN_IMAGES` | HIGH | Page porteur d'images avec < 50 % de surface textuelle extractible (ou < 50 caractères) → document scanné/aplati |
+| 3 | `NESTED_TABLE` | MEDIUM | Tableau natif DOCX (y compris **imbriqué** dans une cellule) ou grille PDF (≥ 3 lignes alignées sur ≥ 2 colonnes) |
+| 4 | `MULTIPLE_COLUMNS` | MEDIUM | > 1 colonne de texte de largeur < 60 % de la page (PDF : regroupement des x) ou colonnes déclarées (DOCX : `w:cols w:num`) |
+| 5 | `HEADER_FOOTER` | LOW | En-tête / pied de page répété sur ≥ 2 pages consécutives (même bande, même contenu) ou en-tête/pied déclaré dans la mise en page DOCX |
+| 6 | `DECORATIVE_CHARS` | LOW | Glyphes décoratifs et ligatures (`ﬁ`, `ﬂ`, `•`, `◆`, `►`, `★`…) hors ASCII mappables |
+| 7 | `UNREADABLE_LINKS` | LOW | URL complète visible dans le texte (au lieu d'un libellé d'ancrage) |
+| 8 | `MISSING_SECTION` | HIGH | Mot-clé de section attendu absent du texte extrait (recherche par **frontière de mot** : « information » ne déclenche pas « formation ») |
+| 9 | `PARSE_ERROR` | HIGH | PDF chiffré, PDF/DOCX corrompu → `error="PARSE_ERROR"` + `parse_errors[]` |
+
+### Score et label
+
+* `risk_score = min(100, Σ poids)` avec `LOW=5`, `MEDIUM=20`, `HIGH=50`.
+* `risk_label` : `HIGH` si score ≥ 60 **ou** présence d'un constat `HIGH` ;
+  `MEDIUM` si score ≥ 25 **ou** présence d'un constat `MEDIUM` ; sinon `LOW`.
+
+---
+
+## 5. Exemples de détection (fixtures synthétiques)
+
+Toutes les fixtures ci-dessous sont générées par les tests
+(`tests/test_cv_quality_ats.py`) : PDF via **reportlab**, DOCX via **python-docx**,
+image PNG construite à la main (zlib + struct, sans Pillow).
+
+### 5.1 PDF une colonne propre → aucun risque
 
 ```
-run_ats_check(document, expected_sections=None, file_bytes=None)
-    │
-    ├─ extract_pages() / extract_pages_from_bytes()  → List[PageContent]
-    │      PDF  : pypdf (glyphes, images, grilles, chiffrement)
-    │      DOCX : python-docx (colonnes, tables, imbrication, en-têtes)
-    │      TXT  : découpage ~3000 caractères / page
-    │
-    ├─ detect_reading_order()      → READING_ORDER      (MEDIUM)
-    ├─ detect_text_in_images()     → TEXT_IN_IMAGES     (HIGH)
-    ├─ detect_nested_tables()      → NESTED_TABLE       (MEDIUM)
-    ├─ detect_multiple_columns()   → MULTIPLE_COLUMNS   (MEDIUM)
-    ├─ detect_headers_footers()    → HEADER_FOOTER      (LOW)
-    ├─ detect_decorative_chars()   → DECORATIVE_CHARS   (LOW)
-    ├─ detect_unreadable_links()   → UNREADABLE_LINKS   (LOW)
-    ├─ detect_missing_sections()   → MISSING_SECTION    (HIGH)
-    ├─ detect_parse_errors()       → PARSE_ERROR        (HIGH)
-    │
-    ├─ _calculate_risk_score()     → 0–100 (plafonné)
-    └─ _calculate_risk_label()     → LOW / MEDIUM / HIGH + interpretation
+run_ats_check_bytes(_clean_pdf(), "pdf")
+→ score=0, label=LOW, pages=1, interpretation="Faible risque"
 ```
 
-Chaque `ATSFinding` porte `code`, `risk_level`, `message`, `page`, `bbox`
-(approximatif, en points PDF) et `evidence_excerpt` (≤ 120 caractères),
-plus `error` (ex. `"PARSE_ERROR"`) pour les findings d'extraction.
-
----
-
-## Les 9 détecteurs
-
-### 1. READING_ORDER (MEDIUM)
-
-**Signal** : l'ordre d'extraction remonte la page au lieu de descendre.
-
-* **PDF (positions réelles)** : comptage des sauts de `y` non monotones
-  (> `READING_ORDER_JUMP_PT` = 10 pt) ; plus de 2 sauts sur une page ⇒
-  finding. C'est exactement l'heuristique demandée par la mission.
-* **DOCX / texte seul** : repli sur des lignes contenant un séparateur de
-  colonnes (3+ espaces ou tabulation).
-
-**Exemple synthétique** (PDF, encadrés peints après le corps) :
+### 5.2 PDF deux colonnes → `MULTIPLE_COLUMNS` (MEDIUM)
 
 ```
-Corps :  Jean Dupont → Compétences … (y 700 → 600)
-Encadrés peints ensuite : y 680, 710, 740  → 3 sauts vers le haut
-→ Finding : "Ordre de lecture non-linéaire détecté (3 sauts de lecture inversés)"
+MULTIPLE_COLUMNS  MEDIUM  page=1
+  message : Mise en page multi-colonnes détectée (2 colonnes étroites) — ordre de lecture à vérifier
+  evidence: colonnes à x≈60, 330
+score=20 → "Risque modéré — relecture conseillée"
 ```
 
-### 2. TEXT_IN_IMAGES (HIGH)
-
-**Signal** : le contenu textuel est porté par une image, l'ATS ne lit rien.
-
-* Page avec image mais **moins de 50 caractères** extractibles ⇒ HIGH
-  (document scanné, OCR requis).
-* Image **dominante** (≥ 25 % de la page) **sans texte adjacent** ⇒ HIGH
-  (texte incorporé dans l'image).
-
-> **Calibrage.** La mission énonce « texte extractible < 50 % de la surface ».
-> Appliqué à la lettre, ce seuil déclencherait sur *toute* page contenant une
-> image — y compris une simple photo en haut d'un CV — et rendrait l'outil
-> inopérant. La règle retenue isole les deux cas où le texte est réellement
-> masqué (page scannée, image dominante sans texte), qui sont les risques ATS
-> réels. Le seuil littéral est documenté ici pour la relecture.
-
-**Exemple synthétique** (PDF image-only) :
+### 5.3 PDF avec tableau → `READING_ORDER` + `NESTED_TABLE` (MEDIUM)
 
 ```
-Page 1 : text="", images=[(0, 0, 595, 842)]
-→ Finding : "Page 1 : texte extractible négligeable (0 caractères) alors que la
-              page contient 1 image(s) — document scanné probable, OCR requis…"
+READING_ORDER  MEDIUM  page=1
+  message : Ordre de lecture potentiellement non linéaire (8 saut(s) latéral/latéraux entre colonnes)
+  evidence: Cell 01 / Cell 02 / Cell 11
+NESTED_TABLE   MEDIUM  page=1  bbox=(60.0, 640.0, 360.0, 700.0)
+  message : Structure tabulaire détectée — les tableaux peuvent casser l'extraction ATS
+  evidence: 4 lignes alignées sur 3 colonnes
 ```
 
-**Contre-exemple** : une photo 60×60 pt à côté d'un texte normal **ne produit
-aucun finding** (test `test_pdf_with_photo_and_text_is_not_flagged`).
+Le tableau est lu ligne par ligne par l'extracteur : c'est exactement le motif qui
+fait perdre au CV son ordre de lecture.
 
-### 3. NESTED_TABLE (MEDIUM)
+### 5.4 PDF image seule → `TEXT_IN_IMAGES` (HIGH)
 
-**Signal** : structure tabulaire, l'extraction ATS peut perdre l'ordre.
+```
+TEXT_IN_IMAGES  HIGH  page=1  bbox=(0.0, 0.0, 595.28, 841.89)
+  message : Contenu majoritairement sous forme d'image — le texte risque de ne pas être extrait par l'ATS
+  evidence: 1 image(s), 0 caractère(s) extractibles, texte sur 0% de la page
+score=50 → "Risque élevé — restructuration recommandée"
+```
 
-* **PDF** : grille alignée (plusieurs lignes partageant ≥ 3 cellules
-  alignées) **ou** traits vectoriels dessinés (≥ 4 segments) ;
-* **DOCX** : tables natives (`w:tbl`) **et** tables imbriquées dans une cellule
-  (message dédié « tableau(x) imbriqué(s) ») ;
-* **Texte seul** : markdown, tableaux ASCII, tabulations.
+### 5.5 PDF chiffré → `PARSE_ERROR` (HIGH)
 
-### 4. MULTIPLE_COLUMNS (MEDIUM)
+```
+PARSE_ERROR  HIGH  page=0  error="PARSE_ERROR"
+  message : Fichier protégé par mot de passe — le contenu ne peut pas être analysé par l'ATS
+  evidence: PARSE_ERROR: PDF chiffré/protégé par mot de passe — extraction impossible
+pages_analyzed=0, parse_errors=["PARSE_ERROR: PDF chiffré/protégé par mot de passe — extraction impossible"]
+```
 
-**Signal** : plus d'une colonne de texte, largeur < 60 % de la page.
+Un PDF corrompu et un DOCX corrompu produisent le même constat (`PARSE_ERROR`, HIGH).
 
-* **PDF (positions réelles)** : regroupement des bords gauches (tolérance 20 pt).
-  Une colonne = un groupe de ≥ 2 blocs détenant ≥ 20 % des blocs de la page
-  et s'étendant sur moins de 60 % de la largeur ; deux groupes séparés de
-  ≥ 40 pt ⇒ finding.
-* **DOCX** : `w:cols/@w:num` > 1 dans les propriétés de section.
-* **Texte seul** : plusieurs lignes partageant le **même séparateur interne**
-  (signature textuelle d'un alignement en colonnes) — exemple :
-  `"TechCorp             Paris-Saclay"` (séparateur à la position 8).
+### 5.6 PDF avec en-tête et pied de page répétés → `HEADER_FOOTER` (LOW)
 
-### 5. HEADER_FOOTER (LOW)
+```
+HEADER_FOOTER  LOW  page=1
+  message : En-tête répété sur les pages 1 et 2 — pollution de l'extraction
+  evidence: cv - jean dupont
+HEADER_FOOTER  LOW  page=1
+  message : Pied de page répété sur les pages 1 et 2 — pollution de l'extraction
+  evidence: document confidentiel
+```
 
-**Signal** : texte répété en haut ou en bas de ≥ 2 pages consécutives.
+### 5.7 DOCX propre → aucun risque
 
-* **PDF** : comparaison de la première / dernière ligne normalisée de pages
-  consécutives (accent et casse ignorés).
-* **DOCX** : les parties `header` / `footer` sont répétées par construction.
+```
+run_ats_check_bytes(_clean_docx(), "docx")
+→ score=0, label=LOW, pages=1
+```
 
-### 6. DECORATIVE_CHARS (LOW)
+### 5.8 DOCX sur 2 colonnes → `MULTIPLE_COLUMNS` (MEDIUM)
 
-Glyphes non mappés : ligatures `ﬁ` `ﬂ`, puces `•` `●` `◆` `►` `‣` `▪` `◦`,
-flèches `➤` `→`, point médian `·`, tirets `–` `—`, guillemets courbes
-`‘ ’ “ ”`.
+```
+MULTIPLE_COLUMNS  MEDIUM  page=1
+  message : Mise en page sur 2 colonnes — l'ordre de lecture peut être altéré
+  evidence: 2 colonnes déclarées dans la mise en page
+```
 
-### 7. UNREADABLE_LINKS (LOW)
+### 5.9 DOCX avec tableau imbriqué → `NESTED_TABLE` (MEDIUM)
 
-URL brute visible (`https?://` ou `www.`) au lieu d'un texte d'ancrage.
-Seuil : plus de 2 URLs sur la page, ou une URL de plus de 60 caractères.
+```
+NESTED_TABLE  MEDIUM  page=1
+  message : Tableau imbriqué détecté — structure tabulaire à risque pour l'extraction ATS
+  evidence: 2 ligne(s) — tableau imbriqué
+```
 
-### 8. MISSING_SECTION (HIGH)
+### 5.10 DOCX avec caractères décoratifs → `DECORATIVE_CHARS` (LOW)
 
-Mots-clés de section **absents** du texte extrait, en français et en anglais
-(`Expérience`, `Formation`, `Compétences`, `Langues`, `Projets`,
-`Certifications`). Par défaut : `Expérience`, `Formation`, `Compétences`,
-surchargeable via `expected_sections`.
+```
+DECORATIVE_CHARS  LOW  page=1
+  message : Caractères décoratifs ou ligatures détectés (●, fi) — ils peuvent être mal interprétés
+  evidence: ● ﬁ
+```
 
-*Quand le texte est absent parce qu'il est dans une image, le finding
-`TEXT_IN_IMAGES` est déjà remonté : les sections manquantes sont alors
-considérées comme une conséquence et non redonnées (évite le bruit).*
+### 5.11 DOCX avec URL brute → `UNREADABLE_LINKS` (LOW)
 
-### 9. PARSE_ERROR (HIGH)
+```
+UNREADABLE_LINKS  LOW  page=1
+  message : 1 URL(s) brute(s) visible(s) dans le texte — un libellé lisible serait préférable
+  evidence: https://github.com/jeandupont/projet
+```
 
-* PDF protégé par mot de passe (`reader.is_encrypted` + échec de
-  `decrypt("")`) ⇒ « Fichier PDF chiffré/protégé par mot de passe ».
-* PDF / DOCX corrompu, tronqué ou malformé ⇒ « Fichier corrompu/malformé ».
-* Le finding porte `error="PARSE_ERROR"` et l'erreur est reprise dans
-  `result.parse_errors`.
+### 5.12 DOCX sans section Formation → `MISSING_SECTION` (HIGH)
 
-Un document **illisible** ne produit **que** ce finding : les autres
-détecteurs ne pourraient donner que des résultats dénaturés.
-
----
-
-## Score et interprétation
-
-| Niveau | Poids | Détecteurs |
-|--------|-------|------------|
-| LOW | 5 | HEADER_FOOTER, DECORATIVE_CHARS, UNREADABLE_LINKS |
-| MEDIUM | 20 | READING_ORDER, NESTED_TABLE, MULTIPLE_COLUMNS |
-| HIGH | 50 | TEXT_IN_IMAGES, MISSING_SECTION, PARSE_ERROR |
-
-`risk_score = min(100, Σ poids)`.
-
-| Label | Score | Interprétation |
-|-------|-------|----------------|
-| `LOW` | 0 – 19 | « Faible risque » |
-| `MEDIUM` | 20 – 49 | « Risque modéré — relecture conseillée » |
-| `HIGH` | 50 – 100 | « Risque élevé — restructuration recommandée » |
-
-> **Calibrage.** Les seuils sont alignés sur les poids : un seul finding
-> MEDIUM (20) donne déjà « MEDIUM », un seul finding HIGH (50) donne déjà
-> « HIGH ». Le label ne contredit donc jamais la liste des findings.
-
-Vocabulaire : on parle de **risque ATS**, de « risque », « peut casser »,
-« relecture conseillée », « restructuration recommandée ». **Jamais** de
-« rejet certain », jamais de verdict binaire pass/fail.
+```
+MISSING_SECTION  HIGH  page=1
+  message : Section attendue introuvable dans le texte extrait : « Formation » — la structure reste invisible pour l'ATS
+  evidence: aucun mot-clé parmi : formation, formations, education, etudes, diplomes
+```
 
 ---
 
-## Tests
-
-`tests/test_cv_quality_ats.py` — **74 tests**, fixtures **réelles** générées à
-la volée (aucun fichier du disque, aucune donnée personnelle, aucun réseau).
-
-### Fixtures PDF (construites avec `reportlab`)
-
-| Fixture | Attendu |
-|---------|---------|
-| PDF 1 colonne propre | aucun `MULTIPLE_COLUMNS` / `READING_ORDER` |
-| PDF 2 colonnes | `MULTIPLE_COLUMNS` MEDIUM |
-| PDF avec tableau dessiné | `NESTED_TABLE` MEDIUM |
-| PDF image-only | `TEXT_IN_IMAGES` HIGH, pas de sections manquantes |
-| PDF avec photo + texte | aucun `TEXT_IN_IMAGES` |
-| PDF chiffré (mot de passe) | `PARSE_ERROR` HIGH seul, `pages_analyzed == 0` |
-| PDF corrompu | `PARSE_ERROR` HIGH seul |
-| PDF caractères décoratifs | `DECORATIVE_CHARS` LOW |
-| PDF en-tête/pied répété (3 pages) | `HEADER_FOOTER` LOW |
-| PDF encadrés non linéaires | `READING_ORDER` MEDIUM |
-| PDF sans sections attendues | `MISSING_SECTION` HIGH ×2 |
-
-### Fixtures DOCX (construites avec `python-docx`)
-
-| Fixture | Attendu |
-|---------|---------|
-| DOCX propre | aucun `MULTIPLE_COLUMNS` |
-| DOCX 2 colonnes (`w:cols num=2`) | `MULTIPLE_COLUMNS` MEDIUM |
-| DOCX tableau imbriqué | `NESTED_TABLE` MEDIUM (« imbriqué ») |
-| DOCX ligatures | `DECORATIVE_CHARS` LOW |
-| DOCX en-tête répété (2 pages) | `HEADER_FOOTER` LOW |
-
-### Couverture fonctionnelle
-
-| Catégorie | Tests |
-|-----------|-------|
-| Détecteur 1 — READING_ORDER | 4 |
-| Détecteur 2 — TEXT_IN_IMAGES | 6 |
-| Détecteur 3 — NESTED_TABLE | 6 |
-| Détecteur 4 — MULTIPLE_COLUMNS | 7 |
-| Détecteur 5 — HEADER_FOOTER | 4 |
-| Détecteur 6 — DECORATIVE_CHARS | 4 |
-| Détecteur 7 — UNREADABLE_LINKS | 3 |
-| Détecteur 8 — MISSING_SECTION | 6 |
-| Détecteur 9 — PARSE_ERROR | 6 |
-| Score / label / interprétation | 6 |
-| Intégration `run_ats_check*` | 12 |
-| Cas limites (vide, déterminisme, réseau, performance) | 10 |
-
----
-
-## Performance
-
-| Scénario | Temps | Critère |
-|----------|-------|---------|
-| CV texte 1 page | ~15 ms | < 3 s |
-| CV texte 3 pages | ~45 ms | < 3 s |
-| **PDF réel 3 pages** (extraction + images + grilles) | ~0,3 s | < 3 s |
-
-`tests/test_cv_quality_ats.py::test_performance_under_3_seconds` vérifie la
-borne sur un PDF réel de 3 pages.
-
----
-
-## Conformité aux contraintes produit
-
-| Contrainte | Statut | Détail |
-|------------|--------|--------|
-| 100 % local | ✅ | `pypdf`, `python-docx`, `reportlab` (tests) — déjà dans `requirements-v3.txt`, aucune dépendance ajoutée |
-| Aucun réseau / LLM / clé | ✅ | test dédié `test_no_network_access` (socket intercepté) |
-| Vocabulaire prudent | ✅ | « risque », « relecture », « restructuration » ; jamais « rejet » (vérifié par test) |
-| 9 détecteurs obligatoires | ✅ | tous implémentés, avec `risk_level`, `page`, `bbox`, `evidence_excerpt` |
-| Score pondéré 0–100 + label | ✅ | LOW=5, MEDIUM=20, HIGH=50, plafond 100 |
-| Interprétation fournie | ✅ | `ATSCheckResult.risk_interpretation` + `RISK_INTERPRETATIONS` |
-| Entrée `DocumentInput` + `expected_sections` | ✅ | Mission 01 réutilisée (`raw_bytes` ajouté) |
-| Sortie `ATSCheckResult` | ✅ | `findings`, `risk_score`, `risk_label`, `pages_analyzed`, `parse_errors` |
-| Erreurs parse (chiffré / corrompu) | ✅ | finding HIGH + `error="PARSE_ERROR"` + `parse_errors` |
-| Tests synthétiques ≥ 12 | ✅ | 74 tests, fixtures PDF/DOCX réelles |
-| Suite globale ≥ 1269 | ✅ | 1495 tests |
-| Performance ≤ 3 s / ≤ 5 pages | ✅ | mesuré sur PDF réel |
-| `run_ats_check()` pure et déterministe | ✅ | test de déterminisme sur texte et PDF réel |
-
----
-
-## Limites connues
-
-1. **DOCX sans mise en page fixe** : les pages sont estimées (saut de page
-   explicite, sinon ~3000 caractères) et les bounding boxes de tables sont
-   approximatives.
-2. **Ligatures PDF** : une police sans table `ToUnicode` peut ne pas restituer
-   le glyphe original ; le jeu `DECORATIVE_CHARS` couvre les cas courants mais
-   n'est pas exhaustif.
-3. **Sections manquantes** : détection par mots-clés — une section titrée de
-   façon atypique peut ne pas être reconnue.
-4. **`pdfplumber` non utilisé** : hors périmètre de la mission (aucune
-   dépendance ajoutée) ; la détection de grilles repose sur l'alignement
-   positionnel et les traits vectoriels.
-
----
-
-## Prochaines étapes
-
-1. Brancher le contrôle sur le pipeline d'export CV (Missions 03 / 05).
-2. Exposer l'API `/api/v5/cv/ats-check` (Mission 10+).
-3. Ajouter un détecteur « polices non embeddées » si `pdfplumber` est
-   finalement autorisé.
-4. Calibrer les seuils sur un corpus de CV anonymisé.
-
----
-
-## Validation
+## 6. Tests
 
 ```bash
-# Tests dédiés
-.venv/bin/python -m pytest -q tests/test_cv_quality_ats.py
-# 74 passed
+/Users/comedelavenne/AI-Excel-Agent/.venv/bin/python -m pytest -q tests/test_cv_quality_ats.py
+→ 42 passed
 
-# Suite complète
-.venv/bin/python -m pytest -q
-# 1495 passed
+/Users/comedelavenne/AI-Excel-Agent/.venv/bin/python -m pytest -q
+→ 1399 passed      (aucune régression)
 
-# Lint
-.venv/bin/python -m ruff check career/cv_quality/ tests/test_cv_quality_ats.py
-# All checks passed!
+/Users/comedelavenne/AI-Excel-Agent/.venv/bin/python -m ruff check .
+→ All checks passed!
 
-# Diff propre
 git diff --check
+→ propre
 ```
 
-**Branche `agent/cvboost-04-ats` prête pour relecture et merge.** 🚀
+### Répartition des 42 tests
+
+| Famille | Tests |
+|---|---|
+| PDF 1 colonne propre | 4 |
+| PDF 2 colonnes | 2 |
+| PDF tableau | 2 |
+| PDF image seule | 2 |
+| PDF chiffré / corrompu | 2 |
+| PDF en-tête / pied de page | 3 |
+| DOCX propre | 2 |
+| DOCX 2 colonnes | 1 |
+| DOCX tableau imbriqué | 1 |
+| DOCX corrompu | 1 |
+| DOCX décoratif / URL | 4 |
+| Sections attendues (défaut, personnalisées, faux positif `information`/`formation`) | 3 |
+| Score, label, interprétation | 4 |
+| Contrat d'API, déterminisme, hors-ligne, performance | 6 |
+| Détecteurs unitaires sur `PageContent` synthétique | 5 |
+
+**Performance mesurée** : PDF de 5 pages analysé en < 3 s (budget de la mission) — le
+test `test_performance_under_three_seconds` le vérifie à chaque exécution.
+
+**Hors-ligne vérifié** : `test_analysis_is_local_only` remplace `socket.socket` par une
+fonction qui lève une exception pendant l'analyse — le test passe, donc aucun appel
+réseau n'est effectué.
+
+---
+
+## 7. Décisions d'implémentation
+
+1. **Positionnement réel du texte (PDF)** — pypdf expose la matrice de texte via le
+   hook `visitor_text` : la translation donne la position de chaque fragment. C'est ce
+   qui rend possibles les détecteurs `READING_ORDER`, `MULTIPLE_COLUMNS`,
+   `NESTED_TABLE` (grille) et `HEADER_FOOTER` (bandes haute/basse) sur un vrai PDF.
+2. **Pas de dépendance supplémentaire** — `pdfplumber` n'est pas ajouté (interdit par la
+   mission) : la détection de grille repose sur l'alignement des fragments de texte, la
+   détection de tableau imbriqué repose sur `python-docx`.
+3. **Frontières de mots** — la recherche des sections utilise `(?<![a-z0-9])mot(?![a-z0-9])` ;
+   sans cela « Informations » serait interprété comme la section « Formation » (faux
+   positif couvert par un test dédié).
+4. **Caractères décoratifs restreints** — les guillemets typographiques et tirets demi-cadratins
+   (produits par Word à chaque export) ne sont **pas** signalés : ils ne présentent pas de
+   risque ATS. Seuls les ligatures et symboles décoratifs le sont.
+5. **Absence de section ≠ fichier illisible** — quand l'extraction a échoué (pages vides),
+   le détecteur `MISSING_SECTION` n'est pas exécuté : on ne signale pas des sections
+   manquantes dans un document qu'on n'a pas pu lire.
+6. **Déterminisme** — les caractères décoratifs sont triés par point de code, les
+   tableaux et les clusters de colonnes sont parcourus dans un ordre stable :
+   `run_ats_check` renvoie deux résultats identiques pour le même fichier
+   (test `test_results_are_deterministic`).
+
+---
+
+## 8. Points d'attention pour la relecture
+
+* Le `bbox` n'est renseigné que pour les constats issus de la structure PDF
+  (`TEXT_IN_IMAGES`, `NESTED_TABLE` sur grille). Le DOCX n'expose pas les positions
+  de paragraphe via `python-docx` : le `bbox` y vaut `None`, ce qui est assumé et
+  documenté.
+* La position exacte d'une image dans un PDF n'est pas exposée par pypdf : la boîte
+  renvoyée est celle de la page. La détection « texte sous forme d'image » s'appuie
+  donc sur le ratio de surface textuelle et le nombre de caractères extractibles.
+* La surface couverte par le texte est **estimée** (`longueur × taille de police × 0,5`) :
+  c'est suffisant pour un ratio, pas pour une mesure exacte.
+* Le document est analysé tel qu'il est exporté : le contrôle porte sur le rendu ATS du
+  fichier, pas sur la qualité rédactionnelle du CV (c'est le rôle de `cv_quality.structure`).
