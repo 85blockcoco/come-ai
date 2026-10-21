@@ -23,6 +23,10 @@ from .models import (
     DocumentInput,
     ExperienceEntry,
     Finding,
+    MatchAction,
+    MatchActionCode,
+    MatchEvidence,
+    MatchResult,
     Provenance,
     ReadabilityScore,
     SectionReading,
@@ -31,12 +35,16 @@ from .models import (
     STATUS_RISK,
     STATUS_UNKNOWN,
 )
+from .matching import find_evidence_in_cv, match_cv_to_offer
 from .parser import extract_text_from_bytes, extract_text_from_file
 from .structure import analyze_cv
 
 __all__ = [
     # Main entry point
     "analyze_cv",
+    # CV ↔ Offer matching (CVBOOST-21)
+    "match_cv_to_offer",
+    "find_evidence_in_cv",
     # Input/Output types
     "DocumentInput",
     "CVAnalysisResult",
@@ -46,6 +54,10 @@ __all__ = [
     "ExperienceEntry",
     "ReadabilityScore",
     "Provenance",
+    "MatchAction",
+    "MatchActionCode",
+    "MatchEvidence",
+    "MatchResult",
     # Status constants
     "STATUS_OK",
     "STATUS_INFO",
