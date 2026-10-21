@@ -506,6 +506,15 @@ def create_career_router(
     async def job(job_id: str) -> Any:
         return await local(lambda: service.get_job(job_id))
 
+    @router.get("/api/career/jobs/{job_id}/offer-intelligence")
+    async def job_offer_intelligence(job_id: str) -> Any:
+        return await local(lambda: service.get_offer_intelligence(job_id))
+
+    @router.get("/api/career/offer-intelligence/{job_id}")
+    async def offer_intelligence(job_id: str) -> Any:
+        """Same snapshot, same identifiers: this route is an alias, not a copy."""
+        return await local(lambda: service.get_offer_intelligence(job_id))
+
     @router.get("/api/career/jobs/{job_id}/prep")
     async def job_prep(job_id: str) -> Any:
         return await local(lambda: service.get_job_prep(job_id))

@@ -1,0 +1,205 @@
+{
+  "note": "Cas synthétiques multilingues (DE / IT / ES) — aucune offre réelle, aucun réseau.",
+  "cases": [
+    {
+      "id": "multilingue-de-master-et-3-jahre",
+      "offer": {
+        "id": "off-multilingue-de-01",
+        "requirements": "Master in Finance\n3 Jahre Erfahrung im Investment Banking\nDeutsch verhandlungssicher",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "etudes",
+            "value": "Master in Finance",
+            "quote": "Master in Finance, 2025"
+          },
+          {
+            "category": "experience",
+            "value": "Analyst Investment Banking",
+            "quote": "Analyst Investment Banking, 2022-2024",
+            "months": 24
+          },
+          {
+            "category": "langues",
+            "value": "Deutsch C1",
+            "quote": "Deutsch C1"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Master in Finance",
+        "category": "etudes",
+        "modality": "mandatory",
+        "verdict": "supported"
+      }
+    },
+    {
+      "id": "multilingue-de-3-jahre-insuffisant",
+      "offer": {
+        "id": "off-multilingue-de-02",
+        "requirements": "3 Jahre Erfahrung im Investment Banking",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "experience",
+            "value": "Analyst Investment Banking",
+            "quote": "Analyst Investment Banking, 2022-2024",
+            "months": 24
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "3 Jahre Erfahrung im Investment Banking",
+        "category": "experience",
+        "modality": "mandatory",
+        "verdict": "unsupported"
+      }
+    },
+    {
+      "id": "multilingue-it-laurea-e-3-anni",
+      "offer": {
+        "id": "off-multilingue-it-01",
+        "requirements": "Laurea triennale in economia\nAlmeno 3 anni di esperienza in auditing",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "etudes",
+            "value": "Laurea triennale in economia",
+            "quote": "Laurea triennale in economia, 2023"
+          },
+          {
+            "category": "experience",
+            "value": "Auditor",
+            "quote": "Auditor, 2021-2024",
+            "months": 36
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Almeno 3 anni di esperienza in auditing",
+        "category": "experience",
+        "modality": "mandatory",
+        "verdict": "supported"
+      }
+    },
+    {
+      "id": "multilingue-es-grado-y-3-años",
+      "offer": {
+        "id": "off-multilingue-es-01",
+        "requirements": "Grado en ADE\n3 años de experiencia en análisis financiero\nInglés C1",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "etudes",
+            "value": "Grado en ADE",
+            "quote": "Grado en ADE, 2022"
+          },
+          {
+            "category": "experience",
+            "value": "Analista financiero",
+            "quote": "Analista financiero, 2020-2024",
+            "months": 48
+          },
+          {
+            "category": "langues",
+            "value": "Inglés C1",
+            "quote": "Inglés C1"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "3 años de experiencia en análisis financiero",
+        "category": "experience",
+        "modality": "mandatory",
+        "verdict": "supported"
+      }
+    },
+    {
+      "id": "multilingue-es-ingles-approuvé",
+      "offer": {
+        "id": "off-multilingue-es-02",
+        "requirements": "Inglés C1",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "langues",
+            "value": "Inglés C1",
+            "quote": "Inglés C1"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Inglés C1",
+        "category": "langues",
+        "modality": "mandatory",
+        "verdict": "supported"
+      }
+    },
+    {
+      "id": "multilingue-outils-power-bi-et-macros",
+      "offer": {
+        "id": "off-multilingue-outils-01",
+        "requirements": "Maitrise de Power BI et des macros Excel",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "outils",
+            "value": "Power BI",
+            "quote": "Power BI — dashboards"
+          },
+          {
+            "category": "outils",
+            "value": "Macros Excel",
+            "quote": "Macros Excel"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Maitrise de Power BI et des macros Excel",
+        "category": "outils",
+        "modality": "mandatory",
+        "verdict": "supported"
+      }
+    },
+    {
+      "id": "multilingue-dates-format-européen",
+      "offer": {
+        "id": "off-multilingue-dates-01",
+        "requirements": "Diplome obtenu avant le 30/09/2026\nDisponible a partir du 2026-09-01",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "diplomation",
+            "value": "2026-05-12",
+            "quote": "Diplômé en mai 2026"
+          },
+          {
+            "category": "dispo",
+            "value": "2026-08-01",
+            "quote": "Disponible dès août 2026"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Diplome obtenu avant le 30/09/2026",
+        "category": "diplomation",
+        "modality": "mandatory",
+        "verdict": "supported"
+      }
+    }
+  ]
+}
