@@ -12,6 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from .models import JOB_FAMILIES, clean_text, normalized_text, parse_date
+from .countries import DEFAULT_COUNTRIES_EXCLUDE, canonical_country_codes
 from .sources import SEARCH_TERMS
 from .education_access import assess_education_access
 from workspace_core import UserFacingError
@@ -170,6 +171,9 @@ def default_brief() -> dict[str, Any]:
         "cities": [],
         "excluded_countries": [],
         "excluded_cities": [],
+        # Countries a connector must never return.  The person never wants
+        # French postings, so the default excludes France at the source.
+        "countries_exclude": list(DEFAULT_COUNTRIES_EXCLUDE),
         "require_known_location": False,
         "start_date": "",
         "duration_months": None,
@@ -224,6 +228,47 @@ def _ranking_values(value: Any) -> dict[str, float]:
             )
         ranking[criterion] = round(multiplier, 2)
     return ranking
+
+
+def _countries_exclude(payload: dict[str, Any]) -> list[str]:
+    """Countries a connector must never return, as canonical ISO codes.
+
+    Three inputs are read, in this order:
+
+    * ``countries_exclude`` — the explicit list, written in ISO codes.  An
+      empty list turns the filter off: it is the only way for a French
+      posting to reach the person.
+    * ``excluded_countries`` — the older free-text list the interface still
+      edits.  An emptied list means the person removed every country
+      exclusion, so the source filter must follow instead of silently
+      keeping the default.
+    * neither — France stays excluded, the one country this product never
+      offers.  A country the person explicitly asks for is not excluded.
+
+    The list is resolved once, here, so every connector reads the same
+    countries and no wording is interpreted twice.
+    """
+    if "countries_exclude" in payload and payload.get("countries_exclude") is not None:
+        raw = payload.get("countries_exclude")
+        if not isinstance(raw, list):
+            raise UserFacingError("Les pays exclus par défaut doivent être une liste.")
+        if len(raw) > 20:
+            raise UserFacingError("Les pays exclus par défaut contiennent trop d’éléments (maximum 20).")
+        return list(canonical_country_codes(raw))
+    if "excluded_countries" in payload:
+        raw_legacy = payload.get("excluded_countries") or []
+        if not isinstance(raw_legacy, list):
+            raise UserFacingError("Les pays exclus doivent être une liste.")
+        if not raw_legacy:
+            # An emptied list is an explicit choice: no country is excluded,
+            # and a French posting may reach the person again.
+            return []
+        legacy = list(canonical_country_codes(raw_legacy))
+        # A list that names no known country keeps the default instead of
+        # silently disabling the filter.
+        return legacy or list(DEFAULT_COUNTRIES_EXCLUDE)
+    wanted = set(canonical_country_codes(payload.get("countries") or []))
+    return [code for code in DEFAULT_COUNTRIES_EXCLUDE if code not in wanted]
 
 
 def validate_brief(payload: Any) -> dict[str, Any]:
@@ -298,6 +343,7 @@ def validate_brief(payload: Any) -> dict[str, Any]:
         "excluded_cities": _string_list(
             payload.get("excluded_cities", []), "Les villes exclues", max_items=20, max_length=120
         ),
+        "countries_exclude": _countries_exclude(payload),
         "require_known_location": require_known_location,
         "start_date": start_text,
         "duration_months": duration,
@@ -342,6 +388,7 @@ def vocabulary() -> dict[str, Any]:
         "contract_types": [{"key": key, "label": label} for key, label in CONTRACT_TYPES.items()],
         "months": [{"value": value, "label": label} for value, label in MONTHS],
         "quarter_months": [1, 2, 3],
+        "default_countries_exclude": list(DEFAULT_COUNTRIES_EXCLUDE),
         "ranking_criteria": [
             {"key": key, "label": label} for key, label in RANKING_CRITERIA.items()
         ],
