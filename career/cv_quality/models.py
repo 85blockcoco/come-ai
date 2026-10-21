@@ -138,3 +138,101 @@ class DocumentInput:
     filename: str | None
     filetype: Literal["txt", "pdf", "docx"]
     page_count: int | None = None
+
+
+# ───────────────────────────────────────────────────────────────────────
+# Rémunération (CVBOOST-16)
+# ───────────────────────────────────────────────────────────────────────
+
+Currency = Literal[
+    "EUR",
+    "USD",
+    "GBP",
+    "JPY",
+    "CHF",
+    "CAD",
+    "AUD",
+    "SEK",
+    "NOK",
+    "DKK",
+    "PLN",
+    "INR",
+    "CNY",
+    "",
+]
+"""Devise d'une evidence de rémunération.
+
+La chaîne vide signifie « aucune devise lue dans le texte » (montant sans
+symbole, composant en pourcentage, nombre d'actions…). Aucune devise n'est
+jamais déduite ni inventée.
+"""
+
+SalaryType = Literal[
+    "base",
+    "variable",
+    "bonus",
+    "stock",
+    "equity",
+    "rsu",
+    "package",
+    "total",
+    "unknown",
+]
+"""Nature de la rémunération détectée.
+
+``unknown`` = le texte ne dit pas de quelle composante il s'agit (ni
+« base », ni « variable », ni « bonus »…). Rien n'est deviné.
+"""
+
+Periodicity = Literal["annual", "monthly", "hourly", "unknown"]
+"""Périodicité *explicitement* lue dans le texte.
+
+``unknown`` = le texte n'indique aucune périodicité ; le montant est alors
+annualisé comme un montant annuel (convention de ``to_annual``), mais le
+champ continue de dire la vérité sur ce qui a été trouvé.
+"""
+
+
+@dataclass(frozen=True, slots=True)
+class SalaryEvidence:
+    """A remuneration figure extracted from an offer description.
+
+    Attributes:
+        raw_text: Exact source excerpt of the remuneration expression
+            (e.g. "45 000 € brut annuel").
+        source_offset: Character index of the expression in the source text.
+        source_excerpt: ~50 characters of context around source_offset.
+        min_annual_eur: Lower bound annualized, in the currency of the
+            evidence (see note below), or None when the figure is not a
+            monetary amount (percentage, number of units).
+        max_annual_eur: Upper bound annualized, same unit as
+            ``min_annual_eur`` (equal to it for a single amount).
+        currency: ISO code of the currency found in the text ("", when the
+            text carries no currency at all).
+        salary_type: Nature of the remuneration (see :data:`SalaryType`).
+        periodicity: Periodicity read in the text (see :data:`Periodicity`).
+        raw_amount_text: Exact amount text as written (e.g. "45 000 €",
+            "45-55k€", "$60,000", "20%").
+        raw_period_text: Exact periodicity text as written (e.g. "brut
+            annuel", "par an", "mensuel", "per year"), "" when absent.
+        confidence: Deterministic 0–1 score describing how sure the
+            extraction is (never a quality promise about the offer).
+
+    NOTE — ``min_annual_eur`` / ``max_annual_eur``: the historical field
+    names mention EUR but the values are expressed in ``currency``. No
+    foreign-exchange conversion is performed: this package has no rate
+    table, no network and never invents a converted amount. For a EUR offer
+    (the usual case) the two readings coincide.
+    """
+
+    raw_text: str
+    source_offset: int
+    source_excerpt: str
+    min_annual_eur: float | None
+    max_annual_eur: float | None
+    currency: Currency
+    salary_type: SalaryType
+    periodicity: Periodicity
+    raw_amount_text: str
+    raw_period_text: str
+    confidence: float

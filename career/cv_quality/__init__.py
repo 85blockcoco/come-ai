@@ -20,18 +20,22 @@ from __future__ import annotations
 
 from .models import (
     CVAnalysisResult,
+    Currency,
     DocumentInput,
     ExperienceEntry,
     Finding,
+    Periodicity,
     Provenance,
     ReadabilityScore,
+    SalaryEvidence,
+    SalaryType,
     SectionReading,
     STATUS_INFO,
     STATUS_OK,
     STATUS_RISK,
     STATUS_UNKNOWN,
 )
-from .parser import extract_text_from_bytes, extract_text_from_file
+from .parser import extract_salary, extract_text_from_bytes, extract_text_from_file
 from .structure import analyze_cv
 
 __all__ = [
@@ -46,6 +50,11 @@ __all__ = [
     "ExperienceEntry",
     "ReadabilityScore",
     "Provenance",
+    # Remuneration (CVBOOST-16)
+    "SalaryEvidence",
+    "Currency",
+    "SalaryType",
+    "Periodicity",
     # Status constants
     "STATUS_OK",
     "STATUS_INFO",
@@ -54,4 +63,5 @@ __all__ = [
     # Parser helpers
     "extract_text_from_file",
     "extract_text_from_bytes",
+    "extract_salary",
 ]
