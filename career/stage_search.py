@@ -11,7 +11,18 @@ from __future__ import annotations
 
 from typing import Any
 
-from .models import JOB_FAMILIES, clean_text, normalized_text, parse_date
+from .models import (
+    COUNTRY_LABELS,
+    DEFAULT_GEO_EXCLUDED_COUNTRIES,
+    DEFAULT_PREFERRED_COUNTRIES,
+    GEO_EXCLUDED_PENALTY,
+    GEO_PREFERRED_BOOST,
+    JOB_FAMILIES,
+    clean_text,
+    normalized_text,
+    parse_date,
+)
+from .offer_qualification import geo_score_for
 from .sources import SEARCH_TERMS
 from .education_access import assess_education_access
 from workspace_core import UserFacingError
@@ -168,6 +179,9 @@ def default_brief() -> dict[str, Any]:
         "roles": [],
         "countries": [],
         "cities": [],
+        "excluded_countries": [],
+        "excluded_cities": [],
+        "require_known_location": False,
         "start_date": "",
         "duration_months": None,
         "contract_types": ["stage", "cdd", "cdi", "vie"],
@@ -178,6 +192,10 @@ def default_brief() -> dict[str, Any]:
         "languages": [],
         "constraints": "",
         "ranking": {},
+        # Countries the ranking rewards, and the one it penalizes.  Both are
+        # editable: an explicitly empty list turns the signal off.
+        "preferred_countries": list(DEFAULT_PREFERRED_COUNTRIES),
+        "geo_excluded_countries": list(DEFAULT_GEO_EXCLUDED_COUNTRIES),
     }
 
 
@@ -280,12 +298,45 @@ def validate_brief(payload: Any) -> dict[str, Any]:
     education_preference = payload.get("education_preference", "bachelor_m1_then_m2")
     if education_preference not in {"bachelor_m1_then_m2", "any"}:
         raise UserFacingError("Préférence de niveau d’études inconnue.")
+    require_known_location = payload.get("require_known_location", False)
+    if type(require_known_location) is not bool:
+        raise UserFacingError("Le contrôle de localisation doit être activé ou désactivé explicitement.")
+    # The geographic ranking signal is configured by the person.  An explicit
+    # list wins, even an empty one (the penalty is then off); without any
+    # list, France stays penalized by default.  A field that is present but
+    # null means "not configured": the default then applies.
+    if payload.get("geo_excluded_countries") is not None:
+        geo_excluded_countries = _string_list(
+            payload.get("geo_excluded_countries"), "Les pays pénalisés au classement",
+            max_items=40, max_length=120,
+        )
+    elif payload.get("excluded_countries") is not None:
+        geo_excluded_countries = _string_list(
+            payload.get("excluded_countries"), "Les pays pénalisés au classement",
+            max_items=40, max_length=120,
+        )
+    else:
+        geo_excluded_countries = list(DEFAULT_GEO_EXCLUDED_COUNTRIES)
+    if payload.get("preferred_countries") is None:
+        preferred_countries = list(DEFAULT_PREFERRED_COUNTRIES)
+    else:
+        preferred_countries = _string_list(
+            payload.get("preferred_countries"), "Les pays ciblés",
+            max_items=40, max_length=120,
+        )
     return {
         "domains": domains,
         "other_domains": _string_list(payload.get("other_domains"), "Les autres métiers", max_items=12, max_length=120),
         "roles": _string_list(payload.get("roles"), "Les métiers", max_items=20, max_length=120),
         "countries": _string_list(payload.get("countries"), "Les pays", max_items=20, max_length=120),
         "cities": _string_list(payload.get("cities"), "Les villes", max_items=20, max_length=120),
+        "excluded_countries": _string_list(
+            payload.get("excluded_countries", []), "Les pays exclus", max_items=20, max_length=120
+        ),
+        "excluded_cities": _string_list(
+            payload.get("excluded_cities", []), "Les villes exclues", max_items=20, max_length=120
+        ),
+        "require_known_location": require_known_location,
         "start_date": start_text,
         "duration_months": duration,
         "contract_types": contract_types,
@@ -296,6 +347,8 @@ def validate_brief(payload: Any) -> dict[str, Any]:
         "languages": _string_list(payload.get("languages"), "Les langues", max_items=10, max_length=60),
         "constraints": clean_text(payload.get("constraints"), limit=2_000),
         "ranking": _ranking_values(payload.get("ranking")),
+        "preferred_countries": preferred_countries,
+        "geo_excluded_countries": geo_excluded_countries,
     }
 
 
@@ -308,6 +361,9 @@ def brief_is_configured(brief: dict[str, Any]) -> bool:
             brief.get("roles"),
             brief.get("countries"),
             brief.get("cities"),
+            brief.get("excluded_countries"),
+            brief.get("excluded_cities"),
+            brief.get("require_known_location") is True,
             clean_text(brief.get("start_date"), limit=32),
             clean_text(brief.get("duration_months")),
             clean_text(brief.get("study_level"), limit=120),
@@ -331,6 +387,16 @@ def vocabulary() -> dict[str, Any]:
         ],
         "ranking_min": RANKING_MIN_MULTIPLIER,
         "ranking_max": RANKING_MAX_MULTIPLIER,
+        # Countries the ranking rewards and the one it penalizes: the form can
+        # offer them without inventing a preference of its own.
+        "preferred_countries": list(DEFAULT_PREFERRED_COUNTRIES),
+        "geo_excluded_countries": list(DEFAULT_GEO_EXCLUDED_COUNTRIES),
+        "countries": [
+            {"code": code, "label": label}
+            for code, label in sorted(COUNTRY_LABELS.items())
+        ],
+        "geo_preferred_boost": GEO_PREFERRED_BOOST,
+        "geo_excluded_penalty": GEO_EXCLUDED_PENALTY,
     }
 
 
@@ -388,6 +454,21 @@ def _study_rank(value: Any) -> int | None:
         if any(_contains(text, pattern) for pattern in patterns):
             rank = candidate if rank is None else max(rank, candidate)
     return rank
+
+
+def _geo_excluded_countries(brief: dict[str, Any]) -> list[str]:
+    """Countries the ranking penalises, read from the brief the person saved.
+
+    A brief that names its own penalised list wins, even when that list is
+    empty (the penalty is then off).  A brief that only knows the hard
+    exclusions uses them.  A brief that names neither keeps France penalised
+    by default.
+    """
+    if "geo_excluded_countries" in brief:
+        return [clean_text(item, limit=120) for item in (brief.get("geo_excluded_countries") or [])]
+    if "excluded_countries" in brief:
+        return [clean_text(item, limit=120) for item in (brief.get("excluded_countries") or [])]
+    return list(DEFAULT_GEO_EXCLUDED_COUNTRIES)
 
 
 def score_brief_match(brief: dict[str, Any], job: dict[str, Any]) -> dict[str, Any]:
@@ -616,7 +697,19 @@ def score_brief_match(brief: dict[str, Any], job: dict[str, Any]) -> dict[str, A
         weighted_points += component["points"] * multiplier
         weighted_maximum += component["maximum"] * multiplier
 
-    score = round(100 * weighted_points / weighted_maximum) if weighted_maximum else None
+    base_score = round(100 * weighted_points / weighted_maximum) if weighted_maximum else None
+    # Geographic ranking signal: the country the source wrote decides the
+    # points, never the city.  ``base_score`` keeps the relevance of the
+    # offer on its own; ``score`` is the total every ranking uses, so an
+    # offer published in a penalised country can never lead a list.
+    geo_score, geo_reason = geo_score_for(
+        job.get("country"),
+        preferred_countries=brief.get("preferred_countries"),
+        excluded_countries=_geo_excluded_countries(brief),
+    )
+    score = None if base_score is None else max(0, min(100, base_score + geo_score))
+    if geo_score:
+        reasons.insert(0, f"{geo_reason} : {geo_score:+d} points au classement.")
     if score is None:
         label = "Aucun critère renseigné : classement neutre"
     elif score >= 70:
@@ -647,6 +740,10 @@ def score_brief_match(brief: dict[str, Any], job: dict[str, Any]) -> dict[str, A
 
     return {
         "score": score,
+        "base_score": base_score,
+        "geo_score": geo_score,
+        "geo_reason": geo_reason,
+        "total_score": score,
         "education_access": assess_education_access(job, brief.get("education_preference", "bachelor_m1_then_m2")),
         "label": label,
         "components": components[:MAX_COMPONENTS],

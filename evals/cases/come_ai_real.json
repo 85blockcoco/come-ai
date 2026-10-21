@@ -659,7 +659,7 @@
   "id": "REAL-010",
   "category": "documents",
   "title": "Qualification d'un stage finance via Career HTTP",
-  "objective": "Faire qualifier une offre fictive de six mois débutant en janvier via le vrai endpoint HTTP Career.",
+  "objective": "Faire qualifier une offre fictive de six mois débutant en janvier via le vrai endpoint HTTP Career, sans faire passer sa source synthétique pour une source live vérifiée.",
   "status": "supported",
   "required_features": [
    "career_http_qualification"
@@ -675,8 +675,8 @@
     "start_date": "2027-01-04",
     "duration_months": 6,
     "language": "English",
-    "country": "France",
-    "city": "Paris"
+    "country": "United Kingdom",
+    "city": "London"
    }
   },
   "expected": {
@@ -684,7 +684,7 @@
     "http_status": 200,
     "retained_count": 1,
     "qualification": {
-     "target_status": "conforming",
+     "target_status": "to_verify",
      "contract_type": "internship",
      "duration_min_months": 6
     }
@@ -704,7 +704,7 @@
    {
     "check": "exact_value",
     "path": "structured.qualification.target_status",
-    "value": "conforming"
+    "value": "to_verify"
    },
    {
     "check": "exact_value",

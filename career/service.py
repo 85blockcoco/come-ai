@@ -107,9 +107,13 @@ from .profile_import import (
     parse_profile_text,
 )
 from .profile_readiness import assess_profile_readiness
+from .qualification_persistence import (
+    decode_qualification_snapshot,
+    normalize_qualification_snapshot,
+)
 
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 # The Stage Hunter brief lives in career_settings as one JSON value: no
 # schema migration, and it is exported with the rest of the local settings.
 STAGE_SEARCH_SETTING_KEY = "stage_search_brief"
@@ -362,6 +366,17 @@ class CareerService:
                     CREATE INDEX jobs_deadline_idx ON jobs(deadline_date);
                     CREATE INDEX jobs_discovery_source_idx ON jobs(discovery_source_id, last_seen_at);
 
+                    CREATE TABLE job_qualification_snapshots (
+                        job_id TEXT PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
+                        schema_version INTEGER NOT NULL,
+                        facts_json TEXT NOT NULL DEFAULT '{}',
+                        provenance_json TEXT NOT NULL DEFAULT '{}',
+                        missing_fields_json TEXT NOT NULL DEFAULT '[]',
+                        reasons_json TEXT NOT NULL DEFAULT '[]',
+                        source_fingerprint TEXT NOT NULL DEFAULT '',
+                        updated_at TEXT NOT NULL
+                    );
+
                     CREATE TABLE applications (
                         id TEXT PRIMARY KEY,
                         job_id TEXT NOT NULL UNIQUE REFERENCES jobs(id) ON DELETE CASCADE,
@@ -547,7 +562,7 @@ class CareerService:
 
     def _migrate(self, connection: sqlite3.Connection, version: int) -> None:
         """Migrate in-place without touching a person's existing Career data."""
-        if version < 1 or version > 6:
+        if version < 1 or version > 7:
             raise UserFacingError("La base Career locale ne peut pas être mise à jour automatiquement.")
         if version == 1:
             self._migrate_to_v2(connection)
@@ -568,6 +583,9 @@ class CareerService:
             self._add_column_if_missing(
                 connection, "application_drafts", "quality_json", "TEXT NOT NULL DEFAULT '{}'"
             )
+            version = 7
+        if version == 7:
+            self._migrate_to_v8(connection)
 
     def _migrate_to_v2(self, connection: sqlite3.Connection) -> None:
         self._add_column_if_missing(connection, "candidate_profile", "contact_email", "TEXT NOT NULL DEFAULT ''")
@@ -692,6 +710,24 @@ class CareerService:
             );
             CREATE INDEX IF NOT EXISTS interview_sessions_updated_idx ON interview_sessions(status, updated_at DESC);
             CREATE INDEX IF NOT EXISTS interview_sessions_job_idx ON interview_sessions(job_id, updated_at DESC);
+            """
+        )
+
+    @staticmethod
+    def _migrate_to_v8(connection: sqlite3.Connection) -> None:
+        """Add derived qualification snapshots without rewriting source facts."""
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS job_qualification_snapshots (
+                job_id TEXT PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
+                schema_version INTEGER NOT NULL,
+                facts_json TEXT NOT NULL DEFAULT '{}',
+                provenance_json TEXT NOT NULL DEFAULT '{}',
+                missing_fields_json TEXT NOT NULL DEFAULT '[]',
+                reasons_json TEXT NOT NULL DEFAULT '[]',
+                source_fingerprint TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL
+            );
             """
         )
 
@@ -1823,6 +1859,9 @@ class CareerService:
         # Career screen immediately useful for this finance-focused product.
         # Every domain remains an editable checkbox and a saved choice wins.
         brief["domains"] = list(STAGE_DOMAINS)
+        brief["excluded_countries"] = ["France"]
+        brief["excluded_cities"] = ["Paris"]
+        brief["require_known_location"] = True
         # A stored brief can become invalid without any action from the person
         # (a vocabulary entry removed by an update, a manual database edit…).
         # A read must never fail hard and lock the whole tab: fall back to an
@@ -1830,10 +1869,19 @@ class CareerService:
         stored_brief_invalid = False
         if raw:
             try:
-                brief = validate_brief(json.loads(raw))
+                stored_payload = json.loads(raw)
+                if not isinstance(stored_payload, dict):
+                    raise TypeError("stored stage-search brief must be an object")
+                stored_payload.setdefault("excluded_countries", ["France"])
+                stored_payload.setdefault("excluded_cities", ["Paris"])
+                stored_payload.setdefault("require_known_location", True)
+                brief = validate_brief(stored_payload)
             except (json.JSONDecodeError, TypeError, ValueError, UserFacingError):
                 brief = default_brief()
                 brief["domains"] = list(STAGE_DOMAINS)
+                brief["excluded_countries"] = ["France"]
+                brief["excluded_cities"] = ["Paris"]
+                brief["require_known_location"] = True
                 stored_brief_invalid = True
         return {
             "brief": brief,
@@ -1844,7 +1892,7 @@ class CareerService:
             "disclaimer": (
                 "Critères enregistrés localement. Par défaut : Stage, CDD, CDI et VIE, "
                 "tous les domaines financiers, débuts de janvier à mars et stages d’au moins six mois. "
-                "Modifie les cases selon ta recherche."
+                "France et Paris sont exclus ; un pays inconnu reste à vérifier. Modifie les cases selon ta recherche."
             ),
         }
 
@@ -1875,6 +1923,9 @@ class CareerService:
                     allowed_contract_types=brief.get("contract_types"),
                     allowed_start_months=brief.get("start_months"),
                     minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
+                    excluded_countries=brief.get("excluded_countries"),
+                    excluded_cities=brief.get("excluded_cities"),
+                    require_known_location=brief.get("require_known_location", True),
                 ).to_dict()
                 _attach_qualification_presentation(stage_match, qualification)
                 matches.append({"job": job, "stage_match": stage_match, "qualification": qualification})
@@ -1901,6 +1952,9 @@ class CareerService:
                     allowed_contract_types=brief.get("contract_types"),
                     allowed_start_months=brief.get("start_months"),
                     minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
+                    excluded_countries=brief.get("excluded_countries"),
+                    excluded_cities=brief.get("excluded_cities"),
+                    require_known_location=brief.get("require_known_location", True),
                 ).to_dict()
                 matches.append({"job": job, "stage_match": None, "qualification": qualification,
                                 "education_access": score_brief_match(brief, job)["education_access"]})
@@ -2141,6 +2195,9 @@ class CareerService:
                 allowed_contract_types=brief.get("contract_types"),
                 allowed_start_months=brief.get("start_months"),
                 minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
+                excluded_countries=brief.get("excluded_countries"),
+                excluded_cities=brief.get("excluded_cities"),
+                require_known_location=brief.get("require_known_location", True),
             ).to_dict()
             if job.get("source_status") == "closed" or qualification["target_status"] == "non_conforming":
                 continue
@@ -2270,6 +2327,9 @@ class CareerService:
                         allowed_contract_types=brief.get("contract_types"),
                         allowed_start_months=brief.get("start_months"),
                         minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
+                        excluded_countries=brief.get("excluded_countries"),
+                        excluded_cities=brief.get("excluded_cities"),
+                        require_known_location=brief.get("require_known_location", True),
                     ).to_dict()
                     qualified_job = {**job, "qualification": qualification}
                     if (qualification["target_status"] != "non_conforming"
@@ -2781,9 +2841,42 @@ class CareerService:
             raise UserFacingError(f"{label} doit être compris entre {minimum} et {maximum}.")
         return number
 
+    @staticmethod
+    def _store_qualification_snapshot(
+        connection: sqlite3.Connection,
+        job_id: str,
+        qualification: dict[str, Any],
+        source_payload: dict[str, Any],
+    ) -> None:
+        """Replace derived metadata only when the current import supplied it."""
+        snapshot = normalize_qualification_snapshot(qualification, source_payload)
+        connection.execute(
+            """
+            INSERT INTO job_qualification_snapshots (
+                job_id, schema_version, facts_json, provenance_json,
+                missing_fields_json, reasons_json, source_fingerprint, updated_at
+            ) VALUES (
+                :job_id, :schema_version, :facts_json, :provenance_json,
+                :missing_fields_json, :reasons_json, :source_fingerprint, :updated_at
+            )
+            ON CONFLICT(job_id) DO UPDATE SET
+                schema_version = excluded.schema_version,
+                facts_json = excluded.facts_json,
+                provenance_json = excluded.provenance_json,
+                missing_fields_json = excluded.missing_fields_json,
+                reasons_json = excluded.reasons_json,
+                source_fingerprint = excluded.source_fingerprint,
+                updated_at = excluded.updated_at
+            """,
+            snapshot | {"job_id": job_id, "updated_at": utc_now()},
+        )
+
     def import_job(self, payload: dict[str, Any], *, availability: dict[str, Any] | None = None,
                    preserve_unknown_source_fields: bool = False) -> dict[str, Any]:
         current_availability = availability or self._current_availability_values()
+        qualification = payload.get("qualification")
+        if not isinstance(qualification, dict):
+            qualification = None
         job = self._normalize_job(payload, availability=current_availability)
         with self._lock, self._connection() as connection:
             existing = connection.execute("SELECT * FROM jobs WHERE dedup_key = ?", (job["dedup_key"],)).fetchone()
@@ -2835,6 +2928,8 @@ class CareerService:
                     job | {"id": job_id, "updated_at": now, "last_verified_at": now},
                 )
                 self._audit(connection, "job_refreshed_without_duplicate", "job", job_id)
+                if qualification is not None:
+                    self._store_qualification_snapshot(connection, job_id, qualification, payload)
                 created = False
             else:
                 job_id = f"job_{uuid.uuid4().hex}"
@@ -2858,6 +2953,8 @@ class CareerService:
                 )
                 audit_source = re.sub(r"[^a-z0-9_-]+", "_", job["source_name"].lower()).strip("_") or "manual"
                 self._audit(connection, f"job_imported_{audit_source}", "job", job_id)
+                if qualification is not None:
+                    self._store_qualification_snapshot(connection, job_id, qualification, payload)
                 created = True
         result = self.get_job(job_id)
         result["created"] = created
@@ -2936,8 +3033,18 @@ class CareerService:
                 """
                 SELECT jobs.*, applications.id AS application_id, applications.stage AS application_stage,
                        applications.receipt_status AS application_receipt_status,
-                       applications.approval_granted AS application_approval_granted
-                FROM jobs LEFT JOIN applications ON applications.job_id = jobs.id WHERE jobs.id = ?
+                       applications.approval_granted AS application_approval_granted,
+                       job_qualification_snapshots.schema_version AS qualification_schema_version,
+                       job_qualification_snapshots.facts_json AS qualification_facts_json,
+                       job_qualification_snapshots.provenance_json AS qualification_provenance_json,
+                       job_qualification_snapshots.missing_fields_json AS qualification_missing_json,
+                       job_qualification_snapshots.reasons_json AS qualification_reasons_json,
+                       job_qualification_snapshots.source_fingerprint AS qualification_source_fingerprint,
+                       job_qualification_snapshots.updated_at AS qualification_updated_at
+                FROM jobs
+                LEFT JOIN applications ON applications.job_id = jobs.id
+                LEFT JOIN job_qualification_snapshots ON job_qualification_snapshots.job_id = jobs.id
+                WHERE jobs.id = ?
                 """,
                 (job_id,),
             ).fetchone()
@@ -2979,8 +3086,17 @@ class CareerService:
         statement = f"""
             SELECT jobs.*, applications.id AS application_id, applications.stage AS application_stage,
                    applications.receipt_status AS application_receipt_status,
-                   applications.approval_granted AS application_approval_granted
-            FROM jobs LEFT JOIN applications ON applications.job_id = jobs.id
+                   applications.approval_granted AS application_approval_granted,
+                   job_qualification_snapshots.schema_version AS qualification_schema_version,
+                   job_qualification_snapshots.facts_json AS qualification_facts_json,
+                   job_qualification_snapshots.provenance_json AS qualification_provenance_json,
+                   job_qualification_snapshots.missing_fields_json AS qualification_missing_json,
+                   job_qualification_snapshots.reasons_json AS qualification_reasons_json,
+                   job_qualification_snapshots.source_fingerprint AS qualification_source_fingerprint,
+                   job_qualification_snapshots.updated_at AS qualification_updated_at
+            FROM jobs
+            LEFT JOIN applications ON applications.job_id = jobs.id
+            LEFT JOIN job_qualification_snapshots ON job_qualification_snapshots.job_id = jobs.id
             WHERE {' AND '.join(clauses)}
             ORDER BY shortlisted DESC,
                 CASE source_status WHEN 'open' THEN 0 WHEN 'unknown' THEN 1 ELSE 2 END,
@@ -3027,6 +3143,16 @@ class CareerService:
 
     def _serialize_job(self, row: sqlite3.Row, context: dict[str, Any] | None = None) -> dict[str, Any]:
         result = dict(row)
+        qualification_row = {
+            "qualification_schema_version": result.pop("qualification_schema_version", None),
+            "qualification_facts_json": result.pop("qualification_facts_json", None),
+            "qualification_provenance_json": result.pop("qualification_provenance_json", None),
+            "qualification_missing_json": result.pop("qualification_missing_json", None),
+            "qualification_reasons_json": result.pop("qualification_reasons_json", None),
+            "qualification_source_fingerprint": result.pop("qualification_source_fingerprint", None),
+            "qualification_updated_at": result.pop("qualification_updated_at", None),
+        }
+        result["qualification_facts"] = decode_qualification_snapshot(qualification_row)
         result["shortlisted"] = bool(result["shortlisted"])
         result["calendar_reasons"] = json.loads(result.pop("calendar_reasons_json") or "[]")
         result["deadline_status"] = deadline_state(result.get("deadline_date"), result.get("source_status", "unknown"))

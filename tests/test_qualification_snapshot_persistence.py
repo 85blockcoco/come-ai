@@ -1,0 +1,151 @@
+"""Regression tests for safe, source-attributed qualification persistence."""
+
+from __future__ import annotations
+
+import copy
+import sqlite3
+
+from career.application_prep import summarize_offer
+from career.service import CareerService, SCHEMA_VERSION
+
+
+def _payload(*, month: int = 1, quote: str = "starting January 2027") -> dict:
+    return {
+        "company": "Synthetic Bank",
+        "title": "Investment Banking Intern",
+        "source_name": "greenhouse",
+        "source_id": "synthetic-1",
+        "official_url": "https://example.test/jobs/synthetic-1",
+        "description_original": f"Internship {quote} for six months.",
+        "source_verified": True,
+        "qualification": {
+            "contract_type": "internship",
+            "contract_status": "confirmed",
+            "start_month": month,
+            "duration_min_months": 6,
+            "duration_max_months": 6,
+            "verification_status": "verified",
+            "target_status": "conforming",
+            "missing_fields": ["jour de début vérifiable"],
+            "reasons": ["Stage confirmé sur la source vérifiée."],
+            "provenance": {
+                "contract_type": {
+                    "value": "internship",
+                    "source": "title_passage",
+                    "quote": "Intern",
+                },
+                "start_month": {
+                    "value": month,
+                    "source": "description_passage",
+                    "quote": quote,
+                },
+                "duration_min_months": {
+                    "value": 6,
+                    "source": "description_passage",
+                    "quote": "six months",
+                },
+            },
+        },
+    }
+
+
+def test_import_does_not_mutate_payload_or_invent_exact_dates(tmp_path) -> None:
+    service = CareerService(tmp_path)
+    payload = _payload()
+    original = copy.deepcopy(payload)
+
+    result = service.import_job(payload)
+
+    assert payload == original
+    assert result["start_date"] is None
+    assert result["end_date"] is None
+    assert result["duration_months"] is None
+    assert result["employment_type"] == ""
+    facts = result["qualification_facts"]
+    assert facts["start_month"] == 1
+    assert facts["duration_min_months"] == 6
+    assert facts["contract_type"] == "internship"
+    assert facts["provenance"]["start_month"]["quote"] == "starting January 2027"
+
+
+def test_new_snapshot_schema_is_additive_and_versioned(tmp_path) -> None:
+    service = CareerService(tmp_path)
+    with sqlite3.connect(service.db_path) as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 8
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(job_qualification_snapshots)")}
+    assert {
+        "job_id",
+        "schema_version",
+        "facts_json",
+        "provenance_json",
+        "missing_fields_json",
+        "reasons_json",
+        "source_fingerprint",
+        "updated_at",
+    } <= columns
+
+
+def test_repeated_import_refreshes_snapshot_but_preserves_user_source_fields(tmp_path) -> None:
+    service = CareerService(tmp_path)
+    first = service.import_job(_payload())
+    with sqlite3.connect(service.db_path) as connection:
+        connection.execute(
+            "UPDATE jobs SET start_date = '2027-01-15', employment_type = 'user-confirmed' WHERE id = ?",
+            (first["id"],),
+        )
+
+    refreshed_payload = _payload(month=2, quote="starting February 2027")
+    refreshed_payload["start_date"] = ""
+    refreshed_payload["employment_type"] = ""
+    refreshed = service.import_job(refreshed_payload, preserve_unknown_source_fields=True)
+
+    assert refreshed["start_date"] == "2027-01-15"
+    assert refreshed["employment_type"] == "user-confirmed"
+    assert refreshed["qualification_facts"]["start_month"] == 2
+    assert refreshed["qualification_facts"]["provenance"]["start_month"]["quote"] == "starting February 2027"
+
+
+def test_import_without_qualification_keeps_last_snapshot(tmp_path) -> None:
+    service = CareerService(tmp_path)
+    first = service.import_job(_payload())
+    unqualified = _payload()
+    unqualified.pop("qualification")
+    unqualified["title"] = "Investment Banking Intern — refreshed"
+
+    refreshed = service.import_job(unqualified)
+
+    assert refreshed["id"] == first["id"]
+    assert refreshed["qualification_facts"]["start_month"] == 1
+
+
+def test_summary_uses_snapshot_and_keeps_unknowns_explicit(tmp_path) -> None:
+    service = CareerService(tmp_path)
+    qualified = service.import_job(_payload())
+    summary = summarize_offer(qualified)
+    assert summary["contract_type"] == "internship"
+    assert summary["start_month"] == 1
+    assert summary["duration_min_months"] == 6
+    assert summary["qualification_status"] == "conforming"
+    assert summary["qualification_missing"] == ["jour de début vérifiable"]
+
+    unknown_payload = _payload()
+    unknown_payload["source_id"] = "synthetic-2"
+    unknown_payload["official_url"] = "https://example.test/jobs/synthetic-2"
+    unknown_payload.pop("qualification")
+    unknown = service.import_job(unknown_payload)
+    unknown_summary = summarize_offer(unknown)
+    assert unknown_summary["contract_type"] == "unknown"
+    assert unknown_summary["start_month"] is None
+    assert unknown_summary["duration_min_months"] is None
+    assert unknown_summary["qualification_status"] == "to_verify"
+
+
+def test_snapshot_is_removed_with_its_job(tmp_path) -> None:
+    service = CareerService(tmp_path)
+    job = service.import_job(_payload())
+    service.delete_job(job["id"])
+    with sqlite3.connect(service.db_path) as connection:
+        count = connection.execute(
+            "SELECT COUNT(*) FROM job_qualification_snapshots WHERE job_id = ?", (job["id"],)
+        ).fetchone()[0]
+    assert count == 0

@@ -36,6 +36,94 @@ PRIMARY_LOCATIONS = (
 )
 
 JOB_STATES = {"discovered", "shortlisted", "rejected", "archived"}
+
+# Countries a person targets when their search brief names none.  These are
+# explicit ISO-2 codes written by the person or by a source, never a guess
+# built from a city name.
+DEFAULT_PREFERRED_COUNTRIES: tuple[str, ...] = (
+    "DE", "GB", "CH", "NL", "LU", "BE", "IE", "AT", "SE", "NO", "DK", "FI",
+    "ES", "IT", "PT", "PL", "CZ", "HU", "RO", "BG", "HR", "SI", "SK", "EE",
+    "LV", "LT", "MT", "CY",
+)
+# The country the ranking penalises when the person has not configured one.
+DEFAULT_GEO_EXCLUDED_COUNTRIES: tuple[str, ...] = ("FR",)
+# Points added once to an offer published in a targeted country.
+GEO_PREFERRED_BOOST = 20
+# Points removed once from an offer published in an excluded country.
+GEO_EXCLUDED_PENALTY = -50
+
+# Closed list of the country names and codes a source may write.  A value that
+# is not in this table names no country: it stays unknown instead of being
+# resolved through a city, a region or a guess.
+_COUNTRY_ALIASES: dict[str, str] = {
+    "at": "AT", "austria": "AT", "autriche": "AT", "osterreich": "AT",
+    "au": "AU", "australia": "AU",
+    "be": "BE", "belgium": "BE", "belgique": "BE", "belgie": "BE",
+    "bg": "BG", "bulgaria": "BG", "bulgarie": "BG",
+    "br": "BR", "brazil": "BR", "bresil": "BR",
+    "ca": "CA", "canada": "CA",
+    "ch": "CH", "switzerland": "CH", "suisse": "CH", "schweiz": "CH",
+    "cn": "CN", "china": "CN", "chine": "CN",
+    "cy": "CY", "cyprus": "CY", "chypre": "CY",
+    "cz": "CZ", "czechia": "CZ", "czech republic": "CZ", "republique tcheque": "CZ",
+    "de": "DE", "germany": "DE", "deutschland": "DE", "allemagne": "DE",
+    "dk": "DK", "denmark": "DK", "danemark": "DK", "dannerke": "DK",
+    "ee": "EE", "estonia": "EE", "estonie": "EE",
+    "es": "ES", "spain": "ES", "espagne": "ES", "spanien": "ES", "espana": "ES",
+    "fi": "FI", "finland": "FI", "finlande": "FI", "suomi": "FI",
+    "fr": "FR", "fra": "FR", "france": "FR", "french republic": "FR",
+    "republique francaise": "FR", "republique de france": "FR",
+    "gb": "GB", "gbr": "GB", "uk": "GB", "u k": "GB", "united kingdom": "GB",
+    "great britain": "GB", "britain": "GB", "royaume uni": "GB", "royaume unis": "GB",
+    "grande bretagne": "GB", "angleterre": "GB",
+    "gr": "GR", "greece": "GR", "grece": "GR",
+    "hr": "HR", "croatia": "HR", "croatie": "HR",
+    "hu": "HU", "hungary": "HU", "hongrie": "HU", "magyarorszag": "HU",
+    "ie": "IE", "irl": "IE", "ireland": "IE", "irlande": "IE",
+    "is": "IS", "iceland": "IS", "islande": "IS",
+    "it": "IT", "italy": "IT", "italie": "IT", "italia": "IT",
+    "lt": "LT", "lithuania": "LT", "lituanie": "LT",
+    "lu": "LU", "luxembourg": "LU", "luxemburg": "LU",
+    "lv": "LV", "latvia": "LV", "lettonie": "LV",
+    "ma": "MA", "morocco": "MA", "maroc": "MA",
+    "mt": "MT", "malta": "MT", "malte": "MT",
+    "mx": "MX", "mexico": "MX", "mexique": "MX",
+    "nl": "NL", "nld": "NL", "netherlands": "NL", "the netherlands": "NL",
+    "pays bas": "NL", "nederland": "NL", "holland": "NL",
+    "no": "NO", "norway": "NO", "norvege": "NO", "norge": "NO",
+    "pl": "PL", "poland": "PL", "pologne": "PL", "polska": "PL",
+    "pt": "PT", "portugal": "PT",
+    "ro": "RO", "romania": "RO", "roumanie": "RO", "romanya": "RO",
+    "se": "SE", "sweden": "SE", "suede": "SE", "suède": "SE",
+    "schweden": "SE", "sverige": "SE",
+    "sg": "SG", "singapore": "SG", "singapour": "SG",
+    "si": "SI", "slovenia": "SI", "slovenie": "SI", "slovenija": "SI",
+    "sk": "SK", "slovakia": "SK", "slovaquie": "SK", "slovensko": "SK",
+    "us": "US", "usa": "US", "united states": "US",
+    "united states of america": "US", "etats unis": "US", "etats unis d amerique": "US",
+}
+
+# Labels used by the interface to render the country lists without inventing
+# a geography of its own.
+COUNTRY_LABELS: dict[str, str] = {
+    "AT": "Autriche", "AU": "Australie", "BE": "Belgique", "BG": "Bulgarie",
+    "BR": "Brésil", "CA": "Canada", "CH": "Suisse", "CN": "Chine", "CY": "Chypre",
+    "CZ": "Tchéquie", "DE": "Allemagne", "DK": "Danemark", "EE": "Estonie",
+    "ES": "Espagne", "FI": "Finlande", "FR": "France", "GB": "Royaume-Uni",
+    "GR": "Grèce", "HR": "Croatie", "HU": "Hongrie", "IE": "Irlande",
+    "IS": "Islande", "IT": "Italie", "LT": "Lituanie", "LU": "Luxembourg",
+    "LV": "Lettonie", "MA": "Maroc", "MT": "Malte", "MX": "Mexique",
+    "NL": "Pays-Bas", "NO": "Norvège", "PL": "Pologne", "PT": "Portugal",
+    "RO": "Roumanie", "SE": "Suède", "SG": "Singapour", "SI": "Slovénie",
+    "SK": "Slovaquie", "US": "États-Unis",
+}
+
+# Every wording of every country, grouped by ISO-2 code.  It lets an
+# exclusion written as a code ("FR") reach an offer published as a name
+# ("France"), and the other way round.
+_COUNTRY_BY_CODE: dict[str, tuple[str, ...]] = {}
+for _alias, _code in _COUNTRY_ALIASES.items():
+    _COUNTRY_BY_CODE[_code] = tuple(sorted({*_COUNTRY_BY_CODE.get(_code, ()), _alias}))
 AVAILABILITY_STATES = {"open", "closed", "unknown"}
 APPLICATION_STAGES = {
     "to_review",
@@ -91,6 +179,37 @@ def normalized_text(value: Any) -> str:
     text = unicodedata.normalize("NFKD", clean_text(value).lower())
     text = "".join(character for character in text if not unicodedata.combining(character))
     return re.sub(r"[^a-z0-9]+", " ", text).strip()
+
+
+def canonical_country_code(value: Any) -> str:
+    """ISO-2 code of the country a source wrote, or ``''`` when it names none.
+
+    The lookup is a closed list of country names and codes.  A city name
+    ("Frankfurt") is never resolved into a country: an offer whose country is
+    unknown stays unknown, because a city never proves a country.
+    """
+    text = clean_text(value, limit=120)
+    if not text:
+        return ""
+    for part in re.split(r"[,;/|]", text):
+        token = normalized_text(part)
+        if not token:
+            continue
+        code = _COUNTRY_ALIASES.get(token)
+        if code:
+            return code
+        # "Remote Germany" or "Germany (Berlin)": keep looking for a word that
+        # names a country, never resolve the city that stands next to it.
+        for word in token.split(" "):
+            code = _COUNTRY_ALIASES.get(word)
+            if code:
+                return code
+    return ""
+
+
+def country_wordings(code: str) -> tuple[str, ...]:
+    """Every wording that names the given country, in comparable form."""
+    return _COUNTRY_BY_CODE.get(str(code or "").strip().upper(), ())
 
 
 def parse_date(value: Any, field_label: str) -> date | None:
