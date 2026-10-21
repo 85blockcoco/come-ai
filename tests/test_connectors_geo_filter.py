@@ -248,6 +248,29 @@ def test_welcome_jungle_excludes_france():
     assert health["raw_count"] == 3
 
 
+def test_html_connectors_exclude_a_location_written_with_a_dash():
+    """A source may write "Paris - France": the country is still read."""
+    for connector_class, provider, path in (
+        (WelcomeJungleConnector, "welcome_jungle", "/fr/companies/synthetic/jobs/{identifier}"),
+        (JobTeaserConnector, "jobteaser", "/jobs/{identifier}"),
+        (TalentComConnector, "talent_com", "/job/{identifier}"),
+        (ApecConnector, "apec", "/emploi/{identifier}"),
+    ):
+        fetch = FixtureFetch(html_cards(mixed_jobs(2, location="Paris - France"), path))
+        connector = connector_class(clock=lambda: "2026-10-20T01:00:00Z", fetch=fetch)
+        payload = connector.discover_internships(source(provider), selection_brief=default_brief())
+        assert payload.jobs == (), connector_class.__name__
+        assert connector_class.health_check()["excluded_by_country"] == {"FR": 2}, connector_class.__name__
+
+
+def test_country_from_source_reads_a_location_written_with_a_dash():
+    """The dash separates the city from the country, exactly like a comma."""
+    assert country_from_source("Paris - France") == "FR"
+    assert country_from_source("Frankfurt - Germany") == "DE"
+    # A dash without spaces belongs to the word itself, never a separator.
+    assert country_from_source("Le-Mans") == ""
+
+
 def test_jobteaser_excludes_france():
     fetch = FixtureFetch(html_cards(mixed_jobs(2, location=FRANCE), "/jobs/{identifier}"))
     connector = JobTeaserConnector(clock=lambda: "2026-10-20T01:00:00Z", fetch=fetch)
@@ -370,6 +393,26 @@ def test_every_connector_exposes_the_geographic_metrics():
         health = connector.health_check()
         assert set(health) >= {"raw_count", "filtered_count", "excluded_count", "excluded_by_country"}
         assert isinstance(health["excluded_by_country"], dict)
+
+
+def test_countries_exclude_empty():
+    """An emptied exclusion list excludes nothing: France comes back."""
+    assert canonical_country_codes([]) == ()
+    assert canonical_country_codes(None) == ()
+    assert validate_brief({"countries_exclude": []})["countries_exclude"] == []
+
+    connector = GreenhouseJobBoardConnector(FeedTransport({"jobs": [
+        greenhouse_job("fr-1", location=FRANCE),
+        greenhouse_job("de-1", location=GERMANY),
+    ]}))
+    payload = connector.discover_internships(
+        GreenhouseBoard("synthetic", "Synthetic Finance", "synthetic"),
+        selection_brief=validate_brief({"countries_exclude": []}),
+        countries_exclude=[],
+    )
+    assert {job["source_id"] for job in payload.jobs} == {"fr-1", "de-1"}
+    assert payload.excluded_by_country == {}
+    assert connector.health_check()["excluded_by_country"] == {}
 
 
 def test_mixed_countries_only_excludes_the_excluded_one():

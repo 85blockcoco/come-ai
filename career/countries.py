@@ -131,6 +131,26 @@ def _fold(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", text).strip()
 
 
+# Separators a source uses between a city and its country: a comma, a
+# parenthesis, a slash, a pipe, or a dash written with spaces around it.
+# A dash without spaces belongs to the word itself ("Le-Mans") and is never
+# a separator.
+_LOCATION_SEPARATORS = r"[,;(/|]|\s+[-\u2013\u2014]\s+"
+
+
+def split_location(value: Any) -> list[str]:
+    """Split a published location into its parts.
+
+    A source writes a city and its country with a comma, a parenthesis, a
+    slash, a pipe or a spaced dash.  Each part is read on its own, so the
+    country is found wherever the source puts it.
+    """
+    text = clean_text(value, limit=300)
+    if not text:
+        return []
+    return [part.strip() for part in re.split(_LOCATION_SEPARATORS, text) if part.strip()]
+
+
 def canonicalize_country(value: Any) -> str:
     """Return the ISO 3166-1 alpha-2 code of a source country wording.
 
@@ -162,13 +182,17 @@ def country_from_source(country: Any = None) -> str:
     fact and never a guessed one.  A source that publishes a whole location
     in its country field (``"London, United Kingdom"``) still resolves: the
     explicit country is the last segment of that wording.
+
+    A location written with a spaced dash (``"Paris - France"``) is read the
+    same way: the dash separates the city from the country, exactly like a
+    comma does.
     """
     code = canonicalize_country(country)
     if code:
         return code
     text = clean_text(country, limit=160)
     if text:
-        for piece in reversed(re.split(r"[,;/|]", text)):
+        for piece in reversed(re.split(_LOCATION_SEPARATORS, text)):
             code = canonicalize_country(piece)
             if code:
                 return code

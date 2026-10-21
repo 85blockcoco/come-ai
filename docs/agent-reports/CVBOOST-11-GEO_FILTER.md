@@ -26,7 +26,7 @@ rejetait l'offre au moment de la qualifier. Le filtre est désormais poussé
 | `career/connectors/jobteaser.py` | Idem |
 | `career/connectors/talent_com.py` | Idem |
 | `career/connectors/apec.py` | Idem |
-| `tests/test_connectors_geo_filter.py` | **Nouveau** — 30 tests synthétiques (aucun socket ouvert) |
+| `tests/test_connectors_geo_filter.py` | **Nouveau** — 33 tests synthétiques (aucun socket ouvert) |
 | `docs/agent-reports/CVBOOST-11-GEO_FILTER.md` | Ce rapport |
 
 Fichiers de test existants mis à jour (conséquence assumée du changement de
@@ -58,7 +58,13 @@ Mission 13 (« pas de géo-inférence »).
 
 `country_from_source()` accepte en revanche une localisation publiée en
 entier dans le champ pays (`"London, United Kingdom"`) : le dernier segment
-explicite est alors résolu.
+explicite est alors résolu. Les séparateurs lus sont la virgule, la
+parenthèse, la barre oblique, la barre verticale et le tiret **entouré
+d'espaces** (`"Paris - France"` → `FR`) ; un tiret collé au mot
+(`"Le-Mans"`) appartient au mot et n'est jamais un séparateur. Les quatre
+connecteurs HTML découpent leur localisation avec la même liste de
+séparateurs, pour qu'une source qui écrit `Paris - France` soit filtrée
+comme une source qui écrit `Paris, France`.
 
 ### 2.2 Où le filtre est appliqué
 
@@ -108,14 +114,67 @@ discover_stage_offers(connectors, sources, selection_brief=None,
 exclue. Le point d'entrée ne filtre rien lui-même, il transmet la liste à
 chaque connecteur, qui l'applique de son côté.
 
+### 2.5 Deux ajustements de lecture, au service de la mesure
+
+Ces deux ajustissements ne changent pas la règle de filtrage ; ils la rendent
+applicable aux formes réelles que publient les sources.
+
+* **Séparateurs de localisation.** `country_from_source()` (le vocabulaire) et
+  `_parse_location()` (les quatre connecteurs HTML) découpent désormais la
+  localisation sur les mêmes séparateurs : virgule, parenthèse, barre
+  oblique, barre verticale et tiret entouré d'espaces. Une source qui écrit
+  `Paris - France` est donc filtrée comme une source qui écrit
+  `Paris, France`. Welcome to the Jungle ne découpait que sur la virgule et
+  la parenthèse : il rejoind les trois autres connecteurs.
+* **Chaîne de confiance TLS.** Les quatre connecteurs HTML lisaient en HTTPS
+  avec le contexte SSL par défaut. Sur un macOS dont le trousseau ne
+  contient pas la racine Mozilla, chaque requête échouait en
+  `CERTIFICATE_VERIFY_FAILED` **avant** d'atteindre la source. Ils
+  utilisent désormais le même repli `certifi` que le transport Greenhouse
+  (`career/discovery.py`) et les ATS publics
+  (`career/connectors/public_ats.py`) : la vérification du certificat n'est
+  pas affaiblie, seule la chaîne de confiance l'est. Sans ce repli, les
+  « runs réels » des quatre connecteurs HTML ne sont pas mesurables.
+
 ---
 
 ## 3. Métriques : `excluded_by_country` par connecteur
 
-Trois exécutions consécutives par connecteur sur un flux synthétique mixte
-(120 offres : France, Allemagne, Royaume-Uni). **Aucun appel réseau** : les
-connecteurs lisent un flux injecté, comme le fait la suite de tests. Les
-compteurs viennent de `health_check()`.
+### 3.1 Trois exécutions réelles (2026-10-21)
+
+Lecture seule des sources publiques du registre curaté
+(`career/source_registry.py`), `countries_exclude=["FR"]`, aucune soumission,
+aucune écriture locale. Les compteurs proviennent de `health_check()` et de
+`DiscoveryPayload.excluded_by_country`.
+
+| Connecteur | Sources lues | `raw_count` | `filtered_count` | `excluded_count` | `excluded_by_country` | Offres gardées | **Offres FR gardées** | Runs 1 / 2 / 3 |
+|---|---|---|---|---|---|---|---|---|
+| greenhouse | 4 boards × 3 | 427 | 267 | 124 | `{"FR": 3}` | 36 | **0** | identiques |
+| lever | 3 sources × 3 | 203 | 64 | 138 | `{"FR": 74}` | 1 | **0** | 1 run : une board a renvoyé un 500 transitoire, relue au run 2 |
+| ashby | 3 sources × 3 | 190 | 42 | 123 | `{"FR": 72}` | 25 | **0** | identiques |
+| smartrecruiters | 0 (aucune source curée) | 0 | 0 | 0 | `{}` | 0 | **0** | — |
+| welcome_jungle | 1 × 3 | 0 | 0 | 0 | `{}` | 0 | **0** | identiques |
+| jobteaser | 1 × 3 | 0 | 0 | 0 | `{}` | 0 | **0** | identiques |
+| talent_com | 1 × 3 | 0 | 0 | 0 | `{}` | 0 | **0** | identiques |
+| apec | 1 × 3 | 0 | 0 | 0 | `{}` | 0 | **0** | identiques |
+
+**Résultat central : 0 offre française conservée, sur 820 lignes brutes lues
+et 149 offres écartées pour cause de pays** (les 3 offres françaises de la
+board *Lincoln International*, 74 sur Lever, 72 sur Ashby).
+
+**Fait constaté sur les 4 connecteurs HTML** : les pages publiques
+répondent (Welcome to the Jungle : 556 Ko ; Talent.com : 625 Ko) mais les
+cartes d'offres sont rendues côté client : le parseur n'extrait 0 ligne sur
+les pages publiques du 2026-10-21. Leurs métriques de filtrage sont donc
+**non observables en conditions réelles** et sont couvertes exclusivement
+par fixtures synthétiques (§3.2). Ce comportement d'extraction relève de la
+Mission 06, pas de cette mission ; il est signalé ici parce qu'il rend les
+chiffres « runs réels » incomplets pour ces quatre connecteurs.
+
+### 3.2 Trois exécutions synthétiques (déterministes, hors réseau)
+
+Flux mixte injecté (France, Allemagne, Royaume-Uni). Les compteurs viennent
+de `health_check()`, comme dans la suite de tests.
 
 | Connecteur | Offres lues | Offres exclues | `excluded_by_country` | Offres retournées | Runs 1 / 2 / 3 |
 |---|---|---|---|---|---|
@@ -146,7 +205,7 @@ malformée).
 
 ## 4. Tests
 
-`tests/test_connectors_geo_filter.py` — 30 tests synthétiques, aucun socket
+`tests/test_connectors_geo_filter.py` — 33 tests synthétiques, aucun socket
 ouvert :
 
 | Cas couvert | Test |
@@ -156,6 +215,7 @@ ouvert :
 | Un libellé inconnu n'invente rien | `test_canonicalize_country_reads_explicit_wording_only` |
 | Liste d'exclusion sans doublon ni pays inventé | `test_canonical_country_codes_keeps_order_and_drops_unknown_wordings` |
 | Localisation publiée en entier dans le champ pays | `test_country_from_source_resolves_a_location_published_in_the_country_field` |
+| Localisation écrite avec un tiret (`"Paris - France"`) | `test_country_from_source_reads_a_location_written_with_a_dash` |
 | France exclue par défaut | `test_default_exclusion_is_france` |
 | Greenhouse écarte la France | `test_greenhouse_excludes_france` |
 | `office.country_code` lu comme fait publié | `test_greenhouse_office_country_code_is_used_to_deduce_the_country` |
@@ -163,9 +223,11 @@ ouvert :
 | Défaut sans brief | `test_greenhouse_default_is_fr_excluded` |
 | France revenue via le brief | `test_greenhouse_brief_can_bring_france_back` |
 | Les 4 connecteurs HTML | `test_{welcome_jungle,jobteaser,talent_com,apec}_excludes_france` |
+| Les 4 connecteurs HTML, localisation au tiret | `test_html_connectors_exclude_a_location_written_with_a_dash` |
 | Les autres pays passent | `test_html_connectors_keep_the_offers_of_other_countries` |
 | Casse insensible | `test_html_connector_case_insensitive_country_variants_are_excluded` |
 | France autorisée explicitement | `test_html_connector_can_be_told_to_allow_france` |
+| Liste d'exclusion vidée | `test_countries_exclude_empty` |
 | ATS publics | `test_public_ats_connectors_exclude_france` |
 | Compteurs par pays | `test_metrics_excluded_count` |
 | Métriques exposées partout | `test_every_connector_exposes_the_geographic_metrics` |
@@ -224,11 +286,12 @@ classement.
 ## 7. Commandes de validation
 
 ```
-.venv/bin/python -m pytest -q                            → 1397 passed, 1 skipped
-.venv/bin/python -m pytest -q tests/test_connectors_geo_filter.py → 30 passed
+.venv/bin/python -m pytest -q                            → 1400 passed, 1 skipped
+.venv/bin/python -m pytest -q tests/test_connectors_geo_filter.py → 33 passed
 .venv/bin/python -m ruff check .                         → All checks passed!
 git diff --check                                          → propre
+./checklist_codex.sh                                     → TOUT VERT
 ```
 
-La suite complète passe de **1367** tests (base `main`) à **1397** :
-1367 inchangés + 30 nouveaux. Aucune régression.
+La suite complète passe de **1367** tests (base `main`) à **1400** :
+1367 inchangés + 33 nouveaux. Aucune régression.
