@@ -541,3 +541,25 @@ button, a, .career-tab { transition: background-color .16s ease, border-color .1
   .application-filters label { flex: 1 1 100%; }
   .application-filters select { width: 100%; }
 }
+
+/* SK-10 — profil candidat : approbation champ par champ des faits prouvés. */
+.candidate-profile-builder { display: grid; gap: 12px; }
+.candidate-facts-counts { display: flex; flex-wrap: wrap; gap: 7px; }
+.fact-count { padding: 4px 11px; border: 1px solid var(--border); border-radius: 16px; background: #fff; color: var(--muted); font-size: .74rem; }
+.fact-count-pending { border-color: #e5c98a; background: var(--warning-soft); color: var(--warning); }
+.fact-count-approved { border-color: #cfe3d8; background: var(--good-soft); color: var(--good); }
+.candidate-facts-list { display: grid; gap: 10px; }
+.candidate-fact { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface-soft); }
+.candidate-fact-proposed { border-left: 3px solid var(--warning); }
+.candidate-fact-approved { border-left: 3px solid var(--good); }
+.candidate-fact-modified { border-left: 3px solid var(--accent); }
+.candidate-fact-rejected, .candidate-fact-suspended { opacity: .72; border-left: 3px solid var(--faint); }
+.candidate-fact-head { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.candidate-fact-kind, .candidate-fact-status, .candidate-fact-ocr { padding: 3px 9px; border-radius: 12px; background: #fff; border: 1px solid var(--border); font-size: .7rem; }
+.candidate-fact-ocr { border-color: #e5c98a; background: var(--warning-soft); color: var(--warning); }
+.candidate-fact-label { margin: 0; font-size: .88rem; font-weight: 650; }
+.candidate-fact-evidence { margin: 0; color: var(--muted); font-size: .72rem; }
+.candidate-fact-quote { margin: 0; padding: 7px 10px; border-left: 2px solid var(--border); background: #fff; color: var(--ink); font-size: .76rem; line-height: 1.4; }
+.candidate-fact-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.candidate-fact-correction { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.candidate-fact-correction input { flex: 1 1 220px; min-height: 34px; padding: 5px 9px; border: 1px solid var(--border); border-radius: 8px; background: #fff; color: var(--ink); font-size: .82rem; }

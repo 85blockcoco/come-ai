@@ -217,6 +217,35 @@
                 <p id="profile-import-history-empty" class="empty-state compact-empty">Aucun CV ou export de profil importé.</p>
               </section>
 
+              <section id="candidate-profile-builder" class="panel candidate-profile-builder" aria-labelledby="candidate-profile-builder-title">
+                <div class="panel-heading compact-heading">
+                  <div>
+                    <p class="eyebrow">Preuves approuvées</p>
+                    <h3 id="candidate-profile-builder-title">Mon profil accepté, fait par fait</h3>
+                  </div>
+                  <button id="candidate-facts-export" class="quiet-button" type="button">Exporter mon profil</button>
+                </div>
+                <p class="panel-help">Chaque fait proposé garde sa source : page, caractères et citation exacte. Rien n’est validé automatiquement, y compris ce qui vient de l’OCR. Un fait proposé, rejeté ou mis de côté ne peut pas justifier une correspondance ni une candidature.</p>
+                <form id="candidate-facts-form" class="form-stack">
+                  <div class="form-row two-columns">
+                    <label>Document local déjà importé
+                      <select id="candidate-facts-import"><option value="">— Aucun document sélectionné —</option></select>
+                    </label>
+                    <label>Ou colle un texte à analyser
+                      <textarea id="candidate-facts-text" rows="3" maxlength="100000" placeholder="Texte de CV copié : rien n’est enregistré sans ta validation."></textarea>
+                    </label>
+                  </div>
+                  <button id="candidate-facts-propose" class="secondary-button" type="submit">Proposer des faits à vérifier</button>
+                </form>
+                <p id="candidate-facts-status" class="panel-help" role="status" aria-live="polite" hidden></p>
+                <div id="candidate-facts-counts" class="candidate-facts-counts" aria-live="polite"></div>
+                <div id="candidate-facts-list" class="candidate-facts-list"></div>
+                <p id="candidate-facts-empty" class="empty-state compact-empty">Aucun fait proposé pour l’instant. Importe un CV ou colle un texte pour obtenir des propositions à vérifier.</p>
+                <div class="inline-actions">
+                  <button id="candidate-facts-apply" class="secondary-button" type="button">Appliquer les faits approuvés à mon profil</button>
+                </div>
+              </section>
+
               <section class="career-intake-details" aria-label="Mini-entretien Career">
                 <div class="panel-heading compact-heading">
                   <div>
@@ -734,5 +763,6 @@
     </div>
     <script src="/career-static/cv_plan.js" defer></script>
     <script src="/career-static/career.js" defer></script>
+    <script src="/career-static/js/profile-builder.js" defer></script>
   </body>
 </html>

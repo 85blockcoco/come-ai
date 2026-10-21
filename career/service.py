@@ -120,6 +120,22 @@ from .profile_import import (
     parse_profile_text,
 )
 from .profile_readiness import assess_profile_readiness
+from .candidate_profile import (
+    CandidateProfile,
+    Evidence,
+    Fact,
+    SOURCE_EMBEDDED_TEXT,
+    SOURCE_OCR,
+    STATUS_APPROVED,
+    STATUS_MODIFIED,
+    STATUS_PROPOSED,
+    apply_decision,
+    export_profile,
+    merge_usable_facts,
+    serialize_fact,
+)
+from .profile_builder import build_fact_proposals
+from .cv_quality.parser import extract_pages_from_bytes
 from .qualification_persistence import (
     decode_qualification_snapshot,
     normalize_qualification_snapshot,
@@ -127,7 +143,7 @@ from .qualification_persistence import (
 )
 
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 # The Stage Hunter brief lives in career_settings as one JSON value: no
 # schema migration, and it is exported with the rest of the local settings.
 STAGE_SEARCH_SETTING_KEY = "stage_search_brief"
@@ -511,6 +527,27 @@ class CareerService:
                     );
                     CREATE INDEX interview_sessions_updated_idx ON interview_sessions(status, updated_at DESC);
                     CREATE INDEX interview_sessions_job_idx ON interview_sessions(job_id, updated_at DESC);
+
+                    CREATE TABLE candidate_facts (
+                        id TEXT PRIMARY KEY,
+                        batch_id TEXT NOT NULL DEFAULT '',
+                        kind TEXT NOT NULL CHECK (kind IN ('skill', 'experience', 'education', 'language', 'project', 'certification', 'date', 'contact', 'other')),
+                        label TEXT NOT NULL,
+                        value TEXT NOT NULL DEFAULT '',
+                        status TEXT NOT NULL DEFAULT 'proposed' CHECK (status IN ('proposed', 'approved', 'rejected', 'modified', 'suspended')),
+                        original_label TEXT NOT NULL DEFAULT '',
+                        original_value TEXT NOT NULL DEFAULT '',
+                        evidence_json TEXT NOT NULL DEFAULT '{}',
+                        meta_json TEXT NOT NULL DEFAULT '{}',
+                        note TEXT NOT NULL DEFAULT '',
+                        source_document TEXT NOT NULL DEFAULT '',
+                        source_method TEXT NOT NULL DEFAULT 'embedded_text',
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL,
+                        decided_at TEXT
+                    );
+                    CREATE INDEX candidate_facts_status_idx ON candidate_facts(status, created_at DESC);
+                    CREATE INDEX candidate_facts_batch_idx ON candidate_facts(batch_id);
                     """
                 )
                 connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
@@ -584,7 +621,7 @@ class CareerService:
 
     def _migrate(self, connection: sqlite3.Connection, version: int) -> None:
         """Migrate in-place without touching a person's existing Career data."""
-        if version < 1 or version > 7:
+        if version < 1 or version > 8:
             raise UserFacingError("La base Career locale ne peut pas être mise à jour automatiquement.")
         if version == 1:
             self._migrate_to_v2(connection)
@@ -608,6 +645,9 @@ class CareerService:
             version = 7
         if version == 7:
             self._migrate_to_v8(connection)
+            version = 8
+        if version == 8:
+            self._migrate_to_v9(connection)
 
     def _migrate_to_v2(self, connection: sqlite3.Connection) -> None:
         self._add_column_if_missing(connection, "candidate_profile", "contact_email", "TEXT NOT NULL DEFAULT ''")
@@ -751,6 +791,34 @@ class CareerService:
                 source_fingerprint TEXT NOT NULL DEFAULT '',
                 updated_at TEXT NOT NULL
             );
+            """
+        )
+
+    @staticmethod
+    def _migrate_to_v9(connection: sqlite3.Connection) -> None:
+        """Add the candidate facts table without rewriting any existing row."""
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS candidate_facts (
+                id TEXT PRIMARY KEY,
+                batch_id TEXT NOT NULL DEFAULT '',
+                kind TEXT NOT NULL CHECK (kind IN ('skill', 'experience', 'education', 'language', 'project', 'certification', 'date', 'contact', 'other')),
+                label TEXT NOT NULL,
+                value TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'proposed' CHECK (status IN ('proposed', 'approved', 'rejected', 'modified', 'suspended')),
+                original_label TEXT NOT NULL DEFAULT '',
+                original_value TEXT NOT NULL DEFAULT '',
+                evidence_json TEXT NOT NULL DEFAULT '{}',
+                meta_json TEXT NOT NULL DEFAULT '{}',
+                note TEXT NOT NULL DEFAULT '',
+                source_document TEXT NOT NULL DEFAULT '',
+                source_method TEXT NOT NULL DEFAULT 'embedded_text',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                decided_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS candidate_facts_status_idx ON candidate_facts(status, created_at DESC);
+            CREATE INDEX IF NOT EXISTS candidate_facts_batch_idx ON candidate_facts(batch_id);
             """
         )
 
@@ -1286,6 +1354,388 @@ class CareerService:
             connection.execute("DELETE FROM profile_imports WHERE id = ?", (identifier,))
             self._audit(connection, "profile_import_deleted", "profile_import", identifier)
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # SK-10 : profil candidat avec preuves approuvées
+    #
+    # Un fait extrait n'est jamais approuvé automatiquement : la table impose
+    # ``status = 'proposed'`` à l'insertion, et seule la décision explicite de
+    # la personne change le statut.  Seuls les faits approuvés ou corrigés
+    # peuvent ensuite justifier une correspondance ou une candidature.
+    # ─────────────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _candidate_fact_from_row(row: sqlite3.Row) -> Fact:
+        """Rebuild one fact from its stored row."""
+        evidence_data: dict[str, Any] = {}
+        try:
+            decoded = json.loads(str(row["evidence_json"] or "{}"))
+            if isinstance(decoded, dict):
+                evidence_data = decoded
+        except json.JSONDecodeError:
+            evidence_data = {}
+        meta_data: dict[str, str] = {}
+        try:
+            decoded_meta = json.loads(str(row["meta_json"] or "{}"))
+            if isinstance(decoded_meta, dict):
+                meta_data = {str(key): str(value) for key, value in decoded_meta.items()}
+        except json.JSONDecodeError:
+            meta_data = {}
+        evidence = Evidence(
+            source=str(evidence_data.get("source") or SOURCE_EMBEDDED_TEXT),
+            page=int(evidence_data.get("page") or 0),
+            page_confidence=str(evidence_data.get("page_confidence") or "unknown"),
+            start_offset=int(evidence_data.get("start_offset") or 0),
+            end_offset=int(evidence_data.get("end_offset") or 0),
+            quote=str(evidence_data.get("quote") or ""),
+            filename=str(evidence_data.get("filename") or ""),
+        )
+        return Fact(
+            id=str(row["id"]),
+            kind=str(row["kind"]),
+            label=str(row["label"]),
+            value=str(row["value"]),
+            status=str(row["status"]),
+            evidence=evidence,
+            original_label=str(row["original_label"] or ""),
+            original_value=str(row["original_value"] or ""),
+            meta=meta_data,
+            note=str(row["note"] or ""),
+            source_document=str(row["source_document"] or ""),
+            source_method=str(row["source_method"] or SOURCE_EMBEDDED_TEXT),
+            batch_id=str(row["batch_id"] or ""),
+            created_at=str(row["created_at"] or ""),
+            updated_at=str(row["updated_at"] or ""),
+            decided_at=str(row["decided_at"] or ""),
+        )
+
+    def _candidate_fact_rows(self, connection: sqlite3.Connection) -> list[sqlite3.Row]:
+        return connection.execute(
+            "SELECT * FROM candidate_facts ORDER BY created_at ASC, rowid ASC"
+        ).fetchall()
+
+    def candidate_fact_counts(self) -> dict[str, int]:
+        """Return the number of facts per status."""
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                "SELECT status, COUNT(*) AS total FROM candidate_facts GROUP BY status"
+            ).fetchall()
+        counts = {
+            STATUS_PROPOSED: 0,
+            STATUS_APPROVED: 0,
+            "rejected": 0,
+            STATUS_MODIFIED: 0,
+            "suspended": 0,
+        }
+        for row in rows:
+            counts[str(row["status"])] = int(row["total"])
+        return counts
+
+    def list_candidate_facts(self, status: str = "") -> list[dict[str, Any]]:
+        """Return the facts of the local profile, most urgent review first."""
+        wanted = clean_text(status, limit=20)
+        with self._lock, self._connection() as connection:
+            if wanted:
+                rows = connection.execute(
+                    "SELECT * FROM candidate_facts WHERE status = ? ORDER BY created_at ASC, rowid ASC",
+                    (wanted,),
+                ).fetchall()
+            else:
+                rows = self._candidate_fact_rows(connection)
+        facts = [self._candidate_fact_from_row(row) for row in rows]
+        order = {STATUS_PROPOSED: 0, STATUS_MODIFIED: 1, STATUS_APPROVED: 2, "suspended": 3, "rejected": 4}
+        facts.sort(key=lambda fact: (order.get(fact.status, 9), fact.kind, fact.created_at))
+        return [serialize_fact(fact) for fact in facts]
+
+    def get_candidate_fact(self, fact_id: str) -> dict[str, Any]:
+        identifier = clean_text(fact_id, limit=80)
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM candidate_facts WHERE id = ?", (identifier,)
+            ).fetchone()
+        if not row:
+            raise UserFacingError("Ce fait de profil n’existe pas.")
+        return serialize_fact(self._candidate_fact_from_row(row))
+
+    def build_candidate_facts(
+        self,
+        *,
+        import_id: str = "",
+        text: str = "",
+        filename: str = "",
+    ) -> dict[str, Any]:
+        """Propose facts from a local CV import or from pasted text.
+
+        Nothing is approved here: every fact is stored with the ``proposed``
+        status, including the facts read by the local OCR.  The person then
+        approves, corrects, rejects or suspends each fact one by one.
+        """
+        source_text = ""
+        pages: list[str] | None = None
+        page_count: int | None = None
+        source_method = SOURCE_EMBEDDED_TEXT
+        source_document = ""
+
+        identifier = clean_text(import_id, limit=80)
+        if identifier:
+            with self._lock, self._connection() as connection:
+                row = connection.execute(
+                    "SELECT * FROM profile_imports WHERE id = ?", (identifier,)
+                ).fetchone()
+            if not row:
+                raise UserFacingError("Cette importation de profil n’existe pas.")
+            source_document = str(row["original_name"] or "")
+            extraction_method = str(row["extraction_method"] or SOURCE_EMBEDDED_TEXT)
+            stored_filename = str(row["stored_filename"] or "")
+            if stored_filename:
+                path = self._profile_document_path(stored_filename)
+                if path.is_file():
+                    suffix = path.suffix.lower().lstrip(".")
+                    filetype = suffix if suffix in {"pdf", "docx", "txt"} else "txt"
+                    try:
+                        pages = extract_pages_from_bytes(path.read_bytes(), filetype)
+                    except Exception:
+                        pages = None
+                    if pages:
+                        source_text = "\n\n".join(pages)
+                        source_method = SOURCE_EMBEDDED_TEXT
+            if not source_text:
+                source_text = str(row["extracted_text"] or "")
+                source_method = SOURCE_OCR if extraction_method != SOURCE_EMBEDDED_TEXT else SOURCE_EMBEDDED_TEXT
+                pages = None
+                try:
+                    page_count = int(row["ocr_pages"] or 0) or None
+                except (TypeError, ValueError):
+                    page_count = None
+        else:
+            source_text = str(text or "").replace("\x00", "").strip()
+            source_document = clean_text(filename, limit=180) or "texte-profil"
+
+        if not source_text.strip():
+            raise UserFacingError(
+                "Le document ne contient pas de texte exploitable pour proposer des faits."
+            )
+
+        batch_id = f"batch_{uuid.uuid4().hex}"
+        now = utc_now()
+        facts = build_fact_proposals(
+            source_text,
+            filename=source_document,
+            source_method=source_method,
+            pages=pages,
+            page_count=page_count,
+            batch_id=batch_id,
+            created_at=now,
+        )
+        if not facts:
+            raise UserFacingError(
+                "Aucune rubrique Formation, Expérience, Compétences ou Langues n’a été trouvée dans ce document."
+            )
+
+        with self._lock, self._connection() as connection:
+            # A new extraction replaces the proposals that were never decided.
+            # Decided facts are never touched: their decision is a user action.
+            connection.execute(
+                "DELETE FROM candidate_facts WHERE status = 'proposed' AND source_document = ?",
+                (source_document,),
+            )
+            for fact in facts:
+                serialized = serialize_fact(fact)
+                connection.execute(
+                    """
+                    INSERT INTO candidate_facts (
+                        id, batch_id, kind, label, value, status, original_label,
+                        original_value, evidence_json, meta_json, note,
+                        source_document, source_method, created_at, updated_at, decided_at
+                    ) VALUES (?, ?, ?, ?, ?, 'proposed', '', '', ?, ?, '', ?, ?, ?, ?, NULL)
+                    """,
+                    (
+                        fact.id,
+                        batch_id,
+                        fact.kind,
+                        fact.label,
+                        fact.value,
+                        json.dumps(serialized["evidence"], ensure_ascii=False),
+                        json.dumps(serialized["meta"], ensure_ascii=False),
+                        source_document,
+                        source_method,
+                        now,
+                        now,
+                    ),
+                )
+            self._audit(connection, "candidate_facts_proposed", "candidate_facts", batch_id)
+
+        return {
+            "batch_id": batch_id,
+            "facts": [serialize_fact(fact) for fact in facts],
+            "counts": self.candidate_fact_counts(),
+            "source": {
+                "document": source_document,
+                "method": source_method,
+                "from_ocr": source_method == SOURCE_OCR,
+                "pages_known": bool(pages),
+            },
+            "disclaimer": (
+                "Aucun fait n’est validé automatiquement. Un fait proposé ne peut pas "
+                "justifier une correspondance ou une candidature tant que tu ne l’as pas approuvé."
+            ),
+        }
+
+    def decide_candidate_fact(
+        self,
+        fact_id: str,
+        decision: str,
+        *,
+        value: str = "",
+        note: str = "",
+    ) -> dict[str, Any]:
+        """Apply one explicit decision of the person on one fact."""
+        identifier = clean_text(fact_id, limit=80)
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM candidate_facts WHERE id = ?", (identifier,)
+            ).fetchone()
+            if not row:
+                raise UserFacingError("Ce fait de profil n’existe pas.")
+            fact = self._candidate_fact_from_row(row)
+            try:
+                updated = apply_decision(fact, decision, value=value, note=note, now=utc_now())
+            except ValueError as error:
+                raise UserFacingError(str(error)) from error
+            connection.execute(
+                """
+                UPDATE candidate_facts
+                SET label = ?, value = ?, status = ?, original_label = ?, original_value = ?,
+                    note = ?, updated_at = ?, decided_at = ?
+                WHERE id = ?
+                """,
+                (
+                    updated.label,
+                    updated.value,
+                    updated.status,
+                    updated.original_label,
+                    updated.original_value,
+                    updated.note,
+                    updated.updated_at,
+                    updated.decided_at,
+                    identifier,
+                ),
+            )
+            self._audit(connection, f"candidate_fact_{updated.status}", "candidate_fact", identifier)
+        return {
+            "fact": serialize_fact(updated),
+            "counts": self.candidate_fact_counts(),
+        }
+
+    def delete_candidate_fact(self, fact_id: str) -> None:
+        """Delete one fact and its evidence from the local profile."""
+        identifier = clean_text(fact_id, limit=80)
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT id FROM candidate_facts WHERE id = ?", (identifier,)
+            ).fetchone()
+            if not row:
+                raise UserFacingError("Ce fait de profil n’existe pas.")
+            connection.execute("DELETE FROM candidate_facts WHERE id = ?", (identifier,))
+            self._audit(connection, "candidate_fact_deleted", "candidate_fact", identifier)
+
+    def usable_candidate_facts(self) -> list[Fact]:
+        """Return the facts the person approved; the only usable ones."""
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                "SELECT * FROM candidate_facts WHERE status IN (?, ?) ORDER BY created_at ASC, rowid ASC",
+                (STATUS_APPROVED, STATUS_MODIFIED),
+            ).fetchall()
+        return [self._candidate_fact_from_row(row) for row in rows]
+
+    def active_candidate_profile(self) -> dict[str, Any]:
+        """Return the active profile: the approved facts and their evidence."""
+        facts = self.usable_candidate_facts()
+        payload = export_profile(CandidateProfile(facts=tuple(facts)))
+        payload["counts"] = self.candidate_fact_counts()
+        payload["pending_count"] = payload["counts"].get(STATUS_PROPOSED, 0)
+        payload["usable_count"] = len(facts)
+        return payload
+
+    def apply_candidate_facts(self, fact_ids: list[str]) -> dict[str, Any]:
+        """Copy approved facts into the local profile fields.
+
+        Only the facts the person approved (or corrected) can be applied: a
+        proposed, rejected or suspended fact never rewrites the profile.
+        """
+        identifiers = [clean_text(item, limit=80) for item in fact_ids if clean_text(item, limit=80)]
+        if not identifiers:
+            raise UserFacingError("Sélectionne au moins un fait approuvé à appliquer au profil.")
+        if len(identifiers) > 60:
+            raise UserFacingError("Trop de faits ont été envoyés.")
+        with self._lock, self._connection() as connection:
+            placeholders = ",".join("?" for _ in identifiers)
+            rows = connection.execute(
+                f"SELECT * FROM candidate_facts WHERE id IN ({placeholders})", identifiers
+            ).fetchall()
+            found = {str(row["id"]) for row in rows}
+            missing = [item for item in identifiers if item not in found]
+            if missing:
+                raise UserFacingError("Un fait sélectionné n’existe pas.")
+            facts = [self._candidate_fact_from_row(row) for row in rows]
+            blocked = [fact for fact in facts if not fact.is_usable]
+            if blocked:
+                raise UserFacingError(
+                    "Seuls les faits approuvés ou corrigés peuvent être appliqués au profil."
+                )
+            profile = self._row_dict(
+                connection.execute("SELECT * FROM candidate_profile WHERE id = 1").fetchone()
+            )
+            merged = merge_usable_facts(profile, facts)
+            changed: dict[str, str] = {}
+            for field_name in ("education", "experience", "skills", "languages"):
+                new_value = str(merged.get(field_name, ""))
+                if new_value != str(profile.get(field_name, "")):
+                    changed[field_name] = self._clean_profile_editable_value(field_name, new_value)
+            if changed:
+                now = utc_now()
+                assignments = ", ".join(f"{field} = :{field}" for field in changed)
+                connection.execute(
+                    f"UPDATE candidate_profile SET {assignments}, updated_at = :updated_at WHERE id = 1",
+                    changed | {"updated_at": now},
+                )
+                self._audit(connection, "candidate_facts_applied", "candidate_profile", "1")
+        return {
+            "profile": self.get_profile(),
+            "applied": len(identifiers),
+            "counts": self.candidate_fact_counts(),
+        }
+
+    def export_candidate_profile(self) -> Path:
+        """Write the portable profile: every fact with its evidence and status."""
+        created = datetime.now().strftime("%Y%m%d-%H%M%S")
+        target = self.export_dir / f"profil_candidat_{created}_{uuid.uuid4().hex[:8]}.json"
+        with self._lock, self._connection() as connection:
+            rows = self._candidate_fact_rows(connection)
+        facts = tuple(self._candidate_fact_from_row(row) for row in rows)
+        payload = export_profile(
+            CandidateProfile(facts=facts),
+            generated_at=utc_now(),
+            source_document=rows[0]["source_document"] if rows else "",
+        )
+        payload["counts"] = self.candidate_fact_counts()
+        target.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        try:
+            os.chmod(target, 0o600)
+        except OSError:
+            pass
+        return target
+
+    def _profile_for_matching(self, profile: dict[str, Any]) -> dict[str, Any]:
+        """Return the profile used for the matching and the candidature drafts.
+
+        Only the facts the person approved are added.  A proposed, rejected or
+        suspended fact can never justify a candidature.
+        """
+        facts = self.usable_candidate_facts()
+        if not facts:
+            return profile
+        return merge_usable_facts(profile, facts)
+
     @staticmethod
     def _intake_answers(value: str) -> dict[str, str]:
         try:
@@ -1562,7 +2012,12 @@ class CareerService:
             raise UserFacingError("Cette offre Career n’existe pas.")
         if not intake_row:
             raise UserFacingError("Le mini-entretien Career local est indisponible.")
-        return profile, self._serialize_intake_row(intake_row), dict(job_row), normalized_language
+        return (
+            self._profile_for_matching(profile),
+            self._serialize_intake_row(intake_row),
+            dict(job_row),
+            normalized_language,
+        )
 
     def create_application_draft(
         self,
@@ -3427,7 +3882,7 @@ class CareerService:
             }
             intake_row = connection.execute("SELECT * FROM career_intake WHERE id = 1").fetchone()
         return {
-            "profile": profile,
+            "profile": self._profile_for_matching(profile),
             "preferences": self._serialize_preferences(preference_rows, settings),
             "intake": self._serialize_intake_row(intake_row) if intake_row else {},
         }
@@ -4496,6 +4951,14 @@ class CareerService:
         return {
             "ocr": self.ocr.status(),
             "guided_intake": True,
+            "candidate_profile": {
+                "enabled": True,
+                "local_only": True,
+                "field_by_field_review": True,
+                "ocr_auto_approved": False,
+                "statuses": ["proposed", "approved", "rejected", "modified", "suspended"],
+                "portable_export": True,
+            },
             "application_studio": {"local_drafts": True, "formats": ["md", "html", "docx", "pdf"]},
             "interview_coach": {
                 "enabled": True,
@@ -4719,6 +5182,12 @@ class CareerService:
                     for row in profile_import_rows
                 ],
                 "career_intake": self._serialize_intake_row(intake_row) if intake_row else {},
+                "candidate_facts": [
+                    serialize_fact(self._candidate_fact_from_row(row))
+                    for row in connection.execute(
+                        "SELECT * FROM candidate_facts ORDER BY created_at ASC"
+                    ).fetchall()
+                ],
                 "application_drafts": [
                     self._serialize_application_draft(row, include_content=True) for row in draft_rows
                 ],
@@ -4758,6 +5227,7 @@ class CareerService:
             except OSError as error:
                 raise UserFacingError("Un document de profil n’a pas pu être supprimé.") from error
             connection.execute("DELETE FROM profile_imports")
+            connection.execute("DELETE FROM candidate_facts")
             connection.execute("DELETE FROM application_drafts")
             connection.execute("DELETE FROM interview_sessions")
             connection.execute("DELETE FROM career_intake")

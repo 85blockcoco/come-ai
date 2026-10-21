@@ -205,6 +205,17 @@ def _estimate_pages_txt(text: str) -> int | None:
     return max(1, (len(text) // 3000) + 1)
 
 
+def _extract_pdf_page(page: object, page_number: int) -> str:
+    """Return the text of one PDF page, positioned reading order first."""
+    page_text = _extract_positioned_page(page, page_number)
+    legacy_text = page.extract_text() or ""
+    if not page_text or (
+        len(page_text.splitlines()) < 0.4 * len(legacy_text.splitlines())
+    ):
+        page_text = legacy_text
+    return page_text
+
+
 def _extract_pdf(data: bytes) -> tuple[str, int]:
     """Extract text from PDF bytes using pypdf.
 
@@ -223,12 +234,7 @@ def _extract_pdf(data: bytes) -> tuple[str, int]:
         texts = []
         for page_number, page in enumerate(reader.pages):
             try:
-                page_text = _extract_positioned_page(page, page_number)
-                legacy_text = page.extract_text() or ""
-                if not page_text or (
-                    len(page_text.splitlines()) < 0.4 * len(legacy_text.splitlines())
-                ):
-                    page_text = legacy_text
+                page_text = _extract_pdf_page(page, page_number)
                 if page_text:
                     texts.append(page_text)
             except Exception:
@@ -237,6 +243,52 @@ def _extract_pdf(data: bytes) -> tuple[str, int]:
         return "\n\n".join(texts), page_count
     except Exception as e:
         raise ValueError(f"Failed to parse PDF: {e}") from e
+
+
+def extract_pages_from_bytes(
+    data: bytes, filetype: str, filename: str | None = None
+) -> list[str]:
+    """Extract the text of each page separately, with the same local engines.
+
+    The returned list is the exact material used to rebuild the joined text
+    (``"\\n\\n".join(pages)``), so a character offset inside the joined text
+    can be mapped back to one page.
+
+    Args:
+        data: Raw file bytes.
+        filetype: One of "txt", "pdf", "docx".
+        filename: Original filename, kept for provenance.
+
+    Returns:
+        The list of page texts; an empty list when nothing could be read.
+
+    Raises:
+        ValueError: If the filetype is unsupported or extraction fails.
+    """
+    if filetype == "txt":
+        text = _extract_txt(data)
+        pages = [part for part in text.split("\f")]
+        return [page for page in pages if page.strip()] or ([text] if text else [])
+    if filetype == "pdf":
+        if not HAS_PYPDF:
+            raise ValueError("PDF extraction requires 'pypdf' package. Install with: pip install pypdf")
+        try:
+            reader = pypdf.PdfReader(io.BytesIO(data))
+        except Exception as e:
+            raise ValueError(f"Failed to parse PDF: {e}") from e
+        pages = []
+        for page_number, page in enumerate(reader.pages):
+            try:
+                page_text = _extract_pdf_page(page, page_number)
+            except Exception:
+                continue
+            if page_text:
+                pages.append(page_text)
+        return pages
+    if filetype == "docx":
+        text, _ = _extract_docx(data)
+        return [text] if text else []
+    raise ValueError(f"Unsupported filetype: {filetype}")
 
 
 def _extract_docx(data: bytes) -> tuple[str, int]:
