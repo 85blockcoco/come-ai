@@ -17,12 +17,27 @@ import threading
 import time
 import urllib.parse
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import replace
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
+from .daily_digest import (
+    DAILY_DIGEST_SETTING,
+    DAILY_DIGEST_TTL_SECONDS,
+    DAILY_DIGEST_TTL_SETTING,
+    MAX_PARALLEL_SOURCES,
+    MAX_TTL_SECONDS,
+    MIN_TTL_SECONDS,
+    build_tracks,
+    empty_state as empty_daily_digest_state,
+    moment_text,
+    normalize_ttl,
+    parse_moment,
+    project_digest,
+)
 from .models import (
     AVAILABILITY_STATES,
     APPLICATION_STAGES,
@@ -221,6 +236,7 @@ class CareerService:
         discovery_connector: GreenhouseJobBoardConnector | None = None,
         curated_sources: tuple[dict[str, Any], ...] | None = None,
         exploration_connectors: dict[str, Any] | None = None,
+        daily_digest_ttl_seconds: int = DAILY_DIGEST_TTL_SECONDS,
     ):
         self.base_dir = base_dir.resolve()
         self.data_dir = self.base_dir / "career_data"
@@ -249,6 +265,9 @@ class CareerService:
         self._prep_cache: set[str] = set()
         self._discovery_lock = threading.Lock()
         self._lock = threading.RLock()
+        # The daily digest cache lifetime is explicit and configurable: a
+        # constructor default, overridable later from the local settings.
+        self.daily_digest_ttl_seconds = normalize_ttl(daily_digest_ttl_seconds)
         self._ensure_storage()
         self._initialize()
         if ConsentGuard is not None:
@@ -2854,12 +2873,15 @@ class CareerService:
                 ),
             )
 
-    def discover_opportunities(self, *, force: bool = False) -> dict[str, Any]:
+    def discover_opportunities(self, *, force: bool = False, max_parallel: int = 1) -> dict[str, Any]:
         """Refresh explicitly configured official boards after a user action.
 
         A source failure is isolated: existing data survives unchanged, while
         other enabled boards continue.  There is no automatic scheduler and
         no provider/model call anywhere in this workflow.
+
+        ``max_parallel`` never exceeds two simultaneous sources: the bound is
+        a resource guarantee for the local machine, not a tuning knob.
         """
         if not self._discovery_lock.acquire(blocking=False):
             raise UserFacingError("Une recherche d’opportunités est déjà en cours. Attends sa fin avant de relancer.")
@@ -2883,203 +2905,444 @@ class CareerService:
                 raise UserFacingError("Ajoute d’abord au moins un board Greenhouse public à suivre.")
 
             outcomes: list[dict[str, Any]] = []
-            for row in sources:
-                source = dict(row)
-                source_id = str(source["id"])
-                selection_key = f"stage_search_selection:{source_id}"
-                started_at = utc_now()
-                if (
-                    not force
-                    and self._discovery_cache_valid(str(source["last_success_at"]))
-                    and cached_selections.get(selection_key) == selection_fingerprint
-                ):
-                    run_id = self._record_discovery_run(
-                        source_id,
-                        status="cached",
-                        started_at=started_at,
-                        finished_at=utc_now(),
-                        message="Résultats conservés : vérification réussie il y a moins de 10 minutes.",
-                    )
+            bounded_parallel = max(1, min(int(max_parallel), MAX_PARALLEL_SOURCES))
+            if bounded_parallel > 1 and len(sources) > 1:
+                # At most two official sources are read at the same time. The
+                # bound is a resource guarantee, not a tuning knob.
+                with ThreadPoolExecutor(max_workers=bounded_parallel) as executor:
+                    futures = [
+                        executor.submit(
+                            self._refresh_discovery_source,
+                            row,
+                            brief,
+                            force=force,
+                            cached_selections=cached_selections,
+                            selection_fingerprint=selection_fingerprint,
+                        )
+                        for row in sources
+                    ]
+                    outcomes = [future.result() for future in futures]
+            else:
+                for row in sources:
                     outcomes.append(
-                        {
-                            "source_id": source_id,
-                            "company": source["company"],
-                            "status": "cached",
-                            "run_id": run_id,
-                            "message": "Résultats récents conservés (cache de 10 minutes).",
-                            "verified_at": source["last_success_at"],
-                        }
-                    )
-                    continue
-
-                run_id = self._record_discovery_run(source_id, status="running", started_at=started_at)
-                with self._lock, self._connection() as connection:
-                    connection.execute(
-                        "UPDATE discovery_sources SET last_checked_at = ?, updated_at = ? WHERE id = ?",
-                        (started_at, started_at, source_id),
-                    )
-                try:
-                    board = GreenhouseBoard(
-                        id=source_id,
-                        company=str(source["company"]),
-                        board_token=str(source["board_token"]),
-                    )
-                    ranked_discovery = getattr(self.discovery_connector, "discover_ranked", None)
-                    if callable(ranked_discovery):
-                        result = ranked_discovery(board, selection_brief=brief)
-                    else:
-                        # Retain the original injectable connector contract.
-                        # Production Greenhouse always uses ranked discovery;
-                        # legacy fixtures/connectors return their own payload.
-                        result = self.discovery_connector.discover(board)
-                except Exception as caught:
-                    # A connector is isolated from the rest of the local
-                    # tracker.  The public implementation raises
-                    # ``PublicSourceError`` for expected source failures, but
-                    # an unexpected parser/transport defect must still close
-                    # this run cleanly rather than leaving it marked running
-                    # or surfacing a server error to the browser.
-                    error = (
-                        caught
-                        if isinstance(caught, PublicSourceError)
-                        else PublicSourceError(
-                            "Cette source officielle a rencontré une erreur locale inattendue. Les offres déjà enregistrées sont conservées.",
-                            code="unexpected",
+                        self._refresh_discovery_source(
+                            row,
+                            brief,
+                            force=force,
+                            cached_selections=cached_selections,
+                            selection_fingerprint=selection_fingerprint,
                         )
                     )
-                    message = clean_text(str(error), limit=1_000)
-                    self._finish_discovery_run(
-                        run_id,
-                        status="error",
-                        found_count=0,
-                        imported_count=0,
-                        updated_count=0,
-                        skipped_count=0,
-                        message=message,
-                    )
-                    with self._lock, self._connection() as connection:
-                        connection.execute(
-                            """
-                            UPDATE discovery_sources
-                            SET last_error_code = ?, last_error_at = ?, updated_at = ? WHERE id = ?
-                            """,
-                            (clean_text(getattr(error, "code", "error"), limit=80), utc_now(), utc_now(), source_id),
-                        )
-                        self._audit(connection, "discovery_source_error", "discovery_source", source_id)
-                    outcomes.append(
-                        {
-                            "source_id": source_id,
-                            "company": source["company"],
-                            "status": "error",
-                            "run_id": run_id,
-                            "message": message,
-                            "verified_at": source["last_success_at"],
-                        }
-                    )
-                    continue
-
-                imported = updated = 0
-                skipped = result.invalid_count
-                seen_at = result.verified_at
-                availability = self._current_availability_values()
-                for raw_job in result.jobs:
-                    try:
-                        payload = dict(raw_job)
-                        raw_source_id = clean_text(payload.get("source_id"), limit=240)
-                        if not raw_source_id:
-                            skipped += 1
-                            continue
-                        payload["source_id"] = f"{source_id}:{raw_source_id}"
-                        imported_job = self.import_job(payload, availability=availability)
-                        if imported_job["created"]:
-                            imported += 1
-                        else:
-                            updated += 1
-                        with self._lock, self._connection() as connection:
-                            connection.execute(
-                                """
-                                UPDATE jobs
-                                SET discovery_source_id = ?, last_seen_at = ?, last_verified_at = ?
-                                WHERE id = ?
-                                """,
-                                (source_id, seen_at, seen_at, imported_job["id"]),
-                            )
-                    except UserFacingError:
-                        # One malformed remote posting must not prevent other
-                        # official postings on the same board from being saved.
-                        skipped += 1
-
-                with self._lock, self._connection() as connection:
-                    # A successful full feed no longer showing an earlier role
-                    # is evidence only that it was not observed now.  It is not
-                    # safe to call the role closed automatically.
-                    # Exclusion from a ranked top-150 or a malformed source
-                    # row is not evidence that an earlier posting vanished.
-                    # Preserve its last verified state and tracking instead.
-                    if not result.truncated and not result.invalid_count:
-                        connection.execute(
-                            """
-                            UPDATE jobs SET source_status = 'unknown', updated_at = ?
-                            WHERE discovery_source_id = ? AND last_seen_at != ? AND source_status = 'open'
-                            """,
-                            (utc_now(), source_id, seen_at),
-                        )
-                    connection.execute(
-                        """
-                        UPDATE discovery_sources
-                        SET last_success_at = ?, last_error_code = '', last_error_at = '', updated_at = ?
-                        WHERE id = ?
-                        """,
-                        (seen_at, utc_now(), source_id),
-                    )
-                    # An additive setting, not a schema replacement. This
-                    # fingerprint also makes an in-flight search using an old
-                    # brief non-cacheable after the person saves new criteria.
-                    connection.execute(
-                        """
-                        INSERT INTO career_settings (setting_key, setting_value) VALUES (?, ?)
-                        ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value
-                        """,
-                        (selection_key, selection_fingerprint),
-                    )
-                    self._audit(connection, "discovery_source_refreshed", "discovery_source", source_id)
-                status = "partial" if skipped else "success"
-                message = f"{len(result.jobs)} offre(s) publiée(s) vérifiée(s), {imported} nouvelle(s), {updated} actualisée(s)."
-                if skipped:
-                    message += f" {skipped} entrée(s) source ignorée(s) car incomplète(s) ou invalide(s)."
-                if result.truncated:
-                    message += (
-                        f" Les 150 offres les plus pertinentes parmi {result.evaluated_count} entrées admissibles "
-                        "ont été conservées après classement local selon tes critères "
-                        "(ordre neutre et déterministe sans critères). "
-                        "Les autres offres déjà suivies restent conservées."
-                    )
-                self._finish_discovery_run(
-                    run_id,
-                    status=status,
-                    found_count=len(result.jobs),
-                    imported_count=imported,
-                    updated_count=updated,
-                    skipped_count=skipped,
-                    message=message,
-                )
-                outcomes.append(
-                    {
-                        "source_id": source_id,
-                        "company": source["company"],
-                        "status": status,
-                        "run_id": run_id,
-                        "found_count": len(result.jobs),
-                        "imported_count": imported,
-                        "updated_count": updated,
-                        "skipped_count": skipped,
-                        "verified_at": seen_at,
-                        "message": message,
-                    }
-                )
             return {"outcomes": outcomes, "sources": self.list_discovery_sources()}
         finally:
             self._discovery_lock.release()
+
+    def _refresh_discovery_source(
+        self,
+        row: sqlite3.Row,
+        brief: dict[str, Any],
+        *,
+        force: bool,
+        cached_selections: dict[str, str],
+        selection_fingerprint: str,
+    ) -> dict[str, Any]:
+        """Read one official board and record what it changed.
+
+        A source failure is isolated: the offers already stored survive, and
+        the other boards continue. The method never sends anything.
+        """
+        source = dict(row)
+        source_id = str(source["id"])
+        selection_key = f"stage_search_selection:{source_id}"
+        started_at = utc_now()
+        if (
+            not force
+            and self._discovery_cache_valid(str(source["last_success_at"]))
+            and cached_selections.get(selection_key) == selection_fingerprint
+        ):
+            run_id = self._record_discovery_run(
+                source_id,
+                status="cached",
+                started_at=started_at,
+                finished_at=utc_now(),
+                message="Résultats conservés : vérification réussie il y a moins de 10 minutes.",
+            )
+            return {
+                    "source_id": source_id,
+                    "company": source["company"],
+                    "status": "cached",
+                    "run_id": run_id,
+                    "message": "Résultats récents conservés (cache de 10 minutes).",
+                    "verified_at": source["last_success_at"],
+            }
+
+        run_id = self._record_discovery_run(source_id, status="running", started_at=started_at)
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                "UPDATE discovery_sources SET last_checked_at = ?, updated_at = ? WHERE id = ?",
+                (started_at, started_at, source_id),
+            )
+        try:
+            board = GreenhouseBoard(
+                id=source_id,
+                company=str(source["company"]),
+                board_token=str(source["board_token"]),
+            )
+            ranked_discovery = getattr(self.discovery_connector, "discover_ranked", None)
+            if callable(ranked_discovery):
+                result = ranked_discovery(board, selection_brief=brief)
+            else:
+                # Retain the original injectable connector contract.
+                # Production Greenhouse always uses ranked discovery;
+                # legacy fixtures/connectors return their own payload.
+                result = self.discovery_connector.discover(board)
+        except Exception as caught:
+            # A connector is isolated from the rest of the local
+            # tracker.  The public implementation raises
+            # ``PublicSourceError`` for expected source failures, but
+            # an unexpected parser/transport defect must still close
+            # this run cleanly rather than leaving it marked running
+            # or surfacing a server error to the browser.
+            error = (
+                caught
+                if isinstance(caught, PublicSourceError)
+                else PublicSourceError(
+                    "Cette source officielle a rencontré une erreur locale inattendue. Les offres déjà enregistrées sont conservées.",
+                    code="unexpected",
+                )
+            )
+            message = clean_text(str(error), limit=1_000)
+            self._finish_discovery_run(
+                run_id,
+                status="error",
+                found_count=0,
+                imported_count=0,
+                updated_count=0,
+                skipped_count=0,
+                message=message,
+            )
+            with self._lock, self._connection() as connection:
+                connection.execute(
+                    """
+                    UPDATE discovery_sources
+                    SET last_error_code = ?, last_error_at = ?, updated_at = ? WHERE id = ?
+                    """,
+                    (clean_text(getattr(error, "code", "error"), limit=80), utc_now(), utc_now(), source_id),
+                )
+                self._audit(connection, "discovery_source_error", "discovery_source", source_id)
+            return {
+                    "source_id": source_id,
+                    "company": source["company"],
+                    "status": "error",
+                    "run_id": run_id,
+                    "message": message,
+                    "verified_at": source["last_success_at"],
+            }
+
+        imported = updated = 0
+        skipped = result.invalid_count
+        seen_at = result.verified_at
+        availability = self._current_availability_values()
+        for raw_job in result.jobs:
+            try:
+                payload = dict(raw_job)
+                raw_source_id = clean_text(payload.get("source_id"), limit=240)
+                if not raw_source_id:
+                    skipped += 1
+                    continue
+                payload["source_id"] = f"{source_id}:{raw_source_id}"
+                imported_job = self.import_job(payload, availability=availability)
+                if imported_job["created"]:
+                    imported += 1
+                else:
+                    updated += 1
+                with self._lock, self._connection() as connection:
+                    connection.execute(
+                        """
+                        UPDATE jobs
+                        SET discovery_source_id = ?, last_seen_at = ?, last_verified_at = ?
+                        WHERE id = ?
+                        """,
+                        (source_id, seen_at, seen_at, imported_job["id"]),
+                    )
+            except UserFacingError:
+                # One malformed remote posting must not prevent other
+                # official postings on the same board from being saved.
+                skipped += 1
+
+        with self._lock, self._connection() as connection:
+            # A successful full feed no longer showing an earlier role
+            # is evidence only that it was not observed now.  It is not
+            # safe to call the role closed automatically.
+            # Exclusion from a ranked top-150 or a malformed source
+            # row is not evidence that an earlier posting vanished.
+            # Preserve its last verified state and tracking instead.
+            if not result.truncated and not result.invalid_count:
+                connection.execute(
+                    """
+                    UPDATE jobs SET source_status = 'unknown', updated_at = ?
+                    WHERE discovery_source_id = ? AND last_seen_at != ? AND source_status = 'open'
+                    """,
+                    (utc_now(), source_id, seen_at),
+                )
+            connection.execute(
+                """
+                UPDATE discovery_sources
+                SET last_success_at = ?, last_error_code = '', last_error_at = '', updated_at = ?
+                WHERE id = ?
+                """,
+                (seen_at, utc_now(), source_id),
+            )
+            # An additive setting, not a schema replacement. This
+            # fingerprint also makes an in-flight search using an old
+            # brief non-cacheable after the person saves new criteria.
+            connection.execute(
+                """
+                INSERT INTO career_settings (setting_key, setting_value) VALUES (?, ?)
+                ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value
+                """,
+                (selection_key, selection_fingerprint),
+            )
+            self._audit(connection, "discovery_source_refreshed", "discovery_source", source_id)
+        status = "partial" if skipped else "success"
+        message = f"{len(result.jobs)} offre(s) publiée(s) vérifiée(s), {imported} nouvelle(s), {updated} actualisée(s)."
+        if skipped:
+            message += f" {skipped} entrée(s) source ignorée(s) car incomplète(s) ou invalide(s)."
+        if result.truncated:
+            message += (
+                f" Les 150 offres les plus pertinentes parmi {result.evaluated_count} entrées admissibles "
+                "ont été conservées après classement local selon tes critères "
+                "(ordre neutre et déterministe sans critères). "
+                "Les autres offres déjà suivies restent conservées."
+            )
+        self._finish_discovery_run(
+            run_id,
+            status=status,
+            found_count=len(result.jobs),
+            imported_count=imported,
+            updated_count=updated,
+            skipped_count=skipped,
+            message=message,
+        )
+        return {
+            "source_id": source_id,
+            "company": source["company"],
+            "status": status,
+            "run_id": run_id,
+            "found_count": len(result.jobs),
+            "imported_count": imported,
+            "updated_count": updated,
+            "skipped_count": skipped,
+            "verified_at": seen_at,
+            "message": message,
+        }
+
+    # ------------------------------------------------------------------
+    # Daily digest (SK-09): what appeared, what changed, what expires.
+    # ------------------------------------------------------------------
+
+    def _daily_digest_ttl(self) -> int:
+        """Return the configured lifetime of the digest cache, in seconds."""
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT setting_value FROM career_settings WHERE setting_key = ?",
+                (DAILY_DIGEST_TTL_SETTING,),
+            ).fetchone()
+        stored = clean_text(row["setting_value"], limit=32) if row else ""
+        if stored:
+            try:
+                return normalize_ttl(int(stored))
+            except (TypeError, ValueError):
+                pass
+        return normalize_ttl(self.daily_digest_ttl_seconds)
+
+    def update_daily_digest_settings(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Store an explicit cache lifetime for the daily digest."""
+        seconds = self._bounded_int(
+            payload.get("ttl_seconds"), MIN_TTL_SECONDS, MAX_TTL_SECONDS, "La durée du cache"
+        )
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO career_settings (setting_key, setting_value) VALUES (?, ?)
+                ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value
+                """,
+                (DAILY_DIGEST_TTL_SETTING, str(seconds)),
+            )
+            self._audit(connection, "daily_digest_settings_updated", "preferences", "daily_digest")
+        return {"ttl_seconds": seconds, "min_ttl_seconds": MIN_TTL_SECONDS, "max_ttl_seconds": MAX_TTL_SECONDS}
+
+    def _daily_digest_state(self) -> dict[str, Any]:
+        """Read the stored digest state; a damaged value never breaks the screen."""
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT setting_value FROM career_settings WHERE setting_key = ?",
+                (DAILY_DIGEST_SETTING,),
+            ).fetchone()
+        state = empty_daily_digest_state()
+        if row:
+            try:
+                decoded = json.loads(str(row["setting_value"]))
+            except (TypeError, ValueError):
+                decoded = None
+            if isinstance(decoded, dict):
+                state.update(decoded)
+        if not isinstance(state.get("tracks"), dict):
+            state["tracks"] = {}
+        if not isinstance(state.get("digest"), dict):
+            state["digest"] = {}
+        # A run still marked as running never completed: the screen says so
+        # instead of presenting a half-refresh as a finished one.
+        if clean_text(state.get("status"), limit=40) == "running":
+            state["partial"] = True
+        return state
+
+    def _store_daily_digest_state(self, state: dict[str, Any]) -> None:
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO career_settings (setting_key, setting_value) VALUES (?, ?)
+                ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value
+                """,
+                (DAILY_DIGEST_SETTING, json.dumps(state, ensure_ascii=False)),
+            )
+
+    def _explorer_outcomes(self) -> list[dict[str, Any]]:
+        """Return the outcome of every curated source read during the last exploration."""
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT setting_value FROM career_settings WHERE setting_key = ?",
+                (EXPLORATION_LAST_SETTING,),
+            ).fetchone()
+        if not row:
+            return []
+        try:
+            snapshot = json.loads(str(row["setting_value"]))
+        except (TypeError, ValueError):
+            return []
+        outcomes = snapshot.get("outcomes") if isinstance(snapshot, dict) else None
+        if not isinstance(outcomes, list):
+            return []
+        return [item for item in outcomes if isinstance(item, dict)]
+
+    def _daily_digest_matches(self) -> list[dict[str, Any]]:
+        """Rank every stored offer against the saved criteria, exactly like the tracker."""
+        payload = self.list_stage_matches()
+        matches = payload.get("matches")
+        return [item for item in matches if isinstance(item, dict)] if isinstance(matches, list) else []
+
+    def _build_daily_digest(self, state: dict[str, Any], now: datetime, matches: list[dict[str, Any]]) -> dict[str, Any]:
+        """Project the digest from the local facts; no request is ever made here."""
+        return project_digest(
+            matches=matches,
+            sources=self.list_discovery_sources(),
+            explorer_outcomes=self._explorer_outcomes(),
+            state=state,
+            now=now,
+            ttl_seconds=self._daily_digest_ttl(),
+        )
+
+    def daily_digest(self) -> dict[str, Any]:
+        """Read the daily digest.
+
+        This call never performs any network request and never writes to the
+        database: opening the page cannot read a source behind the user's
+        back.  A cached digest is served as long as it is fresh; otherwise the
+        digest is rebuilt from the facts already stored locally and the screen
+        says that a manual refresh is expected.
+        """
+        state = self._daily_digest_state()
+        ttl = self._daily_digest_ttl()
+        now = datetime.now(timezone.utc)
+        cached = state.get("digest") if isinstance(state.get("digest"), dict) else {}
+        expires = parse_moment(state.get("expires_at"))
+        if cached and expires is not None and now < expires:
+            return {**cached, "cache_status": "fresh", "requires_refresh": False, "ttl_seconds": ttl}
+        digest = self._build_daily_digest(state, now, self._daily_digest_matches())
+        return {
+            **digest,
+            "cache_status": "expired" if expires is not None else "missing",
+            "requires_refresh": True,
+            "ttl_seconds": ttl,
+        }
+
+    def refresh_daily_digest(
+        self,
+        *,
+        force: bool = False,
+        max_parallel: int = MAX_PARALLEL_SOURCES,
+        include_boards: bool = True,
+        include_curated: bool = True,
+    ) -> dict[str, Any]:
+        """Explicitly refresh the official sources, then rebuild the digest.
+
+        This is the only entry point allowed to read a public source, and it
+        is never called when the page opens.  The run is marked as started
+        before the first request, so an interruption leaves a visible trace
+        instead of a silent half-refresh.
+        """
+        state = self._daily_digest_state()
+        ttl = self._daily_digest_ttl()
+        now = datetime.now(timezone.utc)
+        cached = state.get("digest") if isinstance(state.get("digest"), dict) else {}
+        expires = parse_moment(state.get("expires_at"))
+        if cached and expires is not None and now < expires and not force:
+            # The cache is still valid: an explicit refresh inside the TTL
+            # must not query a source again.
+            return {**cached, "cache_status": "fresh", "requires_refresh": False, "refreshed": False, "ttl_seconds": ttl}
+
+        interrupted = clean_text(state.get("status"), limit=40) == "running"
+        notes: list[str] = []
+        if interrupted:
+            notes.append(
+                "Une actualisation précédente avait été interrompue. Les données déjà enregistrées sont conservées et le résultat est signalé comme partiel."
+            )
+        state["status"] = "running"
+        state["started_at"] = moment_text(now)
+        state["interrupted_at"] = clean_text(state.get("started_at"), limit=40) if interrupted else ""
+        state["partial"] = interrupted
+        self._store_daily_digest_state(state)
+
+        if include_boards:
+            try:
+                self.discover_opportunities(force=True, max_parallel=max_parallel)
+            except UserFacingError as error:
+                notes.append(clean_text(str(error), limit=300))
+        if include_curated:
+            try:
+                self.explore_internships(force=True)
+            except UserFacingError as error:
+                notes.append(clean_text(str(error), limit=300))
+
+        finished = datetime.now(timezone.utc)
+        # The refresh time is part of the digest it produces.
+        state["last_refresh"] = moment_text(finished)
+        # The run that just finished is complete; the interrupted previous one
+        # stays visible in the notes.
+        state["partial"] = False
+        matches = self._daily_digest_matches()
+        digest = self._build_daily_digest(state, finished, matches)
+        if notes:
+            digest["notes"] = list(digest.get("notes") or []) + notes
+        # The comparison state is replaced only after the changes have been
+        # named, so a refresh reports exactly what it changed.
+        state["tracks"] = build_tracks(matches)
+        state["digest"] = digest
+        state["status"] = "completed"
+        state["built_at"] = moment_text(finished)
+        state["expires_at"] = moment_text(finished + timedelta(seconds=ttl))
+        state["partial"] = False
+        state["note"] = " ".join(notes)
+        self._store_daily_digest_state(state)
+        return {**digest, "cache_status": "fresh", "requires_refresh": False, "refreshed": True, "ttl_seconds": ttl}
+
+    def record_daily_digest_visit(self) -> dict[str, Any]:
+        """Record that the digest was shown, so the next one reports what appeared since."""
+        state = self._daily_digest_state()
+        now = datetime.now(timezone.utc)
+        state["last_visit"] = moment_text(now)
+        self._store_daily_digest_state(state)
+        return {"last_visit": state["last_visit"], "recorded": True}
 
     def _replace_preferences(
         self,
@@ -4528,6 +4791,15 @@ class CareerService:
                 "enabled": True,
                 "ai_required": False,
                 "local_only": True,
+                "invented_facts": False,
+            },
+            "daily_digest": {
+                "enabled": True,
+                "local_only": True,
+                "manual_trigger_only": True,
+                "cache_seconds": self._daily_digest_ttl(),
+                "max_parallel_sources": MAX_PARALLEL_SOURCES,
+                "network_on_page_load": False,
                 "invented_facts": False,
             },
         }

@@ -63,6 +63,21 @@
             </div>
           </section>
           <div id="dashboard-content" class="dashboard-content"></div>
+          <section id="daily-digest-panel" class="panel daily-digest-panel" aria-labelledby="daily-digest-title" aria-busy="true">
+            <div class="panel-heading compact-heading">
+              <div>
+                <p class="eyebrow">Recherche du jour</p>
+                <h3 id="daily-digest-title">Ce qui est nouveau, urgent et incertain</h3>
+              </div>
+              <div class="inline-actions">
+                <span id="daily-digest-status" class="local-tag">Chargement…</span>
+                <button id="daily-digest-refresh" class="secondary-button" type="button">Actualiser les sources</button>
+              </div>
+            </div>
+            <p class="panel-help">Synthèse locale calculée à partir des offres déjà enregistrées. Aucune source n’est consultée au chargement : l’actualisation est toujours manuelle.</p>
+            <p id="daily-digest-error" class="career-message error" role="alert" hidden></p>
+            <div id="daily-digest-content"></div>
+          </section>
           <section class="panel today-profile-panel" aria-labelledby="today-profile-title">
             <div class="panel-heading compact-heading">
               <div><p class="eyebrow">Aujourd’hui</p><h3 id="today-profile-title">Ton profil est-il prêt ?</h3></div>
@@ -734,5 +749,6 @@
     </div>
     <script src="/career-static/cv_plan.js" defer></script>
     <script src="/career-static/career.js" defer></script>
+    <script src="/career-static/js/daily-digest.js" defer></script>
   </body>
 </html>
