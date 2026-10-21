@@ -18,6 +18,7 @@ import time
 import urllib.parse
 import uuid
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterator
@@ -28,6 +29,7 @@ from .models import (
     GENERIC_APPLICATION_STAGES,
     JOB_FAMILIES,
     PRIMARY_LOCATIONS,
+    PipelineStage,
     availability_assessment,
     canonical_url,
     clean_text,
@@ -46,6 +48,7 @@ from .application_studio import (
     build_ai_prompt,
     build_kit_texts,
     build_local_application_draft,
+    generate_application_kit,
     normalize_language,
     parse_ai_draft,
     render_application_html,
@@ -62,6 +65,15 @@ from .application_dashboard import (
 )
 from .application_prep import prepare_application, summarize_offer
 from .application_sprint import MAX_SPRINT_CANDIDATES, MAX_SPRINT_ITEMS, build_application_sprint
+from .cv_fit import (
+    PipelineItem,
+    classify_variant,
+    compute_coverage,
+    derive_pipeline_stage,
+    generate_diff,
+    serialize_gap,
+)
+from .cv_variants import ALL_VARIANTS
 
 try:
     from consent_guard import ConsentGuard
@@ -234,6 +246,7 @@ class CareerService:
         # profile settings. Restarting drops HTTP cache but keeps the last
         # result's job references and tracking in SQLite.
         self._exploration_cache: dict[str, tuple[str, Any]] = {}
+        self._prep_cache: set[str] = set()
         self._discovery_lock = threading.Lock()
         self._lock = threading.RLock()
         self._ensure_storage()
@@ -440,6 +453,7 @@ class CareerService:
                         id TEXT PRIMARY KEY,
                         job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
                         language TEXT NOT NULL,
+                        variant TEXT NOT NULL DEFAULT '',
                         generation_mode TEXT NOT NULL CHECK (generation_mode IN ('local', 'ai')),
                         provider TEXT NOT NULL DEFAULT 'Local',
                         cv_markdown TEXT NOT NULL,
@@ -503,6 +517,12 @@ class CareerService:
             elif version < SCHEMA_VERSION:
                 self._migrate(connection, version)
                 connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+            self._add_column_if_missing(
+                connection,
+                "application_drafts",
+                "variant",
+                "TEXT NOT NULL DEFAULT ''",
+            )
             self._seed_defaults(connection)
         try:
             os.chmod(self.db_path, 0o600)
@@ -638,6 +658,7 @@ class CareerService:
                 id TEXT PRIMARY KEY,
                 job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
                 language TEXT NOT NULL,
+                variant TEXT NOT NULL DEFAULT '',
                 generation_mode TEXT NOT NULL CHECK (generation_mode IN ('local', 'ai')),
                 provider TEXT NOT NULL DEFAULT 'Local',
                 cv_markdown TEXT NOT NULL,
@@ -1550,6 +1571,7 @@ class CareerService:
         *,
         use_ai: bool = False,
         ai_generator: Any | None = None,
+        variant: str = "",
     ) -> dict[str, Any]:
         """Create a saved CV/letter draft from a selected local offer.
 
@@ -1591,14 +1613,15 @@ class CareerService:
             connection.execute(
                 """
                 INSERT INTO application_drafts (
-                    id, job_id, language, generation_mode, provider, cv_markdown,
+                    id, job_id, language, variant, generation_mode, provider, cv_markdown,
                     letter_markdown, checks_json, profile_updated_at, job_updated_at, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     draft_id,
                     str(job["id"]),
                     draft.language,
+                    variant,
                     generation_mode,
                     provider,
                     draft.cv_markdown,
@@ -1627,6 +1650,7 @@ class CareerService:
             "company": row["company"],
             "title": row["title"],
             "language": row["language"],
+            "variant": row["variant"] if "variant" in row.keys() else "",
             "generation_mode": row["generation_mode"],
             "provider": row["provider"],
             "checks": self._draft_checks(str(row["checks_json"])),
@@ -2001,11 +2025,100 @@ class CareerService:
         payload["matches"] = matches
         return payload
 
+    def _current_cv_analysis(self):
+        """Analyze the latest approved CV locally, or an explicit empty CV."""
+        from .cv_quality import DocumentInput, analyze_cv
+
+        with self._lock, self._connection() as connection:
+            current_cv = connection.execute(
+                """
+                SELECT original_name, extracted_text, ocr_pages
+                FROM profile_imports
+                WHERE source_kind = 'cv'
+                ORDER BY CASE status WHEN 'applied' THEN 0 ELSE 1 END,
+                         created_at DESC
+                LIMIT 1
+                """
+            ).fetchone()
+        if current_cv:
+            original_name = str(current_cv["original_name"] or "current-cv.txt")
+            suffix = Path(original_name).suffix.lower().lstrip(".")
+            filetype = suffix if suffix in {"pdf", "docx", "txt"} else "txt"
+            document = DocumentInput(
+                text=str(current_cv["extracted_text"] or ""),
+                filename=original_name,
+                filetype=filetype,
+                page_count=int(current_cv["ocr_pages"] or 0) or None,
+            )
+        else:
+            document = DocumentInput(
+                text="",
+                filename=None,
+                filetype="txt",
+                page_count=None,
+            )
+        return analyze_cv(document)
+
     def get_job_prep(self, job_id: str) -> dict[str, Any]:
         """Factual preparation panel for one offer; no model, no invention."""
         job = self.get_job(job_id)
         context = self._scoring_context()
-        analysis = prepare_application(context.get("profile") or {}, context.get("intake") or {}, job)
+        profile = context.get("profile") or {}
+        analysis = prepare_application(profile, context.get("intake") or {}, job)
+        cv_analysis = self._current_cv_analysis()
+        qualification = qualify_offer(job).to_dict()
+        fit_job = {
+            **job,
+            **analysis,
+            "qualification": qualification,
+        }
+        classification = classify_variant(fit_job, profile, ALL_VARIANTS)
+        coverage = compute_coverage(
+            fit_job,
+            cv_analysis,
+            profile,
+            classification.primary_variant,
+        )
+        variant_coverage = {
+            variant.id: compute_coverage(
+                fit_job,
+                cv_analysis,
+                profile,
+                variant,
+            ).mandatory_pct
+            for variant in ALL_VARIANTS
+        }
+        gaps = generate_diff(
+            coverage,
+            cv_analysis,
+            profile,
+            classification.primary_variant,
+        )
+        coverage = replace(
+            coverage,
+            gaps=gaps,
+            variant_rationale=classification.rationale,
+        )
+        analysis.update(
+            {
+                "recommended_variant": classification.primary_variant.id,
+                "recommended_variant_label": classification.primary_variant.label,
+                "variant_scores": classification.scores,
+                "variant_coverage": variant_coverage,
+                "variant_rationale": classification.rationale,
+                "coverage": {
+                    "mandatory_total": coverage.mandatory_total,
+                    "mandatory_covered": coverage.mandatory_covered,
+                    "preferred_total": coverage.preferred_total,
+                    "preferred_covered": coverage.preferred_covered,
+                    "mandatory_pct": coverage.mandatory_pct,
+                    "preferred_pct": coverage.preferred_pct,
+                },
+                "gaps": [serialize_gap(gap) for gap in gaps],
+                "automatic_submission": False,
+            }
+        )
+        self._prep_cache.add(job_id)
         return analysis
 
     def get_application_sprint(self, *, limit: int = 12) -> dict[str, Any]:
@@ -2036,6 +2149,111 @@ class CareerService:
             profile=context.get("profile") or {},
             criteria=self.get_stage_search().get("brief") or {},
         )
+
+    def get_application_pipeline(self) -> dict[str, Any]:
+        """Return a read-only, derived view of the complete local workflow."""
+
+        jobs = self.list_jobs()
+        drafts = self.list_application_drafts()
+        applications = self.list_applications()
+        matches = self.list_stage_matches().get("matches") or []
+        sprint_queue = [
+            {
+                "job_id": str((match.get("job") or {}).get("id") or ""),
+                "readiness": (
+                    "prepare_now"
+                    if (match.get("stage_match") or {}).get("qualification_status")
+                    == "conforming"
+                    else "offer_to_verify"
+                ),
+                "match_score": int((match.get("stage_match") or {}).get("score") or 0),
+            }
+            for match in matches
+            if isinstance(match.get("job"), dict)
+            and (match.get("job") or {}).get("id")
+            and (match.get("stage_match") or {}).get("qualification_status")
+            != "non_conforming"
+        ]
+        sprint_by_job = {item["job_id"]: item for item in sprint_queue}
+        draft_by_job = {str(item.get("job_id")): item for item in drafts}
+        app_by_job = {str(item.get("job_id")): item for item in applications}
+        job_context = {
+            str(job["id"]): {
+                "qualification_facts_json": "1"
+                if job.get("qualification_facts")
+                else ""
+            }
+            for job in jobs
+        }
+        context = {
+            "jobs": job_context,
+            "sprint_queue": sprint_queue,
+            "prep_cache": set(self._prep_cache),
+            "selected_variant": {},
+            "application_drafts": drafts,
+            "applications": applications,
+        }
+        items: list[PipelineItem] = []
+        for job in jobs:
+            job_id = str(job["id"])
+            draft = draft_by_job.get(job_id, {})
+            variant_id = clean_text(draft.get("variant"), limit=40)
+            variant = next(
+                (item for item in ALL_VARIANTS if item.id == variant_id), None
+            )
+            application = app_by_job.get(job_id, {})
+            sprint = sprint_by_job.get(job_id, {})
+            items.append(
+                PipelineItem(
+                    job_id=job_id,
+                    company=clean_text(job.get("company"), limit=240)
+                    or "Entreprise inconnue",
+                    title=clean_text(job.get("title"), limit=300) or "Sans titre",
+                    stage=derive_pipeline_stage(job_id, context),
+                    variant=variant,
+                    variant_label=variant.label if variant else None,
+                    kit_generated_at=clean_text(draft.get("created_at"), limit=64)
+                    or None,
+                    tracking_stage=clean_text(application.get("stage"), limit=80)
+                    or None,
+                    readiness=clean_text(sprint.get("readiness"), limit=80),
+                    match_score=int(sprint.get("match_score") or 0),
+                )
+            )
+        stage_priority = {
+            PipelineStage.TRACKING_CREATED: 0,
+            PipelineStage.KIT_GENERATED: 1,
+            PipelineStage.VARIANT_SELECTED: 2,
+            PipelineStage.PREP_ANALYZED: 3,
+            PipelineStage.SPRINT_QUEUED: 4,
+            PipelineStage.QUALIFIED: 5,
+            PipelineStage.DISCOVERED: 6,
+        }
+        items.sort(
+            key=lambda item: (
+                stage_priority[item.stage],
+                -item.match_score,
+                item.company.casefold(),
+            )
+        )
+        return {
+            "pipeline": [
+                {
+                    "job_id": item.job_id,
+                    "company": item.company,
+                    "title": item.title,
+                    "stage": item.stage.value,
+                    "variant": item.variant.id if item.variant else None,
+                    "variant_label": item.variant_label,
+                    "kit_generated_at": item.kit_generated_at,
+                    "tracking_stage": item.tracking_stage,
+                    "readiness": item.readiness,
+                    "match_score": item.match_score,
+                }
+                for item in items
+            ],
+            "automatic_submission": False,
+        }
 
     def get_job_summary(
         self,
@@ -3044,7 +3262,11 @@ class CareerService:
                 clean_text(payload.get("title"), limit=300),
                 clean_text(payload.get("description_original"), limit=30_000),
             )
-        if job_family != "À préciser" and job_family not in JOB_FAMILIES:
+        if job_family != "À préciser" and job_family not in {
+            *JOB_FAMILIES,
+            "Markets / Quant",
+            "Corporate Finance / FP&A",
+        }:
             raise UserFacingError("La famille professionnelle sélectionnée est inconnue.")
         duration_raw = payload.get("duration_months")
         duration = None
@@ -3668,7 +3890,60 @@ class CareerService:
             for item in prep.get("unverified_elements", [])
         ][:6]
 
-    def create_application_kit(self, job_id: str, language: Any) -> dict[str, Any]:
+    @staticmethod
+    def _variant_config(variant_id: Any):
+        identifier = clean_text(variant_id, limit=40) or "m_a"
+        variant = next((item for item in ALL_VARIANTS if item.id == identifier), None)
+        if variant is None:
+            raise UserFacingError("Variante CV inconnue.")
+        return variant
+
+    def _generate_targeted_kit_files(
+        self, job_id: str, variant_id: str
+    ) -> dict[str, Any]:
+        variant = self._variant_config(variant_id)
+        profile = self.get_profile()
+        job = self.get_job(job_id)
+        prep = self.get_job_prep(job_id)
+        cv_analysis = self._current_cv_analysis()
+        job.update(prep)
+        job["qualification"] = qualify_offer(job).to_dict()
+        coverage = compute_coverage(job, cv_analysis, profile, variant)
+        gaps = generate_diff(coverage, cv_analysis, profile, variant)
+        coverage = replace(
+            coverage,
+            gaps=gaps,
+            recommended_variant=variant,
+            variant_rationale=(
+                f"Variante {variant.label} sélectionnée explicitement ; "
+                "couverture recalculée sur les preuves locales."
+            ),
+        )
+        output_dir = self.base_dir / "output" / "career" / "kits" / f"{job_id}_{variant.id}"
+        generated = generate_application_kit(
+            job,
+            profile,
+            variant,
+            coverage,
+            cv_analysis,
+            output_dir,
+        )
+        return {
+            "variant": variant.id,
+            "variant_label": variant.label,
+            "generated_at": generated.generated_at,
+            "artifacts": {
+                "cv": str(generated.cv_path),
+                "cover_letter": str(generated.cover_letter_path),
+                "prep_sheet": str(generated.prep_sheet_path),
+            },
+            "provenance_map": generated.provenance_map,
+            "automatic_submission": False,
+        }
+
+    def create_application_kit(
+        self, job_id: str, language: Any, variant: Any = "m_a"
+    ) -> dict[str, Any]:
         """Open (or reopen) the preparation kit for one explicitly chosen offer.
 
         Idempotent by design: the tracker record is created only if absent
@@ -3678,6 +3953,7 @@ class CareerService:
         """
         identifier = clean_text(job_id, limit=80)
         normalized_language = normalize_language(language)
+        selected_variant = self._variant_config(variant)
         tracking = self.create_application(identifier)
         created_tracking = bool(tracking.get("created"))
         application_id = str(tracking["id"])
@@ -3686,17 +3962,22 @@ class CareerService:
             existing = connection.execute(
                 """
                 SELECT id FROM application_drafts
-                WHERE job_id = ? AND language = ?
+                WHERE job_id = ? AND language = ? AND variant = ?
                 ORDER BY created_at DESC, application_drafts.rowid DESC LIMIT 1
                 """,
-                (identifier, normalized_language),
+                (identifier, normalized_language, selected_variant.id),
             ).fetchone()
         if existing:
-            result = self.get_application_kit(application_id, normalized_language)
+            result = self.get_application_kit(
+                application_id, normalized_language, selected_variant.id
+            )
+            result.update(self._generate_targeted_kit_files(identifier, selected_variant.id))
             result["created_tracking"] = created_tracking
             result["created_draft"] = False
             return result
-        draft = self.create_application_draft(identifier, normalized_language)
+        draft = self.create_application_draft(
+            identifier, normalized_language, variant=selected_variant.id
+        )
         draft_id = str(draft["id"])
         with self._lock, self._connection() as connection:
             application = connection.execute(
@@ -3709,18 +3990,32 @@ class CareerService:
                 application_id,
                 str(application["job_id"]),
                 "kit_prepared",
-                json.dumps({"draft_id": draft_id, "language": normalized_language, "mode": "local"}, ensure_ascii=False),
+                json.dumps(
+                    {
+                        "draft_id": draft_id,
+                        "language": normalized_language,
+                        "variant": selected_variant.id,
+                        "mode": "local",
+                    },
+                    ensure_ascii=False,
+                ),
             )
             self._audit(connection, "application_kit_prepared", "application", application_id)
-        result = self.get_application_kit(application_id, normalized_language)
+        result = self.get_application_kit(
+            application_id, normalized_language, selected_variant.id
+        )
+        result.update(self._generate_targeted_kit_files(identifier, selected_variant.id))
         result["created_tracking"] = created_tracking
         result["created_draft"] = True
         return result
 
-    def get_application_kit(self, application_id: str, language: Any) -> dict[str, Any]:
+    def get_application_kit(
+        self, application_id: str, language: Any, variant: Any = ""
+    ) -> dict[str, Any]:
         """Assemble the local kit for one tracked application (read-only)."""
         identifier = clean_text(application_id, limit=80)
         normalized_language = normalize_language(language)
+        selected_variant = clean_text(variant, limit=40)
         with self._lock, self._connection() as connection:
             application = connection.execute(
                 """
@@ -3740,14 +4035,21 @@ class CareerService:
             job_row = connection.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
             # Honor the explicitly requested language when a draft exists in
             # it; otherwise fall back to the latest local draft for this offer.
+            variant_clause = " AND application_drafts.variant = ?" if selected_variant else ""
+            parameters: tuple[Any, ...] = (
+                (job_id, normalized_language, selected_variant)
+                if selected_variant
+                else (job_id, normalized_language)
+            )
             draft_row = connection.execute(
-                """
+                f"""
                 SELECT application_drafts.*, jobs.company, jobs.title
                 FROM application_drafts JOIN jobs ON jobs.id = application_drafts.job_id
                 WHERE application_drafts.job_id = ? AND application_drafts.language = ?
+                {variant_clause}
                 ORDER BY application_drafts.created_at DESC, application_drafts.rowid DESC LIMIT 1
                 """,
-                (job_id, normalized_language),
+                parameters,
             ).fetchone()
             if draft_row is None:
                 draft_row = connection.execute(

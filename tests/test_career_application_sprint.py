@@ -169,6 +169,11 @@ def test_sprint_preserves_tracking_and_never_claims_submission() -> None:
     )
     item = payload["queue"][0]
     assert item["tracking"] == {"application_id": "app-1", "stage": "to_prepare"}
+    assert item["recommended_variant"] == "m_a"
+    assert item["recommended_variant_label"] == "M&A / Investment Banking"
+    assert item["variant_rationale"]
+    assert "mandatory_pct" in item["coverage"]
+    assert isinstance(item["gaps"], list)
     assert item["submission_status"] == "manual_only_not_submitted"
     assert payload["automatic_submission"] is False
 

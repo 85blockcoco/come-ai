@@ -171,6 +171,7 @@ class ApplicationKitPayload(BaseModel):
 
     job_id: str = Field(min_length=8, max_length=80)
     language: str = Field(default="fr", min_length=2, max_length=16)
+    variant: str = Field(default="m_a", pattern="^(m_a|markets|corporate_finance)$")
 
 
 class ApplicationKitTextsPayload(BaseModel):
@@ -441,6 +442,10 @@ def create_career_router(
         """Build a local preparation queue; this route never submits anything."""
         return await local(lambda: service.get_application_sprint(limit=limit))
 
+    @router.get("/api/career/application-pipeline")
+    async def application_pipeline() -> Any:
+        return await local(service.get_application_pipeline)
+
     @router.get("/api/career/stage-search/explore")
     async def last_stage_exploration() -> Any:
         # Opening Career reads the last local report; it never fetches boards.
@@ -612,7 +617,11 @@ def create_career_router(
     @router.post("/api/career/application-kits")
     async def create_application_kit(payload: ApplicationKitPayload) -> Any:
         """One user action: idempotent tracking + reusable local draft + kit."""
-        return await local(lambda: service.create_application_kit(payload.job_id, payload.language))
+        return await local(
+            lambda: service.create_application_kit(
+                payload.job_id, payload.language, payload.variant
+            )
+        )
 
     @router.get("/api/career/applications/{application_id}/kit")
     async def application_kit(application_id: str, language: str = "fr") -> Any:

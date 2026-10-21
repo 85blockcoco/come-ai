@@ -10,11 +10,20 @@ optional, explicitly-consented provider enhancement.
 from __future__ import annotations
 
 import html
+import io
 import json
 import re
+import zipfile
 from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
+from docx import Document
+
+from career.cv_fit import CoverageResult
+from career.cv_quality.models import CVAnalysisResult
+from career.cv_variants import CVVariant
 from workspace_core import UserFacingError
 
 
@@ -33,6 +42,272 @@ class ApplicationDraft:
     cv_markdown: str
     letter_markdown: str
     checks: list[str]
+
+
+@dataclass(frozen=True, slots=True)
+class ApplicationKitResult:
+    """Paths and evidence index for one deterministic local application kit."""
+
+    cv_path: Path
+    cover_letter_path: Path
+    prep_sheet_path: Path
+    variant: CVVariant
+    generated_at: str
+    provenance_map: dict[str, dict[str, Any]]
+
+
+_FIXED_ZIP_TIME = (1980, 1, 1, 0, 0, 0)
+
+
+def _save_deterministic_docx(document: Document, path: Path) -> None:
+    """Save a DOCX with stable archive order and timestamps."""
+
+    raw = io.BytesIO()
+    fixed_datetime = datetime(1980, 1, 1)
+    document.core_properties.created = fixed_datetime
+    document.core_properties.modified = fixed_datetime
+    document.save(raw)
+    raw.seek(0)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(raw, "r") as source, zipfile.ZipFile(
+        path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9
+    ) as target:
+        for name in sorted(source.namelist()):
+            info = zipfile.ZipInfo(name, date_time=_FIXED_ZIP_TIME)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o600 << 16
+            target.writestr(info, source.read(name))
+
+
+def _citation(source: str, quote: Any, offset: int = 0) -> dict[str, Any]:
+    return {"source": source, "quote": _text(quote, 500), "offset": offset}
+
+
+def _variant_text(value: str, variant: CVVariant) -> str:
+    if variant.locale == "en-GB":
+        return value.replace("modeling", "modelling").replace(
+            "optimization", "optimisation"
+        )
+    return value.replace("modelling", "modeling").replace(
+        "optimisation", "optimization"
+    )
+
+
+def _profile_lines(profile: dict[str, Any], field: str) -> list[str]:
+    value = _text(profile.get(field), 12_000)
+    return [line.strip(" •-\t") for line in value.splitlines() if line.strip(" •-\t")]
+
+
+def _add_heading_and_lines(
+    document: Document,
+    heading: str,
+    lines: list[str],
+    *,
+    variant: CVVariant,
+    provenance_map: dict[str, dict[str, Any]],
+    source: str,
+) -> None:
+    document.add_heading(heading, level=1)
+    if not lines:
+        document.add_paragraph("[AJOUTER PREUVE CHIFFRÉE]")
+        return
+    for index, line in enumerate(lines):
+        rendered = _variant_text(line, variant)
+        if source == "profile.experience" and rendered.count("|") >= 2:
+            date_text, role, company_and_result = (
+                part.strip() for part in rendered.split("|", 2)
+            )
+            company, separator, result = company_and_result.partition(" — ")
+            document.add_paragraph(f"{date_text} | {role} | {company}")
+            if separator and result:
+                document.add_paragraph(result, style="List Bullet")
+        else:
+            document.add_paragraph(rendered, style="List Bullet")
+        provenance_map[f"{heading}:{index}"] = _citation(source, line)
+
+
+def generate_application_kit(
+    job: dict[str, Any],
+    profile: dict[str, Any],
+    variant: CVVariant,
+    coverage: CoverageResult,
+    cv_analysis: CVAnalysisResult,
+    output_dir: Path,
+) -> ApplicationKitResult:
+    """Generate a deterministic, local-only CV, letter and preparation sheet."""
+
+    del cv_analysis  # The fit gaps already carry the relevant structural evidence.
+    generated_at = _text(job.get("updated_at"), 64) or "1970-01-01T00:00:00Z"
+    destination = Path(output_dir)
+    destination.mkdir(parents=True, exist_ok=True)
+    provenance_map: dict[str, dict[str, Any]] = {}
+
+    cv = Document()
+    name = _text(profile.get("display_name")) or "[Name to complete]"
+    cv.add_paragraph(name)
+    contacts = " · ".join(
+        filter(
+            None,
+            (
+                _text(profile.get("contact_email")),
+                _text(profile.get("contact_phone")),
+                _text(profile.get("linkedin_url")),
+            ),
+        )
+    )
+    cv.add_paragraph(contacts or "[Contact details to complete]")
+    availability = _text(profile.get("availability"))
+    cv.add_paragraph(
+        "Available for a 6-month international internship"
+        + (f": {availability}" if availability else " [À CONFIRMER]")
+    )
+    graduation_source = _text(profile.get("education"))
+    cv.add_paragraph(
+        f"Graduation: {graduation_source}" if graduation_source else "Graduation: [À CONFIRMER]"
+    )
+    cv.add_heading("Professional Summary", level=1)
+    approved_skills = _text(profile.get("skills"))
+    summary = (
+        f"Targeting {job.get('title') or '[role to confirm]'}. "
+        "Documented profile skills: "
+        + _variant_text(approved_skills, variant)
+        if approved_skills
+        else f"Targeting {job.get('title') or '[role to confirm]'}. [SKILLS TO CONFIRM]"
+    )
+    cv.add_paragraph(summary)
+    provenance_map["Professional Summary"] = _citation(
+        "profile.skills", profile.get("skills")
+    )
+
+    content_by_section = {
+        "professional experience": ("experience", _profile_lines(profile, "experience")),
+        "transaction experience": ("experience", _profile_lines(profile, "experience")),
+        "quantitative projects": ("projects", _profile_lines(profile, "projects")),
+        "finance experience": ("experience", _profile_lines(profile, "experience")),
+        "reporting & analysis": ("experience", _profile_lines(profile, "experience")),
+        "education": ("education", _profile_lines(profile, "education")),
+        "technical skills": ("skills", _profile_lines(profile, "skills")),
+        "projects": ("projects", _profile_lines(profile, "projects")),
+        "languages": ("languages", _profile_lines(profile, "languages")),
+        "certifications": ("certifications", _profile_lines(profile, "certifications")),
+    }
+    for heading in variant.section_order:
+        field, lines = content_by_section.get(heading.casefold(), ("profile", []))
+        _add_heading_and_lines(
+            cv,
+            heading,
+            lines,
+            variant=variant,
+            provenance_map=provenance_map,
+            source=f"profile.{field}",
+        )
+    for gap in coverage.gaps:
+        if gap.provenance is None:
+            cv.add_paragraph(
+                f"{gap.requirement}: [AJOUTER PREUVE CHIFFRÉE]", style="List Bullet"
+            )
+
+    cv_path = destination / "cv.docx"
+    _save_deterministic_docx(cv, cv_path)
+
+    letter = Document()
+    letter.add_heading(f"Application — {job.get('title') or '[Role]'}", level=1)
+    letter.add_paragraph(f"Dear Hiring Team at {job.get('company') or '[Company]'},")
+    letter.add_paragraph(
+        _variant_text(
+            f"I am applying with a {variant.cover_letter_tone} focus supported only by cited profile evidence.",
+            variant,
+        )
+    )
+    mandatory_gaps = [
+        gap for gap in coverage.gaps if gap.requirement_type == "mandatory"
+    ][:3]
+    for index, gap in enumerate(mandatory_gaps):
+        if isinstance(gap.provenance, dict) and gap.provenance.get("quote"):
+            evidence = _text(gap.provenance.get("quote"))
+            provenance_map[f"cover_letter:{index}"] = dict(gap.provenance)
+        else:
+            evidence = "[AJOUTER PREUVE CHIFFRÉE]"
+        letter.add_paragraph(f"{gap.requirement}: {evidence}")
+    letter.add_paragraph(
+        "I will review and submit this application manually; no automatic submission is performed."
+    )
+    cover_letter_path = destination / "cover_letter.docx"
+    _save_deterministic_docx(letter, cover_letter_path)
+
+    qualification = job.get("qualification")
+    qualification = qualification if isinstance(qualification, dict) else {}
+    qualification_provenance = qualification.get("provenance")
+    qualification_provenance = (
+        qualification_provenance
+        if isinstance(qualification_provenance, dict)
+        else {}
+    )
+    fact_rows = []
+    for field, evidence in sorted(qualification_provenance.items()):
+        evidence = evidence if isinstance(evidence, dict) else {}
+        fact_rows.append(
+            f"| {field} | {_text(evidence.get('quote')) or 'À vérifier'} | "
+            f"{_text(evidence.get('source')) or 'qualification'} | Confirmer sur la source officielle |"
+        )
+    if not fact_rows:
+        fact_rows.append("| Offre | À vérifier | offre enregistrée | Relire la source officielle |")
+    gap_rows = [
+        f"| {gap.requirement} | {gap.requirement_type} | {gap.current_state} | {gap.adapted_state} |"
+        for gap in coverage.gaps
+    ] or ["| Aucun gap détecté | — | couvert | Relire avant envoi |"]
+    talking_points = {
+        "m_a": ["Valuation approach", "Deal rationale", "Financial modelling test"],
+        "markets": ["Python analysis", "Statistics", "Bloomberg and time series"],
+        "corporate_finance": ["Reporting", "Budgeting", "Variance analysis"],
+    }[variant.id]
+    provenance_lines = [
+        f"- `{key}` → `{citation['source']}`: “{citation.get('quote', '')}”"
+        for key, citation in sorted(provenance_map.items())
+    ] or ["- Aucun fait de profil injecté."]
+    prep = f"""# Prep Sheet — {job.get('company', '')} — {job.get('title', '')} — {variant.label}
+
+**Generated**: {generated_at}
+**Variant**: {variant.label} ({variant.locale})
+**Job ID**: {job.get('id', '')}
+
+## 1. Offer Facts to Verify
+
+| Fact | Current Value | Source | Action |
+|---|---|---|---|
+{chr(10).join(fact_rows)}
+
+## 2. Profile Evidence Gaps
+
+| Requirement | Type | Status | Action |
+|---|---|---|---|
+{chr(10).join(gap_rows)}
+
+## 3. Variant-Specific Interview Talking Points
+
+{chr(10).join(f'- {point}' for point in talking_points)}
+
+## 4. Before You Submit Checklist
+
+- [ ] Replace every `[AJOUTER PREUVE CHIFFRÉE]` with approved evidence.
+- [ ] Verify availability, graduation and work authorisation.
+- [ ] Review the official offer and submit manually.
+- [ ] Aucun envoi automatique.
+
+## 5. Provenance Index
+
+{chr(10).join(provenance_lines)}
+"""
+    prep_sheet_path = destination / "prep_sheet.md"
+    prep_sheet_path.write_text(prep, encoding="utf-8")
+    return ApplicationKitResult(
+        cv_path=cv_path,
+        cover_letter_path=cover_letter_path,
+        prep_sheet_path=prep_sheet_path,
+        variant=variant,
+        generated_at=generated_at,
+        provenance_map=provenance_map,
+    )
 
 
 def normalize_language(value: Any) -> str:

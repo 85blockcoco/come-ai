@@ -12,6 +12,9 @@ from collections import Counter, defaultdict
 import re
 from typing import Any
 
+from .cv_fit import classify_variant, compute_coverage, generate_diff, serialize_gap
+from .cv_quality import DocumentInput, analyze_cv
+from .cv_variants import ALL_VARIANTS
 from .models import clean_text, normalized_text
 
 MAX_SPRINT_ITEMS = 30
@@ -151,6 +154,53 @@ def build_application_sprint(
             continue
         prep = preparations.get(job_id) if isinstance(preparations.get(job_id), dict) else {}
         coverage = prep.get("cv_coverage") if isinstance(prep.get("cv_coverage"), dict) else {}
+        fit_coverage = prep.get("coverage") if isinstance(prep.get("coverage"), dict) else None
+        recommended_variant = clean_text(prep.get("recommended_variant"), limit=40)
+        recommended_variant_label = clean_text(
+            prep.get("recommended_variant_label"), limit=120
+        )
+        variant_rationale = clean_text(prep.get("variant_rationale"), limit=1_000)
+        variant_scores = (
+            prep.get("variant_scores")
+            if isinstance(prep.get("variant_scores"), dict)
+            else {}
+        )
+        fit_gaps = prep.get("gaps") if isinstance(prep.get("gaps"), list) else None
+        if not recommended_variant or fit_coverage is None or fit_gaps is None:
+            classification = classify_variant(job, profile, ALL_VARIANTS)
+            blank_cv = analyze_cv(
+                DocumentInput(text="", filename=None, filetype="txt", page_count=None)
+            )
+            fit_job = {
+                **job,
+                **prep,
+                "qualification": match.get("qualification") or {},
+            }
+            computed = compute_coverage(
+                fit_job,
+                blank_cv,
+                profile,
+                classification.primary_variant,
+            )
+            generated_gaps = generate_diff(
+                computed,
+                blank_cv,
+                profile,
+                classification.primary_variant,
+            )
+            recommended_variant = classification.primary_variant.id
+            recommended_variant_label = classification.primary_variant.label
+            variant_rationale = classification.rationale
+            variant_scores = classification.scores
+            fit_coverage = {
+                "mandatory_total": computed.mandatory_total,
+                "mandatory_covered": computed.mandatory_covered,
+                "preferred_total": computed.preferred_total,
+                "preferred_covered": computed.preferred_covered,
+                "mandatory_pct": computed.mandatory_pct,
+                "preferred_pct": computed.preferred_pct,
+            }
+            fit_gaps = [serialize_gap(gap) for gap in generated_gaps]
         unverified = prep.get("unverified_elements") if isinstance(prep.get("unverified_elements"), list) else []
         uncertainty = prep.get("uncertainty") if isinstance(prep.get("uncertainty"), list) else []
         missing_facts = (match.get("qualification") or {}).get("missing_fields") or []
@@ -253,6 +303,17 @@ def build_application_sprint(
                 "coverage_percent": int(coverage.get("coverage_percent") or 0),
                 "supported_requirements": int(coverage.get("supported") or 0),
                 "requirements_to_verify": int(coverage.get("to_verify") or len(unverified)),
+                "recommended_variant": recommended_variant,
+                "recommended_variant_label": recommended_variant_label,
+                "variant_rationale": variant_rationale,
+                "variant_scores": variant_scores,
+                "variant_coverage": (
+                    prep.get("variant_coverage")
+                    if isinstance(prep.get("variant_coverage"), dict)
+                    else {recommended_variant: fit_coverage.get("mandatory_pct", 0.0)}
+                ),
+                "coverage": fit_coverage,
+                "gaps": fit_gaps,
                 "blockers": blockers[:8],
                 "candidate_warnings": candidate_warnings,
                 "next_actions": next_actions,
