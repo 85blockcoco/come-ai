@@ -10,18 +10,35 @@
     "tests/fixtures/candidate_profile/cv_ocr_synthetique.txt",
     "tests/fixtures/candidate_profile/cv_anglais_synthetique.txt",
     "tests/fixtures/candidate_profile/expected_facts.json",
-    "docs/agent-reports/SPEC-SK10-CANDIDATE_PROFILE.md"
+    "docs/agent-reports/SPEC-SK10-CANDIDATE_PROFILE.md",
+    "messages/result.json"
   ],
   "files_modified": [
     "career/cv_quality/parser.py",
     "career/cv_quality/__init__.py",
     "career/profile_import.py",
-    "career/service.py",
     "career/router.py",
+    "career/service.py",
+    "career/ocr.py",
+    "career/vision_ocr.m",
+    "come_ai_web.py",
     "career_static/index.html",
     "career_static/career.css"
   ],
-  "output": "Mission SK-10 livrée : profil candidat structuré fait de faits reviewables un par un — 5 statuts (proposed/approved/rejected/modified/suspended), provenance exacte (page, offsets, citation) pour chaque compétence, expérience, date et diplôme, OCR jamais auto-approuvé (invariant decided_at), approbation champ par champ (8 endpoints + UI locale), profil actif limité aux faits validés, suppression et export JSON portables, essai manuel hors dépôt, 46 tests.",
-  "logs": "pytest -q tests/test_candidate_profile.py → 46 passed\npytest -q (suite complète) → 1470 passed, 1 skipped\nruff check . → All checks passed!\ngit diff --check → propre\nchecklist_codex.sh main|lint|secrets → TOUT VERT\nCRÉÉ : career/candidate_profile.py (modèle pur, 5 statuts, transitions, invariant decided_at), career/profile_builder.py (pipeline pur texte local → propositions avec offsets exacts), career_static/js/profile-builder.js (approbation champ par champ), scripts/candidate_profile_manual_check.py (essai réel hors dépôt), tests/test_candidate_profile.py + 4 fixtures synthétiques\nMODIFIÉ : career/cv_quality/parser.py (+PageText et extract_pages_from_bytes, texte produit inchangé), career/profile_import.py (vocabulaire de rubriques partagé), career/service.py (persistance career_settings sans migration de schéma, garde-fou require_candidate_profile_evidence() pour SK-11, export), career/router.py (8 endpoints), career_static/index.html + career.css (panneau de relecture)\nBROUCHE : worker/cvboost-31-1792615600 poussée sur origin (2 commits)\nATTENTION : une implémentation parallèle de SK-10 existe déjà sur agent/spec-sk10-candidate-profile (commande antérieure 2448d28, même base) — les deux branches touchent les mêmes fichiers, ne pas les fusionner ensemble ; le rapport §7 détaille point par point que cette branche est le sur-ensemble (stockage sans table ajoutée, invariant decided_at, garde-fou SK-11, profil actif, export de confidentialité, essai manuel, 46 tests). Recommandation : n'intégrer que worker/cvboost-31-1792615600 ; l'autre branche n'a été ni modifiée ni écrasée.",
-  "error": null
+  "output": "Mission SK-10 (CVBOOST-31) livrée et consolidée : le CV importé devient un profil structuré de faits reviewables un par un (5 statuts, provenance page/offsets/citation exacte, OCR local jamais auto-approuvé, suppression + export, UI d'approbation). Consolidation des 4 lots parallèles : base = lot worker/cvboost-31-1792615600, + câblage effectif du critère 5 (les faits validés seuls alimentent le brouillon de candidature et le matching), + 5 défauts adversariaux corrigés (offsets/citation incohérents sur passage long, page fausse sur document CRLF, transitions refusées offertes par l'UI, approbation sans date, upload hors plafond) + contrat SK-11 (/evidence, get_matching_profile).",
+  "logs": "pytest -q tests/test_candidate_profile.py → 64 passed (18 nouveaux)\npytest -q (suite complète) → 1488 passed, 1 skipped\nruff check . → All checks passed!\ngit diff --check → propre\n./checklist_codex.sh → TOUT VERT\nChacun des 5 défauts corrigés est couvert par un test qui échoue sur le code d'origine (vérifié par retour arrière du patch).",
+  "error": null,
+  "branch": "worker/cvboost-31-1792617513",
+  "base": "f5b22f2 (main)",
+  "integration": {
+    "branch_to_integrate": "worker/cvboost-31-1792617513",
+    "registry_branch": "agent/spec-sk10-candidate-profile",
+    "note": "Quatre implémentations parallèles de SK-10 existent sur la même base f5b22f2 et touchent les mêmes fichiers : ne pas les fusionner ensemble. Cette branche est la livraison consolidée (base = lot D worker/cvboost-31-1792615600 + audit). Le lot C (0502c4b) est conservé sur origin/worker/cvboost-31-1792614464 ; les lots A (worker/cvboost-31-1792607995) et B (worker/cvboost-31-1792614191) sont inchangés sur origin.",
+    "sk11_contract": [
+      "GET /api/career/candidate-profile/evidence (400 tant que rien n'est validé)",
+      "GET /api/career/candidate-profile/active (faits validés + profile_fields projetés)",
+      "CareerService.get_matching_profile() (profil projeté sur les faits validés)",
+      "CareerService.require_candidate_profile_evidence()"
+    ]
+  }
 }
