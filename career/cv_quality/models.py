@@ -133,8 +133,63 @@ class DocumentInput:
         filename: Original filename (optional).
         filetype: Document type — "txt", "pdf", or "docx".
         page_count: Estimated page count (optional, set by parser).
+        raw_bytes: Original file bytes (optional, set by the parser). Kept so
+            that layout level analysis (columns, tables, images) can run on the
+            exported file instead of the flattened text.
     """
     text: str
     filename: str | None
     filetype: Literal["txt", "pdf", "docx"]
     page_count: int | None = None
+    raw_bytes: bytes | None = None
+
+
+# ──────────────────────────────────────────────────────────────────────
+# ATS-specific models (Mission 04)
+# ──────────────────────────────────────────────────────────────────────
+
+ATSRiskLevel = Literal["LOW", "MEDIUM", "HIGH"]
+
+
+@dataclass(frozen=True, slots=True)
+class ATSFinding:
+    """A single ATS risk finding detected in the document.
+
+    Attributes:
+        code: Machine-readable code identifying the detector (e.g., "READING_ORDER").
+        risk_level: Severity level — LOW, MEDIUM, HIGH.
+        message: Human-readable description of the finding.
+        page: 1-based page number where the issue was detected.
+        bbox: Approximate bounding box in PDF points (x0, y0, x1, y1), or None if not available.
+        evidence_excerpt: Text excerpt (≤ 120 chars) evidencing the finding.
+        error: Technical error code when the finding comes from a failed
+            extraction (e.g. "PARSE_ERROR"), None otherwise.
+    """
+    code: str
+    risk_level: ATSRiskLevel
+    message: str
+    page: int
+    bbox: tuple[float, float, float, float] | None
+    evidence_excerpt: str
+    error: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ATSCheckResult:
+    """Complete result of ATS risk analysis.
+
+    Attributes:
+        findings: All detected ATS risk findings.
+        risk_score: Weighted risk score 0–100 (LOW=5, MEDIUM=20, HIGH=50, capped at 100).
+        risk_label: Overall risk interpretation — "LOW", "MEDIUM", or "HIGH".
+        pages_analyzed: Number of pages analyzed.
+        parse_errors: List of parse error messages (e.g., encrypted PDF, corrupt DOCX).
+        risk_interpretation: Human-readable interpretation of the label
+            ("Faible risque", "Risque modéré — relecture conseillée", ...).
+    """
+    findings: list[ATSFinding]
+    risk_score: int
+    risk_label: Literal["LOW", "MEDIUM", "HIGH"]
+    pages_analyzed: int
+    parse_errors: list[str]
+    risk_interpretation: str = ""

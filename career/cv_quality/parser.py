@@ -55,6 +55,7 @@ def extract_text_from_bytes(data: bytes, filetype: str, filename: str | None = N
         filename=filename,
         filetype=filetype,
         page_count=page_count,
+        raw_bytes=data,
     )
 
 
