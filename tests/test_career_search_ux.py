@@ -6,6 +6,7 @@ browser helpers without making any network request.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import shutil
 import subprocess
@@ -78,10 +79,16 @@ def test_offer_cards_surface_all_decision_facts_and_source_reliability() -> None
     assert "Prérequis repérés dans l’offre" in source
 
 
-def test_progress_copy_explicitly_says_that_progress_is_estimated() -> None:
+def test_progress_copy_says_the_steps_come_from_the_server() -> None:
     source = SCRIPT.read_text(encoding="utf-8")
-    assert "Progression estimée" in source
-    assert "Le nombre exact de sources sera affiché à la fin" in source
+    module = (ROOT / "career_static" / "js" / "exploration-progress.js").read_text(encoding="utf-8")
+    # Une progression estimée ne doit plus être promise à la personne : les
+    # étapes affichées sont celles que le serveur a réellement terminées.
+    assert "Progression estimée" not in source
+    assert "progression estimée" not in module.lower()
+    assert "étape réellement terminée" in source
+    assert "étape réellement terminée" in HTML.read_text(encoding="utf-8")
+    assert "/api/career/stage-search/explorations" in module
 
 
 def test_detail_view_keeps_full_loaded_offer_when_prep_payload_is_bounded() -> None:
@@ -94,13 +101,19 @@ def test_detail_view_keeps_full_loaded_offer_when_prep_payload_is_bounded() -> N
     assert "...(selectedMatch.qualification || {})" in detail
 
 
-def test_progress_reaches_complete_state_with_real_result_counts() -> None:
+def test_progress_reaches_complete_state_with_real_result_counts(tmp_path: Path) -> None:
     source = SCRIPT.read_text(encoding="utf-8")
     helpers = "let stageHunterResultMode" + source.split("let stageHunterResultMode", 1)[1].split(
         "\nfunction renderStageExploration", 1
     )[0]
+    module_path = tmp_path / "exploration-progress.js"
+    module_path.write_text(
+        (ROOT / "career_static" / "js" / "exploration-progress.js").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
     script = r'''
 const assert = require("assert");
+const fs = require("fs");
 const fill = {style:{}};
 const classes = new Set();
 const elements = {
@@ -111,22 +124,25 @@ const elements = {
   "#stagehunter-progress-detail": {textContent:""},
 };
 const $ = (selector) => elements[selector] || null;
-const realSetInterval = setInterval;
-const realClearInterval = clearInterval;
-global.setInterval = () => 99;
-global.clearInterval = () => {};
+global.window = globalThis;
+global.document = {getElementById(id){ return elements["#" + id] || null; }};
+(0, eval)(fs.readFileSync(MODULE_PATH, "utf8"));
 HELPERS
-startStageHunterProgress();
+const state = {
+  run_id: "explore_run_synthetic", status: "running", phase: "qualifying",
+  phase_order: ["preparing","consulting","normalizing","qualifying","deduplicating","ranking","persisting","completed"],
+  phases_completed: 3, sources_total: 21, sources_completed: 8, sources_succeeded: 7,
+  sources_failed: 1, offers_read: 340, offers_qualified: 57, cancel_requested: false,
+};
+renderExplorationProgress(state);
 assert.strictEqual(elements["#stagehunter-progress"].hidden, false);
-assert.strictEqual(elements["#stagehunter-progress-bar"].attrs["aria-valuenow"], "6");
-finishStageHunterProgress(true, {summary:{sources_attempted:12,retained_count:34}});
-assert.strictEqual(elements["#stagehunter-progress-bar"].attrs["aria-valuenow"], "100");
-assert.match(elements["#stagehunter-progress-detail"].textContent, /12 sources consultées/);
-assert.match(elements["#stagehunter-progress-detail"].textContent, /34 offres retenues/);
-assert(classes.has("is-complete"));
-global.setInterval = realSetInterval;
-global.clearInterval = realClearInterval;
-'''.replace("HELPERS", helpers)
+assert.strictEqual(elements["#stagehunter-progress-bar"].attrs["aria-valuenow"], "43");
+assert.match(elements["#stagehunter-progress-detail"].textContent, /8\/21 sources terminées/);
+assert.match(elements["#stagehunter-progress-detail"].textContent, /7 réussies/);
+assert.match(elements["#stagehunter-progress-detail"].textContent, /1 en erreur/);
+assert.match(elements["#stagehunter-progress-detail"].textContent, /340 annonces lues/);
+assert.match(elements["#stagehunter-progress-detail"].textContent, /57 offres qualifiées/);
+'''.replace("HELPERS", helpers).replace("MODULE_PATH", json.dumps(str(module_path)))
     completed = subprocess.run([_node(), "-e", script], capture_output=True, text=True, timeout=8)
     assert completed.returncode == 0, completed.stderr
 

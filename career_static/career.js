@@ -2907,56 +2907,43 @@ function renderStagePrepSelect() {
 }
 
 let stageHunterResultMode = "auto";
-let stageHunterProgressTimer = null;
-let stageHunterProgressStartedAt = 0;
+let stageHunterRunPoll = null;
 
-function updateStageHunterProgress(value, label, detail) {
+/* La progression affichée vient du serveur : chaque phase et chaque
+   compteur affiché correspond à une étape réellement terminée.  Aucune
+   estimation locale ne remplace un compteur du serveur. */
+function renderExplorationProgress(state) {
+  const progress = window.CareerExplorationProgress;
   const container = $("#stagehunter-progress");
-  const bar = $("#stagehunter-progress-bar");
-  const fill = bar?.querySelector(".stagehunter-progress-fill");
-  if (!container || !bar || !fill) return;
-  const bounded = Math.max(0, Math.min(100, Math.round(value)));
+  if (!progress || !container) return null;
   container.hidden = false;
-  bar.setAttribute("aria-valuenow", String(bounded));
-  fill.style.width = `${bounded}%`;
-  $("#stagehunter-progress-percent").textContent = `${bounded} %`;
-  if (label) $("#stagehunter-progress-label").textContent = label;
-  if (detail) $("#stagehunter-progress-detail").textContent = detail;
+  return progress.renderInto(state);
 }
 
-function startStageHunterProgress() {
-  if (stageHunterProgressTimer) clearInterval(stageHunterProgressTimer);
-  stageHunterProgressStartedAt = Date.now();
-  const container = $("#stagehunter-progress");
-  container?.classList.remove("is-complete", "is-error");
-  updateStageHunterProgress(6, "Préparation de la recherche…", "Progression estimée : les sources répondent à des vitesses différentes. Le nombre exact de sources sera affiché à la fin.");
-  stageHunterProgressTimer = setInterval(() => {
-    const elapsed = Math.max(0, Math.floor((Date.now() - stageHunterProgressStartedAt) / 1000));
-    const value = Math.min(92, 10 + Math.log2(elapsed + 1) * 18);
-    const label = elapsed < 4 ? "Connexion aux sources publiques…"
-      : elapsed < 12 ? "Lecture et normalisation des annonces…"
-      : elapsed < 25 ? "Qualification des contrats, dates et localisations…"
-      : "Classement local des offres pertinentes…";
-    updateStageHunterProgress(value, label, `En cours depuis ${elapsed} s · progression estimée. Les résultats exacts ne sont connus qu’à la fin.`);
-  }, 500);
-}
-
-function finishStageHunterProgress(success, result = null) {
-  if (stageHunterProgressTimer) clearInterval(stageHunterProgressTimer);
-  stageHunterProgressTimer = null;
-  const container = $("#stagehunter-progress");
-  if (!container) return;
-  const elapsed = Math.max(0, Math.round((Date.now() - stageHunterProgressStartedAt) / 1000));
-  container.classList.toggle("is-complete", success);
-  container.classList.toggle("is-error", !success);
-  if (success) {
-    const summary = result?.summary || {};
-    const attempted = Number.isFinite(summary.sources_attempted) ? summary.sources_attempted : "?";
-    const retained = Number.isFinite(summary.retained_count) ? summary.retained_count : "?";
-    updateStageHunterProgress(100, "Recherche terminée", `${attempted} sources consultées · ${retained} offres retenues · ${elapsed} s. Les détails et les éventuels échecs sont affichés ci-dessous.`);
-  } else {
-    updateStageHunterProgress(100, "Recherche interrompue", `La recherche a échoué après ${elapsed} s. Les offres déjà enregistrées sont intactes.`);
+function stopExplorationPolling() {
+  if (stageHunterRunPoll) {
+    stageHunterRunPoll.stop();
+    stageHunterRunPoll = null;
   }
+}
+
+/* Reprise après rechargement : le dernier identifiant d'exploration suffit
+   pour retrouver l'état réel côté serveur. */
+function resumeExplorationIfNeeded() {
+  const progress = window.CareerExplorationProgress;
+  if (!progress) return;
+  const handle = progress.resume({
+    onState: (state) => {
+      renderExplorationProgress(state);
+      if (!progress.isTerminal(state) || state.status !== "completed") return;
+      api("/api/career/stage-search/explore").then((report) => {
+        stageHunterResultMode = "explore";
+        renderStageExploration(report);
+        renderExplorationMatches(report);
+      }).catch(() => {});
+    },
+  });
+  if (handle) stageHunterRunPoll = handle;
 }
 
 function renderStageExploration(payload) {
@@ -3190,27 +3177,63 @@ $("#stagehunter-search")?.addEventListener("click", async () => {
 
 $("#stagehunter-explore")?.addEventListener("click", async () => {
   const button = $("#stagehunter-explore");
+  const cancelButton = $("#stagehunter-explore-cancel");
+  const progress = window.CareerExplorationProgress;
   button.disabled = true;
   button.textContent = "Exploration en cours…";
-  startStageHunterProgress();
+  if (cancelButton) cancelButton.hidden = false;
   try {
-    const result = await api("/api/career/stage-search/explore", {method:"POST", body:JSON.stringify({force:false})});
-    finishStageHunterProgress(true, result);
+    if (!progress) throw new Error("Le suivi de progression de l’exploration est indisponible.");
+    const started = await progress.startExploration({force: false});
+    renderExplorationProgress(started);
+    stageHunterRunPoll = progress.poll(started.run_id, {onState: renderExplorationProgress});
+    const result = await stageHunterRunPoll.promise;
+    stageHunterRunPoll = null;
+    progress.forgetRun();
+    renderExplorationProgress(result);
     stageHunterResultMode = "explore";
-    renderStageExploration(result);
-    renderExplorationMatches(result);
+    const report = await api("/api/career/stage-search/explore");
+    renderStageExploration(report);
+    renderExplorationMatches(report);
     await Promise.all([loadJobs(), loadApplications(), loadDashboard()]);
     renderStagePrepSelect();
-    const failed = result.summary?.sources_failed || 0;
-    const succeeded = (result.summary?.sources_succeeded || 0) + (result.summary?.sources_cached || 0);
-    setMessage(failed && !succeeded ? "Les sources n’ont pas pu être lues. Aucun résultat n’a été inventé ; consulte le rapport de recherche." : result.summary?.partial ? "Exploration partielle terminée. Consulte les sources et les limites avant de choisir une offre." : "Exploration terminée sur les sources du registre. Aucun dépôt de candidature n’a été effectué.", Boolean(failed && !succeeded));
+    const failed = Number.isFinite(result.sources_failed) ? result.sources_failed : 0;
+    const succeeded = Number.isFinite(result.sources_succeeded) ? result.sources_succeeded : 0;
+    if (result.status === "cancelled") {
+      setMessage("Exploration arrêtée entre deux sources. Les résultats précédents et tes offres enregistrées sont conservés.", false);
+    } else if (failed && !succeeded) {
+      setMessage("Les sources n’ont pas pu être lues. Aucun résultat n’a été inventé ; consulte le rapport de recherche.", true);
+    } else if (failed) {
+      setMessage("Exploration partielle terminée : certaines sources ont échoué. Consulte le rapport de recherche avant de choisir une offre.", false);
+    } else {
+      setMessage("Exploration terminée sur les sources du registre. Aucun dépôt de candidature n’a été effectué.", false);
+    }
   } catch (error) {
-    finishStageHunterProgress(false);
+    stopExplorationPolling();
     setMessage(error.message, true);
     $("#stagehunter-explore-status").textContent = "L’exploration a échoué. Tes offres et candidatures déjà enregistrées sont conservées.";
   } finally {
+    stopExplorationPolling();
     button.disabled = false;
     button.textContent = "Explorer les stages";
+    if (cancelButton) cancelButton.hidden = true;
+  }
+});
+
+$("#stagehunter-explore-cancel")?.addEventListener("click", async () => {
+  const button = $("#stagehunter-explore-cancel");
+  const progress = window.CareerExplorationProgress;
+  const runId = progress?.storedRunId?.();
+  if (!progress || !runId) return;
+  button.disabled = true;
+  try {
+    const state = await progress.cancelExploration(runId);
+    renderExplorationProgress(state);
+    setMessage("Arrêt demandé : l’exploration s’arrête entre deux sources et les résultats précédents sont conservés.", false);
+  } catch (error) {
+    setMessage(error.message, true);
+  } finally {
+    button.disabled = false;
   }
 });
 
@@ -3264,6 +3287,7 @@ async function bootstrap() {
   try {
     organiseViews();
     await Promise.all([loadHealth(), loadProfile(), loadProfileImports(), loadIntake(), loadPreferences(), loadDiscoverySources(), loadDashboard(), loadJobs(), loadShortlist(), loadApplications()]);
+    resumeExplorationIfNeeded();
     const requested = window.location.hash.replace("#career/", "");
     if (careerViews.has(requested)) showView(requested, { focus: false, updateHash: false });
     else document.title = "Tableau de bord — Côme AI Career";
