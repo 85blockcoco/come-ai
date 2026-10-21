@@ -1,5 +1,14 @@
 # SPEC-SK10 — Profil candidat avec preuves approuvées
 
+> ⚠️ **À lire en premier.** Une implémentation parallèle de SK-10 existe déjà
+> sur `agent/spec-sk10-candidate-profile` (commande antérieure, commit
+> `2448d28`, même base `f5b22f2`). Les deux branches touchent les **mêmes
+> fichiers** : il ne faut **pas** les fusionner ensemble. Cette branche est le
+> sur-ensemble de l'autre (voir §7 pour le détail point par point).
+> **Recommandation : n'intégrer que `worker/cvboost-31-1792615600`.**
+> L'autre branche n'a été ni modifiée ni écrasée : sa suppression n'est pas
+> une décision que l'agent puisse prendre seul.
+
 **Mission** : CVBOOST-31 (SPEC Kit SK-10)
 **Branche** : `worker/cvboost-31-1792615600` (alias `agent/spec-sk10-candidate-profile`)
 **Base** : `main` — `f5b22f2` (merge ATS diagnostics + targeted CV variants pipeline)

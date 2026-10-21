@@ -1,0 +1,27 @@
+{
+  "status": "done",
+  "files_created": [
+    "career/candidate_profile.py",
+    "career/profile_builder.py",
+    "career_static/js/profile-builder.js",
+    "scripts/candidate_profile_manual_check.py",
+    "tests/test_candidate_profile.py",
+    "tests/fixtures/candidate_profile/cv_synthetique.txt",
+    "tests/fixtures/candidate_profile/cv_ocr_synthetique.txt",
+    "tests/fixtures/candidate_profile/cv_anglais_synthetique.txt",
+    "tests/fixtures/candidate_profile/expected_facts.json",
+    "docs/agent-reports/SPEC-SK10-CANDIDATE_PROFILE.md"
+  ],
+  "files_modified": [
+    "career/cv_quality/parser.py",
+    "career/cv_quality/__init__.py",
+    "career/profile_import.py",
+    "career/service.py",
+    "career/router.py",
+    "career_static/index.html",
+    "career_static/career.css"
+  ],
+  "output": "Mission SK-10 livrée : profil candidat structuré fait de faits reviewables un par un — 5 statuts (proposed/approved/rejected/modified/suspended), provenance exacte (page, offsets, citation) pour chaque compétence, expérience, date et diplôme, OCR jamais auto-approuvé (invariant decided_at), approbation champ par champ (8 endpoints + UI locale), profil actif limité aux faits validés, suppression et export JSON portables, essai manuel hors dépôt, 46 tests.",
+  "logs": "pytest -q tests/test_candidate_profile.py → 46 passed\npytest -q (suite complète) → 1470 passed, 1 skipped\nruff check . → All checks passed!\ngit diff --check → propre\nchecklist_codex.sh main|lint|secrets → TOUT VERT\nCRÉÉ : career/candidate_profile.py (modèle pur, 5 statuts, transitions, invariant decided_at), career/profile_builder.py (pipeline pur texte local → propositions avec offsets exacts), career_static/js/profile-builder.js (approbation champ par champ), scripts/candidate_profile_manual_check.py (essai réel hors dépôt), tests/test_candidate_profile.py + 4 fixtures synthétiques\nMODIFIÉ : career/cv_quality/parser.py (+PageText et extract_pages_from_bytes, texte produit inchangé), career/profile_import.py (vocabulaire de rubriques partagé), career/service.py (persistance career_settings sans migration de schéma, garde-fou require_candidate_profile_evidence() pour SK-11, export), career/router.py (8 endpoints), career_static/index.html + career.css (panneau de relecture)\nBROUCHE : worker/cvboost-31-1792615600 poussée sur origin (2 commits)\nATTENTION : une implémentation parallèle de SK-10 existe déjà sur agent/spec-sk10-candidate-profile (commande antérieure 2448d28, même base) — les deux branches touchent les mêmes fichiers, ne pas les fusionner ensemble ; le rapport §7 détaille point par point que cette branche est le sur-ensemble (stockage sans table ajoutée, invariant decided_at, garde-fou SK-11, profil actif, export de confidentialité, essai manuel, 46 tests). Recommandation : n'intégrer que worker/cvboost-31-1792615600 ; l'autre branche n'a été ni modifiée ni écrasée.",
+  "error": null
+}
