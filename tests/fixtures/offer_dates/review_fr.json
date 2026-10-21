@@ -1,0 +1,667 @@
+{
+  "lang": "fr",
+  "note": "Adversarial review corpus (round 3): real-world phrasings, including the negatives. No real company, no network.",
+  "cases": [
+    {
+      "id": "review-fr-00",
+      "text": "Date limite de candidature : 15 novembre 2025.",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Date limite de candidature : 15 novembre 2025"
+        }
+      ],
+      "absent": [
+        "published",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-fr-01",
+      "text": "Candidatures jusqu'au 15 novembre 2025.",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Candidatures jusqu'au 15 novembre 2025"
+        }
+      ],
+      "absent": [
+        "published",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-fr-02",
+      "text": "Postulez avant le 15 novembre 2025.",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Postulez avant le 15 novembre 2025"
+        }
+      ],
+      "absent": [
+        "published",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-fr-03",
+      "text": "Clôture des candidatures le 15 novembre 2025.",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Clôture des candidatures le 15 novembre 2025"
+        }
+      ],
+      "absent": [
+        "published",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-fr-04",
+      "text": "Prise de poste le 1er janvier 2027.",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 1,
+            "month": 1,
+            "year": 2027
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Prise de poste le 1er janvier 2027"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-fr-05",
+      "text": "Début du stage : 1er janvier 2027.",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 1,
+            "month": 1,
+            "year": 2027
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Début du stage : 1er janvier 2027"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-fr-06",
+      "text": "À compter du 15 mars 2027.",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 15,
+            "month": 3,
+            "year": 2027
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "À compter du 15 mars 2027"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-fr-07",
+      "text": "Fin de contrat le 30 juin 2027.",
+      "expected": [
+        {
+          "fact_type": "end",
+          "value": {
+            "day": 30,
+            "month": 6,
+            "year": 2027
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Fin de contrat le 30 juin 2027"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-fr-08",
+      "text": "Durée du stage : 6 mois.",
+      "expected": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 6,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "stage : 6 mois"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "end",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-fr-09",
+      "text": "Stage de 6 mois.",
+      "expected": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 6,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Stage de 6 mois"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "end",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-fr-10",
+      "text": "Jusqu'à six mois.",
+      "expected": [
+        {
+          "fact_type": "duration_max",
+          "value": {
+            "months_min": null,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Jusqu'à six mois"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-fr-11",
+      "text": "Au moins six mois.",
+      "expected": [
+        {
+          "fact_type": "duration_min",
+          "value": {
+            "months_min": 6,
+            "months_max": null
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Au moins six mois"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-fr-12",
+      "text": "De trois à six mois.",
+      "expected": [
+        {
+          "fact_type": "duration_range",
+          "value": {
+            "months_min": 3,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "De trois à six mois"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max"
+      ]
+    },
+    {
+      "id": "review-fr-13",
+      "text": "Deux ans d'expérience exigés.",
+      "expected": [],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-fr-14",
+      "text": "Annonce publiée le 3 janvier 2025.",
+      "expected": [
+        {
+          "fact_type": "published",
+          "value": {
+            "day": 3,
+            "month": 1,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "publiée le 3 janvier 2025"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-fr-15",
+      "text": "Stage de 6 mois à partir du 1er janvier 2027.",
+      "expected": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 6,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Stage de 6 mois"
+        },
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 1,
+            "month": 1,
+            "year": 2027
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "à partir du 1er janvier 2027"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "end",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-fr-16",
+      "text": "Date limite : 15 novembre.",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": null
+          },
+          "precision": "day",
+          "confidence": "inferred",
+          "quote": "Date limite : 15 novembre"
+        }
+      ],
+      "absent": [
+        "published",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-fr-17",
+      "text": "Candidatures jusqu'au 15 novembre.",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": null
+          },
+          "precision": "day",
+          "confidence": "inferred",
+          "quote": "Candidatures jusqu'au 15 novembre"
+        }
+      ],
+      "absent": [
+        "published",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-fr-18",
+      "text": "Postulez avant le 15 novembre.",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": null
+          },
+          "precision": "day",
+          "confidence": "inferred",
+          "quote": "Postulez avant le 15 novembre"
+        }
+      ],
+      "absent": [
+        "published",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-fr-19",
+      "text": "Début janvier.",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": 1,
+            "year": null
+          },
+          "precision": "month",
+          "confidence": "inferred",
+          "quote": "Début janvier"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-fr-23",
+      "text": "Deux ans d'expérience.",
+      "expected": [],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-fr-24",
+      "text": "Postulez avant le 01/02/2025.",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": null,
+            "month": null,
+            "year": 2025
+          },
+          "precision": "unknown",
+          "confidence": "ambiguous",
+          "quote": "Postulez avant le 01/02/2025"
+        }
+      ],
+      "absent": [
+        "published",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-fr-25",
+      "text": "Publiée le 3 janvier 2025, candidatures jusqu'au 15 novembre 2025.",
+      "expected": [
+        {
+          "fact_type": "published",
+          "value": {
+            "day": 3,
+            "month": 1,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Publiée le 3 janvier 2025"
+        },
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "candidatures jusqu'au 15 novembre 2025"
+        }
+      ],
+      "absent": [
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-fr-26",
+      "text": "Le contrat se termine en décembre 2027.",
+      "expected": [
+        {
+          "fact_type": "end",
+          "value": {
+            "day": null,
+            "month": 12,
+            "year": 2027
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "se termine en décembre 2027"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-fr-27",
+      "text": "Salaire : 45 000 euros par an. Réf : 12345.",
+      "expected": [],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-fr-28",
+      "text": "Notre société a été fondée en 1984.",
+      "expected": [],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-fr-29",
+      "text": "Vous devez maîtriser Excel et SQL (3 ans d'expérience).",
+      "expected": [],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    }
+  ]
+}

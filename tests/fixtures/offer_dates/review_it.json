@@ -1,0 +1,343 @@
+{
+  "lang": "it",
+  "note": "Adversarial review corpus (round 3): real-world phrasings, including the negatives. No real company, no network.",
+  "cases": [
+    {
+      "id": "review-it-00",
+      "text": "Scadenza: 15 novembre 2025.",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Scadenza: 15 novembre 2025"
+        }
+      ],
+      "absent": [
+        "published",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-it-01",
+      "text": "Data di inizio: 15 gennaio 2027.",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 15,
+            "month": 1,
+            "year": 2027
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Data di inizio: 15 gennaio 2027"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-it-02",
+      "text": "Durata: 6 mesi.",
+      "expected": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 6,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Durata: 6 mesi"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "end",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-it-03",
+      "text": "Fino a sei mesi.",
+      "expected": [
+        {
+          "fact_type": "duration_max",
+          "value": {
+            "months_min": null,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Fino a sei mesi"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-it-04",
+      "text": "Almeno sei mesi.",
+      "expected": [
+        {
+          "fact_type": "duration_min",
+          "value": {
+            "months_min": 6,
+            "months_max": null
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Almeno sei mesi"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-it-05",
+      "text": "Da tre a sei mesi.",
+      "expected": [
+        {
+          "fact_type": "duration_range",
+          "value": {
+            "months_min": 3,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Da tre a sei mesi"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max"
+      ]
+    },
+    {
+      "id": "review-it-06",
+      "text": "Due anni di esperienza.",
+      "expected": [],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-it-07",
+      "text": "Pubblicato il 3 gennaio 2025.",
+      "expected": [
+        {
+          "fact_type": "published",
+          "value": {
+            "day": 3,
+            "month": 1,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Pubblicato il 3 gennaio 2025"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-it-08",
+      "text": "Candidare entro il 15 novembre 2025.",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "entro il 15 novembre 2025"
+        }
+      ],
+      "absent": [
+        "published",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-it-09",
+      "text": "Inizio a gennaio.",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": 1,
+            "year": null
+          },
+          "precision": "month",
+          "confidence": "inferred",
+          "quote": "Inizio a gennaio"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-it-14",
+      "text": "Pubblicato il 3 gennaio 2025, scadenza 15 novembre 2025.",
+      "expected": [
+        {
+          "fact_type": "published",
+          "value": {
+            "day": 3,
+            "month": 1,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Pubblicato il 3 gennaio 2025"
+        },
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "scadenza 15 novembre 2025"
+        }
+      ],
+      "absent": [
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-it-15",
+      "text": "Il contratto termina in dicembre 2027.",
+      "expected": [
+        {
+          "fact_type": "end",
+          "value": {
+            "day": null,
+            "month": 12,
+            "year": 2027
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "termina in dicembre 2027"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-it-16",
+      "text": "Stipendio: 45.000 euro all'anno. Riferimento: 12345.",
+      "expected": [],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-it-17",
+      "text": "Fondata nel 1984.",
+      "expected": [],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    }
+  ]
+}

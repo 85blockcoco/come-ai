@@ -362,3 +362,114 @@ def test_offer_level_extraction_exposes_conflicting_sources():
 def test_offer_level_extraction_rejects_non_objects():
     with pytest.raises(TypeError):
         extract_offer_dates("not an offer")
+
+
+# --------------------------------------------------------------------- round 3
+# The cases below are regressions found by the adversarial review of the
+# round-2 delivery: each one was silently mis-classified before.
+
+
+def test_overlapping_markers_keep_the_most_specific_one():
+    # "postular hasta" (deadline) and "hasta el" (end) are one phrase: the
+    # longer, more specific marker decides.
+    facts = extract_dates("Postular hasta el 15 de noviembre de 2025", "es")
+    assert [fact.fact_type for fact in facts] == ["deadline"]
+
+    # "prise de poste" (start) and "poste le" (published) are one phrase too.
+    facts = extract_dates("Prise de poste le 1er janvier 2027", "fr")
+    assert [fact.fact_type for fact in facts] == ["start"]
+
+
+@pytest.mark.parametrize(
+    ("lang", "text"),
+    [
+        ("en", "The contract ends in December 2027"),
+        ("fr", "Le contrat se termine en décembre 2027"),
+        ("de", "Der Vertrag endet im Dezember 2027"),
+        ("it", "Il contratto termina in dicembre 2027"),
+        ("es", "El contrato termina en diciembre de 2027"),
+    ],
+)
+def test_an_end_is_read_in_every_language(lang, text):
+    facts = extract_dates(text, lang)
+    assert [fact.fact_type for fact in facts] == ["end"]
+    assert facts[0].value == {"day": None, "month": 12, "year": 2027}
+    assert facts[0].precision == "month"
+
+
+@pytest.mark.parametrize(
+    ("lang", "text"),
+    [
+        ("en", "Starting January 2027"),
+        ("fr", "Début janvier 2027"),
+        ("de", "Start im Januar 2027"),
+        ("it", "Comincia in gennaio 2027"),
+        ("es", "Comienza en enero 2027"),
+    ],
+)
+def test_a_start_is_read_in_every_language(lang, text):
+    facts = extract_dates(text, lang)
+    assert [fact.fact_type for fact in facts] == ["start"]
+    assert facts[0].value["month"] == 1
+
+
+def test_a_symbol_ordinal_does_not_hide_the_day():
+    facts = extract_dates("Inizio: 1° gennaio 2027", "it")
+    assert len(facts) == 1
+    assert facts[0].value == {"day": 1, "month": 1, "year": 2027}
+    assert facts[0].precision == "day"
+
+
+def test_the_range_prefix_does_not_hide_an_interval():
+    facts = extract_dates("Interns from 3 to 6 months are welcome", "en")
+    assert [fact.fact_type for fact in facts] == ["duration_range"]
+    assert facts[0].value == {"months_min": 3, "months_max": 6}
+
+
+@pytest.mark.parametrize(
+    ("lang", "text", "months"),
+    [
+        ("en", "The internship lasts six months", 6),
+        ("fr", "Le stage dure six mois", 6),
+        ("de", "Das Praktikum dauert sechs Monate", 6),
+        ("it", "Il tirocinio dura sei mesi", 6),
+        ("es", "La práctica dura seis meses", 6),
+    ],
+)
+def test_a_duration_is_read_in_every_language(lang, text, months):
+    facts = extract_dates(text, lang)
+    assert [fact.fact_type for fact in facts] == ["duration_exact"]
+    assert facts[0].value == {"months_min": months, "months_max": months}
+
+
+@pytest.mark.parametrize(
+    ("lang", "text"),
+    [
+        ("en", "Salary: 45,000 euros per year. Reference: 12345."),
+        ("en", "Founded in 1984 by two engineers."),
+        ("fr", "Salaire : 45 000 euros par an. Réf : 12345."),
+        ("de", "Gehalt: 45.000 Euro pro Jahr. Referenz: 12345."),
+        ("it", "Stipendio: 45.000 euro all'anno. Riferimento: 12345."),
+        ("es", "Salario: 45.000 euros al año. Referencia: 12345."),
+    ],
+)
+def test_a_salary_or_a_company_date_never_becomes_a_fact(lang, text):
+    assert extract_dates(text, lang) == []
+
+
+def test_the_corpus_covers_every_language_and_every_fact_type():
+    covered = {
+        fact_type
+        for case in CASES
+        for fact_type in [item["fact_type"] for item in case["expected"]]
+    }
+    assert covered == {
+        "published",
+        "deadline",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range",
+    }

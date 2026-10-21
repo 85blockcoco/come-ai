@@ -304,6 +304,50 @@
       "absent": [
         "deadline"
       ]
+    },
+    {
+      "id": "de-start-start-im",
+      "text": "Start im Januar",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": 1,
+            "year": null
+          },
+          "precision": "month",
+          "confidence": "inferred",
+          "quote": "Start im Januar"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "published",
+        "end"
+      ]
+    },
+    {
+      "id": "de-end-endet-im",
+      "text": "Der Vertrag endet im Dezember 2027",
+      "expected": [
+        {
+          "fact_type": "end",
+          "value": {
+            "day": null,
+            "month": 12,
+            "year": 2027
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "endet im Dezember 2027"
+        }
+      ],
+      "absent": [
+        "start",
+        "deadline",
+        "published"
+      ]
     }
   ]
 }
