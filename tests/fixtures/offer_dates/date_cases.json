@@ -1,0 +1,1992 @@
+{
+  "meta": {
+    "schema": "career.offer_dates.fixtures/1",
+    "description": "Cas synthétiques (FR/EN/DE/IT/ES) du contrat SPEC-SK02 : dates, échéances et durées avec preuves. Les attentes sont écrites à la main, elles décrivent le comportement attendu et non un instantané de l'implémentation.",
+    "languages": [
+      "de",
+      "en",
+      "es",
+      "fr",
+      "it"
+    ],
+    "case_count": 92,
+    "fact_types": [
+      "published",
+      "deadline",
+      "start",
+      "end",
+      "duration_exact",
+      "duration_min",
+      "duration_max",
+      "duration_range"
+    ]
+  },
+  "cases": [
+    {
+      "id": "SK02-EN-001",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "Apply by 15 November 2025.",
+      "expect": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Apply by 15 November 2025",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "start",
+        "duration_exact"
+      ]
+    },
+    {
+      "id": "SK02-EN-002",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "Apply by 15 November.",
+      "expect": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": null
+          },
+          "precision": "day",
+          "confidence": "inferred",
+          "quote": "Apply by 15 November",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "start"
+      ]
+    },
+    {
+      "id": "SK02-EN-003",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "Starting January 2027.",
+      "expect": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": 1,
+            "year": 2027
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Starting January 2027",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "deadline",
+        "end"
+      ]
+    },
+    {
+      "id": "SK02-EN-004",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "Starting January.",
+      "expect": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": 1,
+            "year": null
+          },
+          "precision": "month",
+          "confidence": "inferred",
+          "quote": "Starting January",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "deadline"
+      ]
+    },
+    {
+      "id": "SK02-EN-005",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "The role starts on 1 March 2026.",
+      "expect": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 1,
+            "month": 3,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "starts on 1 March 2026",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-EN-006",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "Published on 3 May 2025.",
+      "expect": [
+        {
+          "fact_type": "published",
+          "value": {
+            "day": 3,
+            "month": 5,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Published on 3 May 2025",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-EN-007",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "Posted on 3 May 2025, apply by 15 November 2025.",
+      "expect": [
+        {
+          "fact_type": "published",
+          "value": {
+            "day": 3,
+            "month": 5,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Posted on 3 May 2025",
+          "contradictions": "empty"
+        },
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "apply by 15 November 2025",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-EN-008",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "Up to six months.",
+      "expect": [
+        {
+          "fact_type": "duration_max",
+          "value": {
+            "months_min": null,
+            "months_max": 6
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "Up to six months",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "duration_min",
+        "duration_exact",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "SK02-EN-009",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "At least six months.",
+      "expect": [
+        {
+          "fact_type": "duration_min",
+          "value": {
+            "months_min": 6,
+            "months_max": null
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "At least six months",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "duration_max",
+        "duration_exact"
+      ]
+    },
+    {
+      "id": "SK02-EN-010",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "Three to six months.",
+      "expect": [
+        {
+          "fact_type": "duration_range",
+          "value": {
+            "months_min": 3,
+            "months_max": 6
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "Three to six months",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "duration_min",
+        "duration_max",
+        "duration_exact"
+      ]
+    },
+    {
+      "id": "SK02-EN-011",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "Two years of prior experience.",
+      "expect": [],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-EN-012",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "3 years of experience required.",
+      "expect": [],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-EN-013",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "A six-month internship.",
+      "expect": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 6,
+            "months_max": 6
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "six-month",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-EN-014",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "A 12-month contract.",
+      "expect": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 12,
+            "months_max": 12
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "12-month",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-EN-015",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "Contract end date: 31 December 2026.",
+      "expect": [
+        {
+          "fact_type": "end",
+          "value": {
+            "day": 31,
+            "month": 12,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "end date: 31 December 2026",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "start"
+      ]
+    },
+    {
+      "id": "SK02-EN-016",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "The contract runs until 31 December 2026.",
+      "expect": [
+        {
+          "fact_type": "end",
+          "value": {
+            "day": 31,
+            "month": 12,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "until 31 December 2026",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "start"
+      ]
+    },
+    {
+      "id": "SK02-EN-017",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "Position available from 15 June 2026.",
+      "expect": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 15,
+            "month": 6,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "inferred",
+          "quote": "from 15 June 2026",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-EN-018",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "Apply by 01/02/2025.",
+      "expect": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": null,
+            "month": null,
+            "year": 2025
+          },
+          "precision": "unknown",
+          "confidence": "ambiguous",
+          "quote": "Apply by 01/02/2025",
+          "contradictions": "not_empty"
+        }
+      ],
+      "forbidden": [
+        "start"
+      ]
+    },
+    {
+      "id": "SK02-EN-019",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "Apply by 15/11/2025.",
+      "expect": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Apply by 15/11/2025",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-EN-020",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "Deadline: 2026-11-30.",
+      "expect": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 30,
+            "month": 11,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Deadline: 2026-11-30",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-EN-021",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "Duration: 6 months.",
+      "expect": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 6,
+            "months_max": 6
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "6 months",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-EN-022",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "Salary 60000 EUR per year.",
+      "expect": [],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-EN-023",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "40 hours per week.",
+      "expect": [],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-EN-024",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "Starting January 2027. Start date: March 2027.",
+      "expect": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": 1,
+            "year": 2027
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Starting January 2027",
+          "contradictions": "not_empty"
+        },
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": 3,
+            "year": 2027
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Start date: March 2027",
+          "contradictions": "not_empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-EN-025",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "The internship lasts 3 months.",
+      "expect": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 3,
+            "months_max": 3
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "3 months",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-EN-026",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "Applications close on 30 September 2025.",
+      "expect": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 30,
+            "month": 9,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "close on 30 September 2025",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "start"
+      ]
+    },
+    {
+      "id": "SK02-EN-027",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "The position is available from 2026.",
+      "expect": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": null,
+            "year": 2026
+          },
+          "precision": "year",
+          "confidence": "inferred",
+          "quote": "from 2026",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-EN-028",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "Offer published 15 January 2025.",
+      "expect": [
+        {
+          "fact_type": "published",
+          "value": {
+            "day": 15,
+            "month": 1,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "published 15 January 2025",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-EN-029",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "The role starts 1 March 2026 and ends 30 September 2026.",
+      "expect": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 1,
+            "month": 3,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "starts 1 March 2026",
+          "contradictions": "empty"
+        },
+        {
+          "fact_type": "end",
+          "value": {
+            "day": 30,
+            "month": 9,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "ends 30 September 2026",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-EN-030",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "Start date: 1 March 2026. End date: 30 November 2026.",
+      "expect": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 1,
+            "month": 3,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Start date: 1 March 2026",
+          "contradictions": "empty"
+        },
+        {
+          "fact_type": "end",
+          "value": {
+            "day": 30,
+            "month": 11,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "End date: 30 November 2026",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-EN-031",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "Apply by 15 November 2025. The role starts 1 January 2026.",
+      "expect": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Apply by 15 November 2025",
+          "contradictions": "empty"
+        },
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 1,
+            "month": 1,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "starts 1 January 2026",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-EN-032",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "Posting published on 3 May 2025 and applications close on 30 September 2025.",
+      "expect": [
+        {
+          "fact_type": "published",
+          "value": {
+            "day": 3,
+            "month": 5,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "published on 3 May 2025",
+          "contradictions": "empty"
+        },
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 30,
+            "month": 9,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "close on 30 September 2025",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-EN-033",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "Minimum 3 years of experience.",
+      "expect": [],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-EN-034",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "We offer a 6-month internship.",
+      "expect": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 6,
+            "months_max": 6
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "6-month",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-EN-035",
+      "lang": "en",
+      "source_field": "description_original",
+      "text": "No later than 15 November 2025.",
+      "expect": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "No later than 15 November 2025",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "start"
+      ]
+    },
+    {
+      "id": "SK02-FR-001",
+      "lang": "fr",
+      "source_field": "description_original",
+      "text": "Date limite : 30/11/2026.",
+      "expect": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 30,
+            "month": 11,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Date limite : 30/11/2026",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "start"
+      ]
+    },
+    {
+      "id": "SK02-FR-002",
+      "lang": "fr",
+      "source_field": "description_original",
+      "text": "Postulez avant le 15 novembre 2025.",
+      "expect": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "avant le 15 novembre 2025",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "start"
+      ]
+    },
+    {
+      "id": "SK02-FR-003",
+      "lang": "fr",
+      "source_field": "description_original",
+      "text": "Candidatures jusqu'au 15 novembre.",
+      "expect": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": null
+          },
+          "precision": "day",
+          "confidence": "inferred",
+          "quote": "Candidatures jusqu'au 15 novembre",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "start",
+        "end"
+      ]
+    },
+    {
+      "id": "SK02-FR-004",
+      "lang": "fr",
+      "source_field": "description_original",
+      "text": "Début du poste : 1er mars 2026.",
+      "expect": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 1,
+            "month": 3,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Début du poste : 1er mars 2026",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "deadline"
+      ]
+    },
+    {
+      "id": "SK02-FR-005",
+      "lang": "fr",
+      "source_field": "description_original",
+      "text": "À partir du 15 janvier 2026.",
+      "expect": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 15,
+            "month": 1,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "inferred",
+          "quote": "À partir du 15 janvier 2026",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "deadline"
+      ]
+    },
+    {
+      "id": "SK02-FR-006",
+      "lang": "fr",
+      "source_field": "description_original",
+      "text": "Durée de 6 mois.",
+      "expect": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 6,
+            "months_max": 6
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "6 mois",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-FR-007",
+      "lang": "fr",
+      "source_field": "description_original",
+      "text": "Au moins 6 mois.",
+      "expect": [
+        {
+          "fact_type": "duration_min",
+          "value": {
+            "months_min": 6,
+            "months_max": null
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "Au moins 6 mois",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "duration_max"
+      ]
+    },
+    {
+      "id": "SK02-FR-008",
+      "lang": "fr",
+      "source_field": "description_original",
+      "text": "Jusqu'à 6 mois.",
+      "expect": [
+        {
+          "fact_type": "duration_max",
+          "value": {
+            "months_min": null,
+            "months_max": 6
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "Jusqu'à 6 mois",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "duration_min"
+      ]
+    },
+    {
+      "id": "SK02-FR-009",
+      "lang": "fr",
+      "source_field": "description_original",
+      "text": "De 3 à 6 mois.",
+      "expect": [
+        {
+          "fact_type": "duration_range",
+          "value": {
+            "months_min": 3,
+            "months_max": 6
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "3 à 6 mois",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "duration_min",
+        "duration_max"
+      ]
+    },
+    {
+      "id": "SK02-FR-010",
+      "lang": "fr",
+      "source_field": "description_original",
+      "text": "Deux ans d'expérience.",
+      "expect": [],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-FR-011",
+      "lang": "fr",
+      "source_field": "description_original",
+      "text": "Publié le 3 mai 2025.",
+      "expect": [
+        {
+          "fact_type": "published",
+          "value": {
+            "day": 3,
+            "month": 5,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Publié le 3 mai 2025",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-FR-012",
+      "lang": "fr",
+      "source_field": "description_original",
+      "text": "Fin de la mission : 30 septembre 2026.",
+      "expect": [
+        {
+          "fact_type": "end",
+          "value": {
+            "day": 30,
+            "month": 9,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Fin de la mission : 30 septembre 2026",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "start"
+      ]
+    },
+    {
+      "id": "SK02-FR-013",
+      "lang": "fr",
+      "source_field": "description_original",
+      "text": "Stage de 6 mois.",
+      "expect": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 6,
+            "months_max": 6
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "6 mois",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-FR-014",
+      "lang": "fr",
+      "source_field": "description_original",
+      "text": "Date limite : 15/11/2025.",
+      "expect": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Date limite : 15/11/2025",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-FR-015",
+      "lang": "fr",
+      "source_field": "description_original",
+      "text": "Le poste commence le 1 mars 2026.",
+      "expect": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 1,
+            "month": 3,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "commence le 1 mars 2026",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "deadline"
+      ]
+    },
+    {
+      "id": "SK02-FR-016",
+      "lang": "fr",
+      "source_field": "description_original",
+      "text": "Contrat de 12 mois.",
+      "expect": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 12,
+            "months_max": 12
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "12 mois",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-DE-001",
+      "lang": "de",
+      "source_field": "description_original",
+      "text": "Bewerbungsfrist: 30.11.2026.",
+      "expect": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 30,
+            "month": 11,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Bewerbungsfrist: 30.11.2026",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "start"
+      ]
+    },
+    {
+      "id": "SK02-DE-002",
+      "lang": "de",
+      "source_field": "description_original",
+      "text": "Bitte bewerben Sie sich bis zum 15. Januar 2025.",
+      "expect": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 1,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "bewerben Sie sich bis zum 15. Januar 2025",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "start"
+      ]
+    },
+    {
+      "id": "SK02-DE-003",
+      "lang": "de",
+      "source_field": "description_original",
+      "text": "Beginn: 15.03.2026.",
+      "expect": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 15,
+            "month": 3,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Beginn: 15.03.2026",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "deadline"
+      ]
+    },
+    {
+      "id": "SK02-DE-004",
+      "lang": "de",
+      "source_field": "description_original",
+      "text": "Arbeitsbeginn am 1. März 2026.",
+      "expect": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 1,
+            "month": 3,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Arbeitsbeginn am 1. März 2026",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "deadline"
+      ]
+    },
+    {
+      "id": "SK02-DE-005",
+      "lang": "de",
+      "source_field": "description_original",
+      "text": "Befristet auf 6 Monate.",
+      "expect": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 6,
+            "months_max": 6
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "6 Monate",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-DE-006",
+      "lang": "de",
+      "source_field": "description_original",
+      "text": "Bis zu 6 Monate.",
+      "expect": [
+        {
+          "fact_type": "duration_max",
+          "value": {
+            "months_min": null,
+            "months_max": 6
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "Bis zu 6 Monate",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "duration_min"
+      ]
+    },
+    {
+      "id": "SK02-DE-007",
+      "lang": "de",
+      "source_field": "description_original",
+      "text": "Mindestens 6 Monate.",
+      "expect": [
+        {
+          "fact_type": "duration_min",
+          "value": {
+            "months_min": 6,
+            "months_max": null
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "Mindestens 6 Monate",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "duration_max"
+      ]
+    },
+    {
+      "id": "SK02-DE-008",
+      "lang": "de",
+      "source_field": "description_original",
+      "text": "Drei bis sechs Monate.",
+      "expect": [
+        {
+          "fact_type": "duration_range",
+          "value": {
+            "months_min": 3,
+            "months_max": 6
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "Drei bis sechs Monate",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "duration_min",
+        "duration_max"
+      ]
+    },
+    {
+      "id": "SK02-DE-009",
+      "lang": "de",
+      "source_field": "description_original",
+      "text": "Zwei Jahre Berufserfahrung.",
+      "expect": [],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-DE-010",
+      "lang": "de",
+      "source_field": "description_original",
+      "text": "Veröffentlicht am 3. Mai 2025.",
+      "expect": [
+        {
+          "fact_type": "published",
+          "value": {
+            "day": 3,
+            "month": 5,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Veröffentlicht am 3. Mai 2025",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-DE-011",
+      "lang": "de",
+      "source_field": "description_original",
+      "text": "Das Praktikum dauert 6 Monate.",
+      "expect": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 6,
+            "months_max": 6
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "6 Monate",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-DE-012",
+      "lang": "de",
+      "source_field": "description_original",
+      "text": "Bewerbungsfrist: 01.02.2025.",
+      "expect": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": null,
+            "month": null,
+            "year": 2025
+          },
+          "precision": "unknown",
+          "confidence": "ambiguous",
+          "quote": "Bewerbungsfrist: 01.02.2025",
+          "contradictions": "not_empty"
+        }
+      ],
+      "forbidden": [
+        "start"
+      ]
+    },
+    {
+      "id": "SK02-DE-013",
+      "lang": "de",
+      "source_field": "description_original",
+      "text": "Vertragsende: 31.12.2026.",
+      "expect": [
+        {
+          "fact_type": "end",
+          "value": {
+            "day": 31,
+            "month": 12,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Vertragsende: 31.12.2026",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "start"
+      ]
+    },
+    {
+      "id": "SK02-DE-014",
+      "lang": "de",
+      "source_field": "description_original",
+      "text": "Der Vertrag beginnt am 1. April 2026.",
+      "expect": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 1,
+            "month": 4,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "beginnt am 1. April 2026",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "deadline"
+      ]
+    },
+    {
+      "id": "SK02-IT-001",
+      "lang": "it",
+      "source_field": "description_original",
+      "text": "Scadenza: 30/11/2026.",
+      "expect": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 30,
+            "month": 11,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Scadenza: 30/11/2026",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "start"
+      ]
+    },
+    {
+      "id": "SK02-IT-002",
+      "lang": "it",
+      "source_field": "description_original",
+      "text": "Inizio: 1 marzo 2026.",
+      "expect": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 1,
+            "month": 3,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Inizio: 1 marzo 2026",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "deadline"
+      ]
+    },
+    {
+      "id": "SK02-IT-003",
+      "lang": "it",
+      "source_field": "description_original",
+      "text": "Durata di 6 mesi.",
+      "expect": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 6,
+            "months_max": 6
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "6 mesi",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-IT-004",
+      "lang": "it",
+      "source_field": "description_original",
+      "text": "Almeno 6 mesi.",
+      "expect": [
+        {
+          "fact_type": "duration_min",
+          "value": {
+            "months_min": 6,
+            "months_max": null
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "Almeno 6 mesi",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "duration_max"
+      ]
+    },
+    {
+      "id": "SK02-IT-005",
+      "lang": "it",
+      "source_field": "description_original",
+      "text": "Fino a 6 mesi.",
+      "expect": [
+        {
+          "fact_type": "duration_max",
+          "value": {
+            "months_min": null,
+            "months_max": 6
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "Fino a 6 mesi",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "duration_min"
+      ]
+    },
+    {
+      "id": "SK02-IT-006",
+      "lang": "it",
+      "source_field": "description_original",
+      "text": "Da 3 a 6 mesi.",
+      "expect": [
+        {
+          "fact_type": "duration_range",
+          "value": {
+            "months_min": 3,
+            "months_max": 6
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "3 a 6 mesi",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "duration_min",
+        "duration_max"
+      ]
+    },
+    {
+      "id": "SK02-IT-007",
+      "lang": "it",
+      "source_field": "description_original",
+      "text": "Due anni di esperienza.",
+      "expect": [],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-IT-008",
+      "lang": "it",
+      "source_field": "description_original",
+      "text": "Pubblicato il 3 maggio 2025.",
+      "expect": [
+        {
+          "fact_type": "published",
+          "value": {
+            "day": 3,
+            "month": 5,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Pubblicato il 3 maggio 2025",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-IT-009",
+      "lang": "it",
+      "source_field": "description_original",
+      "text": "Contratto a tempo determinato di 6 mesi.",
+      "expect": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 6,
+            "months_max": 6
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "6 mesi",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-IT-010",
+      "lang": "it",
+      "source_field": "description_original",
+      "text": "Fine contratto: 30 settembre 2026.",
+      "expect": [
+        {
+          "fact_type": "end",
+          "value": {
+            "day": 30,
+            "month": 9,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Fine contratto: 30 settembre 2026",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "start"
+      ]
+    },
+    {
+      "id": "SK02-IT-011",
+      "lang": "it",
+      "source_field": "description_original",
+      "text": "Candidati entro il 15 novembre 2025.",
+      "expect": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "entro il 15 novembre 2025",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "start"
+      ]
+    },
+    {
+      "id": "SK02-IT-012",
+      "lang": "it",
+      "source_field": "description_original",
+      "text": "Inizio attivita: 1 marzo 2026.",
+      "expect": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 1,
+            "month": 3,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Inizio attivita: 1 marzo 2026",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "deadline"
+      ]
+    },
+    {
+      "id": "SK02-ES-001",
+      "lang": "es",
+      "source_field": "description_original",
+      "text": "Fecha límite: 30/11/2026.",
+      "expect": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 30,
+            "month": 11,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Fecha límite: 30/11/2026",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "start"
+      ]
+    },
+    {
+      "id": "SK02-ES-002",
+      "lang": "es",
+      "source_field": "description_original",
+      "text": "Inicio: 1 marzo 2026.",
+      "expect": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 1,
+            "month": 3,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Inicio: 1 marzo 2026",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "deadline"
+      ]
+    },
+    {
+      "id": "SK02-ES-003",
+      "lang": "es",
+      "source_field": "description_original",
+      "text": "Contrato de 6 meses.",
+      "expect": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 6,
+            "months_max": 6
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "6 meses",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-ES-004",
+      "lang": "es",
+      "source_field": "description_original",
+      "text": "Al menos 6 meses.",
+      "expect": [
+        {
+          "fact_type": "duration_min",
+          "value": {
+            "months_min": 6,
+            "months_max": null
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "Al menos 6 meses",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "duration_max"
+      ]
+    },
+    {
+      "id": "SK02-ES-005",
+      "lang": "es",
+      "source_field": "description_original",
+      "text": "Hasta 6 meses.",
+      "expect": [
+        {
+          "fact_type": "duration_max",
+          "value": {
+            "months_min": null,
+            "months_max": 6
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "Hasta 6 meses",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "duration_min"
+      ]
+    },
+    {
+      "id": "SK02-ES-006",
+      "lang": "es",
+      "source_field": "description_original",
+      "text": "De 3 a 6 meses.",
+      "expect": [
+        {
+          "fact_type": "duration_range",
+          "value": {
+            "months_min": 3,
+            "months_max": 6
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "3 a 6 meses",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "duration_min",
+        "duration_max"
+      ]
+    },
+    {
+      "id": "SK02-ES-007",
+      "lang": "es",
+      "source_field": "description_original",
+      "text": "Dos años de experiencia.",
+      "expect": [],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-ES-008",
+      "lang": "es",
+      "source_field": "description_original",
+      "text": "Publicado el 3 de mayo de 2025.",
+      "expect": [
+        {
+          "fact_type": "published",
+          "value": {
+            "day": 3,
+            "month": 5,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Publicado el 3 de mayo de 2025",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-ES-009",
+      "lang": "es",
+      "source_field": "description_original",
+      "text": "Postular antes del 15 de noviembre de 2025.",
+      "expect": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Postular antes del 15 de noviembre de 2025",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "start"
+      ]
+    },
+    {
+      "id": "SK02-ES-010",
+      "lang": "es",
+      "source_field": "description_original",
+      "text": "Finaliza el 30 de septiembre de 2026.",
+      "expect": [
+        {
+          "fact_type": "end",
+          "value": {
+            "day": 30,
+            "month": 9,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Finaliza el 30 de septiembre de 2026",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "start"
+      ]
+    },
+    {
+      "id": "SK02-ES-011",
+      "lang": "es",
+      "source_field": "description_original",
+      "text": "Comienza el 1 de marzo de 2026.",
+      "expect": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 1,
+            "month": 3,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Comienza el 1 de marzo de 2026",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": [
+        "deadline"
+      ]
+    },
+    {
+      "id": "SK02-ES-012",
+      "lang": "es",
+      "source_field": "description_original",
+      "text": "El contrato es de 12 meses.",
+      "expect": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 12,
+            "months_max": 12
+          },
+          "precision": "unknown",
+          "confidence": "confirmed",
+          "quote": "12 meses",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-FIELD-001",
+      "lang": "en",
+      "source_field": "deadline_date",
+      "text": "2026-11-30",
+      "expect": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 30,
+            "month": 11,
+            "year": 2026
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "2026-11-30",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-FIELD-002",
+      "lang": "fr",
+      "source_field": "deadline_date",
+      "text": "15/11/2025",
+      "expect": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "15/11/2025",
+          "contradictions": "empty"
+        }
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "SK02-FIELD-003",
+      "lang": "de",
+      "source_field": "start_date",
+      "text": "01.03.2026",
+      "expect": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": null,
+            "year": 2026
+          },
+          "precision": "unknown",
+          "confidence": "ambiguous",
+          "quote": "01.03.2026",
+          "contradictions": "not_empty"
+        }
+      ],
+      "forbidden": []
+    }
+  ]
+}
