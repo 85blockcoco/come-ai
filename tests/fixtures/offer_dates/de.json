@@ -1,0 +1,208 @@
+{
+  "lang": "de",
+  "note": "Synthetische Angebote. Keine echte Firma, keine echte Person, kein Netzwerk.",
+  "cases": [
+    {
+      "id": "de-deadline-bewerbungsfrist",
+      "text": "Bewerbungsfrist: 15. November 2025",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {"day": 15, "month": 11, "year": 2025},
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Bewerbungsfrist: 15. November 2025"
+        }
+      ],
+      "absent": ["start", "published", "end"]
+    },
+    {
+      "id": "de-deadline-numeric",
+      "text": "Bewerbungsfrist: 15.11.2025",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {"day": 15, "month": 11, "year": 2025},
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Bewerbungsfrist: 15.11.2025"
+        }
+      ],
+      "absent": ["start"]
+    },
+    {
+      "id": "de-start-beginn",
+      "text": "Beginn: Januar 2027",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {"day": null, "month": 1, "year": 2027},
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Beginn: Januar 2027"
+        }
+      ],
+      "absent": ["deadline"]
+    },
+    {
+      "id": "de-start-month-without-year",
+      "text": "Beginn im Januar",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {"day": null, "month": 1, "year": null},
+          "precision": "month",
+          "confidence": "inferred",
+          "quote": "Beginn im Januar"
+        }
+      ],
+      "absent": ["deadline"]
+    },
+    {
+      "id": "de-duration-exact",
+      "text": "Dauer: 6 Monate",
+      "expected": [
+        {
+          "fact_type": "duration_exact",
+          "value": {"months": 6},
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Dauer: 6 Monate"
+        }
+      ],
+      "absent": ["duration_min", "duration_max", "duration_range"]
+    },
+    {
+      "id": "de-duration-min",
+      "text": "Mindestens 6 Monate",
+      "expected": [
+        {
+          "fact_type": "duration_min",
+          "value": {"months": 6},
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Mindestens 6 Monate"
+        }
+      ],
+      "absent": ["duration_max", "duration_exact"]
+    },
+    {
+      "id": "de-duration-max",
+      "text": "Bis zu 6 Monate",
+      "expected": [
+        {
+          "fact_type": "duration_max",
+          "value": {"months": 6},
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Bis zu 6 Monate"
+        }
+      ],
+      "absent": ["duration_min", "duration_exact"]
+    },
+    {
+      "id": "de-duration-range",
+      "text": "Praktikum von 3 bis 6 Monaten",
+      "expected": [
+        {
+          "fact_type": "duration_range",
+          "value": {"months_min": 3, "months_max": 6},
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Praktikum von 3 bis 6 Monaten"
+        }
+      ],
+      "absent": ["duration_min", "duration_max", "duration_exact"]
+    },
+    {
+      "id": "de-prior-experience-is-not-a-duration",
+      "text": "Zwei Jahre Berufserfahrung",
+      "expected": [],
+      "absent": ["duration_exact", "duration_min", "duration_max", "duration_range"]
+    },
+    {
+      "id": "de-published",
+      "text": "Veröffentlicht am 3. Januar 2025",
+      "expected": [
+        {
+          "fact_type": "published",
+          "value": {"day": 3, "month": 1, "year": 2025},
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Veröffentlicht am 3. Januar 2025"
+        }
+      ],
+      "absent": ["start", "deadline"]
+    },
+    {
+      "id": "de-ambiguous-numeric-date",
+      "text": "Bewerbungsfrist: 01.02.2025",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {"day": 1, "month": 2, "year": 2025},
+          "precision": "day",
+          "confidence": "ambiguous",
+          "quote": "Bewerbungsfrist: 01.02.2025",
+          "contradictions": ["alternative:2025-02-01"]
+        }
+      ],
+      "absent": ["start"]
+    },
+    {
+      "id": "de-end-date",
+      "text": "Vertragsende: 30. Juni 2027",
+      "expected": [
+        {
+          "fact_type": "end",
+          "value": {"day": 30, "month": 6, "year": 2027},
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Vertragsende: 30. Juni 2027"
+        }
+      ],
+      "absent": ["start", "deadline"]
+    },
+    {
+      "id": "de-application-opening-is-not-a-start",
+      "text": "Bewerbungen starten am 15. Januar 2027",
+      "expected": [],
+      "absent": ["start", "deadline", "published"]
+    },
+    {
+      "id": "de-published-and-deadline-are-two-facts",
+      "text": "Veröffentlicht am 3. Januar 2025. Bewerbungsfrist: 15. November 2025.",
+      "expected": [
+        {
+          "fact_type": "published",
+          "value": {"day": 3, "month": 1, "year": 2025},
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Veröffentlicht am 3. Januar 2025"
+        },
+        {
+          "fact_type": "deadline",
+          "value": {"day": 15, "month": 11, "year": 2025},
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Bewerbungsfrist: 15. November 2025"
+        }
+      ],
+      "absent": ["start", "end"]
+    },
+    {
+      "id": "de-start-sofort-has-no-calendar-date",
+      "text": "Beginn: sofort",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {"day": null, "month": null, "year": null},
+          "precision": "unknown",
+          "confidence": "ambiguous",
+          "quote": "Beginn: sofort"
+        }
+      ],
+      "absent": ["deadline"]
+    }
+  ]
+}
