@@ -16,10 +16,10 @@ Le système ne parle **jamais** de « rejet » : il parle de **niveau de risque*
 **relecture conseillée**, jamais un verdict binaire.
 
 ### Résultats des tests
-- ✅ **51 tests unitaires** dédiés (`tests/test_cv_quality_ats.py`), fixtures **synthétiques** (PDF générés par reportlab, DOCX par python-docx)
-- ✅ **1408 tests** dans la suite globale (≥ 1269 requis) — aucune régression
+- ✅ **57 tests unitaires** dédiés (`tests/test_cv_quality_ats.py`), fixtures **synthétiques** (PDF générés par reportlab, DOCX par python-docx)
+- ✅ **1478 tests** dans la suite globale (≥ 1269 requis) — aucune régression
 - ✅ **9 détecteurs** implémentés + score pondéré + label + interprétation
-- ✅ **Performance** : < 0,1 s pour un PDF de 5 pages (seuil : 3 s)
+- ✅ **Performance** : ~45 ms pour un PDF de 5 pages (seuil : 3 s)
 
 ---
 
@@ -62,9 +62,9 @@ Le champ est optionnel : sans octets, les détecteurs travaillent sur le texte s
 | Code | Niveau | Heuristique implémentée | Source |
 |---|---|---|---|
 | `READING_ORDER` | MEDIUM | > 2 retours en arrière de l'axe `y` sur une page (flux non linéaire : encadrés, colonnes entrelacées). Repli texte : lignes séparées par 3+ espaces ou tabulations | positions PDF (visitor `pypdf`) |
-| `TEXT_IN_IMAGES` | HIGH | Page avec `/XObject` image **et** < 200 caractères extractibles (ou 0 caractère) → contenu probablement invisible pour l'ATS | XObjects PDF / `inline_shapes` DOCX |
+| `TEXT_IN_IMAGES` | HIGH | Page avec `/XObject` image **et** < 50 caractères extractibles (ou 0 caractère) → contenu probablement invisible pour l'ATS. **Plus** : image dominante (≥ 25 % de la page) sans texte adjacent → contenu incorporé dans l'image (OCR requis). La position réelle des images est lue dans le flux de contenu PDF (`cm` / `Do`) | XObjects PDF / `inline_shapes` DOCX |
 | `NESTED_TABLE` | MEDIUM | Tableaux DOCX (y compris **imbriqués** dans une cellule) et grilles alignées PDF (≥ 2 lignes à ≥ 3 cellules alignées) | structure DOCX / positions PDF |
-| `MULTIPLE_COLUMNS` | MEDIUM | **Gouttière verticale** sans texte (≥ 40 pt) traversée par ≤ 50 % des lignes et séparant deux blocs couvrant chacun ≥ 30 % de la hauteur de texte ; colonnes déclarées `w:cols` en DOCX | positions PDF / `sectPr` DOCX |
+| `MULTIPLE_COLUMNS` | MEDIUM | **Gouttière verticale** sans texte (≥ 40 pt) traversée par ≤ 50 % des lignes et séparant deux blocs couvrant chacun ≥ 30 % de la hauteur de texte ; colonnes déclarées `w:cols` en DOCX. Repli texte : plusieurs lignes séparant deux champs **au même offset** | positions PDF / `sectPr` DOCX |
 | `HEADER_FOOTER` | LOW | Texte répété en haut (y ≥ 90 % hauteur) ou en bas (y ≤ 10 %) d'au moins **2 pages consécutives**, même contenu et même position | positions PDF / repli texte |
 | `DECORATIVE_CHARS` | LOW | Ligatures (ﬁ ﬂ ﬀ ﬃ ﬄ) et glyphes décoratifs (• ● ◆ ► ▪ → …). Les accents français et les guillemets typographiques ne sont **jamais** signalés | texte extrait |
 | `UNREADABLE_LINKS` | LOW | URL complète visible dans le texte (`http(s)://`, `www.`, domaine nu) au lieu d'un libellé d'ancre. Les adresses e-mail sont exclues | texte extrait |
@@ -171,8 +171,15 @@ Repli possible : lignes traversant la gouttière (≤ 50 %) et blocs de part et 
 chacun ≥ 30 % de la hauteur de texte.
 
 ### 2. Une photo n'est pas un risque « texte dans image »
-Le risque n'est signalé que si la page contient des images **et** moins de 200 caractères
-extractibles. Une photo de portrait à côté d'un vrai texte ne produit aucun signal.
+La position réelle des images est lue dans le flux de contenu du PDF (`cm` puis `Do` : une image
+peint le carré unité, sa boîte est donc la matrice courante). Le risque n'est signalé que si :
+
+- la page contient des images **et** moins de 50 caractères extractibles (page scannée) ;
+- ou si une image **dominante** (≥ 25 % de la page) ne porte **aucun texte adjacent** — le
+  contenu est alors incorporé dans l'image (OCR requis).
+
+Une photo de portrait à côté d'un vrai texte ne produit donc aucun signal, et un CV aplati en
+image est bien détecté.
 
 ### 3. Les accents ne sont jamais des « caractères décoratifs »
 Seules les ligatures et les glyphes décoratifs explicitement listés sont signalés : `é`, `à`,
@@ -188,7 +195,7 @@ Un test vérifie qu'aucun message ne contient « rejet » ni « refus ».
 
 ---
 
-## Tests (`tests/test_cv_quality_ats.py` — 51 tests)
+## Tests (`tests/test_cv_quality_ats.py` — 57 tests)
 
 | Famille | Couverture |
 |---|---|
@@ -218,10 +225,10 @@ Aucune donnée personnelle, aucun fichier externe.
 
 ```bash
 /Users/comedelavenne/AI-Excel-Agent/.venv/bin/python -m pytest -q tests/test_cv_quality_ats.py
-# 51 passed
+# 57 passed
 
 /Users/comedelavenne/AI-Excel-Agent/.venv/bin/python -m pytest -q
-# 1408 passed
+# 1478 passed
 
 /Users/comedelavenne/AI-Excel-Agent/.venv/bin/python -m ruff check .
 # All checks passed!
@@ -257,7 +264,7 @@ git diff --check   # propre
 | `career/cv_quality/models.py` | **étendu** — `ATSFinding`, `ATSCheckResult`, `ATSRiskLevel`, `DocumentInput.raw_bytes` |
 | `career/cv_quality/parser.py` | **étendu** — attache les octets du fichier à `DocumentInput` |
 | `career/cv_quality/__init__.py` | **étendu** — exports `run_ats_check`, `run_ats_check_bytes`, `run_ats_check_file`, `describe_risk` |
-| `tests/test_cv_quality_ats.py` | **nouveau** — 51 tests synthétiques |
+| `tests/test_cv_quality_ats.py` | **nouveau** — 57 tests synthétiques |
 | `docs/agent-reports/CVBOOST-04-ATS.md` | **nouveau** — ce rapport |
 
 ---
@@ -272,6 +279,8 @@ la même mission, worktrees distincts). Trois implémentations ont donc coexist�
 | `0e633a1` | première version (branche `agent/cvboost-04-ats-v2`) |
 | `6e0e3bb` | deuxième version (analyse positionnelle) |
 | `8fd5e98` | commit de consolidation des deux versions |
+| `4e328f9` | régression de la consolidation corrigée (colonnes, tableaux, photo) |
+| `b9297c6` | position réelle des images PDF + seuils calibrés + repli colonnes texte |
 
 La consolidation `8fd5e98` a **introduit des régressions** (vérifié sur 14 fixtures
 synthétiques) :
@@ -297,3 +306,26 @@ Les gains de cette implémentation (non couverts par la consolidation) :
 
 Les commits des autres workers (`0e633a1`, `6e0e3bb`, `8fd5e98`) sont conservés dans
 l'historique de la branche.
+
+### Correctifs appliqués par-dessus la consolidation (`b9297c6`)
+
+Deux faux positifs subsistaient, tous deux vérifiés sur fixtures synthétiques :
+
+| Cas | Avant | Après |
+|---|---|---|
+| CV avec une simple photo + un vrai texte | `TEXT_IN_IMAGES` HIGH → **faux positif** (50/100) | aucun risque ✓ |
+| CV en une colonne, bloc de coordonnées | `MULTIPLE_COLUMNS` MEDIUM → **faux positif** | aucun risque ✓ |
+| CV aplati en image | non détecté | `TEXT_IN_IMAGES` HIGH ✓ |
+
+Les causes et les correctifs :
+
+1. **Position des images** : la position n'était pas lue, chaque image était assimilée à la
+   page entière. Le flux de contenu est maintenant parcouru (`cm` / `Do`) pour obtenir la boîte
+   réelle de chaque image ; le seuil « texte minimal » est ramené de 200 à 50 caractères.
+2. **Repli texte des colonnes** : il reposait sur des paires de lignes courtes consécutives, ce
+   qui signalait le bloc nom / e-mail / téléphone d'un CV propre. Il repose désormais sur un
+   séparateur de colonnes **commun à plusieurs lignes**, signature textuelle d'un vrai
+   alignement en colonnes.
+3. **Règle de géométrie manquante** : une image dominante (≥ 25 % de la page) sans texte
+   adjacent signale un CV aplati dont le contenu est incorporé dans l'image (OCR requis).
+4. **CTM** : la matrice de transformation courante est appliquée aux positions des glyphes.
