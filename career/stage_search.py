@@ -710,11 +710,14 @@ def score_brief_match(brief: dict[str, Any], job: dict[str, Any]) -> dict[str, A
     score = None if base_score is None else max(0, min(100, base_score + geo_score))
     if geo_score:
         reasons.insert(0, f"{geo_reason} : {geo_score:+d} points au classement.")
-    if score is None:
+    if base_score is None:
         label = "Aucun critère renseigné : classement neutre"
-    elif score >= 70:
+    elif base_score >= 70:
+        # The label describes the relevance of the offer; the geographic
+        # preference is explained on its own line, it does not turn a strong
+        # match into a weak one.
         label = "Correspondance forte"
-    elif score >= 45:
+    elif base_score >= 45:
         label = "Correspondance à examiner"
     else:
         label = "Correspondance faible ou incomplète"
