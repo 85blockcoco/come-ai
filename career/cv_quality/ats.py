@@ -1145,7 +1145,10 @@ def run_ats_check(
         findings.extend(detect_headers_footers(pages))
         findings.extend(detect_decorative_chars(pages))
         findings.extend(detect_unreadable_links(pages))
-        findings.extend(detect_missing_sections(pages, expected_sections))
+        if any(page.text.strip() for page in pages):
+            # Without any extractable text the section detector would only
+            # repeat what the "text in images" finding already says.
+            findings.extend(detect_missing_sections(pages, expected_sections))
     findings.extend(detect_parse_errors(parse_errors))
 
     risk_score = calculate_risk_score(findings)

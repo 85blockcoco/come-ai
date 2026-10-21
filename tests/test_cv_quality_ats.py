@@ -310,6 +310,13 @@ def test_text_in_images_detected_on_image_only_pdf():
     assert findings[0].page == 1
 
 
+def test_image_only_pdf_does_not_duplicate_the_missing_sections():
+    """Sans texte extractible, le détecteur de sections n'apporte rien de plus."""
+    result = run_ats_check(_pdf_document(_image_only_pdf()))
+    assert not _has(result, "MISSING_SECTION")
+    assert result.risk_label == "HIGH"
+
+
 def test_text_in_images_quiet_on_text_pdf():
     result = run_ats_check(_pdf_document(_clean_pdf()))
     assert not _has(result, "TEXT_IN_IMAGES")

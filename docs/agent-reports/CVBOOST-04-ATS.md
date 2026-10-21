@@ -16,8 +16,8 @@ Le système ne parle **jamais** de « rejet » : il parle de **niveau de risque*
 **relecture conseillée**, jamais un verdict binaire.
 
 ### Résultats des tests
-- ✅ **50 tests unitaires** dédiés (`tests/test_cv_quality_ats.py`), fixtures **synthétiques** (PDF générés par reportlab, DOCX par python-docx)
-- ✅ **1407 tests** dans la suite globale (≥ 1269 requis) — aucune régression
+- ✅ **51 tests unitaires** dédiés (`tests/test_cv_quality_ats.py`), fixtures **synthétiques** (PDF générés par reportlab, DOCX par python-docx)
+- ✅ **1408 tests** dans la suite globale (≥ 1269 requis) — aucune régression
 - ✅ **9 détecteurs** implémentés + score pondéré + label + interprétation
 - ✅ **Performance** : < 0,1 s pour un PDF de 5 pages (seuil : 3 s)
 
@@ -188,7 +188,7 @@ Un test vérifie qu'aucun message ne contient « rejet » ni « refus ».
 
 ---
 
-## Tests (`tests/test_cv_quality_ats.py` — 50 tests)
+## Tests (`tests/test_cv_quality_ats.py` — 51 tests)
 
 | Famille | Couverture |
 |---|---|
@@ -218,10 +218,10 @@ Aucune donnée personnelle, aucun fichier externe.
 
 ```bash
 /Users/comedelavenne/AI-Excel-Agent/.venv/bin/python -m pytest -q tests/test_cv_quality_ats.py
-# 50 passed
+# 51 passed
 
 /Users/comedelavenne/AI-Excel-Agent/.venv/bin/python -m pytest -q
-# 1407 passed
+# 1408 passed
 
 /Users/comedelavenne/AI-Excel-Agent/.venv/bin/python -m ruff check .
 # All checks passed!
@@ -257,5 +257,5 @@ git diff --check   # propre
 | `career/cv_quality/models.py` | **étendu** — `ATSFinding`, `ATSCheckResult`, `ATSRiskLevel`, `DocumentInput.raw_bytes` |
 | `career/cv_quality/parser.py` | **étendu** — attache les octets du fichier à `DocumentInput` |
 | `career/cv_quality/__init__.py` | **étendu** — exports `run_ats_check`, `run_ats_check_bytes`, `run_ats_check_file`, `describe_risk` |
-| `tests/test_cv_quality_ats.py` | **nouveau** — 50 tests synthétiques |
+| `tests/test_cv_quality_ats.py` | **nouveau** — 51 tests synthétiques |
 | `docs/agent-reports/CVBOOST-04-ATS.md` | **nouveau** — ce rapport |
