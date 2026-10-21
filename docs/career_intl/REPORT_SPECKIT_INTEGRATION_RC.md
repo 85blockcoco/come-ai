@@ -102,9 +102,11 @@ is additive and backed up, rather than misleadingly described as migration-free.
   the Career UI;
 - tests and real local HTTP responses verify the contract.
 
-HTTP smoke evidence on port 8964: `/career` = 200, `/v5` = 200; the API returned
-France, Paris, `require_known_location=true`, Stage/CDD/CDI/VIE and January to
-March, and the three new controls were present in the served HTML.
+Final HTTP smoke evidence after the main refresh, on the launcher's local port
+8765: `/career` = 200 and `/v5` = 200.  The API returned France, Paris,
+`require_known_location=true`, Stage/CDD/CDI/VIE and January to March.  The
+test server was stopped immediately afterward.  An earlier isolated smoke also
+confirmed the three new controls in the served HTML.
 
 ## Validation
 
