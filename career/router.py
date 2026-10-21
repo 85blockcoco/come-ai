@@ -436,6 +436,11 @@ def create_career_router(
     async def stage_search_matches() -> Any:
         return await local(service.list_stage_matches)
 
+    @router.get("/api/career/application-sprint")
+    async def application_sprint(limit: int = Query(default=12, ge=1, le=30)) -> Any:
+        """Build a local preparation queue; this route never submits anything."""
+        return await local(lambda: service.get_application_sprint(limit=limit))
+
     @router.get("/api/career/stage-search/explore")
     async def last_stage_exploration() -> Any:
         # Opening Career reads the last local report; it never fetches boards.

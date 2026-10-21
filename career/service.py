@@ -61,6 +61,7 @@ from .application_dashboard import (
     build_dashboard_payload,
 )
 from .application_prep import prepare_application, summarize_offer
+from .application_sprint import MAX_SPRINT_ITEMS, build_application_sprint
 
 try:
     from consent_guard import ConsentGuard
@@ -1967,6 +1968,32 @@ class CareerService:
         context = self._scoring_context()
         analysis = prepare_application(context.get("profile") or {}, context.get("intake") or {}, job)
         return analysis
+
+    def get_application_sprint(self, *, limit: int = 12) -> dict[str, Any]:
+        """Prioritise a bounded batch for local preparation, without sending.
+
+        This deliberately composes the canonical matching and preparation
+        paths so the batch cannot silently use different eligibility or CV
+        rules from the individual Career screens.
+        """
+        bounded_limit = max(1, min(MAX_SPRINT_ITEMS, int(limit or 12)))
+        matches = self.list_stage_matches().get("matches") or []
+        eligible_matches = [
+            match
+            for match in matches
+            if (match.get("stage_match") or {}).get("qualification_status") != "non_conforming"
+        ][:bounded_limit]
+        preparations = {
+            str(match["job"]["id"]): self.get_job_prep(str(match["job"]["id"]))
+            for match in eligible_matches
+            if isinstance(match.get("job"), dict) and match["job"].get("id")
+        }
+        return build_application_sprint(
+            matches,
+            preparations,
+            self.list_applications(),
+            limit=bounded_limit,
+        )
 
     def get_job_summary(
         self,

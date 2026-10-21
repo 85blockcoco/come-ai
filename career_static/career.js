@@ -3021,6 +3021,126 @@ function renderStageApplications() {
   state.applications.forEach((application) => target.append(applicationCard(application)));
 }
 
+function sprintReadinessLabel(value) {
+  return {
+    prepare_now: "Prête à préparer",
+    profile_to_complete: "Profil à compléter",
+    offer_to_verify: "Offre à vérifier",
+  }[value] || "À vérifier";
+}
+
+function renderApplicationSprint(payload) {
+  const target = $("#stagehunter-sprint");
+  if (!target) return;
+  target.replaceChildren();
+  target.hidden = false;
+  const stats = payload.stats || {};
+  const statsBlock = make("div", "", "sprint-stats");
+  [
+    [stats.selected || 0, "offres dans la file"],
+    [stats.prepare_now || 0, "prêtes à préparer"],
+    [stats.profile_to_complete || 0, "profils à renforcer"],
+    [stats.offer_to_verify || 0, "offres à vérifier"],
+  ].forEach(([value, label]) => {
+    const item = make("article", "", "sprint-stat");
+    item.append(make("strong", String(value)), make("span", label));
+    statsBlock.append(item);
+  });
+  target.append(statsBlock);
+
+  const grid = make("div", "", "sprint-grid");
+  const queue = make("div", "", "sprint-queue");
+  queue.append(make("h4", "Ordre de préparation conseillé"));
+  if (!(payload.queue || []).length) {
+    queue.append(make("p", "Aucune offre admissible dans les résultats actuels. Relance la recherche ou vérifie tes critères.", "empty-state"));
+  }
+  (payload.queue || []).forEach((item, index) => {
+    const card = make("article", "", `sprint-card ${item.readiness === "prepare_now" ? "is-ready" : "is-review"}`);
+    card.append(make("p", `#${index + 1} · ${item.company}`, "sprint-card-company"));
+    card.append(make("h4", item.title));
+    card.append(make("p", `${item.location} · langue ${item.language} · correspondance ${item.match_score}/100 · CV ${item.coverage_percent} %`, "sprint-card-meta"));
+    card.append(chip(sprintReadinessLabel(item.readiness), item.readiness === "prepare_now" ? "good" : "warning"));
+    const actionsList = make("ul");
+    (item.next_actions || []).slice(0, 3).forEach((action) => actionsList.append(make("li", action)));
+    card.append(actionsList);
+    const actions = make("div", "", "job-actions");
+    const prepare = make("button", "Préparer", "primary-button");
+    prepare.type = "button";
+    prepare.addEventListener("click", () => loadStagePrep(item.job_id));
+    const detail = make("button", "Voir le détail", "secondary-button");
+    detail.type = "button";
+    detail.addEventListener("click", () => loadStageDetail(item.job_id));
+    const kit = make("button", "Créer le kit local", "secondary-button");
+    kit.type = "button";
+    kit.title = "Prépare localement le CV et la lettre ; aucun dépôt n’est effectué.";
+    kit.addEventListener("click", () => {
+      const language = String(item.language || "").toLowerCase();
+      const languageCode = ["fr", "en", "it", "de"].find((code) => language === code || language.startsWith(`${code}-`));
+      if (!languageCode) {
+        setMessage("La langue de cette offre doit être confirmée avant de créer le kit.", true);
+        loadStagePrep(item.job_id);
+        return;
+      }
+      startApplicationKitFlow(item.job_id, languageCode);
+    });
+    actions.append(prepare, kit, detail);
+    if (!item.tracking) {
+      const track = make("button", "Créer le suivi", "secondary-button");
+      track.type = "button";
+      track.addEventListener("click", async () => {
+        track.disabled = true;
+        try {
+          await api("/api/career/applications", {method: "POST", body: JSON.stringify({job_id: item.job_id})});
+          setMessage("Suivi local créé. Aucun envoi n’a été effectué.");
+          await Promise.all([loadApplications(), loadDashboard(), loadApplicationSprint()]);
+        } catch (error) {
+          setMessage(error.message, true);
+        } finally {
+          track.disabled = false;
+        }
+      });
+      actions.append(track);
+    } else {
+      actions.append(make("span", `Suivi : ${stageLabels[item.tracking.stage] || item.tracking.stage}`, "sprint-card-meta"));
+    }
+    card.append(actions);
+    queue.append(card);
+  });
+
+  const cv = make("aside", "", "sprint-cv");
+  cv.append(make("h4", "Priorités CV à fort impact"));
+  const priorities = payload.cv_advice?.priorities || [];
+  if (!priorities.length) cv.append(make("p", "Aucun manque récurrent détecté sur cette file. Relis malgré tout chaque offre et chaque document.", "sprint-card-meta"));
+  priorities.slice(0, 8).forEach((priority) => {
+    const block = make("div", "", "sprint-priority");
+    block.append(make("strong", `${priority.keyword} · ${priority.offer_count} offre(s)`));
+    block.append(make("p", priority.advice));
+    cv.append(block);
+  });
+  const strengths = payload.cv_advice?.strengths || [];
+  if (strengths.length) {
+    cv.append(make("h4", "Preuves déjà présentes à remonter"));
+    const list = make("ul");
+    strengths.slice(0, 8).forEach((strength) => list.append(make("li", `${strength.keyword} · repéré dans ${strength.offer_count} correspondance(s)`)));
+    cv.append(list);
+  }
+  grid.append(queue, cv);
+  target.append(grid, make("p", payload.disclaimer || "Aucun envoi automatique.", "sprint-disclaimer"));
+  reveal(target, "start");
+}
+
+async function loadApplicationSprint() {
+  const target = $("#stagehunter-sprint");
+  if (!target) return;
+  target.hidden = false;
+  target.replaceChildren(make("p", "Construction locale de la file…"));
+  try {
+    renderApplicationSprint(await api("/api/career/application-sprint?limit=20"));
+  } catch (error) {
+    target.replaceChildren(make("p", error.message, "scoring-disclaimer"));
+  }
+}
+
 function renderStagePrepList(target, title, items, renderItem) {
   if (!items.length) return;
   const section = make("section", "", "stagehunter-prep-section");
@@ -3232,6 +3352,8 @@ $("#stagehunter-prep-submit")?.addEventListener("click", () => {
   }
   loadStagePrep(jobId);
 });
+
+$("#stagehunter-sprint-build")?.addEventListener("click", () => loadApplicationSprint());
 
 document.querySelectorAll(".career-tab").forEach((tab) => tab.addEventListener("click", () => showView(tab.dataset.view)));
 
