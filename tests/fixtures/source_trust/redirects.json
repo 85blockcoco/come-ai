@@ -1,0 +1,7 @@
+{
+  "label": "Synthetic redirection targets. The shortener is never contacted: the final target is supplied by the caller as a fixture.",
+  "redirects": {
+    "https://bit.ly/3xY2zAcme": "https://job-boards.greenhouse.io/acme-corp/jobs/4217",
+    "https://t.co/syntheticA": "https://careers.acme-corp.com/jobs/finance-intern"
+  }
+}
