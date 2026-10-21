@@ -141,7 +141,8 @@ Elle a été **rebasée sur le `main` courant** (`a054c97`, cherry-pick propre,
 zéro conflit) puis relue à la main, ligne par ligne, contre des CV et des
 offres réalistes. Sept défauts réels ont été trouvés et corrigés. Chacun est
 couvert par un test de régression qui **échoue** sur l'implémentation
-d'origine (vérifié : 7 échecs / 44 succès avant correction, 51 succès après).
+d'origine (vérifié dans un worktree détaché sur `2a41c9d` : 7 échecs / 44
+succès avant correction, 51 succès après).
 
 | # | Défaut | Effet observé avant correction | Correction |
 | --- | --- | --- | --- |
@@ -219,7 +220,7 @@ $ .venv/bin/python -m pytest -q tests/test_cv_matching_actions.py
 51 passed in 0.99s
 
 $ .venv/bin/python -m pytest -q          # suite complète, base a054c97
-1424 passed, 1 skipped in 91.31s (0:01:31)
+1424 passed, 1 skipped in 96.99s (0:01:36)
 
 $ .venv/bin/python -m ruff check .
 All checks passed!
