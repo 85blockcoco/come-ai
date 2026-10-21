@@ -1317,6 +1317,21 @@ class CareerService:
         """Return the structured profile and the state of its review."""
         return self._serialize_candidate_profile(self._load_candidate_profile())
 
+    def get_active_candidate_profile(self) -> dict[str, Any]:
+        """Return the active profile: only the facts a person validated.
+
+        A proposal, a rejection and a suspension are left out: they can never
+        justify a candidacy.
+        """
+        profile = self._load_candidate_profile()
+        return {
+            "id": profile.id,
+            "updated_at": profile.updated_at,
+            "facts": [fact.to_dict() for fact in profile.usable_facts],
+            "summary": profile.usable_summary(),
+            "usable_for_matching": bool(profile.usable_facts),
+        }
+
     def build_candidate_profile_proposals(
         self,
         *,

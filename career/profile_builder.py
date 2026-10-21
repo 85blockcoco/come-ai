@@ -24,6 +24,7 @@ from .candidate_profile import (
     EXTRACTION_METHOD_EMBEDDED,
     FACT_KIND_CERTIFICATION,
     FACT_KIND_CONTACT,
+    FACT_KIND_DATE,
     FACT_KIND_EDUCATION,
     FACT_KIND_EXPERIENCE,
     FACT_KIND_IDENTITY,
@@ -96,6 +97,13 @@ _DATE_RANGE_RE = re.compile(
     re.IGNORECASE,
 )
 _ITEM_SEPARATORS = ",;|"
+#: A period written on a document: two years, or a year and "présent".
+_DATE_PERIOD_RE = re.compile(
+    r"(?:19|20)\d{2}\s*(?:[-–—]|au|à|a|to)\s*(?:(?:19|20)\d{2}|présent|present|current|now)",
+    re.IGNORECASE,
+)
+#: A single year written on a document.
+_DATE_YEAR_RE = re.compile(r"(?<!\d)(?:19|20)\d{2}(?!\d)")
 
 
 @dataclass(frozen=True, slots=True)
@@ -384,6 +392,53 @@ def _propose_lines(
                 metadata={"section": kind},
             )
         )
+        # A diploma or a certificate carries its year: the date is a fact of
+        # its own, with the exact place it was written.
+        facts.extend(_propose_dates(context, item, start, end, owner=kind))
+    return facts
+
+
+def _propose_dates(
+    context: _Context, chunk: str, chunk_start: int, chunk_end: int, *, owner: str
+) -> list[CandidateFact]:
+    """Propose one fact per date written inside a passage.
+
+    A period (``2021-2024``) is preferred over the bare years it contains, so
+    a date is never proposed twice for the same passage.
+    """
+    facts: list[CandidateFact] = []
+    taken: list[tuple[int, int]] = []
+    for match in _DATE_PERIOD_RE.finditer(chunk):
+        start = chunk_start + match.start()
+        end = chunk_start + match.end()
+        taken.append((match.start(), match.end()))
+        facts.append(
+            _make_fact(
+                context,
+                kind=FACT_KIND_DATE,
+                label=match.group(0),
+                value=match.group(0),
+                start=start,
+                end=end,
+                metadata={"owner": owner},
+            )
+        )
+    for match in _DATE_YEAR_RE.finditer(chunk):
+        if any(start <= match.start() and match.end() <= end for start, end in taken):
+            continue
+        start = chunk_start + match.start()
+        end = chunk_start + match.end()
+        facts.append(
+            _make_fact(
+                context,
+                kind=FACT_KIND_DATE,
+                label=match.group(0),
+                value=match.group(0),
+                start=start,
+                end=end,
+                metadata={"owner": owner},
+            )
+        )
     return facts
 
 
@@ -393,39 +448,60 @@ def _propose_experiences(
     """Propose one fact per experience entry of the experience section."""
     entries = _group_experience_entries(body, body_offset)
     facts: list[CandidateFact] = []
-    for header, description, start, end in entries:
+    for entry in entries:
         if len(facts) >= MAX_ITEMS_PER_SECTION:
             break
-        value = header if not description else f"{header}\n{description}"
-        parts = [part.strip() for part in header.split("|") if part.strip()]
-        label = " — ".join(parts) if parts else header
+        value = entry.header if not entry.description else f"{entry.header}\n{entry.description}"
+        parts = [part.strip() for part in entry.header.split("|") if part.strip()]
+        label = " — ".join(parts) if parts else entry.header
         facts.append(
             _make_fact(
                 context,
                 kind=FACT_KIND_EXPERIENCE,
                 label=label[:160],
                 value=value,
-                start=start,
-                end=end,
-                metadata=_experience_metadata(parts, header),
+                start=entry.start,
+                end=entry.end,
+                metadata=_experience_metadata(parts, entry.header),
+            )
+        )
+        # The period written on the entry is a fact of its own.
+        facts.extend(
+            _propose_dates(
+                context,
+                entry.header,
+                entry.header_start,
+                entry.header_end,
+                owner=FACT_KIND_EXPERIENCE,
             )
         )
     return facts
 
 
-def _group_experience_entries(
-    body: str, body_offset: int
-) -> list[tuple[str, str, int, int]]:
+@dataclass(frozen=True, slots=True)
+class _ExperienceEntry:
+    """One experience entry and the offsets of its header."""
+
+    header: str
+    description: str
+    start: int
+    end: int
+    header_start: int
+    header_end: int
+
+
+def _group_experience_entries(body: str, body_offset: int) -> list[_ExperienceEntry]:
     """Group the lines of an experience section into entries.
 
     A new entry starts on a line that carries a date and reads like a header:
     a short line, or a line using the ``role | company | dates`` convention.
     """
-    entries: list[tuple[str, str, int, int]] = []
+    entries: list[_ExperienceEntry] = []
     header = ""
     description_lines: list[str] = []
     entry_start = 0
     entry_end = 0
+    header_start = 0
 
     for chunk, chunk_start, chunk_end in _split_items(body, body_offset, ""):
         line = chunk.strip()
@@ -433,18 +509,37 @@ def _group_experience_entries(
             continue
         starts_entry = bool(_DATE_RE.search(line)) and ("|" in line or len(line) <= 90)
         if starts_entry and header:
-            entries.append((header, "\n".join(description_lines), entry_start, entry_end))
+            entries.append(
+                _ExperienceEntry(
+                    header=header,
+                    description="\n".join(description_lines),
+                    start=entry_start,
+                    end=entry_end,
+                    header_start=header_start,
+                    header_end=header_start + len(header),
+                )
+            )
             header = ""
             description_lines = []
         if not header:
             header = line
-            entry_start = chunk_start
+            entry_start = chunk_start + (len(chunk) - len(chunk.lstrip()))
+            header_start = entry_start
         else:
             description_lines.append(line)
         entry_end = chunk_end
 
     if header:
-        entries.append((header, "\n".join(description_lines), entry_start, entry_end))
+        entries.append(
+            _ExperienceEntry(
+                header=header,
+                description="\n".join(description_lines),
+                start=entry_start,
+                end=entry_end,
+                header_start=header_start,
+                header_end=header_start + len(header),
+            )
+        )
     return entries
 
 

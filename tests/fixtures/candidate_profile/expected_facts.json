@@ -1,0 +1,23 @@
+{
+  "source": "cv_synthetique.txt",
+  "note": "Fixture synthétique : noms fictifs, adresses example.org, entreprises inventées. Aucun document réel.",
+  "facts": [
+    { "kind": "identity", "value": "Jeanne Durand" },
+    { "kind": "contact", "value": "jeanne.durand@example.org" },
+    { "kind": "contact", "value": "+33 6 12 34 56 78" },
+    { "kind": "experience", "contains": "Banque Horizon" },
+    { "kind": "experience", "contains": "Startup Pixel" },
+    { "kind": "date", "value": "2021-2024" },
+    { "kind": "date", "value": "2020" },
+    { "kind": "education", "contains": "Master Data Science" },
+    { "kind": "date", "value": "2021" },
+    { "kind": "skill", "value": "Python" },
+    { "kind": "skill", "value": "SQL" },
+    { "kind": "skill", "value": "Power BI" },
+    { "kind": "skill", "value": "Excel" },
+    { "kind": "language", "value": "Anglais - C1" },
+    { "kind": "language", "value": "Francais - Natif" },
+    { "kind": "certification", "contains": "Microsoft PL-300" },
+    { "kind": "date", "value": "2023" }
+  ]
+}

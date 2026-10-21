@@ -18,6 +18,7 @@ import hashlib
 import json
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -287,10 +288,59 @@ def test_the_offsets_point_at_the_quote_that_is_stored() -> None:
 def test_a_document_without_any_section_proposes_nothing() -> None:
     assert propose_profile_facts("Une phrase sans rubrique utile.") == []
 
-
 def test_the_pipeline_never_invents_a_status_other_than_proposed() -> None:
     facts = propose_profile_facts(read_fixture("cv_synthetique.txt"))
     assert {fact.status for fact in facts} == {FACT_STATUS_PROPOSED}
+
+
+def test_the_extraction_matches_the_expected_facts() -> None:
+    expected = json.loads((FIXTURES / "expected_facts.json").read_text(encoding="utf-8"))
+    facts = propose_profile_facts(read_fixture(expected["source"]))
+    for wanted in expected["facts"]:
+        needle = wanted.get("contains") or wanted.get("value") or ""
+        matches = [
+            fact for fact in facts if fact.kind == wanted["kind"] and needle in fact.value
+        ]
+        assert matches, f"Fact attendu manquant : {wanted}"
+
+
+def test_a_date_is_a_fact_of_its_own_with_its_own_source() -> None:
+    text = read_fixture("cv_synthetique.txt")
+    facts = propose_profile_facts(text)
+    dates = [fact for fact in facts if fact.kind == "date"]
+    assert [fact.value for fact in dates] == ["2021-2024", "2020", "2021", "2023"]
+    for fact in dates:
+        passage = text[fact.provenance.start_offset : fact.provenance.end_offset]
+        assert passage == fact.value
+        assert fact.status == FACT_STATUS_PROPOSED
+
+
+def test_the_manual_check_script_refuses_a_file_stored_in_the_repository() -> None:
+    script = Path(__file__).resolve().parents[1] / "scripts" / "candidate_profile_manual_check.py"
+    assert script.is_file()
+    source = script.read_text(encoding="utf-8")
+    assert "_refuse_repository_files" in source
+    assert "Ce fichier est dans le dépôt" in source
+    # The script only reads and prints: it never decides anything.
+    assert "decide_fact" not in source
+    assert "approved" not in source
+
+
+def test_the_manual_check_script_works_outside_the_repository(tmp_path: Path) -> None:
+    script = Path(__file__).resolve().parents[1] / "scripts" / "candidate_profile_manual_check.py"
+    document = tmp_path / "cv-de-test.txt"
+    document.write_text(read_fixture("cv_synthetique.txt"), encoding="utf-8")
+    completed = subprocess.run(
+        [sys.executable, str(script), "--text-file", str(document)],
+        text=True,
+        capture_output=True,
+        timeout=60,
+        cwd=tmp_path,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert "proposition" in completed.stdout
+    assert "Python" in completed.stdout
+    assert "approuvée" in completed.stdout
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -318,6 +368,7 @@ def test_proposals_are_stored_and_stay_awaiting_a_decision(tmp_path: Path) -> No
         "language": [],
         "certification": [],
         "project": [],
+        "date": [],
     }
     assert service.get_candidate_profile()["facts"] == profile["facts"]
 
@@ -574,6 +625,25 @@ def test_the_review_endpoints_work_end_to_end(tmp_path: Path) -> None:
     emptied = client.delete("/api/career/candidate-profile")
     assert emptied.status_code == 200
     assert client.get("/api/career/candidate-profile").json()["facts"] == []
+
+
+def test_the_active_profile_only_contains_the_validated_facts(tmp_path: Path) -> None:
+    client = TestClient(create_app(tmp_path, agent_override=FakeAgent()))
+    created = client.post(
+        "/api/career/candidate-profile/proposals",
+        json={"text": read_fixture("cv_synthetique.txt")},
+    )
+    target = next(fact for fact in created.json()["facts"] if fact["kind"] == "skill")
+    active = client.get("/api/career/candidate-profile/active").json()
+    assert active["facts"] == []
+    assert active["usable_for_matching"] is False
+    client.post(
+        f"/api/career/candidate-profile/facts/{target['id']}/decision",
+        json={"decision": "approved"},
+    )
+    active = client.get("/api/career/candidate-profile/active").json()
+    assert [fact["value"] for fact in active["facts"]] == [target["value"]]
+    assert active["usable_for_matching"] is True
 
 
 def test_the_document_endpoint_reads_a_local_file(tmp_path: Path) -> None:

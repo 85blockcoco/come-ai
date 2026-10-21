@@ -111,6 +111,7 @@ FACT_KIND_EDUCATION = "education"
 FACT_KIND_LANGUAGE = "language"
 FACT_KIND_CERTIFICATION = "certification"
 FACT_KIND_PROJECT = "project"
+FACT_KIND_DATE = "date"
 
 FACT_KINDS: tuple[str, ...] = (
     FACT_KIND_IDENTITY,
@@ -121,6 +122,7 @@ FACT_KINDS: tuple[str, ...] = (
     FACT_KIND_LANGUAGE,
     FACT_KIND_CERTIFICATION,
     FACT_KIND_PROJECT,
+    FACT_KIND_DATE,
 )
 
 FACT_KIND_LABELS: dict[str, str] = {
@@ -132,6 +134,7 @@ FACT_KIND_LABELS: dict[str, str] = {
     FACT_KIND_LANGUAGE: "Langue",
     FACT_KIND_CERTIFICATION: "Certification",
     FACT_KIND_PROJECT: "Projet",
+    FACT_KIND_DATE: "Date",
 }
 
 #: How the text of a fact was obtained.  ``ocr`` is explicitly listed because

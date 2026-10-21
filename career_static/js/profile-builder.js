@@ -87,6 +87,7 @@ function candidateProfileKindLabels() {
     language: "Langue",
     certification: "Certification",
     project: "Projet",
+    date: "Date",
   };
 }
 

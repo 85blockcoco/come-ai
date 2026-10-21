@@ -433,6 +433,11 @@ def create_career_router(
         """Return the structured profile: every fact with its status and its source."""
         return await local(service.get_candidate_profile)
 
+    @router.get("/api/career/candidate-profile/active")
+    async def active_candidate_profile() -> Any:
+        """Return the active profile: only the facts a person validated."""
+        return await local(service.get_active_candidate_profile)
+
     @router.post("/api/career/candidate-profile/proposals", status_code=201)
     async def candidate_profile_proposals(payload: CandidateProfileProposalsPayload) -> Any:
         """Propose reviewable facts read locally from pasted text.
