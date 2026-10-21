@@ -866,6 +866,28 @@ def test_the_matching_profile_carries_only_the_validated_facts(tmp_path: Path) -
     assert matching["education"] == "Master Démo"
 
 
+def test_the_typed_profile_is_never_lost_by_a_validated_fact(tmp_path: Path) -> None:
+    """A validated fact joins what the person typed; it never replaces it."""
+    service, skills = _profile_with_skills(tmp_path)
+    service.update_profile({"skills": "Excel"})
+    approved = skills[0]
+    service.decide_candidate_fact(approved["id"], decision=FACT_STATUS_APPROVED)
+
+    matching = service.get_matching_profile()
+    assert "Excel" in matching["skills"]
+    assert approved["value"] in matching["skills"]
+
+
+def test_a_validated_fact_already_typed_is_not_written_twice(tmp_path: Path) -> None:
+    service, skills = _profile_with_skills(tmp_path)
+    approved = skills[0]
+    service.update_profile({"skills": approved["value"]})
+    service.decide_candidate_fact(approved["id"], decision=FACT_STATUS_APPROVED)
+
+    matching = service.get_matching_profile()
+    assert matching["skills"].count(approved["value"]) == 1
+
+
 def test_the_active_profile_exposes_the_projected_fields(tmp_path: Path) -> None:
     service, skills = _profile_with_skills(tmp_path)
     approved = skills[0]

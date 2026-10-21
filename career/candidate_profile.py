@@ -27,6 +27,7 @@ other machine-extracted value, is never approved automatically.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field, replace
 from typing import Any, Iterable
 
@@ -167,6 +168,15 @@ PROJECTED_PROFILE_FIELDS: tuple[str, ...] = (
     "skills",
     "languages",
 )
+
+#: How the items of a profile field are separated.  A field that is not
+#: listed holds a single value.
+PROFILE_FIELD_SEPARATORS: dict[str, str] = {
+    "skills": ", ",
+    "languages": ", ",
+    "education": "\n",
+    "experience": "\n",
+}
 
 #: How the text of a fact was obtained.  ``ocr`` is explicitly listed because
 #: an OCR result must never be trusted without a human reading it.
@@ -628,22 +638,18 @@ def merge_facts(existing: Iterable[CandidateFact], proposals: Iterable[Candidate
     return tuple(kept)
 
 
-def active_profile_fields(facts: Iterable[CandidateFact]) -> dict[str, str]:
-    """Project the validated facts onto the Career profile fields.
+def active_profile_values(facts: Iterable[CandidateFact]) -> dict[str, list[str]]:
+    """Return the validated values of each Career profile field.
 
-    This is the contract of the feature for the rest of the application: only
-    a fact a person validated (approved or corrected, with a recorded
-    decision) may reach a profile field.  A proposal, a rejection and a
-    suspension are never read here, so an unapproved fact cannot justify a
-    candidacy.
+    Only a fact a person validated (approved or corrected, with a recorded
+    decision) is read.  A proposal, a rejection and a suspension never reach
+    this projection, so an unapproved fact cannot justify a candidacy.
 
     Returns:
-        The profile fields built from the validated facts.  A field no
-        validated fact feeds is returned empty, and the caller keeps the value
-        the person typed by hand.
+        The values of each field, in the order the facts were decided.  A
+        field no validated fact feeds is returned empty.
     """
-    fields: dict[str, str] = {field: "" for field in PROJECTED_PROFILE_FIELDS}
-    grouped: dict[str, list[str]] = {field: [] for field in PROJECTED_PROFILE_FIELDS}
+    values: dict[str, list[str]] = {field: [] for field in PROJECTED_PROFILE_FIELDS}
 
     for fact in facts:
         if not fact.is_usable:
@@ -656,18 +662,61 @@ def active_profile_fields(facts: Iterable[CandidateFact]) -> dict[str, str]:
                 continue
         else:
             target = FACT_KIND_TO_PROFILE_FIELD.get(fact.kind, "")
-        if target not in grouped:
+        if target not in values:
             continue
-        if target in {"skills", "languages", "education", "experience"}:
-            grouped[target].append(fact.value)
-        else:
-            fields[target] = fields[target] or fact.value
+        if target in PROFILE_FIELD_SEPARATORS:
+            values[target].append(fact.value)
+        elif not values[target]:
+            # A single-value field (an identity, a contact): the first
+            # validated fact fills it.
+            values[target] = [fact.value]
+    return values
 
-    fields["skills"] = ", ".join(grouped["skills"])
-    fields["languages"] = ", ".join(grouped["languages"])
-    fields["education"] = "\n".join(grouped["education"])
-    fields["experience"] = "\n".join(grouped["experience"])
+
+def active_profile_fields(facts: Iterable[CandidateFact]) -> dict[str, str]:
+    """Project the validated facts onto the Career profile fields.
+
+    This is the contract of the feature for the rest of the application: only
+    a fact a person validated may reach a profile field.
+
+    Returns:
+        The profile fields built from the validated facts.  A field no
+        validated fact feeds is returned empty, and the caller keeps the value
+        the person typed by hand.
+    """
+    values = active_profile_values(facts)
+    fields: dict[str, str] = {}
+    for name, items in values.items():
+        separator = PROFILE_FIELD_SEPARATORS.get(name)
+        fields[name] = separator.join(items) if separator else (items[0] if items else "")
     return fields
+
+
+def merge_profile_field(field: str, existing: str, values: Iterable[str]) -> str:
+    """Merge validated values into a profile field the person typed by hand.
+
+    Nothing the person typed is lost: the validated values are added next to
+    it, and a value already present is not written twice.  A field that holds
+    a single value (an identity, a contact) keeps the typed value; a validated
+    fact is used when the field is still empty.
+
+    Returns:
+        The merged value of the field.
+    """
+    separator = PROFILE_FIELD_SEPARATORS.get(field)
+    additions = [str(value or "").strip() for value in values]
+    additions = [value for value in additions if value]
+    if separator is None:
+        return str(existing or "").strip() or (additions[0] if additions else "")
+    pattern = r"[\n;,|]" if separator == ", " else r"\n"
+    items = [part.strip() for part in re.split(pattern, str(existing or "")) if part.strip()]
+    known = {item.casefold() for item in items}
+    for value in additions:
+        if value.casefold() in known:
+            continue
+        known.add(value.casefold())
+        items.append(value)
+    return separator.join(items)
 
 
 def _normalise_value(value: str) -> str:

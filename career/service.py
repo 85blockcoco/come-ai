@@ -126,8 +126,10 @@ from .candidate_profile import (
     CandidateProfile,
     ProfileRuleError,
     active_profile_fields,
+    active_profile_values,
     decide_fact,
     merge_facts,
+    merge_profile_field,
     validate_profile,
 )
 from .profile_builder import propose_profile_facts
@@ -1672,9 +1674,10 @@ class CareerService:
         if not facts:
             return profile
         merged = dict(profile)
-        for field, value in active_profile_fields(facts).items():
-            if value:
-                merged[field] = value
+        for field, values in active_profile_values(facts).items():
+            if not values:
+                continue
+            merged[field] = merge_profile_field(field, str(profile.get(field) or ""), values)
         merged["candidate_profile_active"] = True
         # The stamp lets the caller notice that a decision changed between the
         # moment the profile was read and the moment the document was saved.
