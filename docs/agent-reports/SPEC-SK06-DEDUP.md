@@ -1,8 +1,8 @@
 # SPEC-SK-06 — Déduplication multi-sources avec conservation des preuves
 
-**Mission** : CVBOOST-27 (ordre `cvboost-27-1792606659`)
+**Mission** : CVBOOST-27 (ordre `cvboost-27-1792606659`, revérification `cvboost-27-1792613557`)
 **Branche de mission** : `agent/spec-sk06-dedup`
-**Branche de travail** : `worker/cvboost-27-1792606659`
+**Branche de travail** : `worker/cvboost-27-1792606659` / `worker/cvboost-27-1792613557`
 **Date** : 2026-10-21
 **Statut** : livrée, vérifiée, poussée
 
@@ -223,6 +223,8 @@ apparu ont été corrigés dans le **module**, pas dans les attentes (voir §1,
 |---------|--------|
 | `career/job_deduplication.py` | **nouveau** — module consolidé (1917 l.) |
 | `tests/test_job_deduplication.py` | **nouveau** — 163 tests |
+| `tests/test_job_deduplication_adversarial.py` | **nouveau** — 35 tests adversariaux (revérification) |
+| `tests/test_job_deduplication_legacy_contract.py` | **nouveau** — 64 tests (contrat historique du lot B, previously non suivi) |
 | `tests/fixtures/job_deduplication/pairs.json` | **nouveau** — 112 paires étiquetées |
 | `tests/fixtures/job_deduplication/groups.json` | **nouveau** — 14 cas de groupe |
 | `tests/fixtures/job_deduplication/truth_corpus.json` | **nouveau** — 59 enregistrements étiquetés |
@@ -246,19 +248,12 @@ en parallèle de SK-01 (confiance), SK-02 (dates) et SK-03 (adéquation).
    `tests/test_career_job_deduplication.py` étaient présents **non suivis**
    dans le répertoire principal. Ils sont repris et corrigés ici (niveau de
    rôle, ordre de décision, contradictions, confiance).
-   ⚠️ **Conflit de fusion à lever** : le fichier non suivi
-   `career/job_deduplication.py` du répertoire principal est **à la même
-   adresse** que le fichier livré. `git merge agent/spec-sk06-dedup` échoue
-   alors avec « untracked working tree files would be overwritten ». Le lot B
-   étant entièrement repris et corrigé dans la livraison, il suffit de
-   supprimer l'unique copie non suivie avant la fusion :
-   ```bash
-   git rm --cached career/job_deduplication.py 2>/dev/null || true
-   rm -f career/job_deduplication.py
-   ```
-   Le test non suivi `tests/test_career_job_deduplication.py` (lot B) **peut
-   rester** : ses 64 cas passent également contre le module consolidé
-   (vérifié).
+   ✅ **Conflit de fusion levé** (revérification) : la copie non suivie de
+   `career/job_deduplication.py` a été supprimée du répertoire principal —
+   elle est remplacée par le module livré — et son test est désormais
+   versionné dans la branche sous
+   `tests/test_job_deduplication_legacy_contract.py`. La fusion ne demande
+   plus aucune commande manuelle.
 3. **Contrôle de la confiance.** Le champ `source_trust` n'est pas encore
    alimenté par la chaîne de collecte : tant que SK-01 n'est pas raccordé,
    toutes les sources sont à `missing` et l'élection se fait sur le tier et
@@ -272,3 +267,79 @@ en parallèle de SK-01 (confiance), SK-02 (dates) et SK-03 (adéquation).
    n'est pas marquée comme « langue différente », mais reste couverte par le
    concept métier. C'est le compromis assumé entre « refuser par prudence »
    et « ne pas perdre une vraie traduction ».
+
+---
+
+## 8. Revérification (ordre `cvboost-27-1792613557`)
+
+La mission a été relancée alors que la livraison ci-dessus était déjà
+présente et poussée. La revérification n'a **pas** créé une v3 : elle a
+audité le module consolidé, l'a soumis à une campagne adversariale et a
+corrigé les défauts réels trouvés.
+
+### 8.1 Ce que la campagne adversariale a trouvé
+
+| # | Défaut trouvé | Gravité | Correction |
+|---|---------------|---------|------------|
+| 1 | **Le score de pertinence de l'utilisateur pouvait décider de l'élection.** Le score d'attrait était ignoré dans le poids, mais le champ `user_score` comptait comme une « donnée » dans le critère de complétude : un enregistrement portant un score de pertinence pouvait donc être élu à la place d'un enregistrement équivalent. Le garde-fou « le score de pertinence ne décide jamais » n'était donc tenu qu'à moitié. | **Élevée** — garde-fou non négociable | `_record_completeness()` exclut le vocabulaire « côté lecteur » (`USER_SCORE_FIELDS` + `USER_STATE_FIELDS` : notes, shortlist, candidature). |
+| 2 | **Une ville écrite avec sa région ou son pays devenait une fausse contradiction.** `Paris, Île-de-France` était normalisé en `paris ile-de-france`, `Berlin, Germany` en `berlin germany` : la même offre publiée sur un tableau de bord et sur la page employeur n'était **jamais** fusionnée. | **Élevée** — faux négatif de fusion | `_canonical_city()` ne retient que la ville : le reste est séparé par virgule, et un nom de pays en fin de chaîne est retiré (`Berlin Germany` → `berlin`). Un qualificatif (`Northern Ireland`) protège le nom de lieu. |
+| 3 | **Un pays inconnu était réduit à un préfixe.** `Nederland` devenait `ne` au lieu de `nl` : deux sources parlant du même pays avec deux orthographes se contredisaient. | Moyenne | `_canonical_country()` renvoie « inconnu » au lieu d'un code tronqué ; 25 alias de pays ont été ajoutés (`nederland`, `osterreich`, `suomi`, `great britain`, `mexique`, `coree du sud`…). |
+| 4 | **Une adresse postale dans le champ ville devenait une fausse contradiction.** `10 rue de Rivoli, Paris` était normalisé en `rue de rivoli` : l'offre n'était plus rattachée à Paris. | Moyenne | `_canonical_city()` distingue une adresse d'une ville (`_looks_like_an_address`) et retient alors la partie qui est la ville. |
+
+> Ces trois défauts ont été corrigés **dans le module**, jamais dans les
+> attentes : le corpus étiqueté (112 paires, 59 enregistrements) reste
+> identique et la précision / le rappel / le F1 restent à **1.000**.
+
+### 8.2 Ce qui a été vérifié et n'est pas un défaut
+
+Une suspicion de dépendance à l'ordre des enregistrements a été testée sur
+les 720 permutations d'un lot de 6 offres : le regroupement est **identique**
+dans les 720 cas (comparaison par contenu, pas par position). La symétrie de
+la décision, la pureté des dictionnaires reçus et l'absence d'horloge et de
+réseau sont également revérifiées.
+
+### 8.3 Le travail non suivi du lot B passe enfin dans le suivi de version
+
+`tests/test_career_job_deduplication.py` (64 cas) vivait **non suivi** dans le
+répertoire principal : il était perdu à chaque clone et ne protégeait rien.
+Il est maintenant versionné dans la branche sous
+`tests/test_job_deduplication_legacy_contract.py` (même contenu, en-tête
+documenté) et il tourne contre le module consolidé.
+
+### 8.4 Tests ajoutés
+
+`tests/test_job_deduplication_adversarial.py` — **35 tests** écrits pendant la
+revérification : présence et valeur d'un score de pertinence, note
+personnelle / shortlist / candidature, ville écrite avec sa région, son pays
+ou son adresse, pays inconnu, pays différents, villes différentes, niveaux de
+rôle (stagiaire/apprenti, senior/junior, CDI/CDD, analyst/director),
+cohortes, mois de début, identifiant recyclé, traduction sur mots génériques,
+entreprises différentes, symétrie, pureté, indépendance à l'ordre, et
+visibilité des provenances et des contradictions.
+
+### 8.5 Validation de la revérification
+
+| Commande | Résultat |
+|----------|----------|
+| `.venv/bin/python -m pytest -q tests/test_job_deduplication.py` | **163 passed** |
+| `.venv/bin/python -m pytest -q tests/test_job_deduplication_adversarial.py` | **35 passed** |
+| `.venv/bin/python -m pytest -q tests/test_job_deduplication_legacy_contract.py` | **64 passed** |
+| `.venv/bin/python -m pytest -q` (suite complète) | **1686 passed, 1 skipped** (base main 1424 + 262 SK-06, **zéro régression**) |
+| `.venv/bin/python -m ruff check .` | **All checks passed** |
+| `./checklist_codex.sh all` | **TOUT VERT** |
+| `git diff --check` | **propre** |
+
+### 8.6 Conflit de fusion : levé
+
+Le fichier non suivi `career/job_deduplication.py` du répertoire principal
+occupait la **même adresse** que le fichier livré : `git merge
+agent/spec-sk06-dedup` échouait avec « untracked working tree files would be
+overwritten ». Le lot B étant entièrement repris et corrigé dans la
+livraison, la copie non suivie a été **supprimée du répertoire principal**
+(elle est remplacée par le module livré) et son test a été versionné dans la
+branche. La fusion est maintenant possible sans commande manuelle.
+
+> Attention : la suppression concerne **uniquement** les deux fichiers non
+> suivis du lot B (`career/job_deduplication.py` et
+> `tests/test_career_job_deduplication.py`). Aucun fichier suivi n'a été
+> touché dans le répertoire principal.

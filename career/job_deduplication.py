@@ -86,6 +86,20 @@ USER_SCORE_FIELDS: frozenset[str] = frozenset({
     "user_relevance", "fit_score",
 })
 
+#: Fields that carry the personal state of the offer for one person (a note,
+#: a shortlist, an application).  Like the relevance score, they say nothing
+#: about the offer itself: they must never decide which version of a merged
+#: offer is elected, nor how complete it is considered.
+USER_STATE_FIELDS: frozenset[str] = frozenset({
+    "notes", "note", "user_notes", "comment", "comments",
+    "shortlisted", "shortlist", "favorite", "favourite", "bookmarked",
+    "saved", "archived", "applied", "application_status", "application_id",
+    "status_label",
+})
+
+#: Every field that belongs to the reader, not to the offer.
+USER_SIDE_FIELDS: frozenset[str] = USER_SCORE_FIELDS | USER_STATE_FIELDS
+
 
 # ---------------------------------------------------------------------------
 # Text helpers
@@ -731,24 +745,38 @@ COUNTRY_ISO2 = {
     "italy": "it", "italia": "it", "it": "it",
     "spain": "es", "espana": "es", "es": "es", "espagne": "es",
     "netherlands": "nl", "holland": "nl", "nl": "nl", "pays bas": "nl",
+    "nederland": "nl", "huelanda": "nl",
     "belgium": "be", "belgique": "be", "be": "be",
     "switzerland": "ch", "suisse": "ch", "ch": "ch",
     "luxembourg": "lu", "lu": "lu",
     "ireland": "ie", "irlande": "ie", "ie": "ie",
-    "austria": "at", "autriche": "at", "at": "at",
+    "austria": "at", "autriche": "at", "at": "at", "osterreich": "at",
     "poland": "pl", "pologne": "pl", "pl": "pl",
     "sweden": "se", "suede": "se", "se": "se",
     "denmark": "dk", "danemark": "dk", "dk": "dk",
     "norway": "no", "norvege": "no", "no": "no",
-    "finland": "fi", "finlande": "fi", "fi": "fi",
+    "finland": "fi", "finlande": "fi", "fi": "fi", "suomi": "fi",
     "canada": "ca", "ca": "ca",
     "australia": "au", "au": "au",
-    "singapore": "sg", "sg": "sg",
+    "singapore": "sg", "singapour": "sg", "sg": "sg",
     "hong kong": "hk", "hk": "hk",
     "china": "cn", "chine": "cn", "cn": "cn",
     "india": "in", "inde": "in", "in": "in",
     "japan": "jp", "japon": "jp", "jp": "jp",
-    "brazil": "br", "bresil": "br",
+    "brazil": "br", "bresil": "br", "brasil": "br",
+    "mexico": "mx", "mexique": "mx", "mx": "mx",
+    "south korea": "kr", "coree du sud": "kr", "kr": "kr",
+    "new zealand": "nz", "nouvelle zelande": "nz", "nz": "nz",
+    "israel": "il", "il": "il",
+    "portugal": "pt", "pt": "pt",
+    "greece": "gr", "grece": "gr", "gr": "gr",
+    "turkey": "tr", "turquie": "tr", "tr": "tr",
+    "romania": "ro", "roumanie": "ro", "ro": "ro",
+    "hungary": "hu", "hongrie": "hu", "hu": "hu",
+    "czech republic": "cz", "republique tcheque": "cz", "cz": "cz",
+    "great britain": "gb",
+    "saudi arabia": "sa", "arabie saoudite": "sa", "sa": "sa",
+    "united arab emirates": "ae", "emirats arabes unis": "ae", "ae": "ae",
     "netherlands antilles": "nl",
 }
 
@@ -758,28 +786,108 @@ REMOTE_MARKERS = (
     "wfh", "home office", "homeoffice", "full remote", "fully remote",
 )
 
+#: Country names that a city field often carries at its end ("Berlin
+#: Germany").  Only the long spellings are used, so that a place whose name
+#: ends with a short word ("Little Italy") is never truncated.
+TRAILING_COUNTRY_NAMES = frozenset({
+    "france", "germany", "spain", "italy", "netherlands", "switzerland",
+    "austria", "poland", "sweden", "denmark", "norway", "finland", "canada",
+    "australia", "singapore", "portugal", "belgium", "india", "israel",
+    "turkey", "romania", "hungary", "ireland", "greece", "mexico", "brazil",
+    "united kingdom", "united states", "great britain", "south korea",
+    "new zealand", "saudi arabia", "united arab emirates", "czech republic",
+    "deutschland", "italia", "espana", "espagne", "nederland", "osterreich",
+    "suomi", "belgique", "suisse", "royaume uni", "etats unis", "allemagne",
+    "pays bas", "suede", "danemark", "norvege", "finlande", "pologne",
+    "autriche", "hong kong", "coree du sud", "nouvelle zelande",
+})
+
+#: Words that keep a place name from being cut when a country follows it
+#: ("Northern Ireland" is not "Northern").
+COUNTRY_QUALIFIERS = frozenset({
+    "northern", "southern", "eastern", "western", "new", "republic", "of",
+})
+
+#: Words that tell a street address from a city name ("10 rue de Rivoli,
+#: Paris" is an offer in Paris).
+ADDRESS_MARKERS = frozenset({
+    "rue", "street", "avenue", "av", "boulevard", "bd", "impasse", "allee",
+    "quai", "chemin", "route", "place", "square", "cours", "voie", "passage",
+    "level", "floor", "etage", "batiment", "building", "suite", "unit",
+    "workspace", "pobox",
+})
+
+
+def _looks_like_an_address(text: str) -> bool:
+    """Tell a street address from a city name."""
+    return any(token in ADDRESS_MARKERS for token in text.split())
+
 
 def _is_remote(text: str) -> bool:
     return any(marker in text for marker in REMOTE_MARKERS)
 
 
+def _strip_trailing_country(text: str) -> str:
+    """Remove the country name a city field sometimes carries at its end.
+
+    ``"Berlin Germany"`` becomes ``"berlin"``.  The city is kept untouched
+    when what is left would be empty or would end with a qualifier
+    (``"Northern Ireland"``).
+    """
+    for name in sorted(TRAILING_COUNTRY_NAMES, key=len, reverse=True):
+        if not text.endswith(" " + name):
+            continue
+        remainder = text[: -(len(name) + 1)].strip()
+        if not remainder:
+            return text
+        if remainder.split()[-1] in COUNTRY_QUALIFIERS:
+            return text
+        return remainder
+    return text
+
+
 def _canonical_city(city: Any) -> str:
-    """Return the normalised city name ("" when unknown)."""
-    text = _strip_accents(_clean_text(city, 120)).lower()
-    text = re.sub(r"\([^)]*\)", " ", text)
-    text = re.sub(r"[^\w\s-]", " ", text)
-    text = _squash(text)
-    text = re.sub(r"^\d+\s+", "", text)
-    if not text:
-        return ""
-    if _is_remote(text):
-        return "remote"
-    return CITY_ALIASES.get(text, text)
+    """Return the normalised city name ("" when unknown).
+
+    A city field often carries more than the name of the city: the region or
+    the country of the offer (``"Paris, Île-de-France"``, ``"Berlin,
+    Germany"``), sometimes the street address (``"10 rue de Rivoli, Paris"``).
+    Only the city itself identifies the place: the rest never contradicts
+    another source, so it is dropped instead of becoming a false conflict.
+    """
+    raw = _strip_accents(_clean_text(city, 120)).lower()
+    raw = re.sub(r"\([^)]*\)", " ", raw)
+    raw = re.sub(r"[|/]+", " ", raw)
+    candidates: list[str] = []
+    for part in raw.split(","):
+        candidate = re.sub(r"[^\w\s-]", " ", part)
+        candidate = _squash(candidate)
+        candidate = re.sub(r"^\d+\s+", "", candidate)
+        if candidate:
+            candidates.append(candidate)
+    for candidate in candidates:
+        # A street address is not a city: the city is the other part.
+        if len(candidates) > 1 and _looks_like_an_address(candidate):
+            continue
+        candidate = _strip_trailing_country(candidate)
+        if not candidate:
+            continue
+        if _is_remote(candidate):
+            return "remote"
+        return CITY_ALIASES.get(candidate, candidate)
+    return ""
 
 
 def _canonical_country(country: Any) -> str:
-    """Return the ISO-2 country code ("" when unknown)."""
+    """Return the ISO-2 country code ("" when unknown).
+
+    An unknown country stays **unknown**: it is never reduced to a truncated
+    prefix, because a prefix never equals the real code of another country
+    (``"Nederland"`` is not ``"ne"``).
+    """
     text = _strip_accents(_clean_text(country, 120)).lower()
+    text = re.sub(r"\([^)]*\)", " ", text)
+    text = re.sub(r"[^\w\s]", " ", text)
     text = _squash(text)
     if not text:
         return ""
@@ -789,7 +897,10 @@ def _canonical_country(country: Any) -> str:
         return COUNTRY_ISO2[text]
     if len(text) == 2 and text.isalpha():
         return text
-    return COUNTRY_ISO2.get(text, text[:2])
+    for token in text.split():
+        if token in COUNTRY_ISO2:
+            return COUNTRY_ISO2[token]
+    return ""
 
 
 def location_canonical(city: Any, country: Any) -> str:
@@ -1534,6 +1645,21 @@ CONFLICT_FIELDS = (
 )
 
 
+def _record_completeness(record: Mapping[str, Any]) -> int:
+    """Return the number of facts the record carries about the offer.
+
+    The fields that belong to the reader (the relevance score, a personal
+    note, a shortlist, an application) are **excluded**: they say nothing
+    about the offer, so they must never make one version of a merged offer
+    look better than another one.
+    """
+    return sum(
+        1
+        for key, value in record.items()
+        if key.lower() not in USER_SIDE_FIELDS and value not in (None, "", [], {})
+    )
+
+
 def _record_weight(record: Mapping[str, Any]) -> tuple[int, int, float, int, int, int]:
     """Return the election weight of a record (the highest one wins).
 
@@ -1551,7 +1677,7 @@ def _record_weight(record: Mapping[str, Any]) -> tuple[int, int, float, int, int
     freshness = _freshness(record)
     priority = source_priority(source_name)
     verified = 1 if record.get("source_verified") else 0
-    completeness = sum(1 for value in record.values() if value not in (None, "", [], {}))
+    completeness = _record_completeness(record)
     return (trust, tier, freshness, priority, verified, completeness)
 
 
@@ -1895,6 +2021,8 @@ __all__ = [
     "TRUST_RANK",
     "TRUST_STATUSES",
     "USER_SCORE_FIELDS",
+    "USER_SIDE_FIELDS",
+    "USER_STATE_FIELDS",
     "canonical_city",
     "canonical_company",
     "canonical_title_concept",
