@@ -1,0 +1,21 @@
+{
+  "status": "done",
+  "files_created": [
+    "career/candidate_profile.py",
+    "career/profile_builder.py",
+    "career/profile_store.py",
+    "career/cv_quality/parser.py",
+    "career/router.py",
+    "career_static/js/profile-builder.js",
+    "career_static/index.html",
+    "tests/test_candidate_profile.py",
+    "tests/fixtures/candidate_profile/cv_synthetique.txt",
+    "tests/fixtures/candidate_profile/cv_synthetique_en.txt",
+    "tests/fixtures/candidate_profile/expected_facts.json",
+    "scripts/candidate_profile_manual_check.py",
+    "docs/agent-reports/SPEC-SK10-CANDIDATE_PROFILE.md"
+  ],
+  "output": "Mission SK-10 livrée : pipeline local document → faits proposés avec provenance exacte (page, offsets, citation), 5 statuts par fait, approbation champ par champ, profil actif limité aux faits approuvés, OCR jamais auto-approuvé, suppression et export fonctionnels (11 endpoints /api/career/profile-facts + interface career_static/js/profile-builder.js).",
+  "logs": "pytest -q tests/test_candidate_profile.py → 37 passed\npytest -q tests/test_cv_quality_structure.py → 39 passed (parser inchangé)\npytest -q (suite complète) → 1461 passed, 1 skipped (base 1424 + 37 nouveaux)\nruff check . → All checks passed\ngit diff --check → propre\nCRÉÉ : career/candidate_profile.py (modèle pur), career/profile_builder.py (pipeline local), career/profile_store.py (2 tables SQLite dédiées), career_static/js/profile-builder.js, scripts/candidate_profile_manual_check.py (essais réels hors dépôt)\nMODIFIÉ : career/cv_quality/parser.py (+extract_pages_from_bytes, texte identique), career/router.py (+11 endpoints, effacement du profil lors du reset global), career_static/index.html (+1 script)\nNON MODIFIÉ : career/service.py (tables dédiées, fusionnable en parallèle de SK-01→SK-09)\nBranche poussée : agent/spec-sk10-candidate-profile",
+  "error": null
+}

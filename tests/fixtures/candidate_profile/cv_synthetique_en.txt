@@ -1,0 +1,17 @@
+Alex Sample
+Financial analyst
+alex.sample@example.test — +44 20 7946 0000
+
+EXPERIENCE
+March 2022 - Present Financial analyst — Fictional Group
+Supported 12 clients during restructuring.
+
+EDUCATION
+2018 - 2021 MSc Corporate Finance — Fictional University
+
+SKILLS
+Excel, Python, Power BI, SQL
+
+LANGUAGES
+English — native
+French — B2

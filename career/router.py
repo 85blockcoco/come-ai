@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import os
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse
@@ -13,7 +13,16 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
+from .candidate_profile import (
+    AutoApprovalError,
+    FactTransitionError,
+    ProfileFact,
+    build_justification,
+)
+from .models import utc_now
 from .profile_import import MAX_PROFILE_IMPORT_BYTES
+from .profile_builder import OcrOutcome, build_source_document, propose_facts
+from .profile_store import ProfileStore, ProfileStoreError
 from .service import CareerService
 from workspace_core import UserFacingError, to_jsonable
 
@@ -236,6 +245,19 @@ class CVAnalyzeResponse(BaseModel):
     provenance: dict[str, Any]
 
 
+class CandidateProfileImportPayload(BaseModel):
+    """One document or text to turn into proposed candidate facts."""
+
+    text: str = Field(min_length=1, max_length=100_000)
+    filename: str = Field(default="texte-profil", max_length=256)
+
+
+class CandidateFactModifyPayload(BaseModel):
+    """The corrected value of one fact."""
+
+    value: str = Field(min_length=1, max_length=4_000)
+
+
 def create_career_router(
     service: CareerService,
     *,
@@ -244,6 +266,9 @@ def create_career_router(
     if not CAREER_STATIC_DIR.is_dir():
         raise RuntimeError("Les fichiers Career Agent sont introuvables.")
     router = APIRouter()
+    # The candidate profile keeps its own tables in the local Career database:
+    # the documents read, the facts proposed and the decisions of the user.
+    candidate_profiles = ProfileStore(service.db_path)
 
     async def local(call: Any) -> Any:
         return to_jsonable(await run_in_threadpool(call))
@@ -404,6 +429,88 @@ def create_career_router(
     async def delete_profile_import(import_id: str) -> dict[str, bool]:
         await local(lambda: service.delete_profile_import(import_id))
         return {"deleted": True}
+
+    # --- Candidate profile: proposals, then one decision per fact --------
+    # A document never becomes a profile on its own.  The local pipeline only
+    # proposes facts, each one keeping the exact passage it was read from,
+    # and the user decides field by field which facts may then justify a
+    # matching or an application.
+
+    @router.post("/api/career/profile-facts/import", status_code=201)
+    async def import_candidate_document(request: Request) -> Any:
+        form = None
+        try:
+            form = await request.form(max_files=1, max_fields=1, max_part_size=64 * 1024)
+        except (HTTPException, ValueError) as error:
+            raise UserFacingError(
+                "Import de profil candidat invalide : envoie un document à relire."
+            ) from error
+        try:
+            uploads = [
+                (key, value) for key, value in form.multi_items() if isinstance(value, UploadFile)
+            ]
+            if len(uploads) != 1 or uploads[0][0] != "document":
+                raise UserFacingError("Sélectionne un seul fichier dans le champ « document ».")
+            return await _store_candidate_document(service, candidate_profiles, uploads[0][1])
+        finally:
+            if form is not None:
+                await form.close()
+
+    @router.post("/api/career/profile-facts/import-text", status_code=201)
+    async def import_candidate_text(payload: CandidateProfileImportPayload) -> Any:
+        return await local(
+            lambda: _propose_candidate_facts(
+                candidate_profiles,
+                filename=payload.filename,
+                text=payload.text,
+            )
+        )
+
+    @router.get("/api/career/profile-facts")
+    async def candidate_facts() -> Any:
+        return await local(lambda: _candidate_facts_payload(candidate_profiles))
+
+    @router.get("/api/career/profile-facts/active")
+    async def active_candidate_facts() -> Any:
+        """Only the facts the user approved: what may justify an application."""
+        return await local(lambda: build_justification(candidate_profiles.active_facts()))
+
+    @router.get("/api/career/profile-facts/export")
+    async def export_candidate_profile(include_source: bool = Query(default=True)) -> Any:
+        """The portable profile: facts, decisions and their provenance."""
+        return await local(
+            lambda: candidate_profiles.export_profile(include_source=include_source)
+        )
+
+    @router.post("/api/career/profile-facts/{fact_id}/approve")
+    async def approve_candidate_fact(fact_id: str) -> Any:
+        return await local(lambda: _decide_fact(candidate_profiles, fact_id, "approve"))
+
+    @router.post("/api/career/profile-facts/{fact_id}/reject")
+    async def reject_candidate_fact(fact_id: str) -> Any:
+        return await local(lambda: _decide_fact(candidate_profiles, fact_id, "reject"))
+
+    @router.post("/api/career/profile-facts/{fact_id}/suspend")
+    async def suspend_candidate_fact(fact_id: str) -> Any:
+        return await local(lambda: _decide_fact(candidate_profiles, fact_id, "suspend"))
+
+    @router.post("/api/career/profile-facts/{fact_id}/modify")
+    async def modify_candidate_fact(fact_id: str, payload: CandidateFactModifyPayload) -> Any:
+        return await local(
+            lambda: _decide_fact(candidate_profiles, fact_id, "modify", value=payload.value)
+        )
+
+    @router.delete("/api/career/profile-facts/{fact_id}")
+    async def delete_candidate_fact(fact_id: str) -> dict[str, bool]:
+        deleted = await local(lambda: candidate_profiles.delete_fact(fact_id))
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Ce fait de profil n’existe pas.")
+        return {"deleted": True}
+
+    @router.delete("/api/career/profile-facts/documents/{document_id}")
+    async def delete_candidate_document(document_id: str) -> dict[str, Any]:
+        deleted = await local(lambda: candidate_profiles.delete_document(document_id))
+        return {"deleted": True, "facts_deleted": deleted}
 
     @router.get("/api/career/intake")
     async def intake() -> Any:
@@ -741,6 +848,9 @@ def create_career_router(
     @router.delete("/api/career/data")
     async def reset_data(payload: ResetPayload) -> dict[str, bool]:
         await local(lambda: service.reset_personal_data(payload.confirmation))
+        # The candidate profile keeps its own tables: a full reset must also
+        # erase the documents read and the facts proposed from them.
+        await local(lambda: candidate_profiles.clear())
         return {"deleted": True}
 
     return router
@@ -782,3 +892,178 @@ async def _store_profile_document(
         )
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def _candidate_facts_payload(store: ProfileStore) -> dict[str, Any]:
+    """Return every proposed fact, the decisions taken and the active profile."""
+    facts = store.list_facts()
+    return {
+        "facts": [fact.to_dict() for fact in facts],
+        "counts": store.counts(facts),
+        "documents": store.list_documents(),
+        "active": build_justification(store.active_facts()),
+    }
+
+
+def _propose_candidate_facts(
+    store: ProfileStore,
+    *,
+    filename: str,
+    text: str,
+    created_at: str = "",
+) -> dict[str, Any]:
+    """Read a text locally and store the facts it proposes.
+
+    Nothing is approved here: the facts are stored as ``proposed`` and the
+    user decides each of them from the interface.
+    """
+    stamp = created_at or utc_now()
+    document, spans = build_source_document(
+        filename=filename,
+        filetype="txt",
+        text=text,
+        created_at=stamp,
+    )
+    facts = propose_facts(document, spans, created_at=stamp)
+    store.save_document(document)
+    store.save_facts(facts, now=stamp)
+    return {
+        "document": document.to_dict(include_text=False),
+        "facts": [fact.to_dict() for fact in facts],
+        "counts": store.counts(),
+        "active": build_justification(store.active_facts()),
+        "warnings": _candidate_warnings(document, facts),
+    }
+
+
+def _candidate_warnings(document: Any, facts: Sequence[ProfileFact]) -> list[str]:
+    """Return the honest warnings of one import."""
+    warnings: list[str] = []
+    if document.extraction == "ocr":
+        warnings.append(
+            "Ce document a été lu par l’OCR local : chaque fait doit être vérifié avant d’être approuvé."
+        )
+    if not facts:
+        warnings.append(
+            "Aucune rubrique claire (compétences, expérience, formation, langues) n’a été trouvée."
+        )
+    return warnings
+
+
+def _decide_fact(
+    store: ProfileStore,
+    fact_id: str,
+    action: str,
+    *,
+    value: str | None = None,
+) -> dict[str, Any]:
+    """Apply one user decision to one fact and return the new state."""
+    try:
+        if action == "approve":
+            fact = store.approve(fact_id)
+        elif action == "reject":
+            fact = store.reject(fact_id)
+        elif action == "suspend":
+            fact = store.suspend(fact_id)
+        elif action == "modify":
+            fact = store.modify(fact_id, value or "")
+        else:
+            raise UserFacingError("Décision inconnue pour ce fait de profil.")
+    except ProfileStoreError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except (FactTransitionError, AutoApprovalError) as error:
+        raise UserFacingError(str(error)) from error
+    return {
+        "fact": fact.to_dict(),
+        "counts": store.counts(),
+        "active": build_justification(store.active_facts()),
+    }
+
+
+async def _store_candidate_document(
+    service: CareerService, store: ProfileStore, uploaded: UploadFile
+) -> Any:
+    """Stream one document, read it locally and store the facts it proposes.
+
+    The document never leaves the machine: it is read by the local parser,
+    or by the local OCR when the PDF has no usable text layer.  The facts it
+    produces are proposals, and an OCR document can never be approved by a
+    machine.
+    """
+    original_name = CareerService._safe_profile_source_name(
+        uploaded.filename, fallback="document-profil"
+    )
+    suffix = Path(original_name).suffix.lower()
+    filetype = {".pdf": "pdf", ".docx": "docx", ".txt": "txt", ".md": "txt"}.get(suffix)
+    if filetype is None:
+        raise UserFacingError("Le profil doit être un PDF, DOCX, TXT ou Markdown.")
+    temporary = service.profile_upload_temp_path()
+    bytes_written = 0
+    try:
+        with temporary.open("xb") as destination:
+            try:
+                os.chmod(temporary, 0o600)
+            except OSError:
+                pass
+            while chunk := await uploaded.read(PROFILE_UPLOAD_CHUNK_SIZE):
+                bytes_written += len(chunk)
+                if bytes_written > MAX_PROFILE_IMPORT_BYTES:
+                    raise UserFacingError(
+                        "Document de profil trop volumineux (maximum 10 Mo)."
+                    )
+                destination.write(chunk)
+        return await run_in_threadpool(
+            lambda: _read_candidate_document(
+                service, store, temporary, filename=original_name, filetype=filetype
+            )
+        )
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _read_candidate_document(
+    service: CareerService,
+    store: ProfileStore,
+    path: Path,
+    *,
+    filename: str,
+    filetype: str,
+) -> dict[str, Any]:
+    """Read one document locally and store the facts it proposes."""
+    stamp = utc_now()
+
+    def ocr_provider() -> OcrOutcome:
+        if filetype != "pdf":
+            return OcrOutcome(text="", pages=0, warnings=())
+        try:
+            result = service.ocr.extract_pdf(path)
+        except UserFacingError:
+            raise
+        return OcrOutcome(
+            text=result.text,
+            pages=result.pages,
+            warnings=tuple(result.warnings),
+        )
+
+    try:
+        document, spans = build_source_document(
+            filename=filename,
+            filetype=filetype,
+            data=path.read_bytes(),
+            ocr_provider=ocr_provider,
+            created_at=stamp,
+        )
+    except ValueError as error:
+        raise UserFacingError(
+            "Le document n’a pas pu être lu localement. Essaie un autre format."
+        ) from error
+    facts = propose_facts(document, spans, created_at=stamp)
+    store.save_document(document)
+    store.save_facts(facts, now=stamp)
+    return {
+        "document": document.to_dict(include_text=False),
+        "facts": [fact.to_dict() for fact in facts],
+        "counts": store.counts(),
+        "active": build_justification(store.active_facts()),
+        "warnings": _candidate_warnings(document, facts),
+    }

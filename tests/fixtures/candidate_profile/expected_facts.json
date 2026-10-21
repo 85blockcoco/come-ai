@@ -1,0 +1,41 @@
+{
+  "description": "Synthetic CV used by the candidate profile tests. Every person, company, school, phone number and address here is invented.",
+  "documents": [
+    {
+      "fixture": "cv_synthetique.txt",
+      "language": "fr",
+      "expected_kinds": ["contact", "experience", "education", "skill", "language", "date"],
+      "expected_facts": [
+        {"kind": "contact", "label": "E-mail", "value": "camille.exemple@example.test"},
+        {"kind": "contact", "label": "Téléphone", "value": "+33 6 12 34 56 78"},
+        {"kind": "skill", "label": "Excel", "value": "Excel"},
+        {"kind": "skill", "label": "Python", "value": "Python"},
+        {"kind": "skill", "label": "Power BI", "value": "Power BI"},
+        {"kind": "skill", "label": "SQL", "value": "SQL"},
+        {"kind": "language", "label": "Français", "value": "Français"},
+        {"kind": "language", "label": "Anglais", "value": "Anglais"},
+        {"kind": "education", "value": "2019 - 2021 Master Finance d'entreprise — Université Fictive"},
+        {"kind": "experience", "value": "2021 - 2024 Analyste financière — Groupe Fictif"}
+      ],
+      "expected_attributes": [
+        {"kind": "language", "label": "Anglais", "attributes": {"level": "C1"}}
+      ]
+    },
+    {
+      "fixture": "cv_synthetique_en.txt",
+      "language": "en",
+      "expected_kinds": ["contact", "experience", "education", "skill", "language", "date"],
+      "expected_facts": [
+        {"kind": "contact", "label": "E-mail", "value": "alex.sample@example.test"},
+        {"kind": "skill", "label": "Excel", "value": "Excel"},
+        {"kind": "skill", "label": "SQL", "value": "SQL"},
+        {"kind": "language", "label": "English", "value": "English"},
+        {"kind": "education", "value": "2018 - 2021 MSc Corporate Finance — Fictional University"},
+        {"kind": "experience", "value": "March 2022 - Present Financial analyst — Fictional Group"}
+      ],
+      "expected_attributes": [
+        {"kind": "language", "label": "French", "attributes": {"level": "B2"}}
+      ]
+    }
+  ]
+}

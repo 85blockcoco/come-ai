@@ -39,6 +39,19 @@ class VisualBlock:
     page: int = 0
 
 
+@dataclass(frozen=True, slots=True)
+class ExtractedPage:
+    """The text of one page of a document.
+
+    Attributes:
+        page_number: 1-based page number.
+        text: Text of that page, without the page separator.
+    """
+
+    page_number: int
+    text: str
+
+
 def reconstruct_reading_order(
     blocks: list[VisualBlock], *, line_tolerance: float = 6.0
 ) -> str:
@@ -126,6 +139,38 @@ def _extract_positioned_page(page: object, page_number: int) -> str:
     return reconstruct_reading_order(blocks)
 
 
+def extract_pages_from_bytes(
+    data: bytes, filetype: str, filename: str | None = None
+) -> tuple[list[ExtractedPage], int]:
+    """Extract the text of each page, keeping the page each text comes from.
+
+    The concatenation of the returned pages (joined with a blank line) is
+    exactly the text returned by :func:`extract_text_from_bytes`, so a caller
+    can map any offset of the full text back to its page.
+
+    Args:
+        data: Raw file bytes.
+        filetype: One of "txt", "pdf", "docx".
+        filename: Original filename for provenance.
+
+    Returns:
+        Tuple of (pages holding text, total page count).
+
+    Raises:
+        ValueError: If filetype is unsupported or extraction fails.
+    """
+    if filetype == "txt":
+        text = _extract_txt(data)
+        return [ExtractedPage(page_number=1, text=text)], _estimate_pages_txt(text)
+    if filetype == "pdf":
+        pages, page_count = _extract_pdf_pages(data)
+        return pages, page_count
+    if filetype == "docx":
+        text, _estimated_pages = _extract_docx(data)
+        return [ExtractedPage(page_number=1, text=text)], _estimate_pages_txt(text)
+    raise ValueError(f"Unsupported filetype: {filetype}")
+
+
 def extract_text_from_bytes(data: bytes, filetype: str, filename: str | None = None) -> DocumentInput:
     """Extract text from raw bytes based on filetype.
 
@@ -140,15 +185,8 @@ def extract_text_from_bytes(data: bytes, filetype: str, filename: str | None = N
     Raises:
         ValueError: If filetype is unsupported or extraction fails.
     """
-    if filetype == "txt":
-        text = _extract_txt(data)
-        page_count = _estimate_pages_txt(text)
-    elif filetype == "pdf":
-        text, page_count = _extract_pdf(data)
-    elif filetype == "docx":
-        text, page_count = _extract_docx(data)
-    else:
-        raise ValueError(f"Unsupported filetype: {filetype}")
+    pages, page_count = extract_pages_from_bytes(data, filetype, filename)
+    text = "\n\n".join(page.text for page in pages)
 
     return DocumentInput(
         text=text,
@@ -205,11 +243,11 @@ def _estimate_pages_txt(text: str) -> int | None:
     return max(1, (len(text) // 3000) + 1)
 
 
-def _extract_pdf(data: bytes) -> tuple[str, int]:
-    """Extract text from PDF bytes using pypdf.
+def _extract_pdf_pages(data: bytes) -> tuple[list[ExtractedPage], int]:
+    """Extract the text of each readable page of a PDF.
 
     Returns:
-        Tuple of (extracted_text, page_count).
+        Tuple of (pages holding text, total page count of the document).
 
     Raises:
         ValueError: If pypdf is not available or PDF is invalid.
@@ -220,7 +258,7 @@ def _extract_pdf(data: bytes) -> tuple[str, int]:
     try:
         reader = pypdf.PdfReader(io.BytesIO(data))
         page_count = len(reader.pages)
-        texts = []
+        pages: list[ExtractedPage] = []
         for page_number, page in enumerate(reader.pages):
             try:
                 page_text = _extract_positioned_page(page, page_number)
@@ -230,11 +268,11 @@ def _extract_pdf(data: bytes) -> tuple[str, int]:
                 ):
                     page_text = legacy_text
                 if page_text:
-                    texts.append(page_text)
+                    pages.append(ExtractedPage(page_number=page_number + 1, text=page_text))
             except Exception:
                 # Skip pages that fail to extract
                 continue
-        return "\n\n".join(texts), page_count
+        return pages, page_count
     except Exception as e:
         raise ValueError(f"Failed to parse PDF: {e}") from e
 
