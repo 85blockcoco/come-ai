@@ -23,7 +23,7 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from html.parser import HTMLParser
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from workspace_core import UserFacingError
 
@@ -32,6 +32,9 @@ from .scoring import classify_job_family
 from .stage_search import default_brief, score_brief_match, validate_brief
 from .exploration import classify_internship, criteria_admit
 from .offer_qualification import qualify_offer
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from .job_deduplication import DedupReport
 
 
 GREENHOUSE_HOST = "boards-api.greenhouse.io"
@@ -497,3 +500,26 @@ class GreenhouseJobBoardConnector:
             relevant_count=relevant_count,
             filtered_criteria_count=filtered_criteria_count,
         )
+
+
+def discover_stage_offers(jobs: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], "DedupReport"]:
+    """Merge the offers collected from every public source.
+
+    The multi-source collection happens upstream: each registered board is
+    read once and every connector returns its own offer records.  This entry
+    point is the deterministic, local merge step that runs right after that
+    collection: the same offer published on several boards becomes a single
+    offer, and each merged offer keeps the trace of its sources.
+
+    Args:
+        jobs: Offer records collected from every source (Greenhouse, Ashby,
+            Lever, Welcome to the Jungle, JobTeaser, Talent.com, APEC).
+
+    Returns:
+        A tuple with the deduplicated offers and the merge report.
+    """
+    # Imported lazily: the deduplication module is only needed when several
+    # sources are merged, and it must not slow down the import of discovery.
+    from .job_deduplication import deduplicate_offers
+
+    return deduplicate_offers(jobs)
