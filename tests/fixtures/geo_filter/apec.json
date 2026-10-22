@@ -12,6 +12,15 @@
         {"identifier": "apec-fr-1", "title": "Corporate Finance Intern", "company": "Synthetic Finance", "location": "Paris, France"}
       ],
       "expect": {"kept_source_ids": [], "excluded_by_country": {"FR": 1}}
+    },
+    {
+      "case_id": "apec_paris_city_only",
+      "description": "Une offre APEC publiée à Paris sans pays : l'indice de ville écarte l'offre, il n'invente pas un pays.",
+      "countries_exclude": ["FR"],
+      "cards": [
+        {"identifier": "apec-city-fr", "title": "Corporate Finance Intern", "company": "Synthetic Finance", "location": "Paris"}
+      ],
+      "expect": {"kept_source_ids": [], "excluded_by_country": {"FR": 1}}
     }
   ]
 }

@@ -25,7 +25,13 @@ from career.connectors.apec import ApecConnector
 from career.connectors.jobteaser import JobTeaserConnector
 from career.connectors.talent_com import TalentComConnector
 from career.connectors.welcome_jungle import WelcomeJungleConnector
-from career.countries import GeoFilter, canonicalize_country, country_from_location, geo_filter
+from career.countries import (
+    GeoFilter,
+    canonicalize_country,
+    country_from_location,
+    geo_filter,
+    hinted_country_codes,
+)
 from career.discovery import (
     DiscoveryPayload,
     GreenhouseBoard,
@@ -333,7 +339,58 @@ def test_the_canonical_vocabulary_never_reads_a_city_as_a_country():
     assert canonicalize_country("FRA") == "FR"
 
 
-def test_a_location_that_names_a_country_is_read_on_its_name():
+def test_a_city_hint_may_only_exclude_an_offer():
+    """A hint refuses an offer; it never proves where the offer is."""
+    assert hinted_country_codes("Paris") == ("FR",)
+    assert hinted_country_codes("Berlin") == ("DE",)
+    # Several unnamed places prove nothing.
+    assert hinted_country_codes("Paris, London") == ()
+    assert hinted_country_codes("Atlantis") == ()
+    # A hint is never a country of its own: the offer keeps an unknown one.
+    connector = GreenhouseJobBoardConnector(FeedTransport(_greenhouse_payload(
+        "Paris", "job-hint")))
+    payload = connector.discover_internships(
+        GreenhouseBoard("synthetic", "Synthetic Finance", "synthetic"),
+        selection_brief=default_brief(),
+        countries_exclude=["FR"],
+    )
+    assert [job["source_id"] for job in payload.jobs] == ["job-hint"]
+    assert payload.jobs[0]["country_canonical"] == ""
+    assert payload.excluded_by_country == {}
+
+
+def test_a_scraped_card_that_names_a_single_french_city_is_filtered():
+    """The scraped connectors keep their historical behaviour: Paris is out."""
+    from career.connectors.welcome_jungle import WelcomeJungleConnector
+
+    html = html_cards([{"identifier": "wtj-1", "title": "Corporate Finance Intern",
+                         "company": "Synthetic Finance", "location": "Paris"}],
+                      "/fr/companies/synthetic/jobs/{identifier}")
+    connector = WelcomeJungleConnector(clock=lambda: "2026-10-20T01:00:00Z", fetch=FixtureFetch(html))
+    payload = connector.discover_internships(
+        _source("welcome_jungle"),
+        selection_brief=default_brief(),
+        countries_exclude=["FR"],
+    )
+    assert payload.jobs == ()
+    assert payload.excluded_by_country == {"FR": 1}
+
+
+def test_a_scraped_card_that_names_several_cities_is_kept():
+    """Several unnamed places prove nothing: the offer stays visible."""
+    from career.connectors.welcome_jungle import WelcomeJungleConnector
+
+    html = html_cards([{"identifier": "wtj-2", "title": "Corporate Finance Intern",
+                         "company": "Synthetic Finance", "location": "Paris, London"}],
+                      "/fr/companies/synthetic/jobs/{identifier}")
+    connector = WelcomeJungleConnector(clock=lambda: "2026-10-20T01:00:00Z", fetch=FixtureFetch(html))
+    payload = connector.discover_internships(
+        _source("welcome_jungle"),
+        selection_brief=default_brief(),
+        countries_exclude=["FR"],
+    )
+    assert [job["source_id"] for job in payload.jobs] == ["wtj-2"]
+    assert payload.excluded_by_country == {}
     """A board that publishes the country alone publishes a country."""
     assert country_from_location("France") == "FR"
     assert country_from_location("Germany") == "DE"

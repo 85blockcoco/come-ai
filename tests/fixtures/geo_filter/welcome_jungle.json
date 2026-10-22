@@ -21,6 +21,15 @@
         {"identifier": "wtj-de-1", "title": "Corporate Finance Intern", "company": "Synthetic Finance", "location": "Berlin, Germany"}
       ],
       "expect": {"kept_source_ids": ["wtj-de-1"], "excluded_by_country": {}}
+    },
+    {
+      "case_id": "welcome_jungle_paris_city_only",
+      "description": "Le scraping renvoie une offre à Paris sans pays : l'indice de ville peut écarter l'offre, jamais inventer un pays.",
+      "countries_exclude": ["FR"],
+      "cards": [
+        {"identifier": "wtj-city-fr", "title": "Corporate Finance Intern", "company": "Synthetic Finance", "location": "Paris"}
+      ],
+      "expect": {"kept_source_ids": [], "excluded_by_country": {"FR": 1}}
     }
   ]
 }

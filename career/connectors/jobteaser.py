@@ -23,6 +23,7 @@ from ..discovery import DiscoveryPayload, PublicSourceError, source_html_to_text
 from ..countries import (
     GeoFilter,
     geo_filter,
+    resolve_hinted_country,
     resolve_published_country,
     split_location,
 )
@@ -230,7 +231,9 @@ def _is_excluded_location(city: str, country: str, geo: GeoFilter, location_text
     """
     _ = city
     _canonical, excluded = resolve_published_country(None, location_text or country, geo)
-    return excluded
+    if excluded:
+        return excluded
+    return resolve_hinted_country(location_text or country, geo)
 
 
 def _is_finance_role(title: str, description: str) -> bool:
