@@ -19,7 +19,7 @@ import urllib.parse
 import uuid
 from contextlib import contextmanager
 from dataclasses import replace
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -55,6 +55,15 @@ from .application_studio import (
     scan_kit_placeholders,
 )
 from .calendar_export import build_deadline_calendar_ics
+from .daily_digest import (
+    DEFAULT_EXCLUDED_CITIES as DAILY_DIGEST_EXCLUDED_CITIES,
+    DEFAULT_EXCLUDED_COUNTRIES as DAILY_DIGEST_EXCLUDED_COUNTRIES,
+    DEFAULT_USER_ID as DAILY_DIGEST_USER_ID,
+    MAX_OPPORTUNITIES as DAILY_DIGEST_MAX_OPPORTUNITIES,
+    build_daily_calendar_ics,
+    compute_daily,
+)
+from .daily_digest_store import DailyDigestStore, default_ttl_seconds as daily_digest_ttl_seconds
 from .application_dashboard import (
     CHECKLIST_EVENT_TYPE,
     CHECKLIST_KEYS,
@@ -234,6 +243,12 @@ class CareerService:
         # they contain a complete private snapshot of the local Career data.
         self.backups_dir = self.data_dir / "backups"
         self.db_path = self.data_dir / "career.sqlite3"
+        # SPEC-005 : cache local du cockpit quotidien (TTL configurable, 4 h par
+        # défaut). Il vit dans career_data/ et n'est jamais transmis.
+        self.daily_digest_store = DailyDigestStore(
+            self.data_dir / "daily_digest_cache.json",
+            default_ttl_seconds=daily_digest_ttl_seconds(),
+        )
         self.ocr = ocr or LocalVisionOCR(self.ocr_dir)
         # The discovery lock is intentionally process-local: the local web
         # server has one process, and it prevents double-clicks from issuing
@@ -3679,6 +3694,206 @@ class CareerService:
             query=query,
         )
 
+    # ------------------------------------------------------------------
+    # SPEC-005 : cockpit quotidien local (« Aujourd'hui »)
+    # ------------------------------------------------------------------
+
+    def get_daily_digest(self, *, force_refresh: bool = False) -> dict[str, Any]:
+        """Renvoie le cockpit quotidien, mis en cache (4 h par défaut).
+
+        Le calcul est local et déterministe ; le cache évite de le refaire à
+        chaque chargement de page. Un refresh explicite invalide l'entrée et
+        recalcule tout : rien n'est envoyé, rien n'est écrit ailleurs que dans
+        la base Career locale.
+        """
+
+        now = datetime.now(timezone.utc)
+        if not force_refresh:
+            cached = self.daily_digest_store.read(DAILY_DIGEST_USER_ID, now=now)
+            if cached is not None:
+                payload = dict(cached["payload"])
+                payload["cached"] = True
+                payload["cache_expires_at"] = cached.get("expires_at", "")
+                return payload
+        digest = self._compute_daily_digest(now=now)
+        payload = digest.to_dict()
+        payload["cached"] = False
+        self.daily_digest_store.write(DAILY_DIGEST_USER_ID, payload, now=now)
+        return payload
+
+    def refresh_daily_digest(self) -> dict[str, Any]:
+        """Invalide le cache puis recalcule le cockpit (bouton « Actualiser »)."""
+
+        self.daily_digest_store.invalidate(DAILY_DIGEST_USER_ID)
+        return self.get_daily_digest(force_refresh=True)
+
+    def _compute_daily_digest(self, *, now: datetime) -> Any:
+        """Rassemble les enregistrements locaux puis délègue le calcul pur."""
+
+        jobs = self.list_jobs()
+        applications = self._daily_digest_applications()
+        drafts = self._daily_digest_drafts()
+        candidates = self._daily_digest_opportunity_candidates()
+        stage_search = self.get_stage_search()
+        brief = stage_search.get("brief") or {}
+        if stage_search.get("configured"):
+            # Les exclusions de la personne priment sur celles par défaut.
+            excluded_countries = list(brief.get("excluded_countries") or [])
+            excluded_cities = list(brief.get("excluded_cities") or [])
+        else:
+            excluded_countries = list(DAILY_DIGEST_EXCLUDED_COUNTRIES)
+            excluded_cities = list(DAILY_DIGEST_EXCLUDED_CITIES)
+        return compute_daily(
+            DAILY_DIGEST_USER_ID,
+            today=now.date(),
+            now=now,
+            jobs=jobs,
+            applications=applications,
+            drafts=drafts,
+            opportunity_candidates=candidates,
+            ttl_seconds=self.daily_digest_store.default_ttl_seconds,
+            excluded_countries=excluded_countries,
+            excluded_cities=excluded_cities,
+        )
+
+    def _daily_digest_applications(self) -> list[dict[str, Any]]:
+        """Candidatures suivies et leurs événements, en une lecture bornée."""
+
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT a.id AS application_id, a.job_id, a.stage, a.receipt_status,
+                       a.approval_granted, a.confirmation_reference,
+                       a.created_at AS application_created_at, a.updated_at AS application_updated_at,
+                       j.company, j.title, j.city, j.country, j.official_url,
+                       j.deadline_date, j.source_status
+                FROM applications a JOIN jobs j ON j.id = a.job_id
+                ORDER BY a.updated_at DESC, a.id ASC
+                LIMIT ?
+                """,
+                (MAX_DASHBOARD_APPLICATIONS,),
+            ).fetchall()
+            application_ids = [str(row["application_id"]) for row in rows]
+            events_by_application: dict[str, list[dict[str, Any]]] = {}
+            if application_ids:
+                placeholders = ", ".join("?" for _ in application_ids)
+                event_rows = connection.execute(
+                    f"""
+                    SELECT application_id, event_type, detail, created_at
+                    FROM application_events
+                    WHERE application_id IN ({placeholders})
+                    ORDER BY created_at ASC
+                    """,
+                    application_ids,
+                ).fetchall()
+                for event_row in event_rows:
+                    events_by_application.setdefault(str(event_row["application_id"]), []).append(
+                        dict(event_row)
+                    )
+        records: list[dict[str, Any]] = []
+        for row in rows:
+            record = dict(row)
+            record["application_id"] = str(record.get("application_id") or "")
+            record["updated_at"] = record.get("application_updated_at")
+            record["created_at"] = record.get("application_created_at")
+            record["events"] = events_by_application.get(record["application_id"], [])
+            records.append(record)
+        return records
+
+    def _daily_digest_drafts(self) -> list[dict[str, Any]]:
+        """Brouillons de dossiers préparés localement (progression)."""
+
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, job_id, created_at
+                FROM application_drafts
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (MAX_DASHBOARD_APPLICATIONS,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def _daily_digest_opportunity_candidates(self) -> list[dict[str, Any]]:
+        """Offres éligibles avec leur score et leur couverture documentaire.
+
+        Le classement et la qualification sont ceux du moteur local existant :
+        le cockpit n'invente ni score ni exigence. Les offres non conformes
+        (critères géographiques ou d'éligibilité) sont écartées.
+        """
+
+        matches = self.list_stage_matches().get("matches") or []
+        eligible = [
+            match
+            for match in matches
+            if (match.get("stage_match") or {}).get("qualification_status") != "non_conforming"
+        ]
+        eligible.sort(
+            key=lambda match: (
+                -int((match.get("stage_match") or {}).get("score") or 0),
+                str((match.get("job") or {}).get("company") or "").casefold(),
+                str((match.get("job") or {}).get("title") or "").casefold(),
+            )
+        )
+        candidates: list[dict[str, Any]] = []
+        for match in eligible[:DAILY_DIGEST_MAX_OPPORTUNITIES]:
+            job = match.get("job") if isinstance(match.get("job"), dict) else {}
+            job_id = str(job.get("id") or "")
+            if not job_id:
+                continue
+            try:
+                prep = self.get_job_prep(job_id)
+            except UserFacingError:
+                prep = {}
+            cv_coverage = prep.get("cv_coverage") if isinstance(prep.get("cv_coverage"), dict) else {}
+            scoring = job.get("scoring") if isinstance(job.get("scoring"), dict) else {}
+            stage_match = match.get("stage_match") if isinstance(match.get("stage_match"), dict) else {}
+            candidates.append(
+                {
+                    "job_id": job_id,
+                    "company": job.get("company"),
+                    "title": job.get("title"),
+                    "city": job.get("city"),
+                    "country": job.get("country"),
+                    "official_url": job.get("official_url"),
+                    "posted_date": job.get("posted_date"),
+                    "source_status": job.get("source_status"),
+                    "source_verified": job.get("source_verified"),
+                    "match_score": stage_match.get("score") or scoring.get("score"),
+                    "mandatory_covered": cv_coverage.get("supported"),
+                    "mandatory_total": cv_coverage.get("requirements_total"),
+                    "application_stage": (job.get("application") or {}).get("stage"),
+                }
+            )
+        return candidates
+
+    def export_daily_calendar(self) -> Path:
+        """Écrit un ``.ics`` local pour la journée du cockpit.
+
+        Export explicite et inert : le fichier reprend les échéances, les
+        relances suggérées et les entretiens déclarés, avec des ``UID``
+        déterministes pour que réimporter le fichier mette à jour les mêmes
+        événements au lieu d'en créer de nouveaux.
+        """
+
+        digest = self.get_daily_digest()
+        created = datetime.now().strftime("%Y%m%d-%H%M%S")
+        target = self.export_dir / f"career_aujourdhui_{created}_{uuid.uuid4().hex[:8]}.ics"
+        calendar = build_daily_calendar_ics(digest)
+        try:
+            target.write_text(calendar, encoding="utf-8")
+            os.chmod(target, 0o600)
+        except OSError as error:
+            try:
+                target.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise UserFacingError("Le calendrier du cockpit n’a pas pu être créé.") from error
+        with self._lock, self._connection() as connection:
+            self._audit(connection, "daily_calendar_exported", "export", target.name)
+        return target
+
     def set_application_checklist(self, application_id: str, checked: list[str]) -> dict[str, Any]:
         """Enregistre l'état local de la checklist dans le journal existant.
 
@@ -4529,6 +4744,16 @@ class CareerService:
                 "ai_required": False,
                 "local_only": True,
                 "invented_facts": False,
+            },
+            "daily_digest": {
+                "enabled": True,
+                "local_only": True,
+                "ai_required": False,
+                "cache_ttl_seconds": self.daily_digest_store.default_ttl_seconds,
+                "calendar_export": True,
+                "automatic_submission": False,
+                "default_excluded_countries": list(DAILY_DIGEST_EXCLUDED_COUNTRIES),
+                "default_excluded_cities": list(DAILY_DIGEST_EXCLUDED_CITIES),
             },
         }
 

@@ -536,6 +536,23 @@ button, a, .career-tab { transition: background-color .16s ease, border-color .1
 .application-checklist-items input { width: auto; flex-shrink: 0; margin-top: 2px; }
 .timeline-event { margin: 0; color: var(--muted); font-size: .72rem; line-height: 1.4; }
 .clipboard-fallback { position: absolute; inset-inline-start: -9999px; top: 0; }
+
+/* SPEC-005 — cockpit quotidien (« Aujourd'hui »). */
+.daily-panel { display: grid; gap: .9rem; padding: 19px; border-color: #cce5d7; background: linear-gradient(135deg, #fff 0%, #f6fcf8 100%); }
+.daily-progression { display: grid; gap: .55rem; }
+.daily-progression h3 { color: var(--accent-dark); font-size: .88rem; }
+.daily-progression .metrics { grid-template-columns: repeat(6, minmax(0, 1fr)); margin-bottom: 0; }
+.daily-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.daily-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center; padding: 11px; border: 1px solid #dbe7df; border-radius: 12px; background: #fff; }
+.daily-card-copy { display: grid; min-width: 0; gap: 3px; }
+.daily-card-copy strong { overflow: hidden; font-size: .83rem; text-overflow: ellipsis; white-space: nowrap; }
+.daily-card-copy span, .daily-card-copy small { color: var(--muted); font-size: .72rem; line-height: 1.35; }
+.daily-card-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.daily-card .quiet-button { grid-column: 2; grid-row: 1 / span 2; }
+@media (max-width: 1050px) {
+  .daily-progression .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .daily-grid { grid-template-columns: minmax(0, 1fr); }
+}
 @media (max-width: 620px) {
   .application-filters { align-items: stretch; }
   .application-filters label { flex: 1 1 100%; }

@@ -38,7 +38,8 @@
         </section>
 
         <nav class="career-tabs" aria-label="Navigation principale Career">
-          <button class="career-tab active" id="tab-dashboard" type="button" aria-current="page" aria-controls="view-dashboard" data-view="dashboard">Tableau de bord</button>
+          <button class="career-tab active" id="tab-daily" type="button" aria-current="page" aria-controls="view-daily" data-view="daily">Aujourd’hui</button>
+          <button class="career-tab" id="tab-dashboard" type="button" aria-controls="view-dashboard" data-view="dashboard">Tableau de bord</button>
           <button class="career-tab" id="tab-discover" type="button" aria-controls="view-discover" data-product-area="Discover" data-view="discover">Découvrir</button>
           <button class="career-tab" id="tab-stagehunter" type="button" aria-controls="view-stagehunter" data-view="stagehunter">Stage Hunter</button>
           <button class="career-tab" id="tab-applications" type="button" aria-controls="view-applications" data-product-area="Applications" data-view="applications">Candidatures</button>
@@ -50,7 +51,44 @@
         <p id="career-loading" class="career-loading" role="status" aria-live="polite" aria-atomic="true">Chargement de ton espace Career local…</p>
         <p id="career-message" class="career-message career-global-message" role="status" aria-live="polite" aria-atomic="true"></p>
 
-        <section id="view-dashboard" class="career-view" tabindex="-1" aria-labelledby="dashboard-title">
+        <section id="view-daily" class="career-view" tabindex="-1" aria-labelledby="daily-title">
+          <section class="panel daily-panel" aria-labelledby="daily-title">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Cockpit quotidien</p>
+                <h2 id="daily-title">Aujourd’hui</h2>
+              </div>
+              <div class="inline-actions">
+                <a class="secondary-button link-button" href="/api/career/daily/ics" download>Exporter la journée (.ics)</a>
+                <button id="daily-refresh" class="secondary-button" type="button">Actualiser</button>
+              </div>
+            </div>
+            <p class="panel-help">Ce qui compte aujourd’hui : les échéances proches, les relances à préparer, les offres qui correspondent à ton profil et ta progression de la semaine. Tout est calculé localement — aucun e-mail, message ou candidature n’est envoyé.</p>
+            <p id="daily-loading" class="dashboard-plan-loading" role="status" aria-live="polite" aria-atomic="true">Préparation de ta journée…</p>
+            <p id="daily-error" class="dashboard-plan-error" role="alert" hidden></p>
+            <p id="daily-honesty" class="panel-help"></p>
+            <section class="daily-progression" aria-labelledby="daily-progression-title">
+              <h3 id="daily-progression-title">Progression des sept derniers jours</h3>
+              <div id="daily-progression-metrics" class="metrics" aria-live="polite"></div>
+            </section>
+            <div class="daily-grid">
+              <section class="dashboard-panel">
+                <div class="panel-heading compact-heading"><div><p class="eyebrow">Priorités</p><h3>À faire aujourd’hui</h3></div></div>
+                <div id="daily-urgent" class="dashboard-list"></div>
+                <p id="daily-urgent-empty" class="empty-state compact-empty">Rien d’urgent aujourd’hui : aucune échéance proche, aucune relance due.</p>
+              </section>
+              <section class="dashboard-panel">
+                <div class="panel-heading compact-heading"><div><p class="eyebrow">Opportunités</p><h3>Offres qui te correspondent</h3></div></div>
+                <div id="daily-opportunities" class="dashboard-list"></div>
+                <p id="daily-opportunities-empty" class="empty-state compact-empty">Aucune opportunité ne correspond encore à tes critères locaux.</p>
+              </section>
+            </div>
+            <p id="daily-notes" class="panel-help"></p>
+            <p id="daily-status" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></p>
+          </section>
+        </section>
+
+        <section id="view-dashboard" class="career-view" tabindex="-1" hidden aria-labelledby="dashboard-title">
           <section class="panel dashboard-hero">
             <div>
               <p class="eyebrow">Vue d’ensemble</p>
@@ -733,6 +771,7 @@
       </footer>
     </div>
     <script src="/career-static/cv_plan.js" defer></script>
+    <script src="/career-static/js/daily-digest.js" defer></script>
     <script src="/career-static/career.js" defer></script>
   </body>
 </html>

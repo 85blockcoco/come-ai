@@ -203,6 +203,7 @@ function reveal(element, block = "nearest") {
 
 function labelForView(viewName) {
   return {
+    daily: "Aujourd’hui",
     dashboard: "Tableau de bord",
     discover: "Découvrir",
     stagehunter: "Stage Hunter",
@@ -232,6 +233,15 @@ function metric(value, label) {
   return node;
 }
 
+// SPEC-005 : le cockpit quotidien est rendu par career_static/js/daily-digest.js.
+// Ce pont évite une dépendance dure à l'ordre de chargement des scripts.
+function loadDailyDigest() {
+  if (window.careerDailyDigest && typeof window.careerDailyDigest.load === "function") {
+    return window.careerDailyDigest.load();
+  }
+  return Promise.resolve();
+}
+
 function organiseViews() {
   const profilePanel = document.querySelector(".profile-panel");
   const profileContent = $("#profile-content");
@@ -249,11 +259,14 @@ function organiseViews() {
   }
 }
 
-const careerViews = new Set(["dashboard", "discover", "stagehunter", "shortlist", "studio", "applications", "interviews", "profile", "settings"]);
+const careerViews = new Set(["daily", "dashboard", "discover", "stagehunter", "shortlist", "studio", "applications", "interviews", "profile", "settings"]);
 let internalHashChange = false;
 
 function refreshView(viewName) {
   const loaders = {
+    // SPEC-005 : le cockpit quotidien vit dans career_static/js/daily-digest.js.
+    // Le typeof évite une dépendance dure à l'ordre de chargement des scripts.
+    daily: () => (typeof loadDailyDigest === "function" ? loadDailyDigest() : Promise.resolve()),
     dashboard: loadDashboard,
     stagehunter: loadStageHunter,
     shortlist: loadShortlist,
@@ -3566,10 +3579,10 @@ async function bootstrap() {
   setLoading(true);
   try {
     organiseViews();
-    await Promise.all([loadHealth(), loadProfile(), loadProfileImports(), loadIntake(), loadPreferences(), loadDiscoverySources(), loadDashboard(), loadJobs(), loadShortlist(), loadApplications()]);
+    await Promise.all([loadHealth(), loadProfile(), loadProfileImports(), loadIntake(), loadPreferences(), loadDiscoverySources(), loadDashboard(), loadJobs(), loadShortlist(), loadApplications(), loadDailyDigest()]);
     const requested = window.location.hash.replace("#career/", "");
     if (careerViews.has(requested)) showView(requested, { focus: false, updateHash: false });
-    else document.title = "Tableau de bord — Côme AI Career";
+    else document.title = "Aujourd’hui — Côme AI Career";
   } catch (error) {
     setMessage(error.message, true);
   } finally {
