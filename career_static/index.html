@@ -42,6 +42,7 @@
           <button class="career-tab" id="tab-discover" type="button" aria-controls="view-discover" data-product-area="Discover" data-view="discover">Découvrir</button>
           <button class="career-tab" id="tab-stagehunter" type="button" aria-controls="view-stagehunter" data-view="stagehunter">Stage Hunter</button>
           <button class="career-tab" id="tab-applications" type="button" aria-controls="view-applications" data-product-area="Applications" data-view="applications">Candidatures</button>
+          <button class="career-tab" id="tab-traceability" type="button" aria-controls="view-traceability" data-view="traceability">Traçabilité</button>
           <button class="career-tab" id="tab-interviews" type="button" aria-controls="view-interviews" data-product-area="Interview Coach" data-view="interviews">Coach d’entretien</button>
           <button class="career-tab" id="tab-profile" type="button" aria-controls="view-profile" data-view="profile">Mon profil</button>
           <button class="career-tab" id="tab-settings" type="button" aria-controls="view-settings" data-view="settings">Réglages</button>
@@ -682,6 +683,91 @@
           </section>
         </section>
 
+        <section id="view-traceability" class="career-view" tabindex="-1" hidden aria-labelledby="traceability-title">
+          <section class="panel jobs-panel">
+            <div class="panel-heading">
+              <div><p class="eyebrow">Registre de traçabilité</p><h2 id="traceability-title">Exigences, preuves et historique</h2></div>
+              <div class="inline-actions">
+                <a class="secondary-button link-button" href="/api/career/traceability/export?export_format=json" download="traceabilite.json">Export JSON</a>
+                <a class="secondary-button link-button" href="/api/career/traceability/export?export_format=csv" download="traceabilite.csv">Export CSV</a>
+              </div>
+            </div>
+            <p class="panel-help">Chaque exigence extraite d’une offre est reliée à la preuve locale qui la couvre. Une exigence n’est jamais affichée comme couverte sans citation, et chaque changement reste dans l’historique.</p>
+            <div class="filter-row trace-filters">
+              <label for="traceability-filter-status">Statut
+                <select id="traceability-filter-status">
+                  <option value="">Tous les statuts</option>
+                  <option value="uncovered">Non couverte</option>
+                  <option value="covered">Couverte</option>
+                  <option value="partial">Partiellement couverte</option>
+                  <option value="contradicted">Contradite</option>
+                  <option value="waived">Levée (dérogation)</option>
+                </select>
+              </label>
+              <label for="traceability-filter-category">Catégorie
+                <select id="traceability-filter-category">
+                  <option value="">Toutes les catégories</option>
+                  <option value="skill">Compétence</option>
+                  <option value="experience">Expérience</option>
+                  <option value="education">Formation</option>
+                  <option value="language">Langue</option>
+                  <option value="tool">Outil</option>
+                  <option value="certification">Certification</option>
+                  <option value="soft_skill">Compétence comportementale</option>
+                  <option value="other">Autre</option>
+                </select>
+              </label>
+              <label for="traceability-filter-criticality">Criticité
+                <select id="traceability-filter-criticality">
+                  <option value="">Toutes les criticités</option>
+                  <option value="mandatory">Obligatoire</option>
+                  <option value="preferred">Appréciée</option>
+                  <option value="nice_to_have">Bonus</option>
+                  <option value="contextual">Contextuelle</option>
+                </select>
+              </label>
+              <label for="traceability-filter-review">Validation
+                <select id="traceability-filter-review">
+                  <option value="">Toutes les validations</option>
+                  <option value="pending">À valider</option>
+                  <option value="confirmed">Validée</option>
+                  <option value="rejected">Rejetée</option>
+                  <option value="not_required">Lien manuel</option>
+                </select>
+              </label>
+              <label for="traceability-filter-offer">Offre
+                <input id="traceability-filter-offer" type="text" placeholder="identifiant d’offre" />
+              </label>
+              <label for="traceability-filter-query">Recherche
+                <input id="traceability-filter-query" type="search" placeholder="mot-clé de l’exigence" />
+              </label>
+              <button class="primary-button" id="traceability-apply" type="button">Filtrer</button>
+            </div>
+            <div id="traceability-metrics" class="metrics" role="list"></div>
+            <div id="traceability-batch" class="inline-actions" hidden>
+              <span id="traceability-batch-count" class="local-tag">0 exigence(s) sélectionnée(s)</span>
+              <button class="quiet-button" type="button" data-traceability-batch="confirm">Valider la liaison</button>
+              <button class="quiet-button" type="button" data-traceability-batch="reject">Rejeter la liaison</button>
+              <button class="quiet-button" type="button" data-traceability-batch="unlink">Retirer la preuve</button>
+              <button class="quiet-button" type="button" data-traceability-batch="waive">Lever l’exigence</button>
+            </div>
+            <div id="traceability-list" class="traceability-list" aria-live="polite"></div>
+            <p id="traceability-empty" class="empty-state">Aucune exigence enregistrée pour l’instant. Importe une offre pour alimenter le registre.</p>
+          </section>
+          <section class="panel jobs-panel" id="traceability-detail-panel" hidden>
+            <div class="panel-heading">
+              <div><p class="eyebrow">Détail</p><h3 id="traceability-detail-title">Exigence</h3></div>
+              <button class="quiet-button" id="traceability-detail-close" type="button">Fermer</button>
+            </div>
+            <div id="traceability-detail"></div>
+          </section>
+          <section class="panel jobs-panel">
+            <div class="panel-heading"><div><p class="eyebrow">Audit</p><h3>Gaps critiques</h3></div></div>
+            <p class="panel-help">Exigences obligatoires sans preuve citée : ce sont les points à traiter en priorité.</p>
+            <div id="traceability-gaps" class="traceability-list"></div>
+          </section>
+        </section>
+
         <section id="view-interviews" class="career-view" tabindex="-1" hidden aria-labelledby="interviews-title">
           <section class="panel coach-panel">
             <div class="panel-heading">
@@ -734,5 +820,6 @@
     </div>
     <script src="/career-static/cv_plan.js" defer></script>
     <script src="/career-static/career.js" defer></script>
+    <script src="/career-static/js/traceability.js" defer></script>
   </body>
 </html>

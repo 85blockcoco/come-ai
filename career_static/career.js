@@ -209,6 +209,7 @@ function labelForView(viewName) {
     shortlist: "Ma shortlist",
     studio: "Application Studio",
     applications: "Candidatures",
+    traceability: "Registre de traçabilité",
     interviews: "Coach d’entretien",
     profile: "Mon profil",
     settings: "Réglages",
@@ -249,7 +250,7 @@ function organiseViews() {
   }
 }
 
-const careerViews = new Set(["dashboard", "discover", "stagehunter", "shortlist", "studio", "applications", "interviews", "profile", "settings"]);
+const careerViews = new Set(["dashboard", "discover", "stagehunter", "shortlist", "studio", "applications", "traceability", "interviews", "profile", "settings"]);
 let internalHashChange = false;
 
 function refreshView(viewName) {
@@ -260,6 +261,9 @@ function refreshView(viewName) {
     studio: loadStudio,
     applications: loadApplications,
     interviews: loadCoach,
+    // SPEC-011 — le registre de traçabilité est un module autonome : Career
+    // ne fait que lui demander de se rafraîchir.
+    traceability: () => window.CareerTraceability?.refresh(),
   };
   loaders[viewName]?.().catch((error) => setMessage(error.message, true));
 }
