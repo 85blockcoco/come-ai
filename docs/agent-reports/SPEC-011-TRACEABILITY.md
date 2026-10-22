@@ -401,8 +401,18 @@ chaîne de chemin dupliquée entre le service et le magasin.
 | `ruff check .` | `All checks passed!` |
 | `scripts/audit_integration.py` (base `8d4474a`) | **MERGE AUTORISÉ** — les 4 constats bloquants ont disparu |
 
-### 12.7 Commandes d'audit d'intégration
+### 12.7 Branches
 
+| Branche | Contenu | Rôle |
+| --- | --- | --- |
+| `agent/spec-011-traceability` | Campagne précédente **+ cette passe** | **Branche d'intégration à relire** : c'est elle qui passe la porte de fusion. |
+| `agent/spec-011-traceability-followup` | Idem (même commit) |.Trace explicite du complément, si l'intégrateur préfère une branche dédiée. |
+| `worker/cvboost-46-1792684168` | Idem (même commit) | Branche de travail de cette mission. |
+| `worker/cvboost-46-1792684168-alt` | Une **seconde implémentation complète** du registre, écrite en parallèle par cette passe avant la découverte de la livraison existante (73 tests, règles de couverture, rapports d'audit, API double préfixe) | **Ne pas fusionner avec la branche ci-dessus** : elle est un second registre, incompatible fichier par fichier. Elle est conservée comme relecture croisée (autres choix de conception, autres tests). |
+
+La branche à fusionner est donc `agent/spec-011-traceability`.
+
+### 12.8 Commandes d'audit d'intégration
 Pour la branche de complément (base = la branche de la mission) :
 
 ```bash
