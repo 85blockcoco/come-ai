@@ -74,6 +74,36 @@ from .cv_fit import (
     serialize_gap,
 )
 from .cv_variants import ALL_VARIANTS
+from .evidence_freshness import (
+    CHECK_FREQUENCIES,
+    COVERAGE_ARCHIVED,
+    COVERAGE_COVERED,
+    COVERAGE_STATUSES,
+    FRESHNESS_POLICIES,
+    FREQUENCY_INTERVAL_DAYS,
+    evaluate_all,
+    evaluate_evidence,
+    freshness_to_dict,
+    instant_to_text,
+    normalize_policy,
+    parse_instant,
+    policy_for,
+    refresh,
+    source_check_alert,
+    utc_now as freshness_utc_now,
+)
+from .evidence_freshness_audit import (
+    dashboard as build_freshness_dashboard,
+    export_gate as build_export_gate,
+    report as build_freshness_report,
+    sort_alerts,
+    status_counts,
+)
+from .evidence_freshness_store import (
+    EvidenceFreshnessStore,
+    empty_snapshot,
+    normalize_check,
+)
 
 try:
     from consent_guard import ConsentGuard
@@ -234,6 +264,10 @@ class CareerService:
         # they contain a complete private snapshot of the local Career data.
         self.backups_dir = self.data_dir / "backups"
         self.db_path = self.data_dir / "career.sqlite3"
+        # SPEC-012 : la fraîcheur des preuves est transverse et ne possède
+        # pas les preuves elles-mêmes. Elle garde donc son propre état,
+        # local et privé, à côté de la base Career.
+        self.evidence_freshness_store = EvidenceFreshnessStore(self.data_dir)
         self.ocr = ocr or LocalVisionOCR(self.ocr_dir)
         # The discovery lock is intentionally process-local: the local web
         # server has one process, and it prevents double-clicks from issuing
@@ -2775,6 +2809,287 @@ class CareerService:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    # ------------------------------------------------------------------
+    # SPEC-012 — Fraîcheur des preuves
+    # ------------------------------------------------------------------
+
+    def _freshness_records(self) -> list[dict[str, Any]]:
+        """Return the tracked proofs, oldest first."""
+        return self.evidence_freshness_store.list_evidence()
+
+    @staticmethod
+    def _optional_instant(value: Any, label: str) -> str | None:
+        """Return an ISO instant, or ``None`` when no date was given.
+
+        An unreadable date is refused: it must never be silently dropped
+        and replaced by another date.
+        """
+        text = clean_text(value, limit=40)
+        if not text:
+            return None
+        parsed = parse_instant(text)
+        if parsed is None:
+            raise UserFacingError(f"{label} doit être une date ISO (AAAA-MM-JJ).")
+        return instant_to_text(parsed)
+
+    def list_evidence_freshness(self) -> dict[str, Any]:
+        """Return every tracked proof with its computed freshness."""
+        records = self._freshness_records()
+        freshnesses = {item.evidence_id: item for item in evaluate_all(records)}
+        payload: list[dict[str, Any]] = []
+        for record in records:
+            freshness = freshnesses.get(str(record.get("id")))
+            payload.append(
+                {
+                    **record,
+                    "freshness": freshness_to_dict(freshness) if freshness else None,
+                }
+            )
+        return {"evidence": payload, "count": len(payload)}
+
+    def create_evidence(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Track one new proof."""
+        evidence_type = clean_text(payload.get("evidence_type"), limit=40)
+        if evidence_type not in FRESHNESS_POLICIES:
+            raise UserFacingError("Type de preuve inconnu.")
+        label = clean_text(payload.get("label"), limit=200)
+        if not label:
+            raise UserFacingError("Indique ce que cette preuve atteste.")
+        now = instant_to_text(freshness_utc_now())
+        coverage = clean_text(payload.get("coverage_status"), limit=40).lower()
+        record = {
+            "id": f"ev_{uuid.uuid4().hex[:12]}",
+            "type": evidence_type,
+            "label": label,
+            "created_at": self._optional_instant(payload.get("created_at"), "La date de création") or now,
+            "updated_at": now,
+            "last_verified_at": self._optional_instant(payload.get("last_verified_at"), "La date de vérification"),
+            "expires_at": self._optional_instant(payload.get("expires_at"), "La date d’expiration"),
+            "warning_at": self._optional_instant(payload.get("warning_at"), "La date d’alerte"),
+            "source_url": clean_text(payload.get("source_url"), limit=2_000),
+            "mandatory": bool(payload.get("mandatory")),
+            "archived": False,
+            "coverage_status": coverage if coverage in COVERAGE_STATUSES else COVERAGE_COVERED,
+            "policy_overrides": {},
+            "source_checks": [],
+            "auto_actions": [],
+            "notes": clean_text(payload.get("notes"), limit=2_000),
+            # Raccords ouverts pour les modules transverses qui n'existent
+            # pas encore dans cette branche : le Centre de preuves (SK-08)
+            # et la Traçabilité (SPEC-011) prendront ces références.
+            "evidence_center_ref": clean_text(payload.get("evidence_center_ref"), limit=120),
+            "traceability_ref": clean_text(payload.get("traceability_ref"), limit=120),
+        }
+        saved = self.evidence_freshness_store.save_evidence(record)
+        freshness = evaluate_evidence(saved)
+        return {"evidence": saved, "freshness": freshness_to_dict(freshness)}
+
+    def update_evidence(self, evidence_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """Override the dates, the policy or the state of one proof."""
+        record = self.evidence_freshness_store.get_evidence(evidence_id)
+        if not record:
+            raise UserFacingError("Cette preuve n’existe pas.")
+        updated = dict(record)
+        if "label" in payload and clean_text(payload.get("label"), limit=200):
+            updated["label"] = clean_text(payload.get("label"), limit=200)
+        if "notes" in payload:
+            updated["notes"] = clean_text(payload.get("notes"), limit=2_000)
+        if "source_url" in payload:
+            updated["source_url"] = clean_text(payload.get("source_url"), limit=2_000)
+        if "last_verified_at" in payload:
+            updated["last_verified_at"] = self._optional_instant(
+                payload.get("last_verified_at"), "La date de vérification"
+            )
+        if "expires_at" in payload:
+            updated["expires_at"] = self._optional_instant(payload.get("expires_at"), "La date d’expiration")
+        if "warning_at" in payload:
+            updated["warning_at"] = self._optional_instant(payload.get("warning_at"), "La date d’alerte")
+        if "mandatory" in payload and payload.get("mandatory") is not None:
+            updated["mandatory"] = bool(payload.get("mandatory"))
+        if "archived" in payload and payload.get("archived") is not None:
+            updated["archived"] = bool(payload.get("archived"))
+            if updated["archived"]:
+                updated["coverage_status"] = COVERAGE_ARCHIVED
+        if "coverage_status" in payload:
+            coverage = clean_text(payload.get("coverage_status"), limit=40).lower()
+            if coverage not in COVERAGE_STATUSES:
+                raise UserFacingError("Statut de couverture inconnu.")
+            updated["coverage_status"] = coverage
+        if "policy" in payload and isinstance(payload.get("policy"), dict):
+            overrides = dict(updated.get("policy_overrides") or {})
+            overrides[str(updated.get("type") or "")] = normalize_policy(payload.get("policy"))
+            updated["policy_overrides"] = overrides
+        updated["updated_at"] = instant_to_text(freshness_utc_now())
+        saved = self.evidence_freshness_store.save_evidence(updated)
+        freshness = evaluate_evidence(saved)
+        return {"evidence": saved, "freshness": freshness_to_dict(freshness)}
+
+    def delete_evidence(self, evidence_id: str) -> None:
+        """Stop tracking one proof."""
+        if not self.evidence_freshness_store.delete_evidence(evidence_id):
+            raise UserFacingError("Cette preuve n’existe pas.")
+
+    def evidence_freshness_status(self) -> dict[str, Any]:
+        """Return the global freshness dashboard."""
+        records = self._freshness_records()
+        freshnesses = evaluate_all(records)
+        alerts = self.evidence_freshness_store.list_alerts(active_only=True)
+        payload = build_freshness_dashboard(freshnesses, alerts=alerts, records=records)
+        payload["policies"] = self.evidence_freshness_store.effective_policies()
+        payload["due_checks"] = self.evidence_freshness_store.due_checks(freshnesses)
+        payload["evidence_count"] = len(records)
+        return payload
+
+    def evidence_freshness_detail(self, evidence_id: str) -> dict[str, Any]:
+        """Return the freshness of one proof, with its history and alerts."""
+        record = self.evidence_freshness_store.get_evidence(evidence_id)
+        if not record:
+            raise UserFacingError("Cette preuve n’existe pas.")
+        freshness = evaluate_evidence(record)
+        alerts = [
+            alert
+            for alert in self.evidence_freshness_store.list_alerts(active_only=False)
+            if alert.get("evidence_id") == evidence_id
+        ]
+        return {
+            "evidence": record,
+            "freshness": freshness_to_dict(freshness),
+            "alerts": sort_alerts(alerts),
+            "policy": policy_for(str(record.get("type") or ""), self.evidence_freshness_store.policies()),
+        }
+
+    def set_evidence_freshness_policy(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Set the freshness policy of one evidence type."""
+        evidence_type = clean_text(payload.get("evidence_type"), limit=40)
+        if evidence_type not in FRESHNESS_POLICIES:
+            raise UserFacingError("Type de preuve inconnu.")
+        current = dict(self.evidence_freshness_store.effective_policies().get(evidence_type, {}))
+        merged = dict(current)
+        for key in ("max_age_days", "warning_days", "auto_expire"):
+            if key in payload:
+                merged[key] = payload.get(key)
+        policy = normalize_policy(merged)
+        self.evidence_freshness_store.set_policy(evidence_type, policy)
+        return {
+            "evidence_type": evidence_type,
+            "policy": policy,
+            "policies": self.evidence_freshness_store.effective_policies(),
+        }
+
+    def trigger_evidence_check(self, evidence_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """Record one external verification of a proof."""
+        record = self.evidence_freshness_store.get_evidence(evidence_id)
+        if not record:
+            raise UserFacingError("Cette preuve n’existe pas.")
+        details = payload.get("details")
+        try:
+            check = normalize_check(
+                method=payload.get("method") or "manual",
+                result=payload.get("result") or "unchanged",
+                source_url=payload.get("source_url") or "",
+                details=details if isinstance(details, dict) else {},
+            )
+        except ValueError as error:
+            raise UserFacingError(str(error)) from error
+        updated = self.evidence_freshness_store.record_check(evidence_id, check)
+        alert = source_check_alert(updated, check)
+        if alert:
+            self.evidence_freshness_store.add_alert(alert)
+        freshness = evaluate_evidence(updated)
+        return {
+            "evidence": updated,
+            "freshness": freshness_to_dict(freshness),
+            "check": {
+                "check_id": check.check_id,
+                "checked_at": check.checked_at,
+                "source_url": check.source_url,
+                "method": check.method,
+                "result": check.result,
+            },
+            "alert": alert,
+        }
+
+    def list_evidence_freshness_alerts(self) -> dict[str, Any]:
+        """Return the open alerts and the acknowledged ones."""
+        active = self.evidence_freshness_store.list_alerts(active_only=True)
+        everything = self.evidence_freshness_store.list_alerts(active_only=False)
+        acknowledged = [alert for alert in everything if alert.get("acknowledged")]
+        return {
+            "alerts": sort_alerts(active),
+            "acknowledged": sort_alerts(acknowledged),
+            "count": len(active),
+        }
+
+    def acknowledge_evidence_alert(self, alert_id: str) -> dict[str, Any]:
+        """Acknowledge one alert."""
+        updated = self.evidence_freshness_store.acknowledge_alert(alert_id)
+        if not updated:
+            raise UserFacingError("Cette alerte n’existe pas.")
+        return {"alert": updated}
+
+    def evidence_freshness_report(self) -> dict[str, Any]:
+        """Return the full freshness report, with the trends."""
+        records = self._freshness_records()
+        freshnesses = evaluate_all(records)
+        alerts = self.evidence_freshness_store.list_alerts(active_only=False)
+        snapshots = self.evidence_freshness_store.snapshots()
+        return build_freshness_report(
+            freshnesses,
+            alerts=alerts,
+            records=records,
+            policies=self.evidence_freshness_store.effective_policies(),
+            snapshots=snapshots,
+        )
+
+    def run_evidence_freshness_monitor(self) -> dict[str, Any]:
+        """Run the scheduled monitoring: evaluate, degrade and alert.
+
+        The sweep is idempotent: a proof already downgraded is not
+        downgraded again, and an alert already open is not duplicated.
+        """
+        now = freshness_utc_now()
+        records = self._freshness_records()
+        result = refresh(records, now=now)
+        for original, updated in zip(records, result.records):
+            if updated != original:
+                self.evidence_freshness_store.save_evidence(updated)
+        stored = [self.evidence_freshness_store.add_alert(alert) for alert in result.alerts]
+        counts = status_counts(result.freshnesses)
+        snapshot = empty_snapshot(counts, total=int(counts.get("total") or 0))
+        self.evidence_freshness_store.record_snapshot(snapshot)
+        return {
+            "checked": len(records),
+            "changed": result.changed,
+            "alerts": sort_alerts(stored),
+            "snapshot": snapshot,
+            "due_checks": self.evidence_freshness_store.due_checks(result.freshnesses, now=now),
+            "counts": counts,
+        }
+
+    def evidence_freshness_export_gate(self) -> dict[str, Any]:
+        """Return the export blockers raised by the critical alerts."""
+        alerts = self.evidence_freshness_store.list_alerts(active_only=True)
+        return build_export_gate(alerts)
+
+    def evidence_freshness_policies(self) -> dict[str, Any]:
+        """Return the freshness policies in force, and the ones overridden."""
+        return {
+            "policies": self.evidence_freshness_store.effective_policies(),
+            "overrides": self.evidence_freshness_store.policies(),
+            "default_policies": dict(FRESHNESS_POLICIES),
+        }
+
+    def evidence_freshness_schedule(self) -> dict[str, Any]:
+        """Return the planned verification schedule of the tracked proofs."""
+        records = self._freshness_records()
+        freshnesses = evaluate_all(records)
+        return {
+            "checked": len(records),
+            "due": self.evidence_freshness_store.due_checks(freshnesses),
+            "frequencies": dict(CHECK_FREQUENCIES),
+            "intervals": dict(FREQUENCY_INTERVAL_DAYS),
+        }
+
     @staticmethod
     def _discovery_cache_valid(last_success_at: str) -> bool:
         if not last_success_at:
@@ -4735,6 +5050,15 @@ class CareerService:
                         "SELECT * FROM career_audit_log ORDER BY created_at ASC"
                     ).fetchall()
                 ],
+                # La fraîcheur des preuves est une donnée personnelle : elle
+                # accompagne la preuve exportée, avec son historique de
+                # vérifications, pour que la personne puisse la récupérer.
+                "evidence_freshness": {
+                    "policies": self.evidence_freshness_store.effective_policies(),
+                    "evidence": self._freshness_records(),
+                    "alerts": self.evidence_freshness_store.list_alerts(active_only=False),
+                    "snapshots": self.evidence_freshness_store.snapshots(),
+                },
                 "exported_at": utc_now(),
             }
         target.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -4803,6 +5127,9 @@ class CareerService:
                         path.unlink()
                 except OSError:
                     pass
+        # Le suivi de la fraîcheur des preuves est une donnée personnelle :
+        # une suppression explicite efface aussi son historique.
+        self.evidence_freshness_store.reset()
 
     def safe_export_path(self, filename: str) -> Path:
         candidate = (self.export_dir / Path(filename).name).resolve()

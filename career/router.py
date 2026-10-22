@@ -236,6 +236,59 @@ class CVAnalyzeResponse(BaseModel):
     provenance: dict[str, Any]
 
 
+class EvidenceFreshnessPayload(BaseModel):
+    """A proof the candidate wants to keep under watch."""
+
+    evidence_type: str = Field(min_length=2, max_length=40)
+    label: str = Field(min_length=1, max_length=200)
+    created_at: str = Field(default="", max_length=40)
+    last_verified_at: str = Field(default="", max_length=40)
+    expires_at: str = Field(default="", max_length=40)
+    warning_at: str = Field(default="", max_length=40)
+    source_url: str = Field(default="", max_length=2_000)
+    mandatory: bool = False
+    notes: str = Field(default="", max_length=2_000)
+    evidence_center_ref: str = Field(default="", max_length=120)
+    traceability_ref: str = Field(default="", max_length=120)
+
+
+class EvidenceFreshnessPolicyPayload(BaseModel):
+    """The freshness policy of one evidence type.
+
+    Every field is optional: an absent field keeps the current value, so a
+    policy can be adjusted without rewriting the whole rule.
+    """
+
+    evidence_type: str = Field(min_length=2, max_length=40)
+    max_age_days: int | None = Field(default=None, ge=0, le=20_000)
+    warning_days: int | None = Field(default=None, ge=0, le=20_000)
+    auto_expire: bool | None = Field(default=None)
+
+
+class EvidenceFreshnessUpdatePayload(BaseModel):
+    """An override applied to one proof: dates, policy or state."""
+
+    label: str | None = Field(default=None, max_length=200)
+    notes: str | None = Field(default=None, max_length=2_000)
+    source_url: str | None = Field(default=None, max_length=2_000)
+    last_verified_at: str | None = Field(default=None, max_length=40)
+    expires_at: str | None = Field(default=None, max_length=40)
+    warning_at: str | None = Field(default=None, max_length=40)
+    mandatory: bool | None = Field(default=None)
+    archived: bool | None = Field(default=None)
+    coverage_status: str | None = Field(default=None, max_length=40)
+    policy: dict[str, Any] | None = None
+
+
+class EvidenceFreshnessCheckPayload(BaseModel):
+    """The outcome of one external verification of a proof."""
+
+    method: str = Field(default="manual", max_length=20)
+    result: str = Field(default="unchanged", max_length=20)
+    source_url: str = Field(default="", max_length=2_000)
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
 def create_career_router(
     service: CareerService,
     *,
@@ -716,6 +769,71 @@ def create_career_router(
     async def delete_interview_session(session_id: str) -> dict[str, bool]:
         await local(lambda: service.delete_interview_session(session_id))
         return {"deleted": True}
+
+    # ------------------------------------------------------------------
+    # SPEC-012 — Fraîcheur des preuves
+    # ------------------------------------------------------------------
+
+    @router.get("/api/career/evidence-freshness/status")
+    async def evidence_freshness_status() -> Any:
+        return await local(service.evidence_freshness_status)
+
+    @router.get("/api/career/evidence-freshness/evidence")
+    async def evidence_freshness_evidence() -> Any:
+        return await local(service.list_evidence_freshness)
+
+    @router.post("/api/career/evidence-freshness/evidence", status_code=201)
+    async def create_evidence_freshness(payload: EvidenceFreshnessPayload) -> Any:
+        return await local(lambda: service.create_evidence(payload.model_dump()))
+
+    @router.get("/api/career/evidence-freshness/evidence/{evidence_id}")
+    async def evidence_freshness_detail(evidence_id: str) -> Any:
+        return await local(lambda: service.evidence_freshness_detail(evidence_id))
+
+    @router.patch("/api/career/evidence-freshness/evidence/{evidence_id}")
+    async def update_evidence_freshness(evidence_id: str, payload: EvidenceFreshnessUpdatePayload) -> Any:
+        return await local(
+            lambda: service.update_evidence(evidence_id, payload.model_dump(exclude_unset=True))
+        )
+
+    @router.delete("/api/career/evidence-freshness/evidence/{evidence_id}")
+    async def delete_evidence_freshness(evidence_id: str) -> dict[str, bool]:
+        await local(lambda: service.delete_evidence(evidence_id))
+        return {"deleted": True}
+
+    @router.post("/api/career/evidence-freshness/policy")
+    async def set_evidence_freshness_policy(payload: EvidenceFreshnessPolicyPayload) -> Any:
+        return await local(
+            lambda: service.set_evidence_freshness_policy(payload.model_dump(exclude_unset=True))
+        )
+
+    @router.get("/api/career/evidence-freshness/policy")
+    async def evidence_freshness_policies() -> Any:
+        return await local(service.evidence_freshness_policies)
+
+    @router.get("/api/career/evidence-freshness/schedule")
+    async def evidence_freshness_schedule() -> Any:
+        return await local(service.evidence_freshness_schedule)
+
+    @router.post("/api/career/evidence-freshness/check/{evidence_id}")
+    async def check_evidence_freshness(evidence_id: str, payload: EvidenceFreshnessCheckPayload) -> Any:
+        return await local(lambda: service.trigger_evidence_check(evidence_id, payload.model_dump()))
+
+    @router.get("/api/career/evidence-freshness/alerts")
+    async def evidence_freshness_alerts() -> Any:
+        return await local(service.list_evidence_freshness_alerts)
+
+    @router.post("/api/career/evidence-freshness/acknowledge/{alert_id}")
+    async def acknowledge_evidence_freshness_alert(alert_id: str) -> Any:
+        return await local(lambda: service.acknowledge_evidence_alert(alert_id))
+
+    @router.get("/api/career/evidence-freshness/report")
+    async def evidence_freshness_report() -> Any:
+        return await local(service.evidence_freshness_report)
+
+    @router.post("/api/career/evidence-freshness/monitor")
+    async def run_evidence_freshness_monitor() -> Any:
+        return await local(service.run_evidence_freshness_monitor)
 
     @router.get("/api/career/export/{export_format}")
     async def export_applications(export_format: str) -> FileResponse:

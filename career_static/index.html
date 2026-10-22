@@ -42,6 +42,7 @@
           <button class="career-tab" id="tab-discover" type="button" aria-controls="view-discover" data-product-area="Discover" data-view="discover">Découvrir</button>
           <button class="career-tab" id="tab-stagehunter" type="button" aria-controls="view-stagehunter" data-view="stagehunter">Stage Hunter</button>
           <button class="career-tab" id="tab-applications" type="button" aria-controls="view-applications" data-product-area="Applications" data-view="applications">Candidatures</button>
+          <button class="career-tab" id="tab-freshness" type="button" aria-controls="view-freshness" data-view="freshness">Fraîcheur</button>
           <button class="career-tab" id="tab-interviews" type="button" aria-controls="view-interviews" data-product-area="Interview Coach" data-view="interviews">Coach d’entretien</button>
           <button class="career-tab" id="tab-profile" type="button" aria-controls="view-profile" data-view="profile">Mon profil</button>
           <button class="career-tab" id="tab-settings" type="button" aria-controls="view-settings" data-view="settings">Réglages</button>
@@ -682,6 +683,110 @@
           </section>
         </section>
 
+        <section id="view-freshness" class="career-view" tabindex="-1" hidden aria-labelledby="freshness-title">
+          <header class="view-intro">
+            <p class="eyebrow">Preuves sous surveillance</p>
+            <h2 id="freshness-title">Fraîcheur des preuves</h2>
+            <p>Une certification expire, un outil évolue, une compétence s’efface. Ce tableau suit chaque preuve que tu declares, signale ce qui doit être revérifié et dégrade automatiquement les preuves expirées. Tout est calculé localement, sur ta machine.</p>
+          </header>
+
+          <section class="panel freshness-panel">
+            <div class="panel-heading">
+              <div><p class="eyebrow">Vue globale</p><h3>État des preuves</h3></div>
+              <div class="inline-actions">
+                <button class="secondary-button" type="button" id="freshness-refresh">Actualiser</button>
+                <button class="primary-button" type="button" id="freshness-monitor">Lancer la surveillance</button>
+              </div>
+            </div>
+            <p class="panel-help">La surveillance évalue chaque preuve, dégrade celles qui ont expiré et enregistre un point d’historique. Aucune donnée n’est envoyée à un service externe.</p>
+            <div id="freshness-gate" class="freshness-gate" hidden aria-live="polite"></div>
+            <div id="freshness-summary" class="metrics freshness-metrics" aria-live="polite"></div>
+          </section>
+
+          <section class="panel freshness-panel">
+            <div class="panel-heading"><div><p class="eyebrow">Échéances</p><h3>Expirations à venir</h3></div></div>
+            <div id="freshness-timeline" aria-live="polite"></div>
+          </section>
+
+          <section class="panel freshness-panel">
+            <div class="panel-heading"><div><p class="eyebrow">Alertes</p><h3>Alertes actives</h3></div></div>
+            <div id="freshness-alerts" aria-live="polite"></div>
+          </section>
+
+          <section class="panel freshness-panel">
+            <div class="panel-heading"><div><p class="eyebrow">Par type</p><h3>Répartition des preuves</h3></div></div>
+            <div id="freshness-by-type"></div>
+          </section>
+
+          <section class="panel freshness-panel">
+            <div class="panel-heading"><div><p class="eyebrow">Tendances</p><h3>Évolution de la fraîcheur</h3></div></div>
+            <div id="freshness-trends"></div>
+          </section>
+
+          <section class="panel freshness-panel">
+            <div class="panel-heading"><div><p class="eyebrow">Mes preuves</p><h3>Preuves suivies</h3></div></div>
+            <p class="panel-help">Coche une ou plusieurs preuves pour les traiter ensemble, ou utilise les actions de la ligne.</p>
+            <div id="freshness-evidence" aria-live="polite"></div>
+            <form id="freshness-batch-form" class="form-stack freshness-batch-form">
+              <div class="form-row three-columns">
+                <label>Action groupée
+                  <select id="freshness-batch-action">
+                    <option value="reactivate">Réactiver (nouvelle vérification)</option>
+                    <option value="extend">Étendre le délai</option>
+                    <option value="archive">Archiver</option>
+                  </select>
+                </label>
+                <label>Nombre de jours (extension)
+                  <input id="freshness-batch-days" type="number" min="1" max="3650" value="30" />
+                </label>
+                <div class="freshness-batch-submit"><button class="secondary-button" type="submit">Appliquer aux preuves cochées</button></div>
+              </div>
+            </form>
+          </section>
+
+          <section class="panel freshness-panel">
+            <div class="panel-heading"><div><p class="eyebrow">Ajouter</p><h3>Suivre une preuve</h3></div></div>
+            <form id="freshness-create-form" class="form-stack">
+              <div class="form-row three-columns">
+                <label>Type de preuve
+                  <select id="freshness-type">
+                    <option value="certification">Certification</option>
+                    <option value="skill_technical">Compétence technique</option>
+                    <option value="skill_soft">Compétence comportementale</option>
+                    <option value="experience">Expérience</option>
+                    <option value="education">Formation</option>
+                    <option value="language">Langue</option>
+                    <option value="tool">Outil</option>
+                    <option value="project">Projet</option>
+                  </select>
+                </label>
+                <label>Intitulé
+                  <input id="freshness-label" type="text" maxlength="200" required placeholder="Ex. CFA Niveau I" />
+                </label>
+                <label>Source officielle (facultatif)
+                  <input id="freshness-source" type="url" maxlength="2000" placeholder="https://…" />
+                </label>
+              </div>
+              <div class="form-row two-columns">
+                <label>Dernière vérification (facultatif)
+                  <input id="freshness-verified" type="date" />
+                </label>
+                <label class="application-filter-check"><input type="checkbox" id="freshness-mandatory" /> Preuve obligatoire (une expiration la dégrade au lieu de l’archiver)</label>
+              </div>
+              <label>Note (facultatif)
+                <textarea id="freshness-notes" rows="2" maxlength="2000"></textarea>
+              </label>
+              <div><button class="primary-button" type="submit">Ajouter la preuve</button></div>
+            </form>
+          </section>
+
+          <section class="panel freshness-panel">
+            <div class="panel-heading"><div><p class="eyebrow">Règles</p><h3>Politiques de fraîcheur</h3></div></div>
+            <p class="panel-help">Chaque type de preuve a sa propre durée de validité et sa propre fenêtre d’avertissement. Ces règles s’appliquent automatiquement à toutes les preuves de ce type.</p>
+            <div id="freshness-policies"></div>
+          </section>
+        </section>
+
         <section id="view-interviews" class="career-view" tabindex="-1" hidden aria-labelledby="interviews-title">
           <section class="panel coach-panel">
             <div class="panel-heading">
@@ -734,5 +839,6 @@
     </div>
     <script src="/career-static/cv_plan.js" defer></script>
     <script src="/career-static/career.js" defer></script>
+    <script src="/career-static/js/evidence-freshness.js" defer></script>
   </body>
 </html>

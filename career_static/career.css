@@ -541,3 +541,41 @@ button, a, .career-tab { transition: background-color .16s ease, border-color .1
   .application-filters label { flex: 1 1 100%; }
   .application-filters select { width: 100%; }
 }
+
+/* SPEC-012 — Fraîcheur des preuves : état, échéances, alertes, tendances. */
+.freshness-panel { padding: 18px; margin-bottom: 16px; }
+.freshness-metrics { margin-top: 12px; }
+.freshness-metric { display: grid; gap: 3px; }
+.freshness-metric strong { font-size: 1.55rem; line-height: 1.1; }
+.freshness-metric span { color: var(--ink); font-size: .8rem; font-weight: 700; }
+.freshness-metric small { color: var(--muted); font-size: .72rem; }
+.freshness-metric-good { border-color: #cbead8; background: linear-gradient(145deg, #fff, #f2fbf6); }
+.freshness-metric-warning { border-color: #f0dcb4; background: linear-gradient(145deg, #fff, #fff9ef); }
+.freshness-metric-danger { border-color: #eec3bd; background: linear-gradient(145deg, #fff, #fff4f3); }
+.freshness-metric-muted { border-color: #dce9e2; background: linear-gradient(145deg, #fff, #f7faf8); }
+.freshness-gate { margin-top: 12px; padding: 12px 14px; border: 1px solid #eec3bd; border-radius: 12px; background: var(--danger-soft); }
+.freshness-gate h3 { color: var(--danger); font-size: .84rem; }
+.freshness-gate-list { display: grid; gap: 5px; margin: 7px 0 0; padding-left: 18px; color: var(--danger); font-size: .76rem; line-height: 1.4; }
+.freshness-buckets { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 12px; }
+.freshness-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.freshness-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 11px; align-items: center; padding: 11px 12px; border: 1px solid #dce9e2; border-radius: 12px; background: var(--surface-muted); }
+.freshness-row-copy { display: grid; min-width: 0; gap: 3px; }
+.freshness-row-copy strong { font-size: .82rem; overflow-wrap: anywhere; }
+.freshness-row-meta { color: var(--muted); font-size: .74rem; line-height: 1.4; }
+.freshness-row-critical { border-color: #eec3bd; background: var(--danger-soft); }
+.freshness-row-warning { border-color: #f0dcb4; background: var(--warning-soft); }
+.freshness-chip-good { color: var(--good); background: var(--good-soft); }
+.freshness-chip-warning { color: var(--warning); background: var(--warning-soft); }
+.freshness-chip-danger { color: var(--danger); background: var(--danger-soft); }
+.freshness-chip-muted { color: var(--muted); background: #eef3f0; }
+.freshness-table { width: 100%; border-collapse: collapse; font-size: .77rem; }
+.freshness-table th, .freshness-table td { padding: 7px 9px; border-bottom: 1px solid #e1eee7; text-align: left; }
+.freshness-table thead th { color: var(--muted); font-size: .71rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.freshness-table tbody th { font-weight: 650; }
+.freshness-batch-form { margin-top: 14px; padding-top: 12px; border-top: 1px solid #e1eee7; }
+.freshness-batch-submit { display: flex; align-items: end; }
+.freshness-select { width: auto; }
+@media (max-width: 620px) {
+  .freshness-row { grid-template-columns: auto minmax(0, 1fr); }
+  .freshness-row > .inline-actions, .freshness-row > .job-chip { grid-column: 2 / -1; }
+}

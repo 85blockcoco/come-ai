@@ -209,6 +209,7 @@ function labelForView(viewName) {
     shortlist: "Ma shortlist",
     studio: "Application Studio",
     applications: "Candidatures",
+    freshness: "Fraîcheur des preuves",
     interviews: "Coach d’entretien",
     profile: "Mon profil",
     settings: "Réglages",
@@ -249,8 +250,17 @@ function organiseViews() {
   }
 }
 
-const careerViews = new Set(["dashboard", "discover", "stagehunter", "shortlist", "studio", "applications", "interviews", "profile", "settings"]);
+const careerViews = new Set(["dashboard", "discover", "stagehunter", "shortlist", "studio", "applications", "freshness", "interviews", "profile", "settings"]);
 let internalHashChange = false;
+
+// SPEC-012 : le module de fraîcheur est chargé dans un fichier séparé.  Le
+// chargeur reste ici pour que l'onglet soit connu même avant l'arrivée du
+// module : dans ce cas, il ne se passe encore rien.
+async function loadEvidenceFreshness() {
+  const module = window.CareerEvidenceFreshness;
+  if (!module) return;
+  await module.load();
+}
 
 function refreshView(viewName) {
   const loaders = {
@@ -259,6 +269,7 @@ function refreshView(viewName) {
     shortlist: loadShortlist,
     studio: loadStudio,
     applications: loadApplications,
+    freshness: loadEvidenceFreshness,
     interviews: loadCoach,
   };
   loaders[viewName]?.().catch((error) => setMessage(error.message, true));
@@ -281,6 +292,10 @@ function showView(viewName, { focus = true, updateHash = true } = {}) {
     view.hidden = view.id !== `view-${viewName}`;
   });
   refreshView(viewName);
+  // SPEC-012 : le tableau de fraîcheur se rafraîchit tout seul tant que
+  // l'onglet est ouvert, et se fige dès qu'on le quitte.
+  if (viewName === "freshness") window.CareerEvidenceFreshness?.start();
+  else window.CareerEvidenceFreshness?.stop();
   document.title = `${labelForView(viewName)} — Côme AI Career`;
   if (updateHash && window.location.hash !== `#career/${viewName}`) {
     internalHashChange = true;
