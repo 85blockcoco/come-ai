@@ -17,10 +17,11 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Callable, Protocol
+from typing import Any, Callable, Protocol, Sequence
 
 from ..discovery import DiscoveryPayload, PublicSourceError, _location_parts, source_html_to_text
 from ..exploration import EXPLORATION_MAX_RESULTS, criteria_admit, ranking_key, classify_internship
+from ..geo import geo_filter_decision, resolve_country_filter
 from ..offer_qualification import qualify_offer
 from ..scoring import classify_job_family
 from ..stage_search import default_brief, score_brief_match, validate_brief
@@ -149,7 +150,9 @@ class PublicATSConnector:
         raise NotImplementedError
 
     def discover_internships(self, source: dict[str, Any], *, selection_brief: dict[str, Any],
-                             deadline: float | None = None) -> DiscoveryPayload:
+                             deadline: float | None = None,
+                             countries_exclude: Sequence[str] | None = None,
+                             countries_include: Sequence[str] | None = None) -> DiscoveryPayload:
         if not self.enabled:
             raise PublicSourceError("Ce connecteur est désactivé par défaut.", code="connector_disabled")
         if not isinstance(source, dict) or source.get("provider") != self.provider:
@@ -161,8 +164,10 @@ class PublicATSConnector:
             raise PublicSourceError("Une source officielle vérifiée est requise avant toute consultation.",
                                     code="unverified_source")
         brief = validate_brief(selection_brief) if selection_brief else default_brief()
+        excluded_codes, included_codes = resolve_country_filter(countries_exclude, countries_include)
         pages = self._pages(source, deadline=deadline)
         raw_count = evaluated = invalid = confirmed = uncertain = excluded = relevant = filtered = 0
+        filtered_geo = 0
         ranked: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
         for page in pages:
             items = self._raw_items(page)
@@ -172,6 +177,20 @@ class PublicATSConnector:
             for raw in items:
                 if not isinstance(raw, dict):
                     invalid += 1
+                    continue
+                # The country filter runs on the published location, before
+                # the posting is normalised and before it is qualified: an
+                # excluded offer costs no description parsing, no match and
+                # no qualification.
+                location_text, country_text = self._geo_evidence(raw)
+                decision = geo_filter_decision(
+                    location_text=location_text, country=country_text,
+                    excluded_codes=excluded_codes, included_codes=included_codes,
+                )
+                if decision.excluded:
+                    evaluated += 1
+                    excluded += 1
+                    filtered_geo += 1
                     continue
                 try:
                     job = self._normalise_one(source, raw)
@@ -213,8 +232,17 @@ class PublicATSConnector:
             truncated=relevant > self.max_results, raw_count=raw_count,
             evaluated_count=evaluated, invalid_count=invalid, confirmed_count=confirmed,
             uncertain_count=uncertain, excluded_count=excluded, relevant_count=relevant,
-            filtered_criteria_count=filtered,
+            filtered_criteria_count=filtered, filtered_geo_count=filtered_geo,
         )
+
+    def _geo_evidence(self, raw: dict[str, Any]) -> tuple[Any, Any]:
+        """Published location wording and published country of one posting.
+
+        The default adapter publishes no location: the base ATS feeds do not
+        share one shape, so every provider states its own.
+        """
+        _ = raw
+        return "", ""
 
     def _normalise_one(self, source: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:
         raise NotImplementedError
@@ -254,11 +282,16 @@ class LeverConnector(PublicATSConnector):
     def parse(self, source: dict[str, Any], payload: Any) -> list[dict[str, Any]]:
         return [self._normalise_one(source, item) for item in self._raw_items(payload) if isinstance(item, dict)]
 
+    def _geo_evidence(self, raw: dict[str, Any]) -> tuple[Any, Any]:
+        categories = raw.get("categories") if isinstance(raw.get("categories"), dict) else {}
+        return categories.get("location"), raw.get("country")
+
     def _normalise_one(self, source: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:
         categories = raw.get("categories") if isinstance(raw.get("categories"), dict) else {}
+        location, country = self._geo_evidence(raw)
         return _common_job(self.provider, source, raw.get("id"), raw.get("text"),
                            raw.get("hostedUrl"), raw.get("applyUrl"), raw.get("descriptionPlain"),
-                           categories.get("location"), raw.get("country"), categories.get("commitment"), "")
+                           location, country, categories.get("commitment"), "")
 
 
 class AshbyConnector(PublicATSConnector):
@@ -285,11 +318,13 @@ class AshbyConnector(PublicATSConnector):
         return [self._normalise_one(source, item) for item in self._raw_items(payload)
                 if isinstance(item, dict) and item.get("isListed") is not False]
 
-    def _normalise_one(self, source: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:
+    def _geo_evidence(self, raw: dict[str, Any]) -> tuple[Any, Any]:
         address = raw.get("address") if isinstance(raw.get("address"), dict) else {}
         postal = address.get("postalAddress") if isinstance(address.get("postalAddress"), dict) else {}
-        location = postal.get("addressLocality") or raw.get("location")
-        country = postal.get("addressCountry")
+        return postal.get("addressLocality") or raw.get("location"), postal.get("addressCountry")
+
+    def _normalise_one(self, source: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:
+        location, country = self._geo_evidence(raw)
         job_url = raw.get("jobUrl")
         fallback_id = urllib.parse.urlsplit(str(job_url or "")).path.rstrip("/").rsplit("/", 1)[-1]
         return _common_job(self.provider, source, raw.get("id") or fallback_id, raw.get("title"),
@@ -332,16 +367,20 @@ class SmartRecruitersConnector(PublicATSConnector):
     def parse(self, source: dict[str, Any], payload: Any) -> list[dict[str, Any]]:
         return [self._normalise_one(source, item) for item in self._raw_items(payload) if isinstance(item, dict)]
 
-    def _normalise_one(self, source: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:
+    def _geo_evidence(self, raw: dict[str, Any]) -> tuple[Any, Any]:
         location = raw.get("location") if isinstance(raw.get("location"), dict) else {}
+        return location.get("city"), location.get("country")
+
+    def _normalise_one(self, source: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:
         company = raw.get("company") if isinstance(raw.get("company"), dict) else {}
         contract = raw.get("typeOfEmployment") if isinstance(raw.get("typeOfEmployment"), dict) else {}
         # The documented list response's `ref` is an official API detail URL;
         # a human apply link is used when a source supplies one directly.
         official_url = raw.get("applyUrl") or raw.get("ref")
+        city, country = self._geo_evidence(raw)
         return _common_job(self.provider, source, raw.get("id"), raw.get("name"), official_url,
-                           raw.get("applyUrl"), raw.get("description"), location.get("city"),
-                           location.get("country"), contract.get("label"), raw.get("releasedDate"),
+                           raw.get("applyUrl"), raw.get("description"), city,
+                           country, contract.get("label"), raw.get("releasedDate"),
                            company_name=company.get("name"))
 
 

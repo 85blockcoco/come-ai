@@ -16,9 +16,15 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from html.parser import HTMLParser
-from typing import Any, Callable, Iterator
+from typing import Any, Callable, Iterator, Sequence
 
 from ..discovery import DiscoveryPayload, PublicSourceError, source_html_to_text
+from ..geo import (
+    CITY_HINT_INDEX,
+    DEFAULT_HTML_EXCLUDED_COUNTRIES,
+    geo_filter_decision,
+    resolve_country_filter,
+)
 from ..models import clean_text, canonical_url
 from ..exploration import classify_internship, criteria_admit, ranking_key
 from ..offer_qualification import qualify_offer
@@ -33,6 +39,9 @@ _TALENT_RATE_LIMIT = 2.0
 _TALENT_USER_AGENT = "ComeAI-StageBot/1.0"
 _TALENT_MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 _TALENT_MAX_ROWS = 400
+
+# City wording that indicates a country.  It may only exclude an offer.
+_LOCATION_HINTS = CITY_HINT_INDEX
 
 
 @dataclass
@@ -185,25 +194,20 @@ def _parse_location(location_text: str) -> tuple[str, str]:
     return location_text, ""
 
 
-def _is_france_location(city: str, country: str) -> bool:
-    """Check if location is in France (to be excluded per R1)."""
-    france_indicators = {"france", "fr", "paris", "lyon", "marseille", "toulouse", "nice", "nantes",
-                         "strasbourg", "montpellier", "bordeaux", "lille", "rennes", "reims",
-                         "le havre", "saint-etienne", "toulon", "grenoble", "dijon", "angers",
-                         "villeurbanne", "nanterre", "creteil", "aubervilliers", "asnieres",
-                         "colombes", "courbevoie", "levallois-perret", "neuilly-sur-seine"}
-    city_norm = city.lower().strip()
-    country_norm = country.lower().strip()
-    if country_norm in {"france", "fr"}:
-        return True
-    for ind in france_indicators:
-        if ind == "fr":
-            continue
-        if ind in city_norm.split():
-            return True
-        if f"-{ind}" in city_norm or f"{ind}-" in city_norm:
-            return True
-    return False
+def _is_excluded_location(location_text: str, country: str, excluded_codes: Sequence[str]) -> bool:
+    """Check whether a location belongs to one of the excluded countries.
+
+    The rule is generalised from the historical France-only check: the
+    excluded countries are ISO-3166-1 alpha-2 codes, and a location is only
+    excluded when the source published a country, or when a single city
+    wording indicates one.  A posting published in several unnamed places is
+    never excluded.
+    """
+    decision = geo_filter_decision(
+        location_text=location_text, country=country,
+        excluded_codes=excluded_codes, hints=_LOCATION_HINTS,
+    )
+    return decision.excluded
 
 
 def _is_finance_role(title: str, description: str) -> bool:
@@ -236,9 +240,20 @@ def _iter_raw_offers(
     query: str = "finance internship",
     location: str = "Europe",
     fetch: Callable[[str], str | None] | None = None,
+    *,
+    countries_exclude: Sequence[str] | None = None,
+    countries_include: Sequence[str] | None = None,
+    counters: dict[str, int] | None = None,
 ) -> Iterator[dict[str, Any]]:
-    """Iterate over raw internship offers from Talent.com."""
+    """Iterate over raw internship offers from Talent.com.
+
+    The country filter runs on the scraped location, before the description
+    is parsed and before any qualification work.
+    """
     fetch_fn = fetch or _default_fetch
+    excluded, included = resolve_country_filter(
+        countries_exclude, countries_include, default_exclude=DEFAULT_HTML_EXCLUDED_COUNTRIES
+    )
     for page in range(1, _TALENT_MAX_PAGES + 1):
         url = _build_search_url(query, location, page)
         html = fetch_fn(url)
@@ -260,26 +275,35 @@ def _iter_raw_offers(
 
         for raw in page_jobs:
             _HEALTH.raw_offers += 1
+            if counters is not None:
+                counters["raw"] = counters.get("raw", 0) + 1
 
             title = clean_text(raw.get("title", ""), limit=300)
             company = clean_text(raw.get("company", ""), limit=240)
             url_raw = clean_text(raw.get("url", ""), limit=2000)
             location_text = clean_text(raw.get("location", ""), limit=160)
             contract_type = clean_text(raw.get("contract_type", ""), limit=120)
-            description = source_html_to_text(raw.get("description", ""))
 
             if not title or not company or not url_raw:
+                if counters is not None:
+                    counters["invalid"] = counters.get("invalid", 0) + 1
                 continue
 
             try:
                 official_url = canonical_url(url_raw)
             except Exception:
+                if counters is not None:
+                    counters["invalid"] = counters.get("invalid", 0) + 1
                 continue
 
             city, country = _parse_location(location_text)
 
-            if _is_france_location(city, country):
+            if _is_excluded_location(location_text, country, excluded):
+                if counters is not None:
+                    counters["filtered_geo"] = counters.get("filtered_geo", 0) + 1
                 continue
+
+            description = source_html_to_text(raw.get("description", ""))
 
             _HEALTH.valid_offers += 1
 
@@ -356,7 +380,9 @@ class TalentComConnector:
         self._fetch = fetch
 
     def discover_internships(
-        self, source: dict[str, Any], *, selection_brief: dict[str, Any], deadline: float | None = None
+        self, source: dict[str, Any], *, selection_brief: dict[str, Any], deadline: float | None = None,
+        countries_exclude: Sequence[str] | None = None,
+        countries_include: Sequence[str] | None = None,
     ) -> DiscoveryPayload:
         if not isinstance(source, dict) or source.get("provider") != "talent_com":
             raise PublicSourceError("La source ne correspond pas au connecteur Talent.com.", code="invalid_source")
@@ -373,13 +399,14 @@ class TalentComConnector:
         _HEALTH.to_verify_offers = 0
 
         raw_count = evaluated = invalid = confirmed = uncertain = excluded = relevant = filtered = 0
+        counters: dict[str, int] = {}
         ranked: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
 
-        for raw in _iter_raw_offers(fetch=self._fetch):
+        for raw in _iter_raw_offers(fetch=self._fetch, countries_exclude=countries_exclude,
+                                    countries_include=countries_include, counters=counters):
             if deadline is not None and self.monotonic() >= deadline:
                 raise PublicSourceError("Le budget de recherche est atteint.", code="budget")
-            raw_count += 1
-            if raw_count > _TALENT_MAX_ROWS:
+            if counters.get("raw", 0) > _TALENT_MAX_ROWS:
                 raise PublicSourceError("Le flux dépasse la limite d'offres évaluées.", code="too_many_rows")
 
             try:
@@ -417,6 +444,13 @@ class TalentComConnector:
 
         import heapq
         selected = heapq.nsmallest(self.max_results, ranked, key=lambda item: item[0])
+        # Offers removed by the country filter were read but never qualified:
+        # they count as excluded, and as filtered for the country alone.
+        filtered_geo = counters.get("filtered_geo", 0)
+        evaluated += filtered_geo
+        excluded += filtered_geo
+        invalid += counters.get("invalid", 0)
+        raw_count = counters.get("raw", 0)
 
         return DiscoveryPayload(
             jobs=tuple(item[1]["job"] for item in selected),
@@ -430,6 +464,7 @@ class TalentComConnector:
             excluded_count=excluded,
             relevant_count=relevant,
             filtered_criteria_count=filtered,
+            filtered_geo_count=filtered_geo,
         )
 
     def _normalise_one(self, source: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:

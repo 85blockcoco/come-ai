@@ -23,10 +23,11 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from html.parser import HTMLParser
-from typing import Any, Protocol
+from typing import Any, Protocol, Sequence
 
 from workspace_core import UserFacingError
 
+from .geo import geo_filter_decision, resolve_country_filter
 from .models import canonical_url, clean_text, normalized_text
 from .scoring import classify_job_family
 from .stage_search import default_brief, score_brief_match, validate_brief
@@ -75,6 +76,14 @@ class GreenhouseBoard:
 
 @dataclass(frozen=True)
 class DiscoveryPayload:
+    """Bounded result of one connector read, with factual counters.
+
+    ``excluded_count`` counts every offer that did not reach the results:
+    the ones whose qualification is non-conforming and the ones the country
+    filter removed before any qualification work.  ``filtered_geo_count``
+    is the audit subset of that counter caused by the country filter alone.
+    """
+
     jobs: tuple[dict[str, Any], ...]
     verified_at: str
     truncated: bool
@@ -86,6 +95,12 @@ class DiscoveryPayload:
     excluded_count: int = 0
     relevant_count: int = 0
     filtered_criteria_count: int = 0
+    filtered_geo_count: int = 0
+
+    @property
+    def offers_filtered_geo(self) -> int:
+        """Audit metric: offers removed by the country filter."""
+        return self.filtered_geo_count
 
 
 def parse_greenhouse_board_token(value: Any) -> str:
@@ -339,13 +354,22 @@ class GreenhouseJobBoardConnector:
     def discover_ranked(
         self, board: GreenhouseBoard, *, selection_brief: dict[str, Any] | None = None,
         internships_only: bool = False, deadline: float | None = None,
+        countries_exclude: Sequence[str] | None = None,
+        countries_include: Sequence[str] | None = None,
     ) -> DiscoveryPayload:
         """Score the whole admissible feed before keeping its best 150 jobs.
 
         The person's criteria are used locally; the public HTTP request is
         unchanged and never contains profile or preference data.
+
+        ``countries_exclude`` and ``countries_include`` are ISO-3166-1 alpha-2
+        codes.  The country filter runs on the connector side, before any
+        qualification work, so a posting published in an excluded country
+        costs neither a match nor a CPU cycle.  Called without the
+        parameter, the board behaves exactly as before.
         """
         brief = validate_brief(selection_brief) if selection_brief is not None else default_brief()
+        excluded, included = resolve_country_filter(countries_exclude, countries_include)
         error: PublicSourceError | None = None
         for attempt in range(2):
             try:
@@ -353,7 +377,8 @@ class GreenhouseJobBoardConnector:
                 if remaining <= 0:
                     raise PublicSourceError("Le budget de recherche est atteint ; cette source n’a pas été relancée.", code="budget")
                 payload = self.transport.get_json(board.endpoint, min(GREENHOUSE_TIMEOUT_SECONDS, remaining))
-                return self._normalise(board, payload, selection_brief=brief, internships_only=internships_only)
+                return self._normalise(board, payload, selection_brief=brief, internships_only=internships_only,
+                                       countries_exclude=excluded, countries_include=included)
             except PublicSourceError as caught:
                 error = caught
                 if not caught.retryable or attempt:
@@ -365,16 +390,22 @@ class GreenhouseJobBoardConnector:
         raise error
 
     def discover_internships(
-        self, board: GreenhouseBoard, *, selection_brief: dict[str, Any], deadline: float | None = None
+        self, board: GreenhouseBoard, *, selection_brief: dict[str, Any], deadline: float | None = None,
+        countries_exclude: Sequence[str] | None = None,
+        countries_include: Sequence[str] | None = None,
     ) -> DiscoveryPayload:
         """Explorer entry point: classify and admit before the per-source cap."""
         return self.discover_ranked(board, selection_brief=selection_brief,
-                                    internships_only=True, deadline=deadline)
+                                    internships_only=True, deadline=deadline,
+                                    countries_exclude=countries_exclude,
+                                    countries_include=countries_include)
 
     @staticmethod
     def _normalise(
         board: GreenhouseBoard, payload: Any, *, selection_brief: dict[str, Any] | None = None,
         internships_only: bool = False,
+        countries_exclude: Sequence[str] | None = None,
+        countries_include: Sequence[str] | None = None,
     ) -> DiscoveryPayload:
         if not isinstance(payload, dict) or not isinstance(payload.get("jobs"), list):
             raise PublicSourceError("Greenhouse a renvoyé un format d’offres inattendu.", code="invalid_payload")
@@ -386,12 +417,14 @@ class GreenhouseJobBoardConnector:
                 code="too_many_rows",
             )
         brief = validate_brief(selection_brief) if selection_brief is not None else default_brief()
+        excluded, included = resolve_country_filter(countries_exclude, countries_include)
         evaluated_count = invalid_count = 0
         confirmed_count = uncertain_count = excluded_count = relevant_count = filtered_criteria_count = 0
+        filtered_geo_count = 0
 
         def candidates():
             nonlocal evaluated_count, invalid_count, confirmed_count, uncertain_count, excluded_count
-            nonlocal relevant_count, filtered_criteria_count
+            nonlocal relevant_count, filtered_criteria_count, filtered_geo_count
             for raw in raw_jobs:
                 if not isinstance(raw, dict):
                     invalid_count += 1
@@ -410,7 +443,20 @@ class GreenhouseJobBoardConnector:
                     invalid_count += 1
                     continue
                 location = raw.get("location") if isinstance(raw.get("location"), dict) else {}
-                city, country = _location_parts(location.get("name"), preserve_multi_locations=internships_only)
+                location_name = clean_text(location.get("name"), limit=300)
+                city, country = _location_parts(location_name, preserve_multi_locations=internships_only)
+                evaluated_count += 1
+                # The country filter runs before the description is read and
+                # before any qualification: an excluded posting costs
+                # nothing beyond the feed row it already occupied.
+                decision = geo_filter_decision(
+                    location_text=location_name, country=country,
+                    excluded_codes=excluded, included_codes=included,
+                )
+                if decision.excluded:
+                    excluded_count += 1
+                    filtered_geo_count += 1
+                    continue
                 description = source_html_to_text(raw.get("content"))
                 job = {
                     "company": board.company,
@@ -437,7 +483,6 @@ class GreenhouseJobBoardConnector:
                     "description_original": description,
                     "job_family": classify_job_family(title, description),
                 }
-                evaluated_count += 1
                 match = score_brief_match(brief, job)
                 if internships_only:
                     classification = classify_internship(job)
@@ -496,4 +541,5 @@ class GreenhouseJobBoardConnector:
             excluded_count=excluded_count,
             relevant_count=relevant_count,
             filtered_criteria_count=filtered_criteria_count,
+            filtered_geo_count=filtered_geo_count,
         )

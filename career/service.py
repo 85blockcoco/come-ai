@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import inspect
 import json
 import os
 import re
@@ -101,6 +102,7 @@ from .interview import (
 from .ocr import LocalVisionOCR, OCRResult
 from .discovery import DiscoveryPayload, GreenhouseBoard, GreenhouseJobBoardConnector, PublicSourceError, parse_greenhouse_board_token
 from .connectors import default_exploration_connectors
+from .geo import excluded_country_codes
 from .exploration import (
     EXPLORATION_LAST_SETTING,
     EXPLORATION_MAX_RESULTS,
@@ -208,6 +210,19 @@ def re_sub_filename(value: str) -> str:
     """Make a short, non-path component for a locally exported draft."""
     compact = re.sub(r"[^A-Za-z0-9À-ÿ._-]+", "-", clean_text(value, limit=80)).strip(".-_")
     return compact[:60] or "candidature"
+
+
+def _accepts_keyword(method: Any, keyword: str) -> bool:
+    """Whether a connector's discovery contract accepts a named keyword.
+
+    A connector written before the country filter existed keeps working
+    unchanged; the filter is only pushed to a connector that declares it.
+    """
+    try:
+        parameters = inspect.signature(method).parameters
+    except (TypeError, ValueError):
+        return False
+    return keyword in parameters
 
 
 class CareerService:
@@ -2514,6 +2529,19 @@ class CareerService:
                 "disclaimer": "Sources publiques uniquement. Résultats du dernier parcours, reclassés localement ; aucune candidature envoyée."
                 + (" Tes critères ont changé : relance l’exploration pour couvrir les sources avec ces critères." if changed else "")}
 
+    @staticmethod
+    def _geo_filter_for_brief(brief: dict[str, Any]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        """ISO-3166-1 alpha-2 codes the connectors must apply for the brief.
+
+        The saved criteria name countries in the person's own words; the
+        connectors read ISO-3166-1 alpha-2 codes.  A country that cannot be
+        read is never guessed, and France stays excluded because it is the
+        default international search of this workspace.
+        """
+        raw = brief.get("geo_excluded_countries") or brief.get("excluded_countries") or ()
+        excluded = excluded_country_codes(raw)
+        return excluded or ("FR",), ()
+
     def explore_internships(self, *, force: bool = False) -> dict[str, Any]:
         """Explicit read-only exploration; works with zero personal boards.
 
@@ -2527,6 +2555,7 @@ class CareerService:
         try:
             brief = self.get_stage_search()["brief"]
             fingerprint = self._exploration_brief_fingerprint(brief)
+            countries_exclude, countries_include = self._geo_filter_for_brief(brief)
             started_at = utc_now()
             started_clock = time.monotonic()
             deadline = started_clock + EXPLORATION_NETWORK_BUDGET_SECONDS
@@ -2574,16 +2603,26 @@ class CareerService:
                         # Future connectors receive their own source descriptor.
                         descriptor = GreenhouseBoard(source_id, company, parse_greenhouse_board_token(source.get("board_token"))) if provider == "greenhouse" else source
                         outcome["attempted"] = True
-                        result = connector.discover_internships(descriptor, selection_brief=brief, deadline=deadline)
+                        # The country filter is pushed to the connector so an
+                        # offer published in an excluded country never costs a
+                        # match, a qualification or a request.
+                        connector_kwargs: dict[str, Any] = {"selection_brief": brief, "deadline": deadline}
+                        if _accepts_keyword(connector.discover_internships, "countries_exclude"):
+                            connector_kwargs["countries_exclude"] = list(countries_exclude)
+                        if _accepts_keyword(connector.discover_internships, "countries_include"):
+                            connector_kwargs["countries_include"] = list(countries_include)
+                        result = connector.discover_internships(descriptor, **connector_kwargs)
                         if not isinstance(result, DiscoveryPayload) or not isinstance(result.jobs, tuple) or any(not isinstance(job, dict) for job in result.jobs):
                             raise PublicSourceError("Le connecteur n’a pas renvoyé un résultat d’exploration valide.", code="invalid_payload")
                         counts = (result.raw_count, result.evaluated_count, result.invalid_count,
                                   result.confirmed_count, result.uncertain_count, result.excluded_count,
-                                  result.relevant_count, result.filtered_criteria_count)
+                                  result.relevant_count, result.filtered_criteria_count,
+                                  result.filtered_geo_count)
                         if (any(type(count) is not int or count < 0 for count in counts)
                             or result.raw_count != result.evaluated_count + result.invalid_count
                             or result.evaluated_count != result.confirmed_count + result.uncertain_count + result.excluded_count
                             or result.relevant_count + result.filtered_criteria_count != result.confirmed_count + result.uncertain_count
+                            or result.filtered_geo_count > result.excluded_count
                             or len(result.jobs) > min(EXPLORATION_MAX_RESULTS, result.relevant_count)):
                             raise PublicSourceError("Le connecteur n’a pas fourni des compteurs d’exploration cohérents.", code="invalid_counts")
                         self._exploration_cache[source_id] = (cache_fingerprint, result)
@@ -2598,7 +2637,8 @@ class CareerService:
                 if result is None:
                     continue
                 count_fields = ("raw_count", "evaluated_count", "invalid_count", "confirmed_count", "uncertain_count",
-                                "excluded_count", "relevant_count", "filtered_criteria_count")
+                                "excluded_count", "relevant_count", "filtered_criteria_count",
+                                "filtered_geo_count")
                 outcome.update({key: int(getattr(result, key, 0)) for key in count_fields})
                 outcome.update(verified_at=result.verified_at, retained_count=len(result.jobs), truncated=bool(result.truncated))
                 if result.invalid_count and outcome["status"] == "success":
@@ -2926,6 +2966,10 @@ class CareerService:
                     )
                     ranked_discovery = getattr(self.discovery_connector, "discover_ranked", None)
                     if callable(ranked_discovery):
+                        # The board import keeps recording every published
+                        # posting: the saved criteria decide what the person
+                        # is shown, and the country filter belongs to the
+                        # search path, not to the local tracker.
                         result = ranked_discovery(board, selection_brief=brief)
                     else:
                         # Retain the original injectable connector contract.

@@ -1,0 +1,509 @@
+{
+  "_comment": "SK-11 synthetic corpus. Every posting is invented; no real employer, board or URL is referenced. The HTTP shape of each feed mirrors the documented public API of the connector it belongs to, so the country filter is exercised on the same words a real source publishes.",
+  "cases": [
+    {
+      "id": "greenhouse_paris_france_is_excluded",
+      "connector": "greenhouse",
+      "excluded": ["FR"],
+      "included": [],
+      "expected_titles": [],
+      "expected_filtered_geo": 1,
+      "feed": {
+        "jobs": [
+          {
+            "id": "gh-paris-1",
+            "title": "Corporate Finance Intern",
+            "absolute_url": "https://careers.example.test/jobs/gh-paris-1",
+            "location": {"name": "Paris, France"},
+            "content": "<p>This internship lasts six months.</p>"
+          }
+        ]
+      }
+    },
+    {
+      "id": "greenhouse_london_is_kept",
+      "connector": "greenhouse",
+      "excluded": ["FR"],
+      "included": [],
+      "expected_titles": ["Corporate Finance Intern"],
+      "expected_filtered_geo": 0,
+      "feed": {
+        "jobs": [
+          {
+            "id": "gh-london-1",
+            "title": "Corporate Finance Intern",
+            "absolute_url": "https://careers.example.test/jobs/gh-london-1",
+            "location": {"name": "London, United Kingdom"},
+            "content": "<p>This internship lasts six months.</p>"
+          }
+        ]
+      }
+    },
+    {
+      "id": "greenhouse_multi_location_is_kept",
+      "connector": "greenhouse",
+      "excluded": ["FR"],
+      "included": [],
+      "expected_titles": ["Corporate Finance Intern"],
+      "expected_filtered_geo": 0,
+      "feed": {
+        "jobs": [
+          {
+            "id": "gh-multi-1",
+            "title": "Corporate Finance Intern",
+            "absolute_url": "https://careers.example.test/jobs/gh-multi-1",
+            "location": {"name": "Paris/London/Berlin"},
+            "content": "<p>This internship lasts six months.</p>"
+          }
+        ]
+      }
+    },
+    {
+      "id": "greenhouse_unknown_country_is_kept",
+      "connector": "greenhouse",
+      "excluded": ["FR"],
+      "included": [],
+      "expected_titles": ["Corporate Finance Intern"],
+      "expected_filtered_geo": 0,
+      "feed": {
+        "jobs": [
+          {
+            "id": "gh-unknown-1",
+            "title": "Corporate Finance Intern",
+            "absolute_url": "https://careers.example.test/jobs/gh-unknown-1",
+            "location": {"name": ""},
+            "content": "<p>This internship lasts six months.</p>"
+          }
+        ]
+      }
+    },
+    {
+      "id": "greenhouse_france_is_kept_when_germany_is_the_excluded_country",
+      "connector": "greenhouse",
+      "excluded": ["DE"],
+      "included": [],
+      "expected_titles": ["Corporate Finance Intern"],
+      "expected_filtered_geo": 0,
+      "feed": {
+        "jobs": [
+          {
+            "id": "gh-fr-kept-1",
+            "title": "Corporate Finance Intern",
+            "absolute_url": "https://careers.example.test/jobs/gh-fr-kept-1",
+            "location": {"name": "Paris, France"},
+            "content": "<p>This internship lasts six months.</p>"
+          }
+        ]
+      }
+    },
+    {
+      "id": "lever_frankfurt_is_kept",
+      "connector": "lever",
+      "excluded": ["FR"],
+      "included": [],
+      "expected_titles": ["Corporate Finance Intern"],
+      "expected_filtered_geo": 0,
+      "feed": [
+        {
+          "id": "lv-frankfurt-1",
+          "text": "Corporate Finance Intern",
+          "hostedUrl": "https://jobs.lever.co/synthetic-bank/lv-frankfurt-1",
+          "applyUrl": "https://jobs.lever.co/synthetic-bank/lv-frankfurt-1",
+          "descriptionPlain": "This internship lasts six months.",
+          "categories": {"location": "Frankfurt, Germany", "commitment": "Internship"},
+          "country": "Germany"
+        }
+      ]
+    },
+    {
+      "id": "lever_paris_is_excluded",
+      "connector": "lever",
+      "excluded": ["FR"],
+      "included": [],
+      "expected_titles": [],
+      "expected_filtered_geo": 1,
+      "feed": [
+        {
+          "id": "lv-paris-1",
+          "text": "Corporate Finance Intern",
+          "hostedUrl": "https://jobs.lever.co/synthetic-bank/lv-paris-1",
+          "applyUrl": "https://jobs.lever.co/synthetic-bank/lv-paris-1",
+          "descriptionPlain": "This internship lasts six months.",
+          "categories": {"location": "Paris, France", "commitment": "Internship"},
+          "country": "France"
+        }
+      ]
+    },
+    {
+      "id": "lever_without_country_is_kept",
+      "connector": "lever",
+      "excluded": ["FR"],
+      "included": [],
+      "expected_titles": ["Corporate Finance Intern"],
+      "expected_filtered_geo": 0,
+      "feed": [
+        {
+          "id": "lv-unknown-1",
+          "text": "Corporate Finance Intern",
+          "hostedUrl": "https://jobs.lever.co/synthetic-bank/lv-unknown-1",
+          "applyUrl": "https://jobs.lever.co/synthetic-bank/lv-unknown-1",
+          "descriptionPlain": "This internship lasts six months.",
+          "categories": {"location": "", "commitment": "Internship"}
+        }
+      ]
+    },
+    {
+      "id": "ashby_without_country_is_kept",
+      "connector": "ashby",
+      "excluded": ["FR"],
+      "included": [],
+      "expected_titles": ["Corporate Finance Intern"],
+      "expected_filtered_geo": 0,
+      "feed": {
+        "jobs": [
+          {
+            "id": "as-unknown-1",
+            "title": "Corporate Finance Intern",
+            "jobUrl": "https://jobs.ashbyhq.com/synthetic-bank/as-unknown-1",
+            "applyUrl": "https://jobs.ashbyhq.com/synthetic-bank/as-unknown-1",
+            "descriptionPlain": "This internship lasts six months.",
+            "employmentType": "Internship"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ashby_amsterdam_is_kept",
+      "connector": "ashby",
+      "excluded": ["FR"],
+      "included": [],
+      "expected_titles": ["Corporate Finance Intern"],
+      "expected_filtered_geo": 0,
+      "feed": {
+        "jobs": [
+          {
+            "id": "as-amsterdam-1",
+            "title": "Corporate Finance Intern",
+            "jobUrl": "https://jobs.ashbyhq.com/synthetic-bank/as-amsterdam-1",
+            "applyUrl": "https://jobs.ashbyhq.com/synthetic-bank/as-amsterdam-1",
+            "descriptionPlain": "This internship lasts six months.",
+            "employmentType": "Internship",
+            "address": {"postalAddress": {"addressLocality": "Amsterdam", "addressCountry": "Netherlands"}}
+          }
+        ]
+      }
+    },
+    {
+      "id": "ashby_paris_is_excluded",
+      "connector": "ashby",
+      "excluded": ["FR"],
+      "included": [],
+      "expected_titles": [],
+      "expected_filtered_geo": 1,
+      "feed": {
+        "jobs": [
+          {
+            "id": "as-paris-1",
+            "title": "Corporate Finance Intern",
+            "jobUrl": "https://jobs.ashbyhq.com/synthetic-bank/as-paris-1",
+            "applyUrl": "https://jobs.ashbyhq.com/synthetic-bank/as-paris-1",
+            "descriptionPlain": "This internship lasts six months.",
+            "employmentType": "Internship",
+            "address": {"postalAddress": {"addressLocality": "Paris", "addressCountry": "France"}}
+          }
+        ]
+      }
+    },
+    {
+      "id": "smartrecruiters_multi_country_is_kept",
+      "connector": "smartrecruiters",
+      "excluded": ["FR"],
+      "included": [],
+      "expected_titles": ["Corporate Finance Intern"],
+      "expected_filtered_geo": 0,
+      "feed": {
+        "content": [
+          {
+            "id": "sr-multi-1",
+            "name": "Corporate Finance Intern",
+            "applyUrl": "https://www.smartrecruiters.com/synthetic-bank/sr-multi-1",
+            "description": "<p>This internship lasts six months.</p>",
+            "location": {"city": "Paris", "country": "France, United Kingdom"},
+            "typeOfEmployment": {"label": "Internship"},
+            "releasedDate": "2026-09-01T00:00:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "smartrecruiters_paris_is_excluded",
+      "connector": "smartrecruiters",
+      "excluded": ["FR"],
+      "included": [],
+      "expected_titles": [],
+      "expected_filtered_geo": 1,
+      "feed": {
+        "content": [
+          {
+            "id": "sr-paris-1",
+            "name": "Corporate Finance Intern",
+            "applyUrl": "https://www.smartrecruiters.com/synthetic-bank/sr-paris-1",
+            "description": "<p>This internship lasts six months.</p>",
+            "location": {"city": "Paris", "country": "France"},
+            "typeOfEmployment": {"label": "Internship"},
+            "releasedDate": "2026-09-01T00:00:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "smartrecruiters_include_germany_keeps_germany",
+      "connector": "smartrecruiters",
+      "excluded": [],
+      "included": ["DE"],
+      "expected_titles": ["Corporate Finance Intern"],
+      "expected_filtered_geo": 0,
+      "feed": {
+        "content": [
+          {
+            "id": "sr-de-1",
+            "name": "Corporate Finance Intern",
+            "applyUrl": "https://www.smartrecruiters.com/synthetic-bank/sr-de-1",
+            "description": "<p>This internship lasts six months.</p>",
+            "location": {"city": "Munich", "country": "Germany"},
+            "typeOfEmployment": {"label": "Internship"},
+            "releasedDate": "2026-09-01T00:00:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "smartrecruiters_include_germany_drops_france",
+      "connector": "smartrecruiters",
+      "excluded": [],
+      "included": ["DE"],
+      "expected_titles": [],
+      "expected_filtered_geo": 1,
+      "feed": {
+        "content": [
+          {
+            "id": "sr-fr-out-1",
+            "name": "Corporate Finance Intern",
+            "applyUrl": "https://www.smartrecruiters.com/synthetic-bank/sr-fr-out-1",
+            "description": "<p>This internship lasts six months.</p>",
+            "location": {"city": "Lyon", "country": "France"},
+            "typeOfEmployment": {"label": "Internship"},
+            "releasedDate": "2026-09-01T00:00:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "id": "welcome_jungle_paris_is_excluded",
+      "connector": "welcome_jungle",
+      "excluded": ["FR"],
+      "included": [],
+      "expected_titles": [],
+      "expected_filtered_geo": 1,
+      "cards": [
+        {
+          "title": "Corporate Finance Intern",
+          "company": "Synthetic Bank",
+          "location": "Paris, France",
+          "contract_type": "Internship",
+          "url": "https://www.welcometothejungle.com/fr/companies/synthetic-bank/jobs/wtj-paris-1",
+          "description": "<p>This internship lasts six months.</p>"
+        }
+      ]
+    },
+    {
+      "id": "welcome_jungle_berlin_is_kept",
+      "connector": "welcome_jungle",
+      "excluded": ["FR"],
+      "included": [],
+      "expected_titles": ["Corporate Finance Intern"],
+      "expected_filtered_geo": 0,
+      "cards": [
+        {
+          "title": "Corporate Finance Intern",
+          "company": "Synthetic Bank",
+          "location": "Berlin, Germany",
+          "contract_type": "Internship",
+          "url": "https://www.welcometothejungle.com/fr/companies/synthetic-bank/jobs/wtj-berlin-1",
+          "description": "<p>This internship lasts six months.</p>"
+        }
+      ]
+    },
+    {
+      "id": "welcome_jungle_multi_location_is_kept",
+      "connector": "welcome_jungle",
+      "excluded": ["FR"],
+      "included": [],
+      "expected_titles": ["Corporate Finance Intern"],
+      "expected_filtered_geo": 0,
+      "cards": [
+        {
+          "title": "Corporate Finance Intern",
+          "company": "Synthetic Bank",
+          "location": "Paris/London",
+          "contract_type": "Internship",
+          "url": "https://www.welcometothejungle.com/fr/companies/synthetic-bank/jobs/wtj-multi-1",
+          "description": "<p>This internship lasts six months.</p>"
+        }
+      ]
+    },
+    {
+      "id": "jobteaser_remote_for_a_french_company_is_kept",
+      "connector": "jobteaser",
+      "excluded": ["FR"],
+      "included": [],
+      "expected_titles": ["Corporate Finance Intern"],
+      "expected_filtered_geo": 0,
+      "cards": [
+        {
+          "title": "Corporate Finance Intern",
+          "company": "Synthetic Bank",
+          "location": "Remote",
+          "contract_type": "Internship",
+          "url": "https://www.jobteaser.com/en/jobs/jt-remote-1",
+          "description": "<p>This internship lasts six months.</p>"
+        }
+      ]
+    },
+    {
+      "id": "jobteaser_paris_is_excluded",
+      "connector": "jobteaser",
+      "excluded": ["FR"],
+      "included": [],
+      "expected_titles": [],
+      "expected_filtered_geo": 1,
+      "cards": [
+        {
+          "title": "Corporate Finance Intern",
+          "company": "Synthetic Bank",
+          "location": "Paris, France",
+          "contract_type": "Internship",
+          "url": "https://www.jobteaser.com/en/jobs/jt-paris-1",
+          "description": "<p>This internship lasts six months.</p>"
+        }
+      ]
+    },
+    {
+      "id": "talent_com_munich_is_kept",
+      "connector": "talent_com",
+      "excluded": ["FR"],
+      "included": [],
+      "expected_titles": ["Corporate Finance Intern"],
+      "expected_filtered_geo": 0,
+      "cards": [
+        {
+          "title": "Corporate Finance Intern",
+          "company": "Synthetic Bank",
+          "location": "Munich, Germany",
+          "contract_type": "Internship",
+          "url": "https://www.talent.com/job/tc-munich-1",
+          "description": "<p>This internship lasts six months.</p>"
+        }
+      ]
+    },
+    {
+      "id": "talent_com_paris_city_only_is_excluded",
+      "connector": "talent_com",
+      "excluded": ["FR"],
+      "included": [],
+      "expected_titles": [],
+      "expected_filtered_geo": 1,
+      "cards": [
+        {
+          "title": "Corporate Finance Intern",
+          "company": "Synthetic Bank",
+          "location": "Paris",
+          "contract_type": "Internship",
+          "url": "https://www.talent.com/job/tc-paris-1",
+          "description": "<p>This internship lasts six months.</p>"
+        }
+      ]
+    },
+    {
+      "id": "apec_paris_is_excluded",
+      "connector": "apec",
+      "excluded": ["FR"],
+      "included": [],
+      "expected_titles": [],
+      "expected_filtered_geo": 1,
+      "cards": [
+        {
+          "title": "Corporate Finance Intern",
+          "company": "Synthetic Bank",
+          "location": "Paris",
+          "contract_type": "Stage",
+          "url": "https://www.apec.fr/emploi/stage-analyste-financier-paris",
+          "description": "<p>This internship lasts six months.</p>"
+        }
+      ]
+    },
+    {
+      "id": "apec_london_is_kept",
+      "connector": "apec",
+      "excluded": ["FR"],
+      "included": [],
+      "expected_titles": ["Corporate Finance Intern"],
+      "expected_filtered_geo": 0,
+      "cards": [
+        {
+          "title": "Corporate Finance Intern",
+          "company": "Synthetic Bank",
+          "location": "London, United Kingdom",
+          "contract_type": "Stage",
+          "url": "https://www.apec.fr/emploi/stage-analyste-financier-london",
+          "description": "<p>This internship lasts six months.</p>"
+        }
+      ]
+    },
+    {
+      "id": "no_country_filter_keeps_a_french_posting",
+      "connector": "greenhouse",
+      "excluded": null,
+      "included": null,
+      "expected_titles": ["Corporate Finance Intern"],
+      "expected_filtered_geo": 0,
+      "feed": {
+        "jobs": [
+          {
+            "id": "gh-nofilter-1",
+            "title": "Corporate Finance Intern",
+            "absolute_url": "https://careers.example.test/jobs/gh-nofilter-1",
+            "location": {"name": "Paris, France"},
+            "content": "<p>This internship lasts six months.</p>"
+          }
+        ]
+      }
+    },
+    {
+      "id": "greenhouse_france_and_germany_are_both_excluded",
+      "connector": "greenhouse",
+      "excluded": ["FR", "DE"],
+      "included": [],
+      "expected_titles": [],
+      "expected_filtered_geo": 2,
+      "feed": {
+        "jobs": [
+          {
+            "id": "gh-two-1",
+            "title": "Corporate Finance Intern",
+            "absolute_url": "https://careers.example.test/jobs/gh-two-1",
+            "location": {"name": "Paris, France"},
+            "content": "<p>This internship lasts six months.</p>"
+          },
+          {
+            "id": "gh-two-2",
+            "title": "Corporate Finance Intern",
+            "absolute_url": "https://careers.example.test/jobs/gh-two-2",
+            "location": {"name": "Frankfurt, Germany"},
+            "content": "<p>This internship lasts six months.</p>"
+          }
+        ]
+      }
+    }
+  ]
+}
