@@ -236,6 +236,13 @@ class CVAnalyzeResponse(BaseModel):
     provenance: dict[str, Any]
 
 
+class OfferQualityRefreshPayload(BaseModel):
+    """Request payload of the controlled refresh of the offer quality."""
+
+    offer_ids: list[str] = Field(default_factory=list, max_length=50)
+    force: bool = False
+
+
 def create_career_router(
     service: CareerService,
     *,
@@ -505,6 +512,23 @@ def create_career_router(
     @router.get("/api/career/jobs/{job_id}")
     async def job(job_id: str) -> Any:
         return await local(lambda: service.get_job(job_id))
+
+    @router.get("/api/career/offer-quality/{offer_id}")
+    async def offer_quality(offer_id: str) -> Any:
+        """Return the freshness, the completeness and the provenance of an offer."""
+        return await local(lambda: service.get_offer_quality(offer_id))
+
+    @router.get("/api/career/offer-quality/{offer_id}/history")
+    async def offer_quality_history(offer_id: str) -> Any:
+        """Return the changes detected for an offer since the last refresh."""
+        return await local(lambda: service.offer_quality_history(offer_id))
+
+    @router.post("/api/career/offer-quality/refresh")
+    async def refresh_offer_quality(payload: OfferQualityRefreshPayload) -> Any:
+        """Re-assess the selected offers and report what changed."""
+        return await local(
+            lambda: service.refresh_offer_quality(payload.offer_ids, force=payload.force)
+        )
 
     @router.get("/api/career/jobs/{job_id}/prep")
     async def job_prep(job_id: str) -> Any:
