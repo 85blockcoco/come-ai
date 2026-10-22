@@ -1024,6 +1024,25 @@ def create_career_router(
     async def traceability_import(payload: TraceabilityImportPayload) -> Any:
         return await local(lambda: service.traceability.import_traces(payload.registry))
 
+    # Le contrat de la mission est aussi exposé sans le préfixe de l'espace
+    # Career : ``/traceability/...`` et ``/api/career/traceability/...``
+    # désignent exactement les mêmes opérations (aucune duplication de code).
+    for route in list(router.routes):
+        path = getattr(route, "path", "")
+        if not path.startswith("/api/career/traceability"):
+            continue
+        router.add_api_route(
+            path.replace("/api/career/traceability", "/traceability", 1),
+            route.endpoint,
+            methods=list(route.methods or []),
+            name=f"{route.name}_contract",
+            status_code=route.status_code,
+            response_model=route.response_model,
+            tags=route.tags,
+            dependencies=route.dependencies,
+            include_in_schema=False,
+        )
+
     return router
 
 

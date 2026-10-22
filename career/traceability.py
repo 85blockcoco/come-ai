@@ -721,6 +721,16 @@ class TraceabilityRegistry:
             # A manual link is only a coverage when it carries its citation:
             # an evidence without a quote proves nothing yet.
             self.set_status(trace.trace_id, "covered", actor=actor_value, comment=comment)
+        elif not quote and trace.status == "covered":
+            # A coverage without a citation is not a coverage: replacing the
+            # proof by an uncited one drops the orphan status instead of
+            # keeping a "covered" requirement with no quotable proof.
+            self.set_status(
+                trace.trace_id,
+                "uncovered",
+                actor=actor_value,
+                comment=comment or "Preuve liée sans citation : la couverture est retirée.",
+            )
         return trace
 
     def unlink_evidence(

@@ -174,6 +174,19 @@ def test_manual_link_without_a_quote_does_not_claim_a_coverage() -> None:
     assert trace.evidence_quote is None
 
 
+def test_replacing_a_cited_proof_by_an_uncited_one_drops_the_orphan_coverage() -> None:
+    registry = _registry()
+    trace = _trace(registry)
+    registry.link_evidence(trace.trace_id, evidence_id="ev-1", evidence_quote="Excel modelling")
+    assert trace.status == "covered"
+
+    registry.link_evidence(trace.trace_id, evidence_id="ev-2")
+
+    assert trace.status == "uncovered"
+    assert trace.evidence_quote is None
+    assert "status_changed" in [event.event_type for event in trace.history]
+
+
 def test_automatic_link_stays_pending_and_never_declares_a_coverage() -> None:
     registry = _registry()
     trace = _trace(registry)
@@ -910,8 +923,40 @@ def test_http_import_restores_a_registry(tmp_path: Path) -> None:
     assert client.get(f"/api/career/traceability/requirements/{created.json()['trace_id']}").status_code == 200
 
 
-# ── 5. Intégration Career ───────────────────────────────────────────────────
+def test_the_mission_contract_paths_are_also_served(tmp_path: Path) -> None:
+    """The contract of the mission (``/traceability/...``) is also exposed."""
+    client = _client(tmp_path)
 
+    created = client.post(
+        "/traceability/requirements",
+        json={
+            "requirement_id": "req_1",
+            "requirement_text": "Excel modelling",
+            "source": "offer_job_1",
+            "criticality": "mandatory",
+        },
+    )
+    assert created.status_code == 201
+    trace_id = created.json()["trace_id"]
+
+    assert client.get("/traceability/requirements").status_code == 200
+    assert client.get(f"/traceability/requirements/{trace_id}").status_code == 200
+    assert client.get("/traceability/audit/coverage").status_code == 200
+    assert client.get("/traceability/audit/gaps").status_code == 200
+    assert client.get("/traceability/audit/history").status_code == 200
+    assert client.get("/traceability/export?export_format=csv").status_code == 200
+    assert (
+        client.post(
+            f"/traceability/requirements/{trace_id}/link-evidence",
+            json={"evidence_id": "ev-1", "evidence_quote": "Excel modelling"},
+        ).status_code
+        == 200
+    )
+    # The canonical Career namespace keeps working the same way.
+    assert client.get("/api/career/traceability/requirements").json()["count"] == 1
+
+
+# ── 5. Intégration Career ───────────────────────────────────────────────────
 
 def test_importing_an_offer_registers_its_requirements(tmp_path: Path) -> None:
     service = CareerService(tmp_path)

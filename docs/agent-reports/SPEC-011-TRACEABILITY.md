@@ -18,7 +18,7 @@ worktree `/Users/comedelavenne/AI-Excel-Agent-worker-cvboost-46-1792666523`.
 | `career_static/index.html` | Onglet « Traçabilité » + vue `view-traceability` |
 | `career_static/career.js` | Enregistrement de la vue (`careerViews`, `labelForView`, `refreshView`) |
 | `career_static/career.css` | Styles de la vue (lignes, faits, timeline, actions de lot) |
-| `tests/test_traceability.py` | 60 tests : règles métier, persistance, audit, API HTTP, intégration Career, garde-fous d'interface |
+| `tests/test_traceability.py` | 68 tests : règles métier, persistance, audit, API HTTP, intégration Career, garde-fous d'interface |
 
 La base du registre est **séparée** : `career_data/traceability.sqlite3`.
 Elle ne dépend pas du schéma `career.sqlite3` (aucune migration, aucun
@@ -77,7 +77,7 @@ et la validation manuelle des liaisons automatiques.
 | 2. Liaison auto au matching (SK-21) | `CareerService.get_job_prep` → `sync_traceability_evidence` → `auto_link_evidence`. Correspondance **exacte** seulement (`exact_claim`, `verbatim_quote` avec ≥ 12 caractères normalisés) ; la liaison reste `review_state="pending"`, le statut ne change pas. |
 | 3. Validation manuelle | `POST .../confirm` (→ `covered`, `review_state="confirmed"`) et `POST .../reject` (→ preuve retirée, `uncovered`, `review_state="rejected"`). |
 | 4. Immuabilité de l'historique | `TraceEvent` est *frozen* ; les événements ne sont jamais modifiés ni supprimés (`INSERT OR IGNORE` sur `event_id`) ; le texte et la source de l'exigence ne sont jamais réécrits. |
-| 5. Cohérence « covered = preuve + citation » | `set_status("covered")` est refusé sans `evidence_id` **et** `evidence_quote` ; une liaison manuelle sans citation ne couvre pas. |
+| 5. Cohérence « covered = preuve + citation » | `set_status("covered")` est refusé sans `evidence_id` **et** `evidence_quote` ; une liaison manuelle sans citation ne couvre pas ; remplacer une preuve citée par une preuve sans citation fait retomber le statut orphelin sur `uncovered` (événement `status_changed` tracé). |
 | 6. Audit trail | Chaque mutation écrit un événement daté avec `actor` et `comment` ; la suppression est logique (`deleted`) et laisse l'historique. |
 
 Garde-fous supplémentaires :
@@ -93,7 +93,11 @@ Garde-fous supplémentaires :
 ## 4. API HTTP
 
 Toutes les routes sont sous `/api/career/traceability` (le préfixe de l'espace
-Career), ce qui ajoute le contrat de la mission à l'espace existant.
+Career). Le contrat littéral de la mission est **aussi** exposé sans ce
+préfixe : `/traceability/requirements`, `/traceability/audit/coverage`,
+`/traceability/export`, etc. Les deux espaces désignent exactement les mêmes
+opérations (aucune duplication de code : les routes sont aliasées sur les
+mêmes handlers).
 
 | Méthode | Route | Rôle |
 | --- | --- | --- |
@@ -108,7 +112,7 @@ Career), ce qui ajoute le contrat de la mission à l'espace existant.
 | `POST` | `/requirements/{trace_id}/reopen` | Lever la dérogation |
 | `POST` | `/requirements/{trace_id}/confirm` | Valider une liaison automatique |
 | `POST` | `/requirements/{trace_id}/reject` | Rejeter une liaison automatique |
-| `POST` | `/requirements/batch` | Actions de lot (`confirm`, `reject`, `unlink`, `waive`) — un échec n'annule pas les autres |
+| `POST` | `/batch` | Actions de lot (`confirm`, `reject`, `unlink`, `waive`) — un échec n'annule pas les autres |
 | `POST` | `/offer-analysis` | Enregistrer une analyse SK-02 |
 | `POST` | `/auto-link` | Proposer des liaisons automatiques (SK-10 / SK-21) |
 | `GET` | `/audit/coverage` | Couverture globale, par offre, par CV |
@@ -159,12 +163,37 @@ explicitement signalée « à valider ».
 
 ## 7. Preuves réelles
 
-- Tests ciblés : `60 passed` (`tests/test_traceability.py`).
-- Suite complète : `1484 passed, 1 skipped` (le skip est préexistant :
+- Tests ciblés : `68 passed` (`tests/test_traceability.py`).
+- Suite complète : `1487 passed, 1 skipped` (le skip est préexistant :
   `tests/test_offer_summary_exhaustiveness.py` — script ou base absents).
 - `ruff check .` : `All checks passed!`.
 - `git diff --check` : propre.
+- `node --check career_static/js/traceability.js` : OK.
+- Routes vérifiées : 19 chemins / 22 opérations sous `/api/career/traceability`
+  (+ les alias `/traceability/...`), aucun doublon de méthode.
 - `./checklist_codex.sh` : voir §8.
+
+### Relation avec la tentative précédente
+
+Une tentative antérieure de la même mission a été poussée sur
+`origin/worker/cvboost-46-1792666436` (commits `86a6f88` + `71d14c1`) :
+même périmètre, mais persistance JSON et **sans** intégration du service
+Career (pas de création automatique à l'import d'offre, pas de liaison
+automatique au matching) et avec une base de tests plus réduite.
+
+La branche livrée ici (`worker/cvboost-46-1792666523`) reprend le correctif
+de cohérence de `71d14c1` (une liaison de preuve sans citation fait retomber
+un statut `covered` orphelin sur `uncovered`, covered par un test de
+régression) et ajoute ce qui manquait :
+
+- l'intégration Career (SK-02 → registre, SK-21 → proposition de liaison) ;
+- une persistance SQLite indexée dans `career_data/` (indépendante du schéma
+  `career.sqlite3`, donc sans migration) ;
+- les rapports `audit/evolution` et les actions de lot ;
+- 68 tests contre 30.
+
+C'est cette branche qu'il faut relire et intégrer ; l'ancienne peut être
+abandonnée.
 
 ## 8. Checklist de validation
 
