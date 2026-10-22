@@ -12,10 +12,10 @@ dans les fixtures.
 
 | Fichier | Nature | Contenu |
 |---|---|---|
-| `career/interview_prep.py` | **nouveau** (1 975 lignes) | Moteur de préparation : dataclasses du contrat, 8 banques finance, génération, simulation, sérialisation, rendu Markdown. |
+| `career/interview_prep.py` | **nouveau** (1 995 lignes) | Moteur de préparation : dataclasses du contrat, 8 banques finance, génération, simulation, sérialisation, rendu Markdown. |
 | `career/interview_store.py` | **nouveau** (323 lignes) | Persistance locale SQLite des sessions et de l'historique de simulation. |
 | `career_static/js/interview-prep.js` | **nouveau** (467 lignes) | UI : onglets, mode simulation chronométrée, retour structuré, export. |
-| `tests/test_interview_prep.py` | **nouveau** (567 lignes) | 29 tests (dont un test Node qui *exécute* le chrono et le rendu du feedback). |
+| `tests/test_interview_prep.py` | **nouveau** (577 lignes) | 29 tests (dont un test Node qui *exécute* le chrono et le rendu du feedback). |
 | `docs/agent-reports/SPEC-010-INTERVIEW_PREP.md` | **nouveau** | Ce rapport. |
 | `career/router.py` | modifié | 6 routes `/api/career/interview-prep/…` + 3 payloads Pydantic + accroche du contexte local. |
 | `career/service.py` | modifié | 9 méthodes de service, initialisation du store, capacité `interview_prep`, effacement des données. |
