@@ -13,7 +13,7 @@ Statut : TERMINÉE (testé sur fixtures synthétiques ; aucune donnée réelle ;
 | `career_static/js/traceability.js` | UI du registre : filtres, tri, historique par exigence, actions individuelles et groupées |
 | `career_static/index.html` | Onglet « Traçabilité » + vue registre + panneau d'audit |
 | `career_static/career.js` | Routing de la nouvelle vue (hash + titre d'onglet) |
-| `tests/test_traceability.py` | 32 tests (cœur, persistance, audit, intégrations, API HTTP) |
+| `tests/test_traceability.py` | 33 tests (cœur, persistance, audit, intégrations, API HTTP) |
 
 ## 2. Contrat livré
 
@@ -129,16 +129,20 @@ registre local.
 Worktree : `/Users/comedelavenne/AI-Excel-Agent-worker-cvboost-46-1792666436`,
 branche `worker/cvboost-46-1792666436`, base `f5b22f2`.
 
-- Tests ciblés : `32 passed` (`tests/test_traceability.py`).
-- Suite complète : `1454 passed, 1 skipped` (1 skipped = script optionnel absent,
-  `tests/test_offer_summary_exhaustiveness.py`).
-- `checklist_codex.sh main` : `TOUT VERT` (HEAD `86a6f88`).
+- Tests ciblés : `33 passed` (`tests/test_traceability.py`).
+- Suite complète : `1457 passed, 1 skipped` en 293 s (1 skipped = script optionnel absent,
+  `tests/test_offer_summary_exhaustiveness.py`) — aucune régression.
+- `checklist_codex.sh main` : `TOUT VERT` (HEAD `86a6f88`, refait vert sur `71d14c1`).
 - `checklist_codex.sh secrets` : `TOUT VERT` ; `checklist_codex.sh lint` : `All checks passed!`.
 - `ruff check career/ tests/test_traceability.py` : `All checks passed!`.
-- `git diff --check` : propre.
+- `git diff --check` : propre (working tree et index).
 - `node --check career_static/js/traceability.js` : syntaxe JS valide.
 - `checklist_codex.sh` lancé avec `VENV_PY` pointant sur le venv principal (le worktree
   n'embarque pas de `.venv`).
+
+Commits : `86a6f88` (fonctionnel) puis `71d14c1` (correction « une mise à jour combinée
+ne perd plus les changements voisins »), poussés sur
+`origin/worker/cvboost-46-1792666436`.
 
 ## 6. Limites assumées
 
