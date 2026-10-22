@@ -2116,6 +2116,17 @@ function renderApplicationKit(kit, container) {
     warnings.append(profileAction);
   }
   container.append(warnings);
+
+  // SPEC-004 : la revue du CV ciblé est un module séparé ; s'il n'est pas
+  // chargé, le kit reste utilisable tel quel.
+  if (typeof renderCvReviewSection === "function") {
+    const review = renderCvReviewSection({
+      applicationId: application.id,
+      variant: kit.variant || (kit.draft && kit.draft.variant) || "",
+      language: kit.language || "fr",
+    });
+    if (review) container.append(review);
+  }
 }
 
 async function openApplicationKit(application, container) {
