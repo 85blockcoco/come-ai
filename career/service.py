@@ -112,6 +112,7 @@ from .exploration import (
 )
 from .offer_qualification import qualify_offer
 from .scoring import classify_job_family, score_job
+from .traceability_store import TraceabilityStore
 from workspace_core import UserFacingError, extract_text, safe_error
 from .profile_import import (
     ALLOWED_PROFILE_SUFFIXES,
@@ -249,6 +250,9 @@ class CareerService:
         self._prep_cache: set[str] = set()
         self._discovery_lock = threading.Lock()
         self._lock = threading.RLock()
+        # SPEC-011 : le registre de traçabilité vit dans sa propre base
+        # locale, créée à la demande pour ne pas ralentir le démarrage.
+        self._traceability_store: TraceabilityStore | None = None
         self._ensure_storage()
         self._initialize()
         if ConsentGuard is not None:
@@ -278,6 +282,19 @@ class CareerService:
                 os.chmod(path, 0o700)
             except OSError:
                 pass
+
+    def traceability_store(self) -> TraceabilityStore:
+        """Magasin local du registre de traçabilité des exigences (SPEC-011).
+
+        La base est dédiée et vit dans le répertoire privé ``career_data/`` :
+        le schéma versionné de l'application n'est jamais modifié par le
+        registre, et l'effacement des données Career efface aussi ces traces.
+        """
+        if self._traceability_store is None:
+            self._traceability_store = TraceabilityStore(
+                self.data_dir / "traceability.sqlite3"
+            )
+        return self._traceability_store
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
@@ -4735,6 +4752,10 @@ class CareerService:
                         "SELECT * FROM career_audit_log ORDER BY created_at ASC"
                     ).fetchall()
                 ],
+                # SPEC-011 : le registre de traçabilité contient des exigences
+                # et des citations de preuves personnelles : il fait partie des
+                # données exportables, comme le reste de l'espace Career.
+                "traceability": self.traceability_store().export_snapshot(),
                 "exported_at": utc_now(),
             }
         target.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -4772,6 +4793,10 @@ class CareerService:
             connection.execute("DELETE FROM career_audit_log")
             self._seed_defaults(connection)
             self._audit(connection, "career_data_reset", "career", "all")
+            # SPEC-011 : une demande d'effacement efface aussi le registre de
+            # traçabilité. Aucune trace d'exigence ni citation de preuve ne
+            # doit survivre à une suppression explicite des données Career.
+            self.traceability_store().reset()
         for path in self.export_dir.glob("career_*"):
             try:
                 path.unlink()

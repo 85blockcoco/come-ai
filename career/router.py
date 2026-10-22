@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import csv
 import hashlib
+import io
 import os
 from pathlib import Path
 from typing import Any, Callable
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
@@ -236,6 +238,514 @@ class CVAnalyzeResponse(BaseModel):
     provenance: dict[str, Any]
 
 
+# ---------------------------------------------------------------------------
+# SPEC-011 — Registre de traçabilité des exigences
+# ---------------------------------------------------------------------------
+
+
+class TraceabilityCreatePayload(BaseModel):
+    """Une exigence à enregistrer : le texte est repris tel qu'il a été écrit."""
+
+    requirement_text: str = Field(min_length=1, max_length=4_000)
+    source: str = Field(default="manual", max_length=160)
+    requirement_id: str = Field(default="", max_length=120)
+    category: str = Field(default="other", max_length=40)
+    criticality: str = Field(default="contextual", max_length=40)
+    offer_id: str = Field(default="", max_length=120)
+    cv_id: str = Field(default="", max_length=120)
+    locator: str = Field(default="", max_length=120)
+    source_field: str = Field(default="", max_length=120)
+    tags: list[str] = Field(default_factory=list, max_length=24)
+    evidence_id: str = Field(default="", max_length=160)
+    evidence_quote: str = Field(default="", max_length=4_000)
+    evidence_status: str = Field(default="", max_length=40)
+    comment: str = Field(default="", max_length=2_000)
+
+
+class TraceabilityUpdatePayload(BaseModel):
+    """Modification d'une exigence : statut, preuve, tags ou commentaire."""
+
+    status: str = Field(default="", max_length=40)
+    evidence_id: str = Field(default="", max_length=160)
+    evidence_quote: str = Field(default="", max_length=4_000)
+    evidence_status: str = Field(default="", max_length=40)
+    evidence_field: str = Field(default="", max_length=120)
+    evidence_offset: int | None = None
+    tags: list[str] | None = None
+    category: str = Field(default="", max_length=40)
+    criticality: str = Field(default="", max_length=40)
+    comment: str = Field(default="", max_length=2_000)
+
+
+class TraceabilityLinkPayload(BaseModel):
+    """Liaison d'une preuve : un identifiant **et** une citation."""
+
+    evidence_id: str = Field(min_length=1, max_length=160)
+    evidence_quote: str = Field(min_length=1, max_length=4_000)
+    status: str = Field(default="covered", max_length=40)
+    evidence_field: str = Field(default="", max_length=120)
+    evidence_offset: int | None = None
+    comment: str = Field(default="", max_length=2_000)
+
+
+class TraceabilityUnlinkPayload(BaseModel):
+    comment: str = Field(default="", max_length=2_000)
+
+
+class TraceabilityWaivePayload(BaseModel):
+    justification: str = Field(min_length=1, max_length=2_000)
+    comment: str = Field(default="", max_length=2_000)
+
+
+class TraceabilityCommentPayload(BaseModel):
+    comment: str = Field(default="", max_length=2_000)
+
+
+class TraceabilityConfirmPayload(BaseModel):
+    """Validation humaine d'une liaison automatique."""
+
+    confirmed: bool
+    comment: str = Field(default="", max_length=2_000)
+
+
+class TraceabilityFromOfferPayload(BaseModel):
+    """Création automatique des traces depuis une offre analysée (SK-02)."""
+
+    job_id: str = Field(default="", max_length=80)
+    offer: dict[str, Any] | None = None
+    comment: str = Field(default="", max_length=2_000)
+
+
+class TraceabilityAutoLinkPayload(BaseModel):
+    """Liaisons proposées par le matching local (SK-21)."""
+
+    matches: list[dict[str, Any]] = Field(default_factory=list, max_length=500)
+    comment: str = Field(default="", max_length=2_000)
+
+
+class TraceabilityImportPayload(BaseModel):
+    payload: dict[str, Any]
+    replace: bool = False
+
+
+def _register_traceability_routes(
+    router: APIRouter,
+    service: CareerService,
+    local: Callable[[Any], Any],
+) -> None:
+    """Enregistre les routes du registre de traçabilité (SPEC-011).
+
+    Les routes sont montées deux fois : sous ``/api/career/traceability``
+    (convention du workspace Career) et sous ``/traceability`` (chemin du
+    contrat de mission).  Les deux partagent exactement le même code : il
+    n'existe qu'une seule implémentation métier.
+    """
+    from .traceability import trace_to_dict
+    from .traceability_audit import build_audit_report
+    from .traceability_store import TraceabilityLedger
+
+    def ledger() -> TraceabilityLedger:
+        return TraceabilityLedger(service.traceability_store())
+
+    async def _export_registry(export_format: str) -> Any:
+        """Sérialise le registre complet au format demandé (json ou csv)."""
+        chosen = str(export_format or "json").strip().lower()
+        if chosen == "csv":
+            rows = await local(lambda: _traceability_csv_rows(ledger().list_traces()))
+            return Response(
+                content=_traceability_csv(rows),
+                media_type="text/csv; charset=utf-8",
+                headers={"Content-Disposition": 'attachment; filename="traceabilite.csv"'},
+            )
+        return await local(
+            lambda: _export_report(
+                ledger().list_traces(),
+                ledger().history(),
+                service.traceability_store().counts(),
+            )
+        )
+
+    def summaries(traces: list[Any]) -> list[dict[str, Any]]:
+        """Sérialise une liste de traces (le JSON ne connaît pas les dataclasses)."""
+        return [trace_to_dict(trace, include_history=False) for trace in traces]
+
+    @router.get("/requirements")
+    async def list_requirements(
+        status: str = Query(default="", max_length=40),
+        category: str = Query(default="", max_length=40),
+        criticality: str = Query(default="", max_length=40),
+        offer_id: str = Query(default="", max_length=120),
+        cv_id: str = Query(default="", max_length=120),
+        source: str = Query(default="", max_length=160),
+        tag: str = Query(default="", max_length=60),
+        query: str = Query(default="", max_length=200),
+        limit: int = Query(default=200, ge=1, le=1000),
+        offset: int = Query(default=0, ge=0),
+    ) -> Any:
+        traces = await local(
+            lambda: summaries(
+                ledger().list_traces(
+                    status=status or None,
+                    category=category or None,
+                    criticality=criticality or None,
+                    offer_id=offer_id or None,
+                    cv_id=cv_id or None,
+                    source=source or None,
+                    tag=tag or None,
+                    query=query or None,
+                    limit=limit,
+                    offset=offset,
+                )
+            )
+        )
+        return {"requirements": traces, "count": len(traces)}
+
+    @router.post("/requirements", status_code=201)
+    async def create_requirement(payload: TraceabilityCreatePayload) -> Any:
+        return await local(
+            lambda: trace_to_dict(
+                ledger().create(
+                    requirement_text=payload.requirement_text,
+                    source=payload.source,
+                    requirement_id=payload.requirement_id,
+                    category=payload.category,
+                    criticality=payload.criticality,
+                    offer_id=payload.offer_id,
+                    cv_id=payload.cv_id,
+                    locator=payload.locator,
+                    source_field=payload.source_field,
+                    tags=payload.tags,
+                    evidence_id=payload.evidence_id or None,
+                    evidence_quote=payload.evidence_quote or None,
+                    status=payload.evidence_status or None,
+                    actor="user",
+                    comment=payload.comment,
+                )
+            )
+        )
+
+    @router.post("/requirements/from-offer", status_code=201)
+    async def create_requirements_from_offer(payload: TraceabilityFromOfferPayload) -> Any:
+        """Crée les traces d'une offre à partir du contrat d'exigences (SK-02)."""
+        from .offer_requirements import analyze_offer
+
+        offer = payload.offer
+        if offer is None:
+            if not payload.job_id:
+                raise UserFacingError("Indique une offre ou le numéro d'une offre enregistrée.")
+            offer = await local(lambda: service.get_job(payload.job_id))
+        analysis = await local(lambda: analyze_offer(offer))
+        traces = await local(
+            lambda: summaries(
+                ledger().sync_offer(
+                    analysis,
+                    actor="system",
+                    comment=payload.comment or "Exigences extraites localement de l'offre.",
+                )
+            )
+        )
+        return {
+            "created": len(traces),
+            "offer_id": analysis.get("offer_id", ""),
+            "requirements": traces,
+            "analysis_warnings": analysis.get("warnings", []),
+        }
+
+    @router.post("/requirements/auto-link")
+    async def auto_link_requirements(payload: TraceabilityAutoLinkPayload) -> Any:
+        """Applique les liaisons proposées par le matching local (SK-21)."""
+        traces = await local(
+            lambda: summaries(
+                ledger().auto_link(
+                    payload.matches,
+                    actor="system",
+                    comment=payload.comment or "Liaison proposée par le matching local.",
+                )
+            )
+        )
+        return {"linked": len(traces), "requirements": traces}
+
+    @router.get("/requirements/{trace_id}")
+    async def get_requirement(trace_id: str) -> Any:
+        return await local(lambda: trace_to_dict(ledger().get(trace_id)))
+
+    @router.patch("/requirements/{trace_id}")
+    async def update_requirement(trace_id: str, payload: TraceabilityUpdatePayload) -> Any:
+        return await local(
+            lambda: trace_to_dict(
+                ledger().update(
+                    trace_id,
+                    status=payload.status or None,
+                    evidence_id=payload.evidence_id or None,
+                    evidence_quote=payload.evidence_quote or None,
+                    evidence_status=payload.evidence_status or None,
+                    evidence_field=payload.evidence_field,
+                    evidence_offset=payload.evidence_offset,
+                    tags=payload.tags,
+                    category=payload.category or None,
+                    criticality=payload.criticality or None,
+                    actor="user",
+                    comment=payload.comment,
+                )
+            )
+        )
+
+    @router.delete("/requirements/{trace_id}")
+    async def delete_requirement(trace_id: str) -> dict[str, Any]:
+        await local(lambda: ledger().delete(trace_id, actor="user"))
+        return {"deleted": True, "trace_id": trace_id}
+
+    @router.post("/requirements/{trace_id}/link-evidence")
+    async def link_evidence(trace_id: str, payload: TraceabilityLinkPayload) -> Any:
+        return await local(
+            lambda: trace_to_dict(
+                ledger().link_evidence(
+                    trace_id,
+                    evidence_id=payload.evidence_id,
+                    evidence_quote=payload.evidence_quote,
+                    status=payload.status,
+                    evidence_field=payload.evidence_field,
+                    evidence_offset=payload.evidence_offset,
+                    actor="user",
+                    comment=payload.comment,
+                )
+            )
+        )
+
+    @router.post("/requirements/{trace_id}/unlink-evidence")
+    async def unlink_evidence(trace_id: str, payload: TraceabilityUnlinkPayload) -> Any:
+        return await local(
+            lambda: trace_to_dict(
+                ledger().unlink_evidence(trace_id, actor="user", comment=payload.comment)
+            )
+        )
+
+    @router.post("/requirements/{trace_id}/waive")
+    async def waive_requirement(trace_id: str, payload: TraceabilityWaivePayload) -> Any:
+        return await local(
+            lambda: trace_to_dict(
+                ledger().waive(
+                    trace_id,
+                    justification=payload.justification,
+                    actor="user",
+                    comment=payload.comment,
+                )
+            )
+        )
+
+    @router.post("/requirements/{trace_id}/reopen")
+    async def reopen_requirement(trace_id: str, payload: TraceabilityCommentPayload) -> Any:
+        return await local(
+            lambda: trace_to_dict(
+                ledger().reopen(trace_id, actor="user", comment=payload.comment)
+            )
+        )
+
+    @router.post("/requirements/{trace_id}/confirm")
+    async def confirm_requirement(trace_id: str, payload: TraceabilityConfirmPayload) -> Any:
+        """Valide ou rejette une liaison automatique."""
+        return await local(
+            lambda: trace_to_dict(
+                ledger().confirm_link(
+                    trace_id, confirmed=payload.confirmed, actor="user", comment=payload.comment
+                )
+            )
+        )
+
+    @router.get("/audit/coverage")
+    async def audit_coverage(
+        offer_id: str = Query(default="", max_length=120),
+        cv_id: str = Query(default="", max_length=120),
+    ) -> Any:
+        return await local(
+            lambda: _coverage_report(
+                ledger().list_traces(offer_id=offer_id or None, cv_id=cv_id or None)
+            )
+        )
+
+    @router.get("/audit/gaps")
+    async def audit_gaps(
+        criticality: str = Query(default="", max_length=40),
+        offer_id: str = Query(default="", max_length=120),
+    ) -> Any:
+        return await local(
+            lambda: _gaps_report(
+                ledger().list_traces(
+                    criticality=criticality or None, offer_id=offer_id or None
+                )
+            )
+        )
+
+    @router.get("/audit/history")
+    async def audit_history(
+        trace_id: str = Query(default="", max_length=120),
+        event_type: str = Query(default="", max_length=40),
+        actor: str = Query(default="", max_length=20),
+        limit: int = Query(default=500, ge=1, le=5000),
+    ) -> Any:
+        return await local(
+            lambda: _history_report(
+                ledger().history(
+                    trace_id=trace_id or None,
+                    event_type=event_type or None,
+                    actor=actor or None,
+                    limit=limit,
+                )
+            )
+        )
+
+    @router.get("/audit/waived")
+    async def audit_waived() -> Any:
+        return await local(lambda: _waived_report(ledger().list_traces()))
+
+    @router.get("/audit/evolution")
+    async def audit_evolution() -> Any:
+        return await local(lambda: _evolution_report(ledger().list_traces()))
+
+    @router.get("/audit/report")
+    async def audit_report() -> Any:
+        return await local(
+            lambda: build_audit_report(ledger().list_traces(), ledger().history())
+        )
+
+    @router.get("/export")
+    async def export_registry(
+        export_format: str = Query(default="json", max_length=10, alias="format"),
+    ) -> Any:
+        """Export complet du registre (JSON ou CSV)."""
+        return await _export_registry(export_format)
+
+    @router.get("/export/{export_format}")
+    async def export_registry_path(export_format: str) -> Any:
+        """Même export, avec le format dans le chemin (``/export/csv``)."""
+        return await _export_registry(export_format)
+
+    @router.post("/import")
+    async def import_registry(payload: TraceabilityImportPayload) -> Any:
+        result = await local(
+            lambda: service.traceability_store().import_snapshot(
+                payload.payload, replace=payload.replace
+            )
+        )
+        return {"imported": result["imported"], "skipped": result["skipped"]}
+
+
+def _coverage_report(traces: list[Any]) -> dict[str, Any]:
+    """Rapport de couverture par offre et par CV."""
+    from .traceability_audit import coverage_by_cv, coverage_by_offer, global_summary
+
+    return {
+        "summary": global_summary(traces),
+        "by_offer": coverage_by_offer(traces),
+        "by_cv": coverage_by_cv(traces),
+    }
+
+
+def _gaps_report(traces: list[Any]) -> dict[str, Any]:
+    """Rapport des exigences obligatoires non couvertes."""
+    from .traceability_audit import critical_gaps
+
+    gaps = critical_gaps(traces)
+    return {"gaps": gaps, "count": len(gaps)}
+
+
+def _history_report(events: list[Any]) -> dict[str, Any]:
+    """Rapport de l'historique global filtré."""
+    from .traceability import event_to_dict
+
+    return {"events": [event_to_dict(event) for event in events], "count": len(events)}
+
+
+def _waived_report(traces: list[Any]) -> dict[str, Any]:
+    """Rapport des exigences dérogées et de leurs justifications."""
+    from .traceability_audit import waived_requirements
+
+    waived = waived_requirements(traces)
+    return {"waived": waived, "count": len(waived)}
+
+
+def _evolution_report(traces: list[Any]) -> dict[str, Any]:
+    """Courbe de couverture dans le temps."""
+    from .traceability_audit import evolution
+
+    series = evolution(traces)
+    return {"evolution": series, "count": len(series)}
+
+
+def _export_report(traces: list[Any], events: list[Any], counts: dict[str, int]) -> dict[str, Any]:
+    """Export JSON complet du registre (traces + historique + résumé)."""
+    from .traceability import trace_to_dict
+    from .traceability_audit import global_summary
+
+    return {
+        "counts": counts,
+        "summary": global_summary(traces),
+        "traces": [trace_to_dict(trace) for trace in traces],
+        "events": [
+            {
+                "event_id": event.event_id,
+                "trace_id": event.trace_id,
+                "timestamp": event.timestamp,
+                "event_type": event.event_type,
+                "old_value": event.old_value,
+                "new_value": event.new_value,
+                "actor": event.actor,
+                "comment": event.comment,
+                "origin": event.origin,
+            }
+            for event in events
+        ],
+    }
+
+
+def _traceability_csv_rows(traces: list[Any]) -> list[dict[str, str]]:
+    columns = (
+        "trace_id",
+        "requirement_id",
+        "requirement_text",
+        "source",
+        "category",
+        "criticality",
+        "status",
+        "evidence_id",
+        "evidence_quote",
+        "offer_id",
+        "cv_id",
+        "locator",
+        "source_field",
+        "link_origin",
+        "confirmed",
+        "tags",
+        "waiver_reason",
+        "created_at",
+        "updated_at",
+    )
+    rows: list[dict[str, str]] = []
+    for trace in traces:
+        rows.append(
+            {
+                column: (
+                    ", ".join(getattr(trace, "tags", ()))
+                    if column == "tags"
+                    else str(getattr(trace, column, "") or "")
+                )
+                for column in columns
+            }
+        )
+    return rows
+
+
+def _traceability_csv(rows: list[dict[str, str]]) -> str:
+    buffer = io.StringIO()
+    writer = csv.DictWriter(
+        buffer, fieldnames=list(rows[0].keys()) if rows else [], lineterminator="\n"
+    )
+    if rows:
+        writer.writeheader()
+        writer.writerows(rows)
+    return buffer.getvalue()
+
+
 def create_career_router(
     service: CareerService,
     *,
@@ -247,6 +757,16 @@ def create_career_router(
 
     async def local(call: Any) -> Any:
         return to_jsonable(await run_in_threadpool(call))
+
+    # SPEC-011 : le registre de traçabilité est monté sous l'API Career
+    # (convention du workspace) et sous le chemin du contrat de mission.
+    # Une seule implémentation, deux adresses.
+    traceability_api = APIRouter(prefix="/api/career/traceability")
+    _register_traceability_routes(traceability_api, service, local)
+    router.include_router(traceability_api)
+    traceability_contract = APIRouter(prefix="/traceability")
+    _register_traceability_routes(traceability_contract, service, local)
+    router.include_router(traceability_contract)
 
     @router.get("/career", include_in_schema=False)
     async def career_page() -> FileResponse:

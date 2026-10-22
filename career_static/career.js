@@ -210,6 +210,7 @@ function labelForView(viewName) {
     studio: "Application Studio",
     applications: "Candidatures",
     interviews: "Coach d’entretien",
+    traceability: "Traçabilité",
     profile: "Mon profil",
     settings: "Réglages",
   }[viewName] || "Career";
@@ -249,7 +250,7 @@ function organiseViews() {
   }
 }
 
-const careerViews = new Set(["dashboard", "discover", "stagehunter", "shortlist", "studio", "applications", "interviews", "profile", "settings"]);
+const careerViews = new Set(["dashboard", "discover", "stagehunter", "shortlist", "studio", "applications", "interviews", "profile", "settings", "traceability"]);
 let internalHashChange = false;
 
 function refreshView(viewName) {
@@ -260,6 +261,7 @@ function refreshView(viewName) {
     studio: loadStudio,
     applications: loadApplications,
     interviews: loadCoach,
+    traceability: loadTraceability,
   };
   loaders[viewName]?.().catch((error) => setMessage(error.message, true));
 }
