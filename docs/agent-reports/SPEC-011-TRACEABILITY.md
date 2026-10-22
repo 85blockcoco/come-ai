@@ -164,7 +164,7 @@ explicitement signalée « à valider ».
 ## 7. Preuves réelles
 
 - Tests ciblés : `68 passed` (`tests/test_traceability.py`).
-- Suite complète : `1487 passed, 1 skipped` (le skip est préexistant :
+- Suite complète : `1492 passed, 1 skipped` (le skip est préexistant :
   `tests/test_offer_summary_exhaustiveness.py` — script ou base absents).
 - `ruff check .` : `All checks passed!`.
 - `git diff --check` : propre.
@@ -214,7 +214,7 @@ est un fast-forward ou un merge sans conflit.
 
 | Étape | Résultat |
 | --- | --- |
-| 1. Tests main | ✅ suite complète verte (1487 passed, 1 skipped — le skip est préexistant) |
+| 1. Tests main | ✅ suite complète verte (1492 passed, 1 skipped — le skip est préexistant) |
 | 2-4. Worktrees mémoire / profil | ⚠️ absents dans ce worktree (étapes ignorées, préexistant) |
 | 5. Aucun secret tracké | ✅ aucun fichier sensible ajouté |
 | 6. Mémoire injectée dans le chat | ⚠️ non concerné par SPEC-011 (rappel affiché) |
