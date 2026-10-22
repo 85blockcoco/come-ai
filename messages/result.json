@@ -1,0 +1,15 @@
+{
+  "status": "done",
+  "files_created": [
+    "career/web_evidence.py",
+    "career/web_sources.py",
+    "career/web_research.py",
+    "career/router.py",
+    "tests/test_web_research.py",
+    "docs/agent-reports/SPEC-018-WEB_RESEARCHER.md",
+    "messages/result.json"
+  ],
+  "output": "SPEC-018 livré : recherche web par offre (site, GitHub, recherche publique) avec preuves URL + extrait verbatim, cache 24 h, mode hors ligne explicite, fiche utilisateur, 3 endpoints API et 30 tests hors ligne.",
+  "logs": "pytest -q tests/test_web_research.py → 30 passed\npytest -q → 1454 passed, 1 skipped\nruff check . → All checks passed\ngit diff --check → propre\ncreate_app() → import OK, endpoints /api/career/web/research/* servis",
+  "error": null
+}

@@ -15,6 +15,7 @@ from starlette.datastructures import UploadFile
 
 from .profile_import import MAX_PROFILE_IMPORT_BYTES
 from .service import CareerService
+from .web_research import DEFAULT_TTL_HOURS, WebResearcher
 from workspace_core import UserFacingError, to_jsonable
 
 
@@ -118,6 +119,31 @@ class ApplicationStagePayload(BaseModel):
 class ApprovalPayload(BaseModel):
     approved: bool
     note: str = Field(default="", max_length=1_000)
+
+
+class WebResearchSourcePayload(BaseModel):
+    url: str = Field(default="", max_length=2_000)
+    title: str = Field(default="", max_length=300)
+    excerpt: str = Field(default="", max_length=2_000)
+    fact_kind: str = Field(default="about", max_length=20)
+
+
+class WebResearchNewsPayload(BaseModel):
+    title: str = Field(default="", max_length=300)
+    url: str = Field(default="", max_length=2_000)
+    date: str = Field(default="", max_length=32)
+    excerpt: str = Field(default="", max_length=2_000)
+
+
+class WebResearchProvidePayload(BaseModel):
+    """A company sheet supplied by the person; every field is optional."""
+
+    company: str = Field(default="", max_length=240)
+    stack: list[str] = Field(default_factory=list, max_length=40)
+    values: list[str] = Field(default_factory=list, max_length=40)
+    notes: str = Field(default="", max_length=4_000)
+    sources: list[WebResearchSourcePayload] = Field(default_factory=list, max_length=20)
+    news: list[WebResearchNewsPayload] = Field(default_factory=list, max_length=5)
 
 
 class ReceiptPayload(BaseModel):
@@ -240,10 +266,12 @@ def create_career_router(
     service: CareerService,
     *,
     ai_generator: Callable[[str], dict[str, Any]] | None = None,
+    web_researcher: WebResearcher | None = None,
 ) -> APIRouter:
     if not CAREER_STATIC_DIR.is_dir():
         raise RuntimeError("Les fichiers Career Agent sont introuvables.")
     router = APIRouter()
+    researcher = web_researcher or WebResearcher(cache_dir=service.data_dir / "web_research")
 
     async def local(call: Any) -> Any:
         return to_jsonable(await run_in_threadpool(call))
@@ -275,6 +303,13 @@ def create_career_router(
             "interview_coach": capabilities["interview_coach"],
             "calendar_export": capabilities["calendar_export"],
             "stage_search": capabilities["stage_search"],
+            "web_research": {
+                "network_required": False,
+                "cached_fallback": True,
+                "cache_ttl_hours": DEFAULT_TTL_HOURS,
+                "evidence_required": True,
+                "user_provided_sheet": True,
+            },
         }
 
     @router.post("/api/career/cv/analyze")
@@ -742,6 +777,31 @@ def create_career_router(
     async def reset_data(payload: ResetPayload) -> dict[str, bool]:
         await local(lambda: service.reset_personal_data(payload.confirmation))
         return {"deleted": True}
+
+    @router.get("/web/research/{job_id}", include_in_schema=False)
+    @router.get("/api/career/web/research/{job_id}")
+    async def web_research_endpoint(job_id: str, refresh: bool = Query(False)) -> dict[str, Any]:
+        """Public web facts for one offer, every fact backed by an evidence id."""
+        job = await local(lambda: service.get_job(job_id))
+        facts = await local(lambda: researcher.research(job, refresh=refresh).as_dict())
+        return facts
+
+    @router.post("/web/research/{job_id}/provide", include_in_schema=False)
+    @router.post("/api/career/web/research/{job_id}/provide")
+    async def provide_web_research_endpoint(
+        job_id: str, payload: WebResearchProvidePayload
+    ) -> dict[str, Any]:
+        """Merge a user-supplied company sheet; it is labelled user_provided."""
+        job = await local(lambda: service.get_job(job_id))
+        facts = await local(lambda: researcher.provide(job, payload.model_dump()).as_dict())
+        return facts
+
+    @router.get("/web/research/{job_id}/freshness", include_in_schema=False)
+    @router.get("/api/career/web/research/{job_id}/freshness")
+    async def web_research_freshness_endpoint(job_id: str) -> dict[str, Any]:
+        """Whether the 24 h cache is still fresh, and for how long it has been kept."""
+        job = await local(lambda: service.get_job(job_id))
+        return await local(lambda: researcher.freshness(job))
 
     return router
 
