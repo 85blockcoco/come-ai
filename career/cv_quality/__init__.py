@@ -18,6 +18,7 @@ Usage:
 
 from __future__ import annotations
 
+from .education_extractor import EducationFact, extract_education
 from .models import (
     CVAnalysisResult,
     DocumentInput,
@@ -46,6 +47,9 @@ __all__ = [
     "ExperienceEntry",
     "ReadabilityScore",
     "Provenance",
+    # Education requirement extraction (SK-19)
+    "EducationFact",
+    "extract_education",
     # Status constants
     "STATUS_OK",
     "STATUS_INFO",

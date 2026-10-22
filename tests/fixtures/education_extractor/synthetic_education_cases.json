@@ -1,0 +1,287 @@
+{
+  "description": "SK-19 — fixtures synthétiques de l'extracteur de niveau d'études (aucune offre réelle, aucun réseau).",
+  "cases": [
+    {
+      "id": "fr_diplome_ingenieur_ou_master2",
+      "text": "Diplôme d'ingénieur ou Master 2 requis",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 5, "field": "Engineering", "confidence": "explicit", "quote": "Diplôme d'ingénieur", "contradictions_include": ["Niveau alternatif : Bac+6 (« Master 2 »)"]}
+      ]
+    },
+    {
+      "id": "fr_bac5_minimum_finance",
+      "text": "Bac+5 minimum (Finance, Économie)",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 5, "field": "Finance", "confidence": "explicit", "quote": "Bac+5"}
+      ]
+    },
+    {
+      "id": "fr_doctorat_prefere",
+      "text": "Doctorat préféré",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 8, "field": null, "confidence": "inferred", "quote": "Doctorat"}
+      ]
+    },
+    {
+      "id": "fr_bac3_minimum_master_apprecie",
+      "text": "Bac+3 minimum, Master apprécié",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 5, "field": null, "confidence": "inferred", "quote": "Master", "contradictions_include": ["Niveau concurrent : Bac+3 (« Bac+3 »)"]},
+        {"fact_type": "education_level_required", "level_rank": 3, "field": null, "confidence": "explicit", "quote": "Bac+3", "contradictions_include": ["Niveau concurrent : Bac+5 (« Master »)"]}
+      ]
+    },
+    {
+      "id": "en_masters_degree_finance",
+      "text": "Master's degree in Finance required",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 5, "field": "Finance", "confidence": "explicit", "quote": "Master's"}
+      ]
+    },
+    {
+      "id": "en_phd_or_equivalent_experience",
+      "text": "PhD or equivalent experience",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 8, "field": null, "confidence": "ambiguous", "quote": "PhD", "contradictions_exact": ["experience_equivalent"]}
+      ]
+    },
+    {
+      "id": "en_bachelors_degree_4_years",
+      "text": "Bachelor's degree (4 years)",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 4, "field": null, "confidence": "inferred", "quote": "Bachelor's degree"}
+      ]
+    },
+    {
+      "id": "de_masterabschluss_wirtschaftsingenieur",
+      "text": "Masterabschluss (Wirtschaftsingenieur)",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 5, "field": "Engineering", "confidence": "inferred", "quote": "Masterabschluss"}
+      ]
+    },
+    {
+      "id": "de_promotion_erwuenscht",
+      "text": "Promotion erwünscht",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 8, "field": null, "confidence": "inferred", "quote": "Promotion"}
+      ]
+    },
+    {
+      "id": "de_kein_masterabschluss",
+      "text": "Sie haben keinen Masterabschluss",
+      "lang": "auto",
+      "no_facts": true
+    },
+    {
+      "id": "it_laurea_magistrale_ingegneria",
+      "text": "Laurea magistrale in Ingegneria",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 5, "field": "Engineering", "confidence": "inferred", "quote": "Laurea magistrale"}
+      ]
+    },
+    {
+      "id": "it_laurea_triennale_richiesta",
+      "text": "Laurea triennale richiesta",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 4, "field": null, "confidence": "explicit", "quote": "Laurea triennale"}
+      ]
+    },
+    {
+      "id": "es_master_finanzas_requerido",
+      "text": "Máster en Finanzas requerido",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 5, "field": "Finance", "confidence": "explicit", "quote": "Máster"}
+      ]
+    },
+    {
+      "id": "es_grado_finanzas_requerido",
+      "text": "Grado en Finanzas requerido",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 4, "field": "Finance", "confidence": "explicit", "quote": "Grado"}
+      ]
+    },
+    {
+      "id": "nl_master_financien",
+      "text": "Master diploma (Financiën)",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 5, "field": "Finance", "confidence": "inferred", "quote": "Master"}
+      ]
+    },
+    {
+      "id": "nl_hbo_bachelor_vereist",
+      "text": "HBO Bachelor vereist",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 4, "field": null, "confidence": "explicit", "quote": "HBO"}
+      ]
+    },
+    {
+      "id": "fr_ecole_de_commerce",
+      "text": "École de commerce (Bac+5)",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 5, "field": "Business", "confidence": "inferred", "quote": "Bac+5"}
+      ]
+    },
+    {
+      "id": "fr_bac4_valide",
+      "text": "Niveau Bac+4 validé",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 4, "field": null, "confidence": "inferred", "quote": "Bac+4"}
+      ]
+    },
+    {
+      "id": "fr_bac4_minimum",
+      "text": "Bac+4 minimum",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 4, "field": null, "confidence": "explicit", "quote": "Bac+4"}
+      ]
+    },
+    {
+      "id": "fr_bac6_minimum",
+      "text": "Bac+6 minimum",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 6, "field": null, "confidence": "explicit", "quote": "Bac+6"}
+      ]
+    },
+    {
+      "id": "fr_m2_requis",
+      "text": "M2 requis",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 6, "field": null, "confidence": "explicit", "quote": "M2"}
+      ]
+    },
+    {
+      "id": "fr_licence3_exigee",
+      "text": "Licence 3 exigée",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 4, "field": null, "confidence": "explicit", "quote": "Licence 3"}
+      ]
+    },
+    {
+      "id": "fr_bac3_ou_bac5",
+      "text": "Bac+3 ou Bac+5",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 3, "field": null, "confidence": "inferred", "quote": "Bac+3", "contradictions_include": ["Niveau alternatif : Bac+5 (« Bac+5 »)"]}
+      ]
+    },
+    {
+      "id": "fr_sans_diplome_ingenieur",
+      "text": "Poste ouvert sans diplôme d'ingénieur",
+      "lang": "auto",
+      "no_facts": true
+    },
+    {
+      "id": "fr_equivalent_par_lexperience",
+      "text": "Équivalent par l'expérience",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 0, "field": null, "confidence": "ambiguous", "contradictions_exact": ["experience_equivalent"]}
+      ]
+    },
+    {
+      "id": "fr_formation_finance_exigee",
+      "text": "Formation en Finance exigée",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_field_required", "level_rank": 0, "field": "Finance", "confidence": "explicit", "quote": "Finance"}
+      ]
+    },
+    {
+      "id": "fr_grande_ecole_appreciee",
+      "text": "Grande école appréciée",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 5, "field": null, "confidence": "inferred", "quote": "Grande école"}
+      ]
+    },
+    {
+      "id": "fr_bac5_ecole_ingenieur",
+      "text": "Bac+5 (École d'ingénieur)",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 5, "field": "Engineering", "confidence": "inferred", "quote": "Bac+5"}
+      ]
+    },
+    {
+      "id": "fr_doctorat_phd_synonymes",
+      "text": "Doctorat (PhD) exigé",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 8, "field": null, "quote": "Doctorat"}
+      ]
+    },
+    {
+      "id": "en_master_2_required",
+      "text": "Master 2 required",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 6, "field": null, "confidence": "explicit", "quote": "Master 2"}
+      ]
+    },
+    {
+      "id": "en_msc_data_science_required",
+      "text": "M.Sc. in Data Science required",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 6, "field": "Data Science", "confidence": "explicit", "quote": "M.Sc."}
+      ]
+    },
+    {
+      "id": "en_master_required_bachelor_accepted",
+      "text": "Master required. Bachelor accepted.",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 5, "field": null, "confidence": "explicit", "quote": "Master", "contradictions_include": ["Niveau concurrent"]},
+        {"fact_type": "education_level_required", "level_rank": 4, "field": null, "confidence": "explicit", "quote": "Bachelor", "contradictions_include": ["Niveau concurrent"]}
+      ]
+    },
+    {
+      "id": "en_undergraduate_degree_accepted",
+      "text": "Undergraduate degree accepted",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 4, "field": null, "confidence": "explicit", "quote": "Undergraduate"}
+      ]
+    },
+    {
+      "id": "en_bachelor_required",
+      "text": "Bachelor required",
+      "lang": "auto",
+      "expect": [
+        {"fact_type": "education_level_required", "level_rank": 4, "field": null, "confidence": "explicit", "quote": "Bachelor"}
+      ]
+    },
+    {
+      "id": "en_these_requirements_trap",
+      "text": "These requirements include a dedicated team",
+      "lang": "auto",
+      "no_facts": true
+    },
+    {
+      "id": "fr_texte_sans_formation",
+      "text": "Poste de alternant souple, rythme 3 semaines entreprise / 1 semaine école, missions variées sur Paris.",
+      "lang": "auto",
+      "no_facts": true
+    }
+  ]
+}
