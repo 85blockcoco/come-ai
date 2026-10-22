@@ -202,15 +202,18 @@ abandonnée.
 
 | Étape | Résultat |
 | --- | --- |
-| 1. Tests main | ✅ 1484 passed, 1 skipped |
+| 1. Tests main | ✅ suite complète verte (1487 passed, 1 skipped — le skip est préexistant) |
 | 2-4. Worktrees mémoire / profil | ⚠️ absents dans ce worktree (étapes ignorées, préexistant) |
 | 5. Aucun secret tracké | ✅ aucun fichier sensible ajouté |
 | 6. Mémoire injectée dans le chat | ⚠️ non concerné par SPEC-011 (rappel affiché) |
-| 7. DevKit | ✅ vert |
+| 7. DevKit | ✅ 207 passed |
 | 8. Study Coach | ⚠️ worktree absent (ignoré) |
 | 9. Empreinte DevKit | ⚠️ rapports absents (étape ignorée) |
 | 10. Lint ruff | ✅ All checks passed |
 | 11. Interdits | ✅ rappel affiché |
+
+Verdict : **TOUT VERT** (les étapes ignorées le sont pour des worktrees
+absents, sans rapport avec SPEC-011).
 
 ## 9. Limites honnêtes
 
