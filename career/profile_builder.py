@@ -37,6 +37,7 @@ from .candidate_profile import (
     normalize_text,
 )
 from .cv_quality import DocumentInput, analyze_cv
+from .cv_quality.structure import SECTION_KEYWORDS
 
 
 # ── Limits ──────────────────────────────────────────────────────────────────
@@ -55,6 +56,22 @@ SECTION_KINDS: dict[str, str] = {
     "Expérience": KIND_EXPERIENCE,
     "Projets": KIND_PROJECT,
     "Certifications": KIND_CERTIFICATION,
+}
+
+
+def _header_key(value: str) -> str:
+    """Normalize a header line so it can be compared with a section keyword."""
+    return normalize_text(value).replace("-", " ").replace("/", " ")
+
+
+#: A section header is a line whose normalized text *is* one of the section
+#: keywords of Mission 01.  A line that merely mentions a section ("Compétences
+#: clés recherchées" in a summary) is not a header: anchoring a section on it
+#: would swallow the real content of the section and lose it from the review.
+_HEADER_KEYWORDS: dict[str, str] = {
+    _header_key(keyword): canonical
+    for canonical, keywords in SECTION_KEYWORDS.items()
+    for keyword in keywords
 }
 
 
@@ -173,6 +190,7 @@ class _Entry:
     result: str
     start: int
     end: int
+    header_end: int = 0
 
 
 def _strip_accents(value: str) -> str:
@@ -183,6 +201,59 @@ def _strip_accents(value: str) -> str:
 def _clean_line(value: str) -> str:
     """Compact the whitespace of one source line without changing its wording."""
     return re.sub(r"[ \t]+", " ", value.replace("\r", "")).strip()
+
+
+def align_page_spans(
+    text: str,
+    pages: Sequence[str] | None,
+    *,
+    confidence: str = "exact",
+) -> list[PageSpan]:
+    """Locate every page verbatim inside the text.
+
+    The offsets of a fact must point into the text the person was shown.  The
+    page list is therefore aligned on that text: when a page cannot be found
+    there, the list does not describe this text and no page is invented.
+    """
+    if not pages or not text:
+        return []
+    spans: list[PageSpan] = []
+    cursor = 0
+    for number, page in enumerate(pages, start=1):
+        needle = page.strip()
+        if not needle:
+            continue
+        index = text.find(needle, cursor)
+        if index < 0:
+            anchored = _anchor_page(text, page, cursor)
+            if anchored < 0:
+                return []
+            spans.append(PageSpan(number, anchored, len(text), confidence))
+            cursor = len(text)
+            continue
+        spans.append(PageSpan(number, index, index + len(needle), confidence))
+        cursor = index + len(needle)
+    return spans
+
+
+def _anchor_page(text: str, page: str, cursor: int) -> int:
+    """Find a page whose reading differs slightly from the text.
+
+    The page is located by its first and its last line, which survive the
+    small differences between two readings of the same page (blanks, reading
+    order of a column).  ``-1`` means the page does not describe this text.
+    """
+    lines = [line.strip() for line in page.splitlines() if line.strip()]
+    if not lines:
+        return -1
+    first = lines[0][:80]
+    last = lines[-1][-80:]
+    start = text.find(first, cursor)
+    if start < 0:
+        return -1
+    if text.find(last, start) < 0:
+        return -1
+    return start
 
 
 def page_spans(
@@ -203,12 +274,11 @@ def page_spans(
     information, so its single block stays ``estimated``.
     """
     if pages:
-        spans: list[PageSpan] = []
-        cursor = 0
-        for number, page in enumerate(pages, start=1):
-            spans.append(PageSpan(number, cursor, cursor + len(page), page_confidence))
-            cursor += len(page) + 2
-        return spans
+        aligned = align_page_spans(text, pages, confidence=page_confidence)
+        if aligned:
+            return aligned
+        # The page list does not describe this text: the page becomes a hint.
+        return [PageSpan(1, 0, len(text), "estimated")] if text else []
 
     if page_count and page_count > 1 and text:
         size = max(1, len(text) // page_count)
@@ -305,16 +375,83 @@ def _section_items(text: str, start: int, end: int, *, split_lists: bool) -> lis
 
 
 def _quote(text: str, start: int, end: int) -> str:
-    """Return the verbatim passage of a fact, bounded for a readable review.
+    """Return the verbatim passage of a fact.
 
-    The quote is the source text itself: ``text[start:end]``.  Only a very
-    long passage is shortened, and the shortening is visible (it ends with
-    an ellipsis).
+    The quote is the source text itself: ``text[start:end]``.  The passage is
+    bounded when the fact is built, never shortened afterwards: a quote that
+    was cut in the middle would no longer be the passage its offsets announce.
     """
-    excerpt = text[start:end]
-    if len(excerpt) > MAX_QUOTE_CHARS:
-        excerpt = excerpt[:MAX_QUOTE_CHARS].rstrip() + "…"
-    return excerpt
+    return text[start:end]
+
+
+def _strict_section_blocks(text: str) -> list[tuple[str, int, int]]:
+    """Return the section blocks read from the real headers of the document.
+
+    A header is a line whose normalized text is exactly a section keyword of
+    Mission 01.  The blocks are the intervals between two headers: a line that
+    only mentions a section belongs to no section and never becomes a fact.
+    """
+    headers: list[tuple[str, int]] = []
+    cursor = 0
+    for raw_line in text.split("\n"):
+        line_start = cursor
+        cursor += len(raw_line) + 1
+        stripped = raw_line.strip()
+        if not stripped:
+            continue
+        canonical = _HEADER_KEYWORDS.get(_header_key(stripped))
+        if not canonical:
+            continue
+        headers.append((canonical, line_start))
+    blocks: list[tuple[str, int, int]] = []
+    seen: set[str] = set()
+    for index, (canonical, start) in enumerate(headers):
+        end = headers[index + 1][1] if index + 1 < len(headers) else len(text)
+        if canonical in seen:
+            # A section is read once, like in Mission 01.
+            continue
+        seen.add(canonical)
+        blocks.append((canonical, start, end))
+    return blocks
+
+
+def _next_line_start(text: str, start: int) -> int:
+    """Return the offset of the line that follows the one starting at ``start``."""
+    newline = text.find("\n", start)
+    return len(text) if newline < 0 else newline + 1
+
+
+def _section_blocks(text: str, fuzzy_sections: Sequence[Any]) -> list[tuple[str, int, int]]:
+    """Return the section blocks used to propose the facts.
+
+    The strict blocks come first: they are the ones whose offsets are exact.
+    A section that the strict reading does not find (an unusual header such
+    as "Mes projets") keeps the fuzzy block of Mission 01, provided it does
+    not overlap a strict block.  The line that anchors such a block is its
+    header: it is never proposed as a fact.
+    """
+    blocks = _strict_section_blocks(text)
+    covered = {canonical for canonical, _, _ in blocks}
+    for section in fuzzy_sections:
+        canonical = str(getattr(section, "title", ""))
+        if not canonical or canonical in covered:
+            continue
+        start = int(getattr(section, "start_offset", 0))
+        end = int(getattr(section, "end_offset", 0))
+        if end <= start:
+            continue
+        if any(start < block_end and block_start < end for _, block_start, block_end in blocks):
+            continue
+        anchor = _next_line_start(text, start)
+        header = text[start : anchor - 1] if anchor <= len(text) else text[start:]
+        if _HEADER_KEYWORDS.get(_header_key(header.strip())) != canonical:
+            # The anchor is an approximate header ("Langues et niveaux"):
+            # it titles the section, it is not a fact of it.
+            start = anchor
+        blocks.append((canonical, start, end))
+        covered.add(canonical)
+    blocks.sort(key=lambda item: item[1])
+    return blocks
 
 
 def _detect_date(text: str) -> str:
@@ -335,6 +472,21 @@ def _detect_date(text: str) -> str:
     if match:
         return match.group(0)
     return ""
+
+
+def _raw_date_span(text: str, start: int, end: int) -> tuple[int, int] | None:
+    """Return the exact offsets of the date written in a passage.
+
+    The label shown to the person may be normalised ("2023 – 2025"), but the
+    proof never is: the date keeps the raw characters of the document, and
+    its offsets designate the date itself.
+    """
+    passage = text[start:end]
+    for pattern in (_DATE_RANGE_RE, _MONTH_YEAR_RE, _YEAR_RE):
+        match = pattern.search(passage)
+        if match:
+            return start + match.start(), start + match.end()
+    return None
 
 
 def _language_parts(line: str) -> tuple[str, str]:
@@ -381,6 +533,15 @@ def _make_fact(
     meta: dict[str, str] | None = None,
 ) -> Fact:
     """Build one proposed fact with its exact provenance."""
+    start = max(0, min(int(start), len(text)))
+    end = max(start, min(int(end), len(text)))
+    if end - start > MAX_QUOTE_CHARS:
+        # The passage is bounded, not shortened afterwards: the stored quote
+        # must stay the exact text its offsets announce.
+        end = start + MAX_QUOTE_CHARS
+        boundary = text.rfind(" ", start, end)
+        if boundary > start:
+            end = boundary
     page, confidence = page_for_offset(spans, start)
     return Fact(
         id=f"fact_{uuid.uuid4().hex}",
@@ -544,14 +705,16 @@ def _education_facts(
         )
         date_value = str(meta.get("date", ""))
         if date_value:
+            raw_date = _raw_date_span(text, item.start, item.end)
+            date_start, date_end = raw_date if raw_date else (item.start, item.end)
             facts.append(
                 _make_fact(
                     kind=KIND_DATE,
                     label=date_value,
                     value="",
                     text=text,
-                    start=item.start,
-                    end=item.end,
+                    start=date_start,
+                    end=date_end,
                     spans=spans,
                     source=source,
                     source_method=source_method,
@@ -592,6 +755,7 @@ def _experience_entries(text: str, section_start: int, section_end: int) -> list
                 result="",
                 start=item.start,
                 end=item.end,
+                header_end=item.end,
             )
             continue
         if current is None:
@@ -606,6 +770,7 @@ def _experience_entries(text: str, section_start: int, section_end: int) -> list
             result=result,
             start=current.start,
             end=item.end,
+            header_end=current.header_end,
         )
     if current is not None:
         entries.append(current)
@@ -655,14 +820,16 @@ def _experience_facts(
             )
         )
         if entry.dates:
+            raw_date = _raw_date_span(text, entry.start, entry.header_end or entry.end)
+            date_start, date_end = raw_date if raw_date else (entry.start, entry.end)
             facts.append(
                 _make_fact(
                     kind=KIND_DATE,
                     label=entry.dates,
                     value="",
                     text=text,
-                    start=entry.start,
-                    end=entry.end,
+                    start=date_start,
+                    end=date_end,
                     spans=spans,
                     source=source,
                     source_method=source_method,
@@ -815,12 +982,10 @@ def build_fact_proposals(
             created_at=created_at,
         )
     )
-    for section in analysis.sections:
-        kind = SECTION_KINDS.get(section.title)
+    for section_title, start, end in _section_blocks(source_text, analysis.sections):
+        kind = SECTION_KINDS.get(section_title)
         if not kind:
             continue
-        start = int(section.start_offset)
-        end = int(section.end_offset)
         common = {
             "spans": spans,
             "source": source_method,
@@ -831,16 +996,16 @@ def build_fact_proposals(
         }
         if kind == KIND_SKILL:
             facts.extend(
-                _skill_facts(source_text, start, end, section.title, **common)
+                _skill_facts(source_text, start, end, section_title, **common)
             )
         elif kind == KIND_LANGUAGE:
-            facts.extend(_language_facts(source_text, start, end, section.title, **common))
+            facts.extend(_language_facts(source_text, start, end, section_title, **common))
         elif kind == KIND_EDUCATION:
-            facts.extend(_education_facts(source_text, start, end, section.title, **common))
+            facts.extend(_education_facts(source_text, start, end, section_title, **common))
         elif kind == KIND_EXPERIENCE:
-            facts.extend(_experience_facts(source_text, start, end, section.title, **common))
+            facts.extend(_experience_facts(source_text, start, end, section_title, **common))
         else:
-            facts.extend(_simple_facts(source_text, kind, start, end, section.title, **common))
+            facts.extend(_simple_facts(source_text, kind, start, end, section_title, **common))
 
     # Bounded proposals: a very long document never floods the review screen.
     # A kind that reached its own cap is skipped, never fatal: the other

@@ -155,7 +155,9 @@ OCR_SOURCES: frozenset[str] = frozenset({SOURCE_OCR})
 # ── Limits ──────────────────────────────────────────────────────────────────
 MAX_LABEL_CHARS = 160
 MAX_VALUE_CHARS = 2_000
-MAX_QUOTE_CHARS = 400
+#: Longest passage kept as the proof of a fact.  The passage is bounded, not
+#: truncated afterwards: the stored quote is always ``source[start:end]``.
+MAX_QUOTE_CHARS = 600
 MAX_NOTE_CHARS = 500
 
 PROFILE_FIELD_LIMITS: dict[str, int] = {
@@ -505,20 +507,24 @@ def merge_usable_facts_with_sources(
             added.append((fact, line))
         if not added:
             continue
-        combined = existing_lines + [line for _, line in added]
         limit = field_limits.get(field_name, 0)
-        kept: list[str] = []
-        used = 0
-        for line in combined:
+        # The lines the person wrote are never dropped: only the new lines
+        # are bounded by the field limit, and every one of them that still
+        # fits is kept.  A long fact that does not fit must not push out the
+        # short ones that do.
+        kept = list(existing_lines)
+        used = sum(len(line) + 1 for line in kept)
+        written: list[tuple[Fact, str]] = []
+        for fact, line in added:
             if limit and used + len(line) + 1 > limit:
-                break
+                continue
             kept.append(line)
             used += len(line) + 1
+            written.append((fact, line))
         merged[field_name] = "\n".join(kept)
-        for fact, line in added:
-            if line in kept:
-                contributions[fact.id] = (field_name, line)
-                applied.add(fact.id)
+        for fact, line in written:
+            contributions[fact.id] = (field_name, line)
+            applied.add(fact.id)
 
     return merged, contributions, applied
 

@@ -138,7 +138,7 @@ from .candidate_profile import (
     remove_profile_line,
     serialize_fact,
 )
-from .profile_builder import build_fact_proposals
+from .profile_builder import align_page_spans, build_fact_proposals
 from .cv_quality.parser import extract_pages_from_bytes
 from .qualification_persistence import (
     decode_qualification_snapshot,
@@ -147,7 +147,7 @@ from .qualification_persistence import (
 )
 
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 # The Stage Hunter brief lives in career_settings as one JSON value: no
 # schema migration, and it is exported with the rest of the local settings.
 STAGE_SEARCH_SETTING_KEY = "stage_search_brief"
@@ -546,6 +546,7 @@ class CareerService:
                         note TEXT NOT NULL DEFAULT '',
                         source_document TEXT NOT NULL DEFAULT '',
                         source_method TEXT NOT NULL DEFAULT 'embedded_text',
+                        source_key TEXT NOT NULL DEFAULT '',
                         applied_field TEXT NOT NULL DEFAULT '',
                         applied_line TEXT NOT NULL DEFAULT '',
                         created_at TEXT NOT NULL,
@@ -627,7 +628,7 @@ class CareerService:
 
     def _migrate(self, connection: sqlite3.Connection, version: int) -> None:
         """Migrate in-place without touching a person's existing Career data."""
-        if version < 1 or version > 9:
+        if version < 1 or version > 10:
             raise UserFacingError("La base Career locale ne peut pas être mise à jour automatiquement.")
         if version == 1:
             self._migrate_to_v2(connection)
@@ -657,6 +658,9 @@ class CareerService:
             version = 9
         if version == 9:
             self._migrate_to_v10(connection)
+            version = 10
+        if version == 10:
+            self._migrate_to_v11(connection)
 
     def _migrate_to_v2(self, connection: sqlite3.Connection) -> None:
         self._add_column_if_missing(connection, "candidate_profile", "contact_email", "TEXT NOT NULL DEFAULT ''")
@@ -859,6 +863,18 @@ class CareerService:
             if not field_name or not line:
                 continue
             self._remove_profile_line(connection, field_name, line)
+
+    def _migrate_to_v11(self, connection: sqlite3.Connection) -> None:
+        """Scope the replacement of pending proposals to their own source.
+
+        One column is added to ``candidate_facts``: the key of the document
+        the facts were read from.  A new extraction only replaces the pending
+        proposals of the *same* document: pasting a second CV must never erase
+        the review of the first one.
+        """
+        self._add_column_if_missing(
+            connection, "candidate_facts", "source_key", "TEXT NOT NULL DEFAULT ''"
+        )
 
     @staticmethod
     def _remove_profile_line(connection: sqlite3.Connection, field_name: str, line: str) -> bool:
@@ -1533,6 +1549,7 @@ class CareerService:
         page_confidence = "exact"
         source_method = SOURCE_EMBEDDED_TEXT
         source_document = ""
+        source_key = ""
 
         identifier = clean_text(import_id, limit=80)
         if identifier:
@@ -1545,6 +1562,10 @@ class CareerService:
             source_document = str(row["original_name"] or "")
             extraction_method = str(row["extraction_method"] or SOURCE_EMBEDDED_TEXT)
             stored_filename = str(row["stored_filename"] or "")
+            # The reading stored with the import is the one the person saw in
+            # the preview: it stays the reference of every offset.
+            stored_text = str(row["extracted_text"] or "")
+            source_key = f"import:{identifier}"
             if extraction_method != SOURCE_EMBEDDED_TEXT:
                 # The document was read by OCR: the reading stored with the
                 # import is the one the person saw in the preview, so the
@@ -1566,11 +1587,27 @@ class CareerService:
                     except Exception:
                         pages = None
                     if pages:
-                        source_text = "\n\n".join(pages)
-                        source_method = SOURCE_EMBEDDED_TEXT
-                        # A DOCX has no page information: its single block is
-                        # an estimate, never an exact page.
-                        page_confidence = "estimated" if filetype == "docx" else "exact"
+                        if stored_text.strip():
+                            # The reading the person saw stays the reference
+                            # of every offset.  The re-read only brings the
+                            # pages: they are aligned on that very text, and
+                            # a page that cannot be found there is not
+                            # invented.
+                            source_text = stored_text
+                            aligned = align_page_spans(source_text, pages, confidence="exact")
+                            if aligned:
+                                # A DOCX has no page information: its single
+                                # block is an estimate, never an exact page.
+                                page_confidence = "estimated" if filetype == "docx" else "exact"
+                            else:
+                                pages = None
+                                page_confidence = "estimated"
+                        else:
+                            # No reading was stored with the import: the
+                            # document is read again and the facts are
+                            # proposed from that reading.
+                            source_text = "\n\n".join(pages)
+                            page_confidence = "estimated" if filetype == "docx" else "exact"
             if not source_text:
                 source_text = str(row["extracted_text"] or "")
                 source_method = SOURCE_OCR if extraction_method != SOURCE_EMBEDDED_TEXT else SOURCE_EMBEDDED_TEXT
@@ -1583,6 +1620,12 @@ class CareerService:
         else:
             source_text = str(text or "").replace("\x00", "").strip()
             source_document = clean_text(filename, limit=180) or "texte-profil"
+            # Two pasted texts are two documents, even when they share the
+            # same name: the pending proposals of one must not erase the
+            # review of the other.  The same text under the same name is the
+            # same document and replaces its own pending proposals.
+            digest = hashlib.sha256(f"{source_document}\n{source_text}".encode("utf-8")).hexdigest()
+            source_key = "text:" + digest[:16]
 
         if not source_text.strip():
             raise UserFacingError(
@@ -1607,11 +1650,15 @@ class CareerService:
             )
 
         with self._lock, self._connection() as connection:
-            # A new extraction replaces the proposals that were never decided.
-            # Decided facts are never touched: their decision is a user action.
+            # A new extraction replaces the pending proposals of the *same*
+            # document only.  Two different documents never erase each
+            # other, even when they share the same name.
             connection.execute(
-                "DELETE FROM candidate_facts WHERE status = 'proposed' AND source_document = ?",
-                (source_document,),
+                """
+                DELETE FROM candidate_facts
+                WHERE status = 'proposed' AND (source_key = ? OR (source_key = '' AND source_document = ?))
+                """,
+                (source_key, source_document),
             )
             for fact in facts:
                 serialized = serialize_fact(fact)
@@ -1620,8 +1667,9 @@ class CareerService:
                     INSERT INTO candidate_facts (
                         id, batch_id, kind, label, value, status, original_label,
                         original_value, evidence_json, meta_json, note,
-                        source_document, source_method, created_at, updated_at, decided_at
-                    ) VALUES (?, ?, ?, ?, ?, 'proposed', '', '', ?, ?, '', ?, ?, ?, ?, NULL)
+                        source_document, source_method, source_key,
+                        created_at, updated_at, decided_at
+                    ) VALUES (?, ?, ?, ?, ?, 'proposed', '', '', ?, ?, '', ?, ?, ?, ?, ?, NULL)
                     """,
                     (
                         fact.id,
@@ -1633,6 +1681,7 @@ class CareerService:
                         json.dumps(serialized["meta"], ensure_ascii=False),
                         source_document,
                         source_method,
+                        source_key,
                         now,
                         now,
                     ),
@@ -1648,6 +1697,7 @@ class CareerService:
                 "method": source_method,
                 "from_ocr": source_method == SOURCE_OCR,
                 "pages_known": bool(pages),
+                "source_key": source_key,
             },
             "disclaimer": (
                 "Aucun fait n’est validé automatiquement. Un fait proposé ne peut pas "
