@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -13,6 +14,20 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
+from .evidence_freshness import (
+    CHECK_METHODS,
+    CHECK_RESULTS,
+    EVIDENCE_TYPES,
+    format_timestamp,
+    parse_timestamp,
+)
+from .evidence_freshness_audit import (
+    build_audit_report,
+    build_freshness_report,
+    render_report_markdown,
+    summarize_evidence,
+)
+from .evidence_freshness_store import FreshnessStore, FreshnessStoreError
 from .profile_import import MAX_PROFILE_IMPORT_BYTES
 from .service import CareerService
 from workspace_core import UserFacingError, to_jsonable
@@ -236,6 +251,94 @@ class CVAnalyzeResponse(BaseModel):
     provenance: dict[str, Any]
 
 
+class EvidenceFreshnessCreatePayload(BaseModel):
+    """One proof registered in the local freshness registry."""
+
+    evidence_type: str = Field(min_length=2, max_length=60)
+    title: str = Field(default="", max_length=200)
+    mandatory: bool = False
+    source_url: str = Field(default="", max_length=2_000)
+    notes: str = Field(default="", max_length=2_000)
+    expires_at: str | None = Field(default=None, max_length=64)
+    last_verified_at: str | None = Field(default=None, max_length=64)
+    evidence_id: str | None = Field(default=None, max_length=80)
+
+
+class EvidenceFreshnessPolicyPayload(BaseModel):
+    """Freshness policy of one evidence type."""
+
+    evidence_type: str = Field(min_length=2, max_length=60)
+    max_age_days: int | None = Field(default=None, ge=0, le=3650)
+    warning_days: int | None = Field(default=None, ge=0, le=3650)
+    auto_expire: bool | None = None
+    reset: bool = False
+
+
+class EvidenceFreshnessPatchPayload(BaseModel):
+    """Manual update of one proof (dates, flags, policy, actions)."""
+
+    title: str | None = Field(default=None, max_length=200)
+    notes: str | None = Field(default=None, max_length=2_000)
+    mandatory: bool | None = None
+    source_url: str | None = Field(default=None, max_length=2_000)
+    expires_at: str | None = Field(default=None, max_length=64)
+    warning_at: str | None = Field(default=None, max_length=64)
+    extend_days: int | None = Field(default=None, ge=1, le=3650)
+    archived: bool | None = None
+    reactivate: bool = False
+    policy: dict[str, Any] | None = None
+
+
+class EvidenceFreshnessCheckPayload(BaseModel):
+    """One manual verification of a proof."""
+
+    method: str = Field(default="manual", max_length=20)
+    result: str = Field(default="unchanged", max_length=20)
+    source_url: str | None = Field(default=None, max_length=2_000)
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+def _freshness_now() -> datetime:
+    """Current UTC time, used by the freshness endpoints only."""
+
+    return datetime.now(timezone.utc)
+
+
+def _freshness_timestamp(value: str | None, label: str) -> datetime | None:
+    """Parse a date sent by the user and report it as a readable error."""
+
+    try:
+        return parse_timestamp(value)
+    except ValueError as error:
+        raise UserFacingError(f"La date « {label} » est invalide.") from error
+
+
+class _FreshnessGateway:
+    """Adapter turning the local store errors into user-facing errors.
+
+    The store speaks in low-level errors (unknown id, unreadable file,
+    invalid date); the HTTP layer speaks in 404/400 with a French message.
+    """
+
+    def __init__(self, store: FreshnessStore) -> None:
+        self._store = store
+
+    def __getattr__(self, name: str) -> Any:
+        attribute = getattr(self._store, name)
+
+        def call(*args: Any, **kwargs: Any) -> Any:
+            try:
+                return attribute(*args, **kwargs)
+            except FreshnessStoreError as error:
+                raise UserFacingError(str(error)) from error
+            except KeyError as error:
+                raise HTTPException(status_code=404, detail="Preuve introuvable.") from error
+            except ValueError as error:
+                raise UserFacingError(str(error)) from error
+
+        return call
+
+
 def create_career_router(
     service: CareerService,
     *,
@@ -244,6 +347,7 @@ def create_career_router(
     if not CAREER_STATIC_DIR.is_dir():
         raise RuntimeError("Les fichiers Career Agent sont introuvables.")
     router = APIRouter()
+    freshness_store = _FreshnessGateway(FreshnessStore(service.data_dir / "evidence_freshness"))
 
     async def local(call: Any) -> Any:
         return to_jsonable(await run_in_threadpool(call))
@@ -716,6 +820,235 @@ def create_career_router(
     async def delete_interview_session(session_id: str) -> dict[str, bool]:
         await local(lambda: service.delete_interview_session(session_id))
         return {"deleted": True}
+
+    @router.get("/api/career/evidence-freshness/status")
+    async def evidence_freshness_status() -> Any:
+        """Global freshness dashboard; every status is recomputed locally."""
+
+        def payload() -> dict[str, Any]:
+            now = _freshness_now()
+            freshness_store.refresh(now=now)
+            evidences = freshness_store.list_evidence(now=now)
+            alerts = freshness_store.list_alerts(active_only=True, now=now)
+            report = build_freshness_report(evidences, alerts, now=now)
+            return {
+                "generated_at": format_timestamp(now),
+                "report": report,
+                "evidence": [summarize_evidence(evidence, now) for evidence in evidences],
+                "alerts": [alert.to_dict() for alert in alerts],
+                "schedule": [check.to_dict() for check in freshness_store.plan(now=now)],
+                "policies": freshness_store.list_policies(),
+            }
+
+        return await local(payload)
+
+    @router.get("/api/career/evidence-freshness/evidence")
+    async def evidence_freshness_evidence(
+        status: str = Query(default="", max_length=120),
+        evidence_type: str = Query(default="", max_length=60),
+    ) -> Any:
+        """Every known proof, with its status recomputed locally."""
+
+        def payload() -> dict[str, Any]:
+            now = _freshness_now()
+            evidences = freshness_store.list_evidence(
+                status=status or None,
+                evidence_type=evidence_type or None,
+                now=now,
+            )
+            return {
+                "evidence": [summarize_evidence(evidence, now) for evidence in evidences],
+                "count": len(evidences),
+            }
+
+        return await local(payload)
+
+    @router.post("/api/career/evidence-freshness/evidence", status_code=201)
+    async def create_evidence_freshness(payload: EvidenceFreshnessCreatePayload) -> Any:
+        """Register one proof and compute its expiry from the policy."""
+
+        def action() -> dict[str, Any]:
+            now = _freshness_now()
+            if payload.evidence_type.strip() not in EVIDENCE_TYPES:
+                raise UserFacingError(
+                    "Type de preuve inconnu. Types acceptés : "
+                    + ", ".join(sorted(EVIDENCE_TYPES))
+                    + "."
+                )
+            expires_at = _freshness_timestamp(payload.expires_at, "d'expiration")
+            last_verified_at = _freshness_timestamp(payload.last_verified_at, "de dernière vérification")
+            evidence = freshness_store.register_evidence(
+                evidence_type=payload.evidence_type,
+                title=payload.title,
+                mandatory=payload.mandatory,
+                source_url=payload.source_url,
+                notes=payload.notes,
+                created_at=now,
+                last_verified_at=last_verified_at,
+                expires_at=expires_at,
+                evidence_id=payload.evidence_id,
+                now=now,
+            )
+            return evidence.to_dict()
+
+        return await local(action)
+
+    @router.get("/api/career/evidence-freshness/evidence/{evidence_id}")
+    async def evidence_freshness_detail(evidence_id: str) -> Any:
+        """One proof and its verification history."""
+
+        def payload() -> dict[str, Any]:
+            now = _freshness_now()
+            evidence = freshness_store.get_evidence(evidence_id, now=now)
+            if evidence is None:
+                raise HTTPException(status_code=404, detail="Preuve introuvable.")
+            return {
+                "evidence": evidence.to_dict(),
+                "summary": summarize_evidence(evidence, now),
+                "alerts": [
+                    alert.to_dict()
+                    for alert in freshness_store.list_alerts(active_only=False, now=now)
+                    if alert.evidence_id == evidence_id
+                ],
+            }
+
+        return await local(payload)
+
+    @router.patch("/api/career/evidence-freshness/evidence/{evidence_id}")
+    async def update_evidence_freshness(evidence_id: str, payload: EvidenceFreshnessPatchPayload) -> Any:
+        """Override the dates, the flags or the policy of one proof."""
+
+        def action() -> dict[str, Any]:
+            now = _freshness_now()
+            changes = payload.model_dump(exclude_unset=True)
+            if "policy" in changes:
+                policy = changes.pop("policy") or {}
+                changes["policy_override"] = policy
+            evidence = freshness_store.update_evidence(evidence_id, changes, now=now)
+            return evidence.to_dict()
+
+        return await local(action)
+
+    @router.delete("/api/career/evidence-freshness/evidence/{evidence_id}")
+    async def delete_evidence_freshness(evidence_id: str) -> dict[str, bool]:
+        """Delete one proof and the alerts attached to it."""
+
+        def action() -> bool:
+            return freshness_store.delete_evidence(evidence_id, now=_freshness_now())
+
+        deleted = await local(action)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Preuve introuvable.")
+        return {"deleted": True}
+
+    @router.get("/api/career/evidence-freshness/policy")
+    async def evidence_freshness_policies() -> Any:
+        """The policy applied to every evidence type."""
+
+        def payload() -> dict[str, Any]:
+            return {"policies": freshness_store.list_policies()}
+
+        return await local(payload)
+
+    @router.post("/api/career/evidence-freshness/policy")
+    async def set_evidence_freshness_policy(payload: EvidenceFreshnessPolicyPayload) -> Any:
+        """Override the freshness policy of one evidence type."""
+
+        def action() -> dict[str, Any]:
+            policy = freshness_store.set_policy(
+                payload.evidence_type,
+                max_age_days=payload.max_age_days,
+                warning_days=payload.warning_days,
+                auto_expire=payload.auto_expire,
+                reset=payload.reset,
+                now=_freshness_now(),
+            )
+            return policy.to_dict()
+
+        return await local(action)
+
+    @router.post("/api/career/evidence-freshness/check/{evidence_id}")
+    async def check_evidence_freshness(evidence_id: str, payload: EvidenceFreshnessCheckPayload) -> Any:
+        """Trigger one manual verification of a proof."""
+
+        def action() -> dict[str, Any]:
+            now = _freshness_now()
+            if payload.method not in CHECK_METHODS:
+                raise UserFacingError("La méthode de vérification n’est pas prise en charge.")
+            if payload.result not in CHECK_RESULTS:
+                raise UserFacingError("Le résultat de vérification n’est pas pris en charge.")
+            evidence, alerts = freshness_store.record_source_check(
+                evidence_id,
+                method=payload.method,
+                result=payload.result,
+                source_url=payload.source_url,
+                details=payload.details,
+                now=now,
+            )
+            return {
+                "evidence": evidence.to_dict(),
+                "summary": summarize_evidence(evidence, now),
+                "alerts": [alert.to_dict() for alert in alerts],
+            }
+
+        return await local(action)
+
+    @router.get("/api/career/evidence-freshness/alerts")
+    async def evidence_freshness_alerts(
+        active_only: bool = True,
+    ) -> Any:
+        """The active alerts, most critical first."""
+
+        def payload() -> dict[str, Any]:
+            now = _freshness_now()
+            alerts = freshness_store.list_alerts(active_only=active_only, now=now)
+            return {"alerts": [alert.to_dict() for alert in alerts], "count": len(alerts)}
+
+        return await local(payload)
+
+    @router.post("/api/career/evidence-freshness/acknowledge/{alert_id}")
+    async def acknowledge_evidence_freshness(alert_id: str) -> Any:
+        """Acknowledge one alert so it stops being active."""
+
+        def action() -> dict[str, Any]:
+            now = _freshness_now()
+            known = [
+                alert
+                for alert in freshness_store.list_alerts(active_only=False, now=now)
+                if alert.alert_id == alert_id
+            ]
+            if not known:
+                raise HTTPException(status_code=404, detail="Alerte introuvable.")
+            alert = freshness_store.acknowledge_alert(alert_id, now=now)
+            return alert.to_dict()
+
+        return await local(action)
+
+    @router.get("/api/career/evidence-freshness/schedule")
+    async def evidence_freshness_schedule() -> Any:
+        """The monitoring plan: which proof must be checked and when."""
+
+        def payload() -> dict[str, Any]:
+            now = _freshness_now()
+            checks = freshness_store.plan(now=now)
+            return {"checks": [check.to_dict() for check in checks], "count": len(checks)}
+
+        return await local(payload)
+
+    @router.get("/api/career/evidence-freshness/report")
+    async def evidence_freshness_report() -> Any:
+        """The complete freshness audit: report, trends and verifications."""
+
+        def payload() -> dict[str, Any]:
+            now = _freshness_now()
+            freshness_store.refresh(now=now)
+            evidences = freshness_store.list_evidence(now=now)
+            alerts = freshness_store.list_alerts(active_only=False, now=now)
+            history = freshness_store.history(limit=500)
+            report = build_audit_report(evidences, alerts, history, now=now)
+            return {**report, "markdown": render_report_markdown(report)}
+
+        return await local(payload)
 
     @router.get("/api/career/export/{export_format}")
     async def export_applications(export_format: str) -> FileResponse:

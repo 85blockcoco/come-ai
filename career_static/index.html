@@ -44,6 +44,7 @@
           <button class="career-tab" id="tab-applications" type="button" aria-controls="view-applications" data-product-area="Applications" data-view="applications">Candidatures</button>
           <button class="career-tab" id="tab-interviews" type="button" aria-controls="view-interviews" data-product-area="Interview Coach" data-view="interviews">Coach d’entretien</button>
           <button class="career-tab" id="tab-profile" type="button" aria-controls="view-profile" data-view="profile">Mon profil</button>
+          <button class="career-tab" id="tab-evidence-freshness" type="button" aria-controls="view-evidence-freshness" data-view="evidence-freshness">Fraîcheur des preuves</button>
           <button class="career-tab" id="tab-settings" type="button" aria-controls="view-settings" data-view="settings">Réglages</button>
         </nav>
 
@@ -571,6 +572,153 @@
           <div id="profile-content" class="single-view-content"></div>
         </section>
 
+        <section id="view-evidence-freshness" class="career-view" tabindex="-1" aria-labelledby="evidence-freshness-title" hidden>
+          <header class="view-intro">
+            <p class="eyebrow">Fraîcheur des preuves</p>
+            <h2 id="evidence-freshness-title">Fraîcheur des preuves</h2>
+            <p>Suis la date d’échéance de tes certifications, compétences et langues. Chaque statut est déduit localement des dates que tu déclares : rien n’est envoyé à un tiers et aucune preuve n’est inventée.</p>
+          </header>
+
+          <section class="panel" aria-labelledby="freshness-overview-title">
+            <div class="panel-heading compact-heading">
+              <div><p class="eyebrow">État global</p><h3 id="freshness-overview-title">Vue d’ensemble</h3></div>
+              <span class="local-tag">Calcul local</span>
+            </div>
+            <p class="panel-help">Un statut n’est jamais stocké : il est recalculé à chaque affichage à partir de la date d’échéance, de la fenêtre d’avertissement et de la politique du type de preuve.</p>
+            <p id="freshness-loading" role="status" aria-live="polite" aria-atomic="true">Calcul de la fraîcheur de tes preuves…</p>
+            <div id="freshness-counters" class="metrics"></div>
+            <p id="freshness-error" class="career-message error" role="alert" hidden></p>
+            <p id="freshness-status" class="panel-help" role="status" aria-live="polite" aria-atomic="true"></p>
+          </section>
+
+          <section class="panel" aria-labelledby="freshness-timeline-title">
+            <div class="panel-heading compact-heading">
+              <div><p class="eyebrow">Échéances</p><h3 id="freshness-timeline-title">Ce qui expire bientôt</h3></div>
+            </div>
+            <p class="panel-help">Trois fenêtres de temps : 7, 30 et 90 jours. Une preuve listée dans les 7 jours apparaît aussi dans les deux autres.</p>
+            <div id="freshness-timeline"></div>
+            <p id="freshness-timeline-empty" class="empty-state" hidden>Aucune preuve n’arrive à échéance dans les 90 prochains jours.</p>
+          </section>
+
+          <section class="panel" aria-labelledby="freshness-alerts-title">
+            <div class="panel-heading compact-heading">
+              <div><p class="eyebrow">Alertes</p><h3 id="freshness-alerts-title">Ce qui demande ton attention</h3></div>
+            </div>
+            <p class="panel-help">Une alerte critique signale une preuve expirée, un avertissement une échéance à moins de 7 jours. « Acquitter » retire l’alerte de la liste sans modifier la preuve elle-même.</p>
+            <div id="freshness-alerts"></div>
+            <p id="freshness-alerts-empty" class="empty-state" hidden>Aucune alerte active : toutes tes preuves connues sont à jour.</p>
+          </section>
+
+          <section class="panel" aria-labelledby="freshness-by-type-title">
+            <div class="panel-heading compact-heading">
+              <div><p class="eyebrow">Répartition</p><h3 id="freshness-by-type-title">Par type de preuve</h3></div>
+            </div>
+            <p class="panel-help">Une politique par type de preuve fixe sa durée de validité, son fenêtre d’avertissement et son expiration automatique.</p>
+            <div id="freshness-by-type"></div>
+            <p id="freshness-by-type-empty" class="empty-state" hidden>Aucune preuve enregistrée : commence par en ajouter une.</p>
+          </section>
+
+          <section class="panel" aria-labelledby="freshness-trends-title">
+            <div class="panel-heading compact-heading">
+              <div><p class="eyebrow">Historique</p><h3 id="freshness-trends-title">Évolution de la fraîcheur</h3></div>
+            </div>
+            <p class="panel-help">La tendance est reconstruite à partir des relevés quotidiens conservés localement. L’absence de relevé ne vaut pas preuve de fraîcheur.</p>
+            <div id="freshness-trends"></div>
+            <p id="freshness-trends-empty" class="empty-state" hidden>Aucun relevé historique : la tendance s’affichera après quelques enregistrements.</p>
+          </section>
+
+          <section class="panel" aria-labelledby="freshness-schedule-title">
+            <div class="panel-heading compact-heading">
+              <div><p class="eyebrow">Surveillance</p><h3 id="freshness-schedule-title">Plan de contrôle</h3></div>
+            </div>
+            <p class="panel-help">La fréquence de contrôle est déduite du type de preuve et de son échéance. Aucun contrôle n’est déclenché automatiquement en ligne.</p>
+            <div id="freshness-schedule"></div>
+            <p id="freshness-schedule-empty" class="empty-state" hidden>Aucun contrôle planifié pour l’instant.</p>
+          </section>
+
+          <section class="panel" aria-labelledby="freshness-evidence-title">
+            <div class="panel-heading compact-heading">
+              <div><p class="eyebrow">Registre</p><h3 id="freshness-evidence-title">Mes preuves</h3></div>
+            </div>
+            <p class="panel-help">« Vérifier » enregistre un contrôle manuel, « Prolonger » repousse l’échéance de 30 jours, « Archiver » sort la preuve du décompte et « Supprimer » efface définitivement la fiche.</p>
+            <div id="freshness-evidence-list" class="dashboard-list"></div>
+            <p id="freshness-evidence-empty" class="empty-state" hidden>Aucune preuve enregistrée pour l’instant.</p>
+          </section>
+
+          <section class="panel" aria-labelledby="freshness-form-title">
+            <div class="panel-heading compact-heading">
+              <div><p class="eyebrow">Ajouter</p><h3 id="freshness-form-title">Enregistrer une preuve</h3></div>
+            </div>
+            <p class="panel-help">La date d’expiration est calculée à partir de la politique du type choisi. Tu peux la corriger ensuite avec « Prolonger de 30 jours ».</p>
+            <form id="freshness-form" class="form-stack">
+              <label>Type de preuve
+                <select id="freshness-type" name="evidence_type" required>
+                  <option value="certification">Certification</option>
+                  <option value="skill_technical">Compétence technique</option>
+                  <option value="skill_soft">Savoir-être</option>
+                  <option value="experience">Expérience</option>
+                  <option value="education">Formation</option>
+                  <option value="language">Langue</option>
+                  <option value="tool">Outil</option>
+                  <option value="project">Projet</option>
+                </select>
+              </label>
+              <label>Titre de la preuve
+                <input id="freshness-title" name="title" maxlength="200" required placeholder="Ex. : certification CFA niveau II" />
+              </label>
+              <label class="application-actions">
+                <input id="freshness-mandatory" name="mandatory" type="checkbox" />
+                <span>Preuve obligatoire : elle sera signalée en priorité si elle expire</span>
+              </label>
+              <label>Lien de la source
+                <input id="freshness-source-url" name="source_url" maxlength="2000" type="url" placeholder="https://…" />
+              </label>
+              <label>Notes
+                <textarea id="freshness-notes" name="notes" maxlength="2000" rows="3" placeholder="Organisme de délivrance, numéro, conditions de renouvellement…"></textarea>
+              </label>
+              <button class="primary-button" type="submit">Ajouter la preuve</button>
+            </form>
+          </section>
+
+          <section class="panel" aria-labelledby="freshness-policy-title">
+            <div class="panel-heading compact-heading">
+              <div><p class="eyebrow">Politique</p><h3 id="freshness-policy-title">Durée de validité par type</h3></div>
+            </div>
+            <p class="panel-help">La politique décide quand une preuve entre en avertissement et quand elle expire. Les dates que tu as fixées toi-même ne sont jamais recalculées.</p>
+            <form id="freshness-policy-form" class="form-stack">
+              <label>Type de preuve
+                <select id="freshness-policy-type">
+                  <option value="certification">Certification</option>
+                  <option value="skill_technical">Compétence technique</option>
+                  <option value="skill_soft">Savoir-être</option>
+                  <option value="experience">Expérience</option>
+                  <option value="education">Formation</option>
+                  <option value="language">Langue</option>
+                  <option value="tool">Outil</option>
+                  <option value="project">Projet</option>
+                </select>
+              </label>
+              <div class="form-row two-columns">
+                <label>Durée de validité (jours)
+                  <input id="freshness-policy-max-age" type="number" min="0" max="3650" step="1" />
+                </label>
+                <label>Avertissement avant l’échéance (jours)
+                  <input id="freshness-policy-warning" type="number" min="0" max="3650" step="1" />
+                </label>
+              </div>
+              <label class="application-actions">
+                <input id="freshness-policy-auto-expire" type="checkbox" />
+                <span>Dégrader automatiquement une preuve expirée</span>
+              </label>
+              <p id="freshness-policy-state" class="panel-help"></p>
+              <div class="inline-actions">
+                <button id="freshness-policy-save" class="primary-button" type="button">Appliquer la politique</button>
+                <button id="freshness-policy-reset" class="quiet-button" type="button">Revenir à la politique par défaut</button>
+              </div>
+            </form>
+          </section>
+        </section>
+
         <section id="view-settings" class="career-view" tabindex="-1" hidden aria-labelledby="settings-title">
           <section class="panel settings-panel">
             <div class="panel-heading"><div><p class="eyebrow">Préférences et confidentialité</p><h2 id="settings-title">Réglages</h2></div><span class="local-tag">Données locales</span></div>
@@ -733,6 +881,7 @@
       </footer>
     </div>
     <script src="/career-static/cv_plan.js" defer></script>
+    <script src="/career-static/js/evidence-freshness.js" defer></script>
     <script src="/career-static/career.js" defer></script>
   </body>
 </html>
