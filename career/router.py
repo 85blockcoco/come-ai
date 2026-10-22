@@ -236,6 +236,14 @@ class CVAnalyzeResponse(BaseModel):
     provenance: dict[str, Any]
 
 
+class CVReviewDecisionPayload(BaseModel):
+    """One explicit decision on one block of the targeted CV review."""
+
+    block_id: str = Field(min_length=1, max_length=120)
+    status: str = Field(pattern="^(accepted|rejected|modified|pending)$")
+    user_text: str | None = Field(default=None, max_length=4_000)
+
+
 def create_career_router(
     service: CareerService,
     *,
@@ -631,6 +639,41 @@ def create_career_router(
     async def update_application_kit(application_id: str, payload: ApplicationKitTextsPayload) -> Any:
         texts = {"motivation_short": payload.motivation_short, "availability": payload.availability}
         return await local(lambda: service.update_kit_texts(application_id, texts))
+
+    # SPEC-004 : revue du CV ciblé — chaque proposition est visible, prouvée
+    # et contrôlée avant l'export local du DOCX.
+    @router.get("/api/career/cv-review/{application_id}")
+    async def cv_review(application_id: str) -> Any:
+        """The full review workspace of one targeted CV."""
+        return await local(lambda: service.get_cv_review(application_id))
+
+    @router.post("/api/career/cv-review/{application_id}/decide")
+    async def decide_cv_review(application_id: str, payload: CVReviewDecisionPayload) -> Any:
+        """Record one accept / modify / reject / back-to-source decision."""
+        return await local(
+            lambda: service.decide_cv_review(
+                application_id,
+                payload.block_id,
+                payload.status,
+                payload.user_text,
+            )
+        )
+
+    @router.get("/api/career/cv-review/{application_id}/history")
+    async def cv_review_history(application_id: str) -> Any:
+        """The immutable decision log of one application."""
+        return await local(lambda: service.get_cv_review_history(application_id))
+
+    @router.get("/api/career/cv-review/{application_id}/export")
+    async def export_cv_review(application_id: str) -> FileResponse:
+        """Export the reviewed CV as a local DOCX (refused while blocked)."""
+        path = await run_in_threadpool(lambda: service.export_cv_review(application_id))
+        return FileResponse(
+            path,
+            filename=path.name,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Cache-Control": "no-store"},
+        )
 
     @router.patch("/api/career/application-drafts/{draft_id}")
     async def update_application_draft(draft_id: str, payload: ApplicationDraftEditPayload) -> Any:

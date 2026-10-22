@@ -682,6 +682,20 @@
           </section>
         </section>
 
+        <section id="view-review" class="career-view" tabindex="-1" hidden aria-labelledby="review-title">
+          <section class="panel cv-review-panel">
+            <div class="panel-heading">
+              <div><p class="eyebrow">Revue du CV ciblé</p><h2 id="review-title">Revue du CV</h2></div>
+              <div class="inline-actions">
+                <button class="primary-button" type="button" id="cv-review-export" disabled>Exporter le DOCX</button>
+                <button class="quiet-button" type="button" id="cv-review-back">Retour aux candidatures</button>
+              </div>
+            </div>
+            <p class="panel-help">Chaque ligne du CV ciblé est comparée à sa source, avec la preuve qui l’étaye. Accepte, modifie, refuse ou reviens à la source : rien n’est exporté tant qu’un bloc critique n’est pas tranché.</p>
+            <div id="cv-review-container" class="cv-review-container" aria-live="polite"></div>
+          </section>
+        </section>
+
         <section id="view-interviews" class="career-view" tabindex="-1" hidden aria-labelledby="interviews-title">
           <section class="panel coach-panel">
             <div class="panel-heading">
@@ -733,6 +747,7 @@
       </footer>
     </div>
     <script src="/career-static/cv_plan.js" defer></script>
+    <script src="/career-static/js/cv-review.js" defer></script>
     <script src="/career-static/career.js" defer></script>
   </body>
 </html>

@@ -1,0 +1,12 @@
+{
+  "id": "fixture-offer-001",
+  "company": "Synthetic Bank",
+  "title": "M&A Internship",
+  "official_url": "https://careers.example.test/fixture",
+  "job_family": "M&A / Investment Banking",
+  "requirements": "Financial modeling, valuation and Bloomberg Terminal are required.",
+  "source_status": "open",
+  "city": "Paris",
+  "country": "France",
+  "description_original": "Synthetic offer used only by the local CV review tests."
+}

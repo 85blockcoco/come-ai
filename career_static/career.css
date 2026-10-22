@@ -541,3 +541,38 @@ button, a, .career-tab { transition: background-color .16s ease, border-color .1
   .application-filters label { flex: 1 1 100%; }
   .application-filters select { width: 100%; }
 }
+
+/* SPEC-004 — revue du CV ciblé : vue split source / proposition. */
+.cv-review-container { display: grid; gap: 14px; margin-top: 14px; }
+.cv-review-progress-label { color: var(--accent-dark); font-size: .8rem; font-weight: 700; }
+.cv-review-progress-bar { height: 9px; overflow: hidden; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-muted); }
+.cv-review-progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), #10b981); }
+.cv-review-blockers { margin: 0; padding: 11px 13px 11px 30px; border: 1px solid #f2d9b0; border-radius: 11px; background: var(--warning-soft); color: var(--warning); font-size: .76rem; }
+.cv-review-blockers li + li { margin-top: 4px; }
+.cv-review-blocks { display: grid; gap: 12px; }
+.cv-review-block { padding: 13px; border: 1px solid var(--border); border-radius: 13px; background: var(--panel); box-shadow: var(--shadow); }
+.cv-review-block-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 9px; }
+.cv-review-block-section { color: var(--muted); font-size: .72rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.cv-review-badge { padding: 3px 9px; border-radius: 11px; font-size: .71rem; font-weight: 700; }
+.cv-review-badge-good { color: var(--good); background: var(--good-soft); }
+.cv-review-badge-warning { color: var(--warning); background: var(--warning-soft); }
+.cv-review-badge-danger { color: var(--danger); background: var(--danger-soft); }
+.cv-review-badge-info { color: var(--accent-dark); background: var(--accent-soft); }
+.cv-review-badge-muted { color: var(--muted); background: var(--surface-muted); }
+.cv-review-split { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+.cv-review-split h4 { margin: 0 0 4px; color: var(--faint); font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; }
+.cv-review-source, .cv-review-proposed { padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-muted); }
+.cv-review-text { margin: 0; font-size: .82rem; line-height: 1.5; white-space: pre-wrap; }
+.cv-review-diff-insert { color: var(--good); background: var(--good-soft); border-radius: 3px; }
+.cv-review-diff-delete { color: var(--danger); background: var(--danger-soft); border-radius: 3px; text-decoration: line-through; }
+.cv-review-user-text { margin-top: 6px; padding: 7px 9px; border-inline-start: 3px solid var(--accent); background: var(--accent-soft); font-size: .8rem; }
+.cv-review-evidence { display: grid; gap: 5px; margin-top: 9px; }
+.cv-review-evidence-item { margin: 0; font-size: .74rem; color: var(--muted); }
+.cv-review-evidence-source { font-weight: 700; color: var(--accent-dark); }
+.cv-review-evidence-quote { margin-inline-start: 6px; font-style: italic; }
+.cv-review-placeholder-reason { margin: 0; color: var(--warning); font-size: .74rem; }
+.cv-review-edit { width: 100%; margin-top: 9px; padding: 8px; border: 1px solid var(--border); border-radius: 9px; font-size: .82rem; }
+.cv-review-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+@media (max-width: 760px) {
+  .cv-review-split { grid-template-columns: 1fr; }
+}

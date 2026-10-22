@@ -83,7 +83,9 @@ def _citation(source: str, quote: Any, offset: int = 0) -> dict[str, Any]:
     return {"source": source, "quote": _text(quote, 500), "offset": offset}
 
 
-def _variant_text(value: str, variant: CVVariant) -> str:
+def variant_text(value: str, variant: CVVariant) -> str:
+    """Public helper: the locale adaptation shared by the kit and the review."""
+
     if variant.locale == "en-GB":
         return value.replace("modeling", "modelling").replace(
             "optimization", "optimisation"
@@ -112,7 +114,7 @@ def _add_heading_and_lines(
         document.add_paragraph("[AJOUTER PREUVE CHIFFRÉE]")
         return
     for index, line in enumerate(lines):
-        rendered = _variant_text(line, variant)
+        rendered = variant_text(line, variant)
         if source == "profile.experience" and rendered.count("|") >= 2:
             date_text, role, company_and_result = (
                 part.strip() for part in rendered.split("|", 2)
@@ -170,7 +172,7 @@ def generate_application_kit(
     summary = (
         f"Targeting {job.get('title') or '[role to confirm]'}. "
         "Documented profile skills: "
-        + _variant_text(approved_skills, variant)
+        + variant_text(approved_skills, variant)
         if approved_skills
         else f"Targeting {job.get('title') or '[role to confirm]'}. [SKILLS TO CONFIRM]"
     )
@@ -214,7 +216,7 @@ def generate_application_kit(
     letter.add_heading(f"Application — {job.get('title') or '[Role]'}", level=1)
     letter.add_paragraph(f"Dear Hiring Team at {job.get('company') or '[Company]'},")
     letter.add_paragraph(
-        _variant_text(
+        variant_text(
             f"I am applying with a {variant.cover_letter_tone} focus supported only by cited profile evidence.",
             variant,
         )

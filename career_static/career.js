@@ -19,6 +19,8 @@ const state = {
   coachSessions: [],
   activeCoachSession: null,
   pendingKitApplicationId: "",
+  pendingReviewApplicationId: "",
+  cvReviewWorkspace: null,
 };
 const $ = (selector) => document.querySelector(selector);
 const elements = {
@@ -113,6 +115,9 @@ const elements = {
   coachFeedback: $("#coach-feedback"),
   coachHistory: $("#coach-history"),
   coachHistoryEmpty: $("#coach-history-empty"),
+  cvReviewContainer: $("#cv-review-container"),
+  cvReviewExport: $("#cv-review-export"),
+  cvReviewBack: $("#cv-review-back"),
 };
 
 const stageLabels = {
@@ -209,6 +214,7 @@ function labelForView(viewName) {
     shortlist: "Ma shortlist",
     studio: "Application Studio",
     applications: "Candidatures",
+    review: "Revue du CV",
     interviews: "Coach d’entretien",
     profile: "Mon profil",
     settings: "Réglages",
@@ -249,7 +255,7 @@ function organiseViews() {
   }
 }
 
-const careerViews = new Set(["dashboard", "discover", "stagehunter", "shortlist", "studio", "applications", "interviews", "profile", "settings"]);
+const careerViews = new Set(["dashboard", "discover", "stagehunter", "shortlist", "studio", "applications", "review", "interviews", "profile", "settings"]);
 let internalHashChange = false;
 
 function refreshView(viewName) {
@@ -259,6 +265,7 @@ function refreshView(viewName) {
     shortlist: loadShortlist,
     studio: loadStudio,
     applications: loadApplications,
+    review: loadCvReview,
     interviews: loadCoach,
   };
   loaders[viewName]?.().catch((error) => setMessage(error.message, true));
@@ -1146,6 +1153,10 @@ function applicationCard(application) {
   kitContainer.hidden = true;
   kitButton.addEventListener("click", () => openApplicationKit(application, kitContainer));
   actions.append(kitButton);
+  const reviewButton = make("button", "Reviser le CV ciblé", "secondary-button");
+  reviewButton.type = "button";
+  reviewButton.addEventListener("click", () => openCvReview(application));
+  actions.append(reviewButton);
   const noteLabel = make("label", "Note de suivi (facultative)");
   const noteInput = document.createElement("input");
   noteInput.type = "text";
@@ -1414,6 +1425,48 @@ async function loadApplications() {
   state.applications = listing.applications || [];
   renderApplicationDashboard(dash);
   await consumePendingKit();
+}
+
+/* SPEC-004 : la revue du CV ciblé est une vue locale, branchée sur une seule
+   candidature. Les décisions sont enregistrées par l'API Career locale. */
+function openCvReview(application) {
+  state.pendingReviewApplicationId = application?.id || "";
+  showView("review");
+}
+
+function updateCvReviewExport(workspace) {
+  if (!elements.cvReviewExport) return;
+  const enabled = cvReviewExportEnabled(workspace);
+  elements.cvReviewExport.disabled = !enabled;
+  elements.cvReviewExport.title = cvReviewExportTooltip(workspace);
+  elements.cvReviewExport.setAttribute("aria-disabled", String(!enabled));
+}
+
+async function handleCvReviewDecision(block, status, userText) {
+  const applicationId = state.pendingReviewApplicationId;
+  if (!applicationId) return;
+  try {
+    const workspace = await cvReviewDecide(applicationId, block.block_id, status, userText);
+    state.cvReviewWorkspace = workspace;
+    renderCvReview(elements.cvReviewContainer, workspace, { onDecide: handleCvReviewDecision });
+    updateCvReviewExport(workspace);
+    setMessage("Décision enregistrée dans l’historique local de la revue.");
+  } catch (error) {
+    setMessage(error.message, true);
+  }
+}
+
+async function loadCvReview() {
+  const applicationId = state.pendingReviewApplicationId;
+  if (!applicationId) {
+    elements.cvReviewContainer?.replaceChildren();
+    updateCvReviewExport(null);
+    return;
+  }
+  const workspace = await api(`/api/career/cv-review/${encodeURIComponent(applicationId)}`);
+  state.cvReviewWorkspace = workspace;
+  renderCvReview(elements.cvReviewContainer, workspace, { onDecide: handleCvReviewDecision });
+  updateCvReviewExport(workspace);
 }
 
 const coachModeLabels = {
@@ -3537,6 +3590,13 @@ $("#stagehunter-sprint-build")?.addEventListener("click", () => loadApplicationS
 $("#stagehunter-pipeline-refresh")?.addEventListener("click", () => loadApplicationPipeline());
 
 document.querySelectorAll(".career-tab").forEach((tab) => tab.addEventListener("click", () => showView(tab.dataset.view)));
+
+elements.cvReviewExport?.addEventListener("click", () => {
+  const applicationId = state.pendingReviewApplicationId;
+  if (!applicationId || elements.cvReviewExport.disabled) return;
+  window.location.href = cvReviewExportUrl(applicationId);
+});
+elements.cvReviewBack?.addEventListener("click", () => showView("applications"));
 
 (function fillApplicationStageFilter() {
   const select = $("#applications-filter-stage");

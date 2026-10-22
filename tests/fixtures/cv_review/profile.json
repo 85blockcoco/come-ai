@@ -1,0 +1,13 @@
+{
+  "display_name": "Candidat Exemple",
+  "contact_email": "candidat@example.test",
+  "contact_phone": "",
+  "linkedin_url": "",
+  "education": "MSc Finance — Université Exemple — December 2026",
+  "experience": "2024 | Analyst | Synthetic Bank — Built 12 financial models in Excel, cutting reporting time by 35%.\n2023 | Intern | Fixture Capital — Reviewed 120 credit reports, improving quality by 30%.",
+  "skills": "Excel, financial modelling, valuation, Bloomberg",
+  "projects": "Academic project: Monte Carlo simulation in Python.",
+  "languages": "French native; English C1",
+  "eligibility": "compatible",
+  "notes": ""
+}

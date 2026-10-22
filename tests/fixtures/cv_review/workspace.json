@@ -1,0 +1,15 @@
+{
+  "note": "SPEC-004 — workspace de revue attendu pour les fixtures ci-dessus (variante M&A, locale). Les blocs sont numérotés par section canonique ; les ids de blocs sont stables tant que le profil et l'offre ne changent pas.",
+  "variant": "m_a",
+  "critical_sections": ["experiences", "skills"],
+  "expected_sections": ["experiences", "skills", "education", "projects", "languages"],
+  "expected_blocks": [
+    {"block_id": "experiences:0", "section": "experiences", "status": "verified"},
+    {"block_id": "experiences:1", "section": "experiences", "status": "verified"},
+    {"block_id": "skills:0", "section": "skills", "status": "verified"},
+    {"block_id": "education:0", "section": "education", "status": "verified"},
+    {"block_id": "projects:0", "section": "projects", "status": "verified"},
+    {"block_id": "languages:0", "section": "languages", "status": "verified"}
+  ],
+  "expected_placeholder_prefix": "skills:gap:"
+}

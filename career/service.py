@@ -73,7 +73,18 @@ from .cv_fit import (
     generate_diff,
     serialize_gap,
 )
-from .cv_variants import ALL_VARIANTS
+from .cv_variants import ALL_VARIANTS, CVVariant
+from .cv_review import (
+    ReviewError,
+    ReviewWorkspace,
+    apply_decision,
+    build_review_markdown,
+    build_workspace,
+    can_export,
+    merge_decisions,
+    workspace_to_dict,
+)
+from .cv_review_store import ReviewStore, ReviewStoreError, safe_application_id, workspace_to_state
 
 try:
     from consent_guard import ConsentGuard
@@ -250,6 +261,9 @@ class CareerService:
         self._discovery_lock = threading.Lock()
         self._lock = threading.RLock()
         self._ensure_storage()
+        # SPEC-004 : the CV review workspace and its immutable decision
+        # history live in the private Career directory, never in ``data/``.
+        self.review_store = ReviewStore(self.data_dir)
         self._initialize()
         if ConsentGuard is not None:
             try:
@@ -4803,6 +4817,167 @@ class CareerService:
                         path.unlink()
                 except OSError:
                     pass
+
+    # ------------------------------------------------------------------
+    # SPEC-004 — Evidence-backed CV review workspace
+    # ------------------------------------------------------------------
+    def _cv_review_context(
+        self, application_id: str
+    ) -> tuple[dict[str, Any], dict[str, Any], CVVariant, str, Any]:
+        """Collect the local facts needed to review one targeted CV.
+
+        Everything here comes from the local profile, the recorded offer and
+        the local coverage analysis: no network call, no model.
+        """
+        identifier = clean_text(application_id, limit=80)
+        with self._lock, self._connection() as connection:
+            application = connection.execute(
+                "SELECT id, job_id FROM applications WHERE id = ?", (identifier,)
+            ).fetchone()
+            if not application:
+                raise UserFacingError("Cette candidature Career n’existe pas.")
+            job_id = str(application["job_id"])
+            draft_row = connection.execute(
+                """
+                SELECT variant, language FROM application_drafts
+                WHERE job_id = ?
+                ORDER BY created_at DESC, application_drafts.rowid DESC LIMIT 1
+                """,
+                (job_id,),
+            ).fetchone()
+        profile = self.get_profile()
+        job = self.get_job(job_id)
+        prep = self.get_job_prep(job_id)
+        cv_analysis = self._current_cv_analysis()
+        job.update(prep)
+        job["qualification"] = qualify_offer(job).to_dict()
+        language = "fr"
+        variant: CVVariant | None = None
+        if draft_row:
+            language = clean_text(draft_row["language"], limit=16) or "fr"
+            try:
+                variant = self._variant_config(draft_row["variant"])
+            except UserFacingError:
+                variant = None
+        if variant is None:
+            variant = classify_variant(job, profile, ALL_VARIANTS).primary_variant
+        coverage = compute_coverage(job, cv_analysis, profile, variant)
+        return job, profile, variant, language, coverage
+
+    def _cv_review_workspace(self, application_id: str) -> ReviewWorkspace:
+        """Build the review workspace and merge the persisted decisions."""
+        job, profile, variant, language, coverage = self._cv_review_context(application_id)
+        now = utc_now()
+        workspace = build_workspace(
+            clean_text(application_id, limit=80),
+            job=job,
+            profile=profile,
+            variant=variant,
+            coverage=coverage,
+            language=language,
+            created_at=now,
+            updated_at=now,
+        )
+        stored = self.review_store.load_workspace(workspace.application_id)
+        merged = merge_decisions(workspace, stored)
+        if stored is None or workspace_to_state(merged) != workspace_to_state(stored):
+            merged.updated_at = now
+            self.review_store.save_workspace(merged)
+        return merged
+
+    def get_cv_review(self, application_id: str) -> dict[str, Any]:
+        """The reviewable state of one targeted CV, with its decision history."""
+        workspace = self._cv_review_workspace(application_id)
+        payload = workspace_to_dict(workspace)
+        payload["history"] = self.review_store.load_history(workspace.application_id).to_dict()
+        return payload
+
+    def get_cv_review_history(self, application_id: str) -> dict[str, Any]:
+        """The immutable decision log of one application."""
+        identifier = clean_text(application_id, limit=80)
+        with self._lock, self._connection() as connection:
+            application = connection.execute(
+                "SELECT id FROM applications WHERE id = ?", (identifier,)
+            ).fetchone()
+        if not application:
+            raise UserFacingError("Cette candidature Career n’existe pas.")
+        try:
+            safe_application_id(identifier)
+        except ReviewStoreError as error:
+            raise UserFacingError("Identifiant de candidature invalide.") from error
+        return self.review_store.load_history(identifier).to_dict()
+
+    def decide_cv_review(
+        self,
+        application_id: str,
+        block_id: str,
+        status: str,
+        user_text: str | None = None,
+    ) -> dict[str, Any]:
+        """Record one explicit user decision on one reviewed block."""
+        workspace = self._cv_review_workspace(application_id)
+        block = workspace.block(clean_text(block_id, limit=120))
+        if block is None:
+            raise UserFacingError("Bloc de revue inconnu pour cette candidature.")
+        previous_status = block.status
+        now = utc_now()
+        try:
+            updated = apply_decision(
+                workspace,
+                block.block_id,
+                clean_text(status, limit=20),
+                user_text=user_text,
+                decided_at=now,
+            )
+        except ReviewError as error:
+            raise UserFacingError(str(error)) from error
+        self.review_store.save_workspace(updated)
+        event = self.review_store.new_event(
+            application_id=updated.application_id,
+            block_id=block.block_id,
+            section=block.section,
+            from_status=previous_status,
+            to_status=clean_text(status, limit=20),
+            decided_at=now,
+            user_text=clean_text(user_text, limit=4_000) if user_text else None,
+        )
+        self.review_store.append_event(event)
+        payload = workspace_to_dict(updated)
+        payload["history"] = self.review_store.load_history(updated.application_id).to_dict()
+        payload["decision"] = event.to_dict()
+        return payload
+
+    def export_cv_review(self, application_id: str) -> Path:
+        """Export the reviewed CV as a local DOCX, or refuse to."""
+        workspace = self._cv_review_workspace(application_id)
+        allowed, blockers = can_export(workspace)
+        if not allowed:
+            raise UserFacingError(
+                "Export bloqué : " + " ".join(blockers) + " Valide les blocs critiques avant d’exporter."
+            )
+        try:
+            identifier = safe_application_id(workspace.application_id)
+        except ReviewStoreError as error:
+            raise UserFacingError("Identifiant de candidature invalide.") from error
+        profile = self.get_profile()
+        markdown = build_review_markdown(workspace, profile)
+        job = self.get_job(workspace.job_id) if workspace.job_id else {}
+        title = "CV révisé"
+        if job:
+            title = "CV révisé — {company} — {title}".format(
+                company=clean_text(job.get("company"), limit=240),
+                title=clean_text(job.get("title"), limit=300),
+            )
+        target_dir = self.export_dir / "cv_review"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / f"{identifier}.docx"
+        write_docx(
+            markdown=markdown,
+            title=title,
+            language=workspace.language or "fr",
+            target=target,
+        )
+        return target
 
     def safe_export_path(self, filename: str) -> Path:
         candidate = (self.export_dir / Path(filename).name).resolve()
