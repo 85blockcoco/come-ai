@@ -13,6 +13,7 @@ from dataclasses import asdict, dataclass
 from datetime import date
 from typing import Any
 
+from .cv_quality.education_extractor import extract_education
 from .exploration import _SENIOR_TITLE, classify_internship
 from .models import canonical_url, clean_text
 
@@ -342,6 +343,32 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
         evidence["contract_type"] = FactEvidence("internship", f"{item['field']}_passage", item["quote"])
     elif contract_type == "unknown" and re.search(r"\bgraduate\b", _fold(title + " " + employment)):
         evidence["contract_type"] = FactEvidence("graduate role ambiguous", "title_or_contract_passage", title or employment)
+
+    education_facts = []
+    seen_education: set[tuple[object, ...]] = set()
+    for source_field, source_text in (
+        ("role_level", clean_text(offer.get("role_level"), limit=300)),
+        ("requirements", clean_text(offer.get("requirements"), limit=30_000)),
+        ("eligibility_requirement", clean_text(offer.get("eligibility_requirement"), limit=30_000)),
+        ("description_original", description),
+        ("description", clean_text(offer.get("description"), limit=30_000)),
+    ):
+        if not source_text:
+            continue
+        for fact in extract_education(source_text, source_field=source_field):
+            key = (fact.level_rank, fact.level_label, fact.field, fact.quote)
+            if key in seen_education:
+                continue
+            seen_education.add(key)
+            education_facts.append(fact)
+    if education_facts:
+        # The extractor already caps one text at two facts; across fields keep
+        # the first two deduplicated statements rather than inventing a merge.
+        evidence["education_required"] = FactEvidence(
+            [fact.to_dict() for fact in education_facts[:2]],
+            "education_extractor",
+            education_facts[0].quote,
+        )
 
     reasons: list[str] = []
     target_status = "to_verify"

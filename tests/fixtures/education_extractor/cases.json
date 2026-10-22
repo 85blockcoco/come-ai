@@ -1,0 +1,341 @@
+[
+  {
+    "id": "fr_engineer_or_master2",
+    "lang": "auto",
+    "text": "Diplôme d'ingénieur ou Master 2 requis",
+    "expected": [
+      {"fact_type": "education_level_required", "rank": 5, "label": "Ingénieur", "field": "Engineering", "confidence": "explicit", "contradictions": []}
+    ]
+  },
+  {
+    "id": "fr_bac5_finance",
+    "lang": "auto",
+    "text": "Bac+5 minimum (Finance, Économie)",
+    "expected": [
+      {"rank": 5, "label": "Bac+5", "field": "Finance", "confidence": "explicit", "contradictions": []}
+    ]
+  },
+  {
+    "id": "fr_doctorat_prefere",
+    "lang": "auto",
+    "text": "Doctorat préféré",
+    "expected": [
+      {"rank": 8, "label": "Doctorat", "field": null, "confidence": "inferred", "contradictions": ["preferred_only"]}
+    ]
+  },
+  {
+    "id": "fr_bac3_min_master_apprecie",
+    "lang": "auto",
+    "text": "Bac+3 minimum, Master apprécié",
+    "expected": [
+      {"rank": 3, "confidence": "explicit", "contradictions": ["conflict_with_rank_5"]},
+      {"rank": 5, "confidence": "inferred", "contradictions": ["preferred_only", "conflict_with_rank_3"]}
+    ]
+  },
+  {
+    "id": "en_master_finance",
+    "lang": "auto",
+    "text": "Master's degree in Finance required",
+    "expected": [
+      {"rank": 5, "label": "Master", "field": "Finance", "confidence": "explicit", "contradictions": []}
+    ]
+  },
+  {
+    "id": "en_phd_equivalent_experience",
+    "lang": "auto",
+    "text": "PhD or equivalent experience",
+    "expected": [
+      {"rank": 8, "label": "PhD", "field": null, "confidence": "ambiguous", "contradictions": ["experience_equivalent"]}
+    ]
+  },
+  {
+    "id": "en_bachelor_4_years",
+    "lang": "auto",
+    "text": "Bachelor's degree (4 years)",
+    "expected": [
+      {"rank": 4, "label": "Bachelor", "field": null, "confidence": "explicit", "contradictions": []}
+    ]
+  },
+  {
+    "id": "de_masterabschluss",
+    "lang": "auto",
+    "text": "Masterabschluss (Wirtschaftsingenieur)",
+    "expected": [
+      {"rank": 5, "label": "Master", "field": "Engineering", "confidence": "explicit", "contradictions": []}
+    ]
+  },
+  {
+    "id": "de_promotion",
+    "lang": "auto",
+    "text": "Promotion erwünscht",
+    "expected": [
+      {"rank": 8, "label": "Promotion", "field": null, "confidence": "inferred", "contradictions": ["preferred_only"]}
+    ]
+  },
+  {
+    "id": "it_laurea_magistrale",
+    "lang": "auto",
+    "text": "Laurea magistrale in Ingegneria",
+    "expected": [
+      {"rank": 5, "label": "Laurea magistrale", "field": "Engineering", "confidence": "explicit", "contradictions": []}
+    ]
+  },
+  {
+    "id": "es_master_finanzas",
+    "lang": "auto",
+    "text": "Máster en Finanzas requerido",
+    "expected": [
+      {"rank": 5, "label": "Master", "field": "Finance", "confidence": "explicit", "contradictions": []}
+    ]
+  },
+  {
+    "id": "nl_master_financien",
+    "lang": "auto",
+    "text": "Master diploma (Financiën)",
+    "expected": [
+      {"rank": 5, "label": "Master", "field": "Finance", "confidence": "explicit", "contradictions": []}
+    ]
+  },
+  {
+    "id": "fr_ecole_commerce",
+    "lang": "auto",
+    "text": "École de commerce (Bac+5)",
+    "expected": [
+      {"rank": 5, "label": "Bac+5", "field": "Business", "confidence": "explicit", "contradictions": []}
+    ]
+  },
+  {
+    "id": "fr_niveau_bac4",
+    "lang": "auto",
+    "text": "Niveau Bac+4 validé",
+    "expected": [
+      {"rank": 4, "label": "Bac+4", "field": null, "confidence": "explicit", "contradictions": []}
+    ]
+  },
+  {
+    "id": "multi_master_bachelor",
+    "lang": "auto",
+    "text": "Master required\nBachelor accepted",
+    "expected": [
+      {"rank": 5, "confidence": "explicit", "contradictions": ["conflict_with_rank_3"]},
+      {"rank": 3, "confidence": "explicit", "contradictions": ["accepted_alternative", "conflict_with_rank_5"]}
+    ]
+  },
+  {
+    "id": "fr_master_ou_equivalent",
+    "lang": "auto",
+    "text": "Master ou équivalent",
+    "expected": [
+      {"rank": 5, "label": "Master", "field": null, "confidence": "inferred", "contradictions": []}
+    ]
+  },
+  {
+    "id": "fr_grande_ecole",
+    "lang": "auto",
+    "text": "Grande école",
+    "expected": [
+      {"rank": 5, "label": "Grande école", "field": null, "confidence": "inferred", "contradictions": []}
+    ]
+  },
+  {
+    "id": "fr_experience_equivalent",
+    "lang": "auto",
+    "text": "Bac+5 ou équivalent par l'expérience",
+    "expected": [
+      {"rank": 5, "confidence": "ambiguous", "contradictions": ["experience_equivalent"]}
+    ]
+  },
+  {
+    "id": "en_bachelor_plain",
+    "lang": "auto",
+    "text": "Bachelor's degree required",
+    "expected": [
+      {"rank": 3, "label": "Bachelor", "field": null, "confidence": "explicit", "contradictions": []}
+    ]
+  },
+  {
+    "id": "en_msc_data_science",
+    "lang": "auto",
+    "text": "MSc in Data Science required",
+    "expected": [
+      {"rank": 5, "label": "MSc", "field": "Data Science", "confidence": "explicit", "contradictions": []}
+    ]
+  },
+  {
+    "id": "de_bachelor_betriebswirtschaft",
+    "lang": "auto",
+    "text": "Bachelor in Betriebswirtschaft",
+    "expected": [
+      {"rank": 3, "label": "Bachelor", "field": "Business", "confidence": "explicit", "contradictions": []}
+    ]
+  },
+  {
+    "id": "it_laurea_triennale_economia",
+    "lang": "auto",
+    "text": "Laurea triennale in Economia",
+    "expected": [
+      {"rank": 4, "label": "Laurea", "field": "Economics", "confidence": "explicit", "contradictions": []}
+    ]
+  },
+  {
+    "id": "es_grado_derecho",
+    "lang": "auto",
+    "text": "Grado en Derecho",
+    "expected": [
+      {"rank": 4, "label": "Grado", "field": "Law", "confidence": "explicit", "contradictions": []}
+    ]
+  },
+  {
+    "id": "nl_hbo_bachelor",
+    "lang": "auto",
+    "text": "HBO Bachelor",
+    "expected": [
+      {"rank": 4, "label": "HBO", "field": null, "confidence": "explicit", "contradictions": []}
+    ]
+  },
+  {
+    "id": "fr_licence_droit",
+    "lang": "auto",
+    "text": "Licence en Droit exigée",
+    "expected": [
+      {"rank": 3, "label": "Licence", "field": "Law", "confidence": "explicit", "contradictions": []}
+    ]
+  },
+  {
+    "id": "en_master_science_math",
+    "lang": "auto",
+    "text": "Master of Science in Mathematics",
+    "expected": [
+      {"rank": 5, "label": "Master", "field": "Mathematics", "confidence": "explicit", "contradictions": []}
+    ]
+  },
+  {
+    "id": "de_doktorat_equivalent",
+    "lang": "auto",
+    "text": "Doktorat oder gleichwertige Erfahrung",
+    "expected": [
+      {"rank": 8, "label": "Doktorat", "confidence": "ambiguous", "contradictions": ["experience_equivalent"]}
+    ]
+  },
+  {
+    "id": "fr_bac6",
+    "lang": "auto",
+    "text": "Bac+6 exigé",
+    "expected": [
+      {"rank": 6, "label": "Bac+6", "field": null, "confidence": "explicit", "contradictions": []}
+    ]
+  },
+  {
+    "id": "it_dottorato",
+    "lang": "auto",
+    "text": "Dottorato di ricerca",
+    "expected": [
+      {"rank": 8, "label": "Dottorato", "field": null, "confidence": "explicit", "contradictions": []}
+    ]
+  },
+  {
+    "id": "es_doctorado_deseable",
+    "lang": "auto",
+    "text": "Doctorado deseable",
+    "expected": [
+      {"rank": 8, "label": "Doctorado", "field": null, "confidence": "inferred", "contradictions": ["preferred_only"]}
+    ]
+  },
+  {
+    "id": "nl_promotie_gewenst",
+    "lang": "auto",
+    "text": "Promotie gewenst",
+    "expected": [
+      {"rank": 8, "label": "Promotie", "field": null, "confidence": "inferred", "contradictions": ["preferred_only"]}
+    ]
+  },
+  {
+    "id": "en_bachelor_accepted",
+    "lang": "auto",
+    "text": "Bachelor accepted",
+    "expected": [
+      {"rank": 3, "label": "Bachelor", "field": null, "confidence": "explicit", "contradictions": ["accepted_alternative"]}
+    ]
+  },
+  {
+    "id": "fr_master_specialise_finance",
+    "lang": "auto",
+    "text": "Master spécialisé en Finance",
+    "expected": [
+      {"rank": 6, "label": "Master spécialisé", "field": "Finance", "confidence": "explicit", "contradictions": []}
+    ]
+  },
+  {
+    "id": "fr_field_only",
+    "lang": "auto",
+    "text": "Diplôme en Finance requis",
+    "expected": [
+      {"fact_type": "education_field_required", "rank": 0, "label": "", "field": "Finance", "confidence": "inferred", "contradictions": []}
+    ]
+  },
+  {
+    "id": "fr_no_education",
+    "lang": "auto",
+    "text": "Nous recherchons un profil curieux.",
+    "expected": []
+  },
+  {
+    "id": "en_master_verb",
+    "lang": "auto",
+    "text": "You will master Python",
+    "expected": []
+  },
+  {
+    "id": "fr_driving_licence",
+    "lang": "auto",
+    "text": "Permis de conduire (licence B) exigé",
+    "expected": []
+  },
+  {
+    "id": "en_dr_title",
+    "lang": "auto",
+    "text": "Dr. Smith leads the team",
+    "expected": []
+  },
+  {
+    "id": "fr_bac5_or_bac3_accepte",
+    "lang": "auto",
+    "text": "Bac+5 requis et Bac+3 accepté",
+    "expected": [
+      {"rank": 5, "confidence": "explicit", "contradictions": ["conflict_with_rank_3"]},
+      {"rank": 3, "confidence": "explicit", "contradictions": ["accepted_alternative", "conflict_with_rank_5"]}
+    ]
+  },
+  {
+    "id": "en_engineering_degree",
+    "lang": "auto",
+    "text": "Engineering degree required",
+    "expected": [
+      {"rank": 5, "label": "Engineering degree", "field": "Engineering", "confidence": "explicit", "contradictions": []}
+    ]
+  },
+  {
+    "id": "fr_bac3_and_master",
+    "lang": "auto",
+    "text": "Bac+3 et Master requis",
+    "expected": [
+      {"rank": 5, "label": "Master", "field": null, "confidence": "explicit", "contradictions": []}
+    ]
+  },
+  {
+    "id": "en_phd_preferred",
+    "lang": "auto",
+    "text": "PhD preferred",
+    "expected": [
+      {"rank": 8, "label": "PhD", "field": null, "confidence": "inferred", "contradictions": ["preferred_only"]}
+    ]
+  },
+  {
+    "id": "de_diplom_ingenieur",
+    "lang": "auto",
+    "text": "Diplom-Ingenieur (FH)",
+    "expected": [
+      {"rank": 5, "label": "Ingénieur", "field": "Engineering", "confidence": "explicit", "contradictions": []}
+    ]
+  }
+]
