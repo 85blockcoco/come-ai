@@ -7,6 +7,7 @@
     <title>Côme AI Career — espace local</title>
     <link rel="stylesheet" href="/career-static/career.css" />
     <link rel="stylesheet" href="/career-static/cv_plan.css" />
+    <link rel="stylesheet" href="/career-static/dependencies.css" />
   </head>
   <body>
     <a class="skip-link" href="#career-main">Aller au contenu Career</a>
@@ -42,6 +43,7 @@
           <button class="career-tab" id="tab-discover" type="button" aria-controls="view-discover" data-product-area="Discover" data-view="discover">Découvrir</button>
           <button class="career-tab" id="tab-stagehunter" type="button" aria-controls="view-stagehunter" data-view="stagehunter">Stage Hunter</button>
           <button class="career-tab" id="tab-applications" type="button" aria-controls="view-applications" data-product-area="Applications" data-view="applications">Candidatures</button>
+          <button class="career-tab" id="tab-dependencies" type="button" aria-controls="view-dependencies" data-product-area="Dependencies" data-view="dependencies">Dépendances</button>
           <button class="career-tab" id="tab-interviews" type="button" aria-controls="view-interviews" data-product-area="Interview Coach" data-view="interviews">Coach d’entretien</button>
           <button class="career-tab" id="tab-profile" type="button" aria-controls="view-profile" data-view="profile">Mon profil</button>
           <button class="career-tab" id="tab-settings" type="button" aria-controls="view-settings" data-view="settings">Réglages</button>
@@ -726,6 +728,100 @@
             <p id="coach-history-empty" class="empty-state compact-empty">Aucune séance sauvegardée. Commence par une question technique, fit, case ou liée à une offre.</p>
           </section>
         </section>
+
+        <section id="view-dependencies" class="career-view" tabindex="-1" hidden aria-labelledby="dependencies-title">
+          <section class="panel dependency-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">SPEC-013 · lecture locale</p>
+                <h2 id="dependencies-title">Dépendances et analyse d’impact</h2>
+                <p>Un graphe local relie tes offres, exigences, preuves, matchings et candidatures. Les scénarios montrent ce qui risque d’être touché avant d’appliquer un changement ; rien n’est modifié ni envoyé automatiquement.</p>
+              </div>
+              <span class="local-tag">100 % local</span>
+            </div>
+            <p id="dependencies-status" class="dependency-status" role="status" aria-live="polite"></p>
+            <div class="dependency-toolbar">
+              <button id="dependencies-build" class="primary-button" type="button">Construire / rafraîchir</button>
+              <button id="dependencies-refresh" class="secondary-button" type="button">Recharger</button>
+              <button id="dependencies-snapshot" class="quiet-button" type="button">Créer un snapshot</button>
+              <span id="dependencies-summary" class="dependency-summary" aria-live="polite"></span>
+            </div>
+            <div id="dependencies-filters" class="dependency-filters" aria-label="Filtrer les types de nœuds">
+              <label><input type="checkbox" data-dependency-filter="requirement" checked /> Exigences</label>
+              <label><input type="checkbox" data-dependency-filter="evidence" checked /> Preuves</label>
+              <label><input type="checkbox" data-dependency-filter="offer" checked /> Offres</label>
+              <label><input type="checkbox" data-dependency-filter="profile" checked /> Profil</label>
+              <label><input type="checkbox" data-dependency-filter="application" checked /> Candidatures</label>
+              <label><input type="checkbox" data-dependency-filter="matching" checked /> Matchings</label>
+              <label><input type="checkbox" data-dependency-filter="skill" checked /> Compétences</label>
+              <label><input type="checkbox" data-dependency-filter="certification" checked /> Certifications</label>
+            </div>
+            <div class="dependency-canvas-wrap">
+              <svg id="dependencies-svg" class="dependency-canvas" viewBox="0 0 880 560" role="img" aria-label="Graphe interactif des dépendances locales"></svg>
+              <p id="dependencies-empty" class="dependency-empty" hidden>Aucun nœud à afficher avec ces filtres. Construis le graphe ou réactive un type.</p>
+            </div>
+            <div id="dependencies-legend" class="dependency-legend" aria-label="Légende des types de nœuds"></div>
+            <p class="panel-help">Molette : zoom. Glisser : déplacer. Cliquer un nœud : voir ses voisins. Le chemin critique apparaît en rouge après une analyse d’impact.</p>
+          </section>
+
+          <div class="dependency-grid">
+            <section class="panel dependency-card" aria-labelledby="dependencies-impact-title">
+              <h4 id="dependencies-impact-title">Simuler un changement</h4>
+              <div class="dependency-impact-controls">
+                <label>Nœud source
+                  <select id="dependencies-impact-source"><option value="">Choisir un nœud…</option></select>
+                </label>
+                <label>Type de changement
+                  <select id="dependencies-impact-kind">
+                    <option value="update">Modifier</option>
+                    <option value="delete">Supprimer</option>
+                    <option value="status_change">Changer le statut</option>
+                    <option value="unlink">Délier</option>
+                    <option value="create">Créer</option>
+                  </select>
+                </label>
+                <label>Seuil de propagation
+                  <input id="dependencies-impact-threshold" type="number" min="0" max="1" step="0.05" value="0.15" />
+                </label>
+              </div>
+              <div class="dependency-toolbar top-gap">
+                <button id="dependencies-impact-run" class="secondary-button" type="button">Analyser l’impact</button>
+                <button id="dependencies-plan-button" class="quiet-button" type="button" disabled>Proposer un plan</button>
+              </div>
+              <div id="dependencies-impact-output" aria-live="polite"></div>
+            </section>
+
+            <section class="panel dependency-card" aria-labelledby="dependencies-node-title">
+              <h4 id="dependencies-node-title">Détail d’un nœud</h4>
+              <div id="dependencies-node-detail">
+                <p class="empty-state">Sélectionne un nœud pour voir ses voisins et ses liens.</p>
+              </div>
+            </section>
+
+            <section class="panel dependency-card" aria-labelledby="dependencies-critical-title">
+              <div class="panel-heading compact-heading">
+                <h4 id="dependencies-critical-title">Nœuds critiques</h4>
+                <button id="dependencies-critical-refresh" class="quiet-button" type="button">Actualiser</button>
+              </div>
+              <div id="dependencies-critical-output" aria-live="polite"></div>
+            </section>
+
+            <section class="panel dependency-card" aria-labelledby="dependencies-fragility-title">
+              <div class="panel-heading compact-heading">
+                <h4 id="dependencies-fragility-title">Fragilité et cycles</h4>
+                <button id="dependencies-fragility-refresh" class="quiet-button" type="button">Actualiser</button>
+              </div>
+              <div id="dependencies-fragility-output" aria-live="polite"></div>
+            </section>
+
+            <section class="panel dependency-card" aria-labelledby="dependencies-plan-title">
+              <h4 id="dependencies-plan-title">Plan d’exécution</h4>
+              <div id="dependencies-plan-output" aria-live="polite">
+                <p class="empty-state">Lance une analyse d’impact puis « Proposer un plan ».</p>
+              </div>
+            </section>
+          </div>
+        </section>
       </main>
 
       <footer>
@@ -733,6 +829,7 @@
       </footer>
     </div>
     <script src="/career-static/cv_plan.js" defer></script>
+    <script src="/career-static/js/dependencies.js" defer></script>
     <script src="/career-static/career.js" defer></script>
   </body>
 </html>
