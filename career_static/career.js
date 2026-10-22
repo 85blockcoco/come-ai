@@ -212,6 +212,7 @@ function labelForView(viewName) {
     interviews: "Coach d’entretien",
     profile: "Mon profil",
     settings: "Réglages",
+    constitution: "Constitution",
   }[viewName] || "Career";
 }
 
@@ -249,7 +250,7 @@ function organiseViews() {
   }
 }
 
-const careerViews = new Set(["dashboard", "discover", "stagehunter", "shortlist", "studio", "applications", "interviews", "profile", "settings"]);
+const careerViews = new Set(["dashboard", "discover", "stagehunter", "shortlist", "studio", "applications", "interviews", "profile", "settings", "constitution"]);
 let internalHashChange = false;
 
 function refreshView(viewName) {
@@ -260,6 +261,11 @@ function refreshView(viewName) {
     studio: loadStudio,
     applications: loadApplications,
     interviews: loadCoach,
+    // La Constitution exécutable (SPEC-014) charge ses propres données :
+    // elle reste isolée du reste de l'interface Career.
+    constitution: async () => {
+      if (window.ComeConstitution?.init) await window.ComeConstitution.init();
+    },
   };
   loaders[viewName]?.().catch((error) => setMessage(error.message, true));
 }

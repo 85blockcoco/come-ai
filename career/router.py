@@ -13,6 +13,21 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
+from .constitution import (
+    CONSTITUTION_VERSION,
+    ENTITY_ID_KEY,
+    ENTITY_TYPE_KEY,
+    ConstitutionEngine,
+    ConstitutionError,
+    Rule,
+    build_entity_context,
+    check_expression,
+    evaluate_expression,
+    generate_rule_tests,
+)
+from .constitution_audit import build_audit_report, build_entity_report, detect_drift, render_report_markdown
+from .constitution_store import ConstitutionStore
+from .models import clean_text
 from .profile_import import MAX_PROFILE_IMPORT_BYTES
 from .service import CareerService
 from workspace_core import UserFacingError, to_jsonable
@@ -227,6 +242,127 @@ class CVAnalyzePayload(BaseModel):
     filetype: str = Field(default="txt", pattern="^(txt|pdf|docx)$")
 
 
+# --- Constitution exécutable (SPEC-014) --------------------------------------
+
+
+class ConstitutionRulePayload(BaseModel):
+    """Création d'une règle (toujours en brouillon)."""
+
+    rule_id: str = Field(min_length=1, max_length=160)
+    name: str = Field(min_length=1, max_length=200)
+    domain: str = Field(min_length=1, max_length=40)
+    description: str = Field(default="", max_length=4_000)
+    rationale: str = Field(default="", max_length=4_000)
+    expression: str = Field(min_length=1, max_length=2_000)
+    dsl_type: str = Field(default="cel", max_length=20)
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    scope: list[str] = Field(default_factory=list, max_length=20)
+    tags: list[str] = Field(default_factory=list, max_length=20)
+    severity: str = Field(default="error", max_length=20)
+    remediation: str | None = Field(default=None, max_length=1_000)
+    source_reference: str | None = Field(default=None, max_length=400)
+    created_by: str = Field(default="local", max_length=120)
+
+
+class ConstitutionRuleUpdatePayload(BaseModel):
+    """Modification d'une règle : crée une nouvelle version en brouillon."""
+
+    name: str | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=4_000)
+    rationale: str | None = Field(default=None, max_length=4_000)
+    expression: str | None = Field(default=None, max_length=2_000)
+    parameters: dict[str, Any] | None = None
+    scope: list[str] | None = Field(default=None, max_length=20)
+    tags: list[str] | None = Field(default=None, max_length=20)
+    severity: str | None = Field(default=None, max_length=20)
+    remediation: str | None = Field(default=None, max_length=1_000)
+    source_reference: str | None = Field(default=None, max_length=400)
+    change_note: str = Field(default="", max_length=500)
+    actor: str = Field(default="local", max_length=120)
+
+
+class ConstitutionApprovePayload(BaseModel):
+    """Approbation d'une règle : l'approbateur doit différer de l'auteur."""
+
+    approved_by: str = Field(min_length=1, max_length=120)
+    note: str = Field(default="", max_length=500)
+
+
+class ConstitutionReasonPayload(BaseModel):
+    """Dépréciation ou archivage d'une règle."""
+
+    reason: str = Field(default="", max_length=500)
+    actor: str = Field(default="local", max_length=120)
+
+
+class ConstitutionRollbackPayload(BaseModel):
+    """Rollback instantané vers une version antérieure."""
+
+    target_version: int = Field(ge=1)
+    reason: str = Field(default="", max_length=500)
+    actor: str = Field(default="local", max_length=120)
+
+
+class ConstitutionRuleSetPayload(BaseModel):
+    """Création d'un jeu de règles."""
+
+    ruleset_id: str = Field(min_length=1, max_length=160)
+    name: str = Field(min_length=1, max_length=200)
+    rules: list[str] = Field(default_factory=list, max_length=200)
+    description: str = Field(default="", max_length=4_000)
+    effective_from: str = Field(default="", max_length=40)
+    supersedes: str | None = Field(default=None, max_length=160)
+    actor: str = Field(default="local", max_length=120)
+
+
+class ConstitutionRuleSetRollbackPayload(BaseModel):
+    """Rollback d'un jeu de règles (version précédente par défaut)."""
+
+    target_version: int | None = Field(default=None, ge=1)
+    reason: str = Field(default="", max_length=500)
+    actor: str = Field(default="local", max_length=120)
+
+
+class ConstitutionRuleSetUpdatePayload(BaseModel):
+    """Modification d'un jeu de règles : crée une nouvelle version."""
+
+    name: str | None = Field(default=None, max_length=200)
+    rules: list[str] | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=4_000)
+    change_note: str = Field(default="", max_length=500)
+    actor: str = Field(default="local", max_length=120)
+
+
+class ConstitutionValidatePayload(BaseModel):
+    """Validation d'une entité face à un jeu de règles."""
+
+    entity_id: str = Field(default="", max_length=160)
+    entity_type: str = Field(default="offer", max_length=40)
+    entity: dict[str, Any] | None = None
+    job_id: str = Field(default="", max_length=160)
+    ruleset_id: str = Field(default="career.core", max_length=160)
+
+
+class ConstitutionExpressionPayload(BaseModel):
+    """Vérification syntaxique d'une expression CEL."""
+
+    expression: str = Field(min_length=1, max_length=2_000)
+
+
+class ConstitutionExpressionPreviewPayload(BaseModel):
+    """Prévisualisation d'une expression CEL sur un contexte."""
+
+    expression: str = Field(min_length=1, max_length=2_000)
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
+class ConstitutionTestGeneratePayload(BaseModel):
+    """Génération de tests depuis les règles actives."""
+
+    write: bool = False
+    output_path: str = Field(default="", max_length=400)
+
+
 class CVAnalyzeResponse(BaseModel):
     """Response payload for CV structural analysis."""
     findings: list[dict[str, Any]]
@@ -234,6 +370,262 @@ class CVAnalyzeResponse(BaseModel):
     experiences: list[dict[str, Any]]
     readability: dict[str, Any]
     provenance: dict[str, Any]
+
+
+def _constitution_context(
+    payload: ConstitutionValidatePayload, service: CareerService | None
+) -> dict[str, Any]:
+    """Construit le contexte d'évaluation d'une entité (fournie ou stockée)."""
+    entity_type = clean_text(payload.entity_type, limit=40) or "offer"
+    entity = payload.entity
+    if not entity and payload.job_id and service is not None:
+        entity = service.get_job(payload.job_id)
+    entity = entity or {}
+    already_namespaced = any(key in entity for key in ("matching", "freshness", "dedup", "privacy", "export"))
+    context = dict(entity) if already_namespaced else build_entity_context(entity_type, entity)
+    resolved_id = clean_text(payload.entity_id, limit=160) or clean_text(entity.get("id"), limit=160)
+    context[ENTITY_ID_KEY] = resolved_id
+    context[ENTITY_TYPE_KEY] = entity_type
+    return context
+
+
+def create_constitution_router(store: ConstitutionStore, *, service: CareerService | None = None) -> APIRouter:
+    """Endpoints de la Constitution exécutable (SPEC-014).
+
+    Les règles sont la source de vérité des seuils métier : elles se créent,
+    se relisent, s'approuvent, se versionnent et se contrôlent depuis HTTP.
+    """
+    router = APIRouter(prefix="/api/constitution")
+    engine = ConstitutionEngine(store=store)
+
+    async def local(call: Any) -> Any:
+        return to_jsonable(await run_in_threadpool(call))
+
+    @router.get("/health")
+    async def constitution_health() -> Any:
+        rules = await local(lambda: store.list_rules())
+        rulesets = await local(lambda: store.list_rulesets())
+        return {
+            "module": "Constitution exécutable",
+            "version": CONSTITUTION_VERSION,
+            "dsl": "cel",
+            "rules": len(rules),
+            "active_rules": sum(1 for rule in rules if rule.get("status") == "active"),
+            "rulesets": [ruleset.get("ruleset_id") for ruleset in rulesets],
+            "offline": True,
+        }
+
+    @router.get("/rules")
+    async def list_rules(
+        domain: str = Query(default="", max_length=40),
+        status: str = Query(default="", max_length=20),
+        q: str = Query(default="", max_length=200),
+        scope: str = Query(default="", max_length=40),
+    ) -> Any:
+        rules = await local(
+            lambda: store.list_rules(
+                domain=domain or None,
+                status=status or None,
+                query=q or None,
+                scope=scope or None,
+            )
+        )
+        return {"rules": rules, "count": len(rules)}
+
+    @router.post("/rules", status_code=201)
+    async def create_rule(payload: ConstitutionRulePayload) -> Any:
+        return await local(lambda: store.create_rule(payload.model_dump(), actor=payload.created_by))
+
+    @router.get("/rules/{rule_id}")
+    async def get_rule(rule_id: str) -> Any:
+        def run() -> dict[str, Any]:
+            rule = store.get_rule(rule_id)
+            if rule is None:
+                raise UserFacingError(f"La règle « {rule_id} » est introuvable.")
+            return {
+                "rule": rule,
+                "effective": store.effective_rule(rule_id),
+                "versions": store.list_rule_versions(rule_id),
+                "signature_valid": store.verify_rule(rule),
+            }
+
+        return await local(run)
+
+    @router.patch("/rules/{rule_id}")
+    async def update_rule(rule_id: str, payload: ConstitutionRuleUpdatePayload) -> Any:
+        changes = {
+            key: value
+            for key, value in payload.model_dump().items()
+            if value is not None and key not in {"change_note", "actor"}
+        }
+        return await local(
+            lambda: store.update_rule(
+                rule_id,
+                changes,
+                actor=payload.actor,
+                change_note=payload.change_note,
+            )
+        )
+
+    @router.post("/rules/{rule_id}/approve")
+    async def approve_rule(rule_id: str, payload: ConstitutionApprovePayload) -> Any:
+        return await local(
+            lambda: store.approve_rule(rule_id, approver=payload.approved_by, note=payload.note)
+        )
+
+    @router.post("/rules/{rule_id}/deprecate")
+    async def deprecate_rule(rule_id: str, payload: ConstitutionReasonPayload) -> Any:
+        return await local(
+            lambda: store.deprecate_rule(rule_id, actor=payload.actor, reason=payload.reason)
+        )
+
+    @router.post("/rules/{rule_id}/archive")
+    async def archive_rule(rule_id: str, payload: ConstitutionReasonPayload) -> Any:
+        return await local(
+            lambda: store.archive_rule(rule_id, actor=payload.actor, reason=payload.reason)
+        )
+
+    @router.post("/rules/{rule_id}/rollback")
+    async def rollback_rule(rule_id: str, payload: ConstitutionRollbackPayload) -> Any:
+        return await local(
+            lambda: store.rollback_rule(
+                rule_id,
+                target_version=payload.target_version,
+                actor=payload.actor,
+                reason=payload.reason,
+            )
+        )
+
+    @router.get("/rulesets")
+    async def list_rulesets() -> Any:
+        rulesets = await local(lambda: store.list_rulesets())
+        return {"rulesets": rulesets, "count": len(rulesets)}
+
+    @router.post("/rulesets", status_code=201)
+    async def create_ruleset(payload: ConstitutionRuleSetPayload) -> Any:
+        return await local(lambda: store.create_ruleset(payload.model_dump(), actor=payload.actor))
+
+    @router.get("/rulesets/{ruleset_id}")
+    async def get_ruleset(ruleset_id: str) -> Any:
+        def run() -> dict[str, Any]:
+            ruleset = store.get_ruleset(ruleset_id)
+            if ruleset is None:
+                raise UserFacingError(f"Le jeu de règles « {ruleset_id} » est introuvable.")
+            return {
+                "ruleset": ruleset,
+                "versions": store.list_ruleset_versions(ruleset_id),
+                "signature_valid": store.verify(ruleset, str(ruleset.get("signature", ""))),
+            }
+
+        return await local(run)
+
+    @router.patch("/rulesets/{ruleset_id}")
+    async def update_ruleset(ruleset_id: str, payload: ConstitutionRuleSetUpdatePayload) -> Any:
+        changes = {
+            key: value
+            for key, value in payload.model_dump().items()
+            if value is not None and key not in {"change_note", "actor"}
+        }
+        return await local(
+            lambda: store.update_ruleset(
+                ruleset_id,
+                changes,
+                actor=payload.actor,
+                change_note=payload.change_note,
+            )
+        )
+
+    @router.post("/rollback/{ruleset_id}")
+    async def rollback_ruleset(ruleset_id: str, payload: ConstitutionRuleSetRollbackPayload) -> Any:
+        return await local(
+            lambda: store.rollback_ruleset(
+                ruleset_id,
+                target_version=payload.target_version,
+                actor=payload.actor,
+                reason=payload.reason,
+            )
+        )
+
+    @router.post("/validate")
+    async def validate_entity(payload: ConstitutionValidatePayload) -> Any:
+        def run() -> dict[str, Any]:
+            context = _constitution_context(payload, service)
+            report = engine.check_conformance(context, payload.ruleset_id)
+            store.record_conformance(report.to_dict())
+            ruleset = engine.resolve_ruleset(payload.ruleset_id)
+            results = engine.evaluate_all(ruleset, context) if ruleset else []
+            return {
+                "report": report.to_dict(),
+                "results": [result.to_dict() for result in results],
+                "ruleset_id": payload.ruleset_id,
+            }
+
+        return await local(run)
+
+    @router.get("/report/{entity_id}")
+    async def entity_report(entity_id: str) -> Any:
+        def run() -> dict[str, Any]:
+            report = build_entity_report(store, entity_id)
+            if not report.get("checked"):
+                raise UserFacingError(
+                    f"Aucune conformité enregistrée pour l'entité « {entity_id} » : lancez d'abord une validation."
+                )
+            return report
+
+        return await local(run)
+
+    @router.get("/audit")
+    async def audit_report() -> Any:
+        def run() -> dict[str, Any]:
+            report = build_audit_report(store)
+            report["markdown"] = render_report_markdown(report)
+            return report
+
+        return await local(run)
+
+    @router.get("/drift")
+    async def drift_report() -> Any:
+        return await local(lambda: detect_drift(store))
+
+    @router.post("/test/generate")
+    async def generate_tests(payload: ConstitutionTestGeneratePayload) -> Any:
+        def run() -> dict[str, Any]:
+            rules = [Rule.from_dict(item) for item in store.list_rules(status="active")]
+            content = generate_rule_tests(rules)
+            written: str | None = None
+            if payload.write:
+                default_path = store.data_dir / "constitution" / "generated" / "test_constitution_generated.py"
+                target = Path(payload.output_path) if payload.output_path else default_path
+                resolved = target.resolve()
+                if store.data_dir.resolve() not in resolved.parents and resolved != store.data_dir.resolve():
+                    raise UserFacingError(
+                        "Les tests générés ne peuvent être écrits que dans l'espace local Career."
+                    )
+                resolved.parent.mkdir(parents=True, exist_ok=True)
+                resolved.write_text(content, encoding="utf-8")
+                written = str(resolved)
+            for rule in rules:
+                store.mark_rule_tested(rule.rule_id, tested=True)
+            return {"rules": len(rules), "content": content, "written": written}
+
+        return await local(run)
+
+    @router.post("/expression/check")
+    async def check_expression_endpoint(payload: ConstitutionExpressionPayload) -> Any:
+        return await local(lambda: check_expression(payload.expression))
+
+    @router.post("/expression/preview")
+    async def preview_expression(payload: ConstitutionExpressionPreviewPayload) -> Any:
+        def run() -> dict[str, Any]:
+            try:
+                value = evaluate_expression(payload.expression, payload.context)
+            except ConstitutionError as error:
+                return {"valid": False, "error": str(error), "value": None}
+            return {"valid": True, "error": None, "value": value}
+
+        return await local(run)
+
+    return router
 
 
 def create_career_router(
@@ -244,6 +636,10 @@ def create_career_router(
     if not CAREER_STATIC_DIR.is_dir():
         raise RuntimeError("Les fichiers Career Agent sont introuvables.")
     router = APIRouter()
+    # La Constitution exécutable vit à côté de la base Career : elle décrit
+    # les règles du produit, pas les données d'une candidature.
+    constitution_store = ConstitutionStore(service.base_dir)
+    router.include_router(create_constitution_router(constitution_store, service=service))
 
     async def local(call: Any) -> Any:
         return to_jsonable(await run_in_threadpool(call))

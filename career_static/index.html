@@ -45,6 +45,7 @@
           <button class="career-tab" id="tab-interviews" type="button" aria-controls="view-interviews" data-product-area="Interview Coach" data-view="interviews">Coach d’entretien</button>
           <button class="career-tab" id="tab-profile" type="button" aria-controls="view-profile" data-view="profile">Mon profil</button>
           <button class="career-tab" id="tab-settings" type="button" aria-controls="view-settings" data-view="settings">Réglages</button>
+          <button class="career-tab" id="tab-constitution" type="button" aria-controls="view-constitution" data-view="constitution">Constitution</button>
         </nav>
 
         <p id="career-loading" class="career-loading" role="status" aria-live="polite" aria-atomic="true">Chargement de ton espace Career local…</p>
@@ -726,6 +727,148 @@
             <p id="coach-history-empty" class="empty-state compact-empty">Aucune séance sauvegardée. Commence par une question technique, fit, case ou liée à une offre.</p>
           </section>
         </section>
+
+        <section id="view-constitution" class="career-view" tabindex="-1" hidden aria-labelledby="constitution-title">
+          <header class="view-intro">
+            <div>
+              <p class="eyebrow">Gouvernance des règles</p>
+              <h2 id="constitution-title">Constitution exécutable</h2>
+              <p>Les règles métier (fraîcheur, matching, déduplication, confidentialité, export) sont écrites ici sous forme d’expressions vérifiables. Une règle reste un brouillon tant qu’elle n’est pas approuvée : le tableau de bord distingue l’état de chaque règle et signale la dérive. Rien n’est envoyé sur le réseau.</p>
+            </div>
+            <span class="local-tag">100 % local · DSL CEL</span>
+          </header>
+
+          <section class="panel" aria-labelledby="constitution-health-title">
+            <div class="panel-heading compact-heading"><div><p class="eyebrow">État</p><h3 id="constitution-health-title">Constitution en cours</h3></div></div>
+            <div id="constitution-health" class="constitution-health" aria-live="polite"></div>
+          </section>
+
+          <section class="panel" aria-labelledby="constitution-rules-title">
+            <div class="panel-heading compact-heading"><div><p class="eyebrow">Catalogue</p><h3 id="constitution-rules-title">Règles connues</h3></div></div>
+            <div id="constitution-rules" class="constitution-rules" aria-live="polite"></div>
+          </section>
+
+          <section class="panel" aria-labelledby="constitution-editor-title">
+            <div class="panel-heading compact-heading"><div><p class="eyebrow">Éditeur</p><h3 id="constitution-editor-title">Écrire une règle</h3></div></div>
+            <form id="constitution-editor" class="form-stack">
+              <div class="form-row two-columns">
+                <label>Identifiant de règle
+                  <input id="constitution-rule-id" name="rule_id" type="text" maxlength="160" placeholder="freshness.certification.max_age" required>
+                </label>
+                <label>Nom
+                  <input id="constitution-rule-name" name="name" type="text" maxlength="200" placeholder="Durée max certification" required>
+                </label>
+              </div>
+              <div class="form-row three-columns">
+                <label>Domaine
+                  <select id="constitution-domain" name="domain">
+                    <option value="freshness">Fraîcheur</option>
+                    <option value="matching" selected>Matching</option>
+                    <option value="dedup">Déduplication</option>
+                    <option value="privacy">Confidentialité</option>
+                    <option value="export">Export</option>
+                  </select>
+                </label>
+                <label>Sévérité
+                  <select id="constitution-severity" name="severity">
+                    <option value="info">Information</option>
+                    <option value="warning">Avertissement</option>
+                    <option value="error" selected>Erreur</option>
+                    <option value="critical">Critique</option>
+                  </select>
+                </label>
+                <label>Entités concernées
+                  <input id="constitution-scope" name="scope" type="text" maxlength="200" placeholder="offer, evidence">
+                </label>
+              </div>
+              <label>Description
+                <textarea id="constitution-description" name="description" rows="2" maxlength="4000" placeholder="Ce que la règle interdit ou exige."></textarea>
+              </label>
+              <label>Pourquoi cette règle existe
+                <textarea id="constitution-rationale" name="rationale" rows="2" maxlength="4000" placeholder="Justification métier, source dans le code ou la documentation."></textarea>
+              </label>
+              <label>Expression (CEL)
+                <textarea id="constitution-expression" name="expression" rows="3" maxlength="2000" list="constitution-identifiers" placeholder="matching.score &gt;= 45" required></textarea>
+              </label>
+              <datalist id="constitution-identifiers"></datalist>
+              <div class="inline-actions">
+                <button id="constitution-check-expression" class="quiet-button" type="button">Vérifier la syntaxe</button>
+                <button id="constitution-preview-expression" class="quiet-button" type="button">Prévisualiser</button>
+              </div>
+              <p id="constitution-check" class="constitution-feedback" role="status" aria-live="polite"></p>
+              <p id="constitution-preview" class="constitution-feedback" role="status" aria-live="polite"></p>
+              <label>Contexte de prévisualisation (JSON)
+                <textarea id="constitution-context" name="context" rows="3" maxlength="4000" placeholder="{&quot;matching&quot;: {&quot;score&quot;: 72}}"></textarea>
+              </label>
+              <div class="form-row two-columns">
+                <label>Auteur
+                  <input id="constitution-author" name="author" type="text" maxlength="120" value="local">
+                </label>
+                <label>Approbateur (relève par un tiers)
+                  <input id="constitution-approver" name="approver" type="text" maxlength="120" placeholder="nom de la relecture">
+                </label>
+              </div>
+              <div class="inline-actions">
+                <button class="primary-button" type="submit">Enregistrer en brouillon</button>
+                <button id="constitution-approve" class="secondary-button" type="button">Approuver la règle sélectionnée</button>
+              </div>
+            </form>
+            <p id="constitution-editor-status" class="constitution-feedback" role="status" aria-live="polite"></p>
+          </section>
+
+          <section class="panel" aria-labelledby="constitution-validator-title">
+            <div class="panel-heading compact-heading"><div><p class="eyebrow">Contrôle</p><h3 id="constitution-validator-title">Valider une entité</h3></div></div>
+            <form id="constitution-validator" class="form-stack">
+              <div class="form-row three-columns">
+                <label>Identifiant de l’entité
+                  <input id="constitution-entity-id" name="entity_id" type="text" maxlength="160" placeholder="offre-123">
+                </label>
+                <label>Type d’entité
+                  <select id="constitution-entity-type" name="entity_type">
+                    <option value="offer" selected>Offre</option>
+                    <option value="profile">Profil</option>
+                    <option value="evidence">Preuve</option>
+                    <option value="requirement">Exigence</option>
+                    <option value="matching">Matching</option>
+                    <option value="export">Export</option>
+                  </select>
+                </label>
+                <label>Jeu de règles
+                  <input id="constitution-ruleset-id" name="ruleset_id" type="text" maxlength="160" value="career.core">
+                </label>
+              </div>
+              <label>Entité (JSON)
+                <textarea id="constitution-entity" name="entity" rows="4" maxlength="20000" placeholder="{&quot;duration_months&quot;: 6, &quot;scoring&quot;: {&quot;score&quot;: 72}}"></textarea>
+              </label>
+              <div class="inline-actions">
+                <button id="constitution-validate" class="primary-button" type="button">Valider</button>
+                <button id="constitution-generate-tests" class="quiet-button" type="button">Générer les tests</button>
+              </div>
+            </form>
+            <p id="constitution-validation-result" class="constitution-feedback" role="status" aria-live="polite"></p>
+            <pre id="constitution-generated" class="constitution-generated" aria-live="polite"></pre>
+          </section>
+
+          <section class="panel" aria-labelledby="constitution-graph-title">
+            <div class="panel-heading compact-heading"><div><p class="eyebrow">Cartographie</p><h3 id="constitution-graph-title">Règles → entités → tests</h3></div></div>
+            <div id="constitution-graph" class="constitution-graph" aria-live="polite"></div>
+          </section>
+
+          <section class="panel" aria-labelledby="constitution-dashboard-title">
+            <div class="panel-heading compact-heading"><div><p class="eyebrow">Conformité</p><h3 id="constitution-dashboard-title">Tableau de bord et dérive</h3></div></div>
+            <div id="constitution-dashboard" class="constitution-dashboard" aria-live="polite"></div>
+          </section>
+
+          <section class="panel" aria-labelledby="constitution-history-title">
+            <div class="panel-heading compact-heading"><div><p class="eyebrow">Versionnage</p><h3 id="constitution-history-title">Historique de la règle sélectionnée</h3></div></div>
+            <div id="constitution-history" class="constitution-history" aria-live="polite"></div>
+          </section>
+
+          <section class="panel" aria-labelledby="constitution-audit-title">
+            <div class="panel-heading compact-heading"><div><p class="eyebrow">Traçabilité</p><h3 id="constitution-audit-title">Journal d’audit</h3></div></div>
+            <div id="constitution-audit" class="constitution-audit" aria-live="polite"></div>
+          </section>
+        </section>
       </main>
 
       <footer>
@@ -734,5 +877,6 @@
     </div>
     <script src="/career-static/cv_plan.js" defer></script>
     <script src="/career-static/career.js" defer></script>
+    <script src="/career-static/js/constitution.js" defer></script>
   </body>
 </html>

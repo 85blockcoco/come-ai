@@ -541,3 +541,38 @@ button, a, .career-tab { transition: background-color .16s ease, border-color .1
   .application-filters label { flex: 1 1 100%; }
   .application-filters select { width: 100%; }
 }
+
+/* SPEC-014 — Constitution exécutable : éditeur, dashboard, graphe, historique. */
+.constitution-health, .constitution-dashboard, .constitution-rules, .constitution-graph, .constitution-history, .constitution-audit { display: grid; gap: 12px; }
+.constitution-metric { display: grid; gap: 2px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-soft); }
+.constitution-metric strong { color: var(--accent-dark); font-size: 1.3rem; }
+.constitution-metric span { color: var(--muted); font-size: .74rem; }
+.constitution-note { color: var(--faint); font-size: .72rem; }
+.constitution-empty { color: var(--muted); font-size: .78rem; }
+.constitution-table { width: 100%; border-collapse: collapse; font-size: .76rem; }
+.constitution-table th, .constitution-table td { padding: 7px 9px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.constitution-table th { color: var(--muted); font-size: .7rem; letter-spacing: .04em; text-transform: uppercase; }
+.constitution-table td small { display: block; color: var(--faint); font-size: .7rem; }
+.constitution-rule-link { border: 0; padding: 0; color: var(--accent-dark); background: none; font-weight: 700; text-align: left; }
+.constitution-rule-link:hover, .constitution-rule-link:focus-visible { text-decoration: underline; outline: none; }
+.constitution-feedback { min-height: 1.2rem; color: var(--muted); font-size: .74rem; white-space: pre-wrap; }
+.constitution-generated { max-height: 240px; overflow: auto; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-muted); font-size: .72rem; white-space: pre-wrap; }
+.constitution-score { display: grid; gap: 2px; padding: 14px; border: 1px solid #cbead8; border-radius: 12px; background: var(--good-soft); }
+.constitution-score strong { color: var(--good); font-size: 1.5rem; }
+.constitution-score span { color: var(--muted); font-size: .74rem; }
+.constitution-alerts, .constitution-violations, .constitution-timeline { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.constitution-alerts li, .constitution-violations li { display: grid; gap: 2px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-soft); font-size: .74rem; }
+.constitution-alerts li span, .constitution-violations li span { color: var(--muted); }
+.constitution-alert { border-color: #f2d9b0 !important; background: var(--warning-soft) !important; }
+.constitution-ok { border-color: #cbead8 !important; background: var(--good-soft) !important; }
+.constitution-timeline-item { display: grid; gap: 4px; padding: 11px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-soft); }
+.constitution-timeline-item span { color: var(--muted); font-size: .72rem; }
+.constitution-diff { color: var(--ink); font-size: .72rem; }
+.constitution-svg { width: 100%; height: auto; }
+.constitution-node-domain { fill: var(--accent); }
+.constitution-node-rule { fill: var(--accent-dark); }
+.constitution-node-entity { fill: var(--warning); }
+.constitution-node-test { fill: var(--good); }
+.constitution-edge { stroke: #b9cec4; stroke-width: 1.2; }
+.constitution-edge-checks { stroke: var(--good); stroke-dasharray: 4 3; }
+.constitution-label { fill: var(--ink); font-size: 11px; }
