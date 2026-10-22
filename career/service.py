@@ -126,7 +126,7 @@ from .qualification_persistence import (
     normalize_qualification_snapshot,
     snapshot_matches_current_source,
 )
-from .traceability_store import TraceabilityService
+from .traceability_store import TRACEABILITY_DB_FILENAME, TraceabilityService
 
 
 SCHEMA_VERSION = 8
@@ -293,8 +293,33 @@ class CareerService:
         opens the traceability view never creates the extra SQLite file.
         """
         if self._traceability is None:
-            self._traceability = TraceabilityService(self.data_dir / "traceability.sqlite3")
+            self._traceability = TraceabilityService(self.traceability_db_path())
         return self._traceability
+
+    def traceability_db_path(self) -> Path:
+        """Path of the registry database, without creating it.
+
+        The personal-data reset needs to know whether the file exists even
+        when this process never opened the traceability view: the registry
+        may come from an earlier session and must not survive a deletion
+        request.
+        """
+        return self.data_dir / TRACEABILITY_DB_FILENAME
+
+    def _traceability_export(self) -> dict[str, Any]:
+        """Return the traceability registry for the personal-data export.
+
+        SPEC-011: the registry holds requirement texts, evidence citations
+        taken from the profile and the audit history. That is personal data:
+        the copy a person downloads ("Exporter mes données") must carry it,
+        otherwise the copy is silently incomplete.
+        """
+        try:
+            return {"available": True, **self.traceability.store.export_json()}
+        except Exception:
+            # An export must not lose the rest of the personal data because
+            # of one module: the section stays present and says it is missing.
+            return {"available": False, "trace_count": 0, "traces": []}
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
@@ -4831,6 +4856,11 @@ class CareerService:
                         "SELECT * FROM career_audit_log ORDER BY created_at ASC"
                     ).fetchall()
                 ],
+                # SPEC-011 — the traceability registry holds requirement texts,
+                # evidence citations taken from the profile and the audit
+                # history: that is personal data and belongs in the copy the
+                # person downloads, exactly like the other sections.
+                "traceability": self._traceability_export(),
                 "exported_at": utc_now(),
             }
         target.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -4870,11 +4900,15 @@ class CareerService:
             self._audit(connection, "career_data_reset", "career", "all")
         # SPEC-011 — the traceability registry holds derived personal data
         # (requirements, quotes, history): it is erased with everything else.
-        if self._traceability is not None:
-            try:
-                self._traceability.reset()
-            except Exception:
-                pass
+        # The check is on the *file*, not on the in-memory handle: the
+        # database may come from an earlier session even when this process
+        # never opened the traceability view, and a deletion request must
+        # leave no requirement text and no citation on the disk.
+        try:
+            if self._traceability is not None or self.traceability_db_path().exists():
+                self.traceability.reset()
+        except Exception:
+            pass
         for path in self.export_dir.glob("career_*"):
             try:
                 path.unlink()

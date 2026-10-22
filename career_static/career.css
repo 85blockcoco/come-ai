@@ -557,6 +557,8 @@ button, a, .career-tab { transition: background-color .16s ease, border-color .1
 .traceability-quote { margin: 2px 0 0; color: var(--accent-dark); font-size: .76rem; line-height: 1.45; }
 .traceability-quote.muted { color: var(--faint); font-style: italic; }
 .traceability-actions { display: flex; flex: 0 0 auto; gap: 7px; align-items: center; }
+.traceability-justification { min-height: 34px; max-width: 22rem; padding: 6px 9px; border: 1px solid var(--border); border-radius: 8px; background: #fff; font-size: .77rem; }
+.traceability-justification-label { display: inline-flex; }
 .traceability-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 12px; }
 .traceability-facts dt { color: var(--muted); font-size: .73rem; }
 .traceability-facts dd { margin: 0; font-size: .78rem; }

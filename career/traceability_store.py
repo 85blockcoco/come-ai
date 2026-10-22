@@ -52,12 +52,24 @@ from .traceability import (
 
 
 __all__ = [
+    "TRACEABILITY_DB_FILENAME",
+    "TRACEABILITY_EXPORT_SCHEMA",
     "TraceabilityService",
     "TraceabilityStore",
 ]
 
 
-SCHEMA_VERSION = 1
+#: Version du format d'échange du registre (clef ``schema_version`` de
+#: l'export JSON).  Volontairement distincte du numéro de version du schéma
+#: de la base Career : ce nombre décrit un *format d'export*, il ne pilote
+#: aucune migration et ne touche jamais au schéma de l'application.
+TRACEABILITY_EXPORT_SCHEMA = 1
+
+#: Nom du fichier de base du registre, dans le répertoire privé ``career_data/``.
+#: Partagé avec ``career.service`` pour que l'effacement des données Career
+#: puisse vérifier l'**existence du fichier** — pas seulement la présence du
+#: gestionnaire en mémoire : la base peut venir d'une session antérieure.
+TRACEABILITY_DB_FILENAME = "traceability.sqlite3"
 
 CSV_COLUMNS: tuple[str, ...] = (
     "trace_id",
@@ -316,7 +328,7 @@ class TraceabilityStore:
         """Return the portable export of the registry (deterministic)."""
         items = list(traces) if traces is not None else self.load_traces()
         return {
-            "schema_version": SCHEMA_VERSION,
+            "schema_version": TRACEABILITY_EXPORT_SCHEMA,
             "trace_count": len(items),
             "traces": [trace.to_dict() for trace in items],
         }

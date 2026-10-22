@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 import subprocess
 
 import pytest
@@ -1043,6 +1044,68 @@ def test_personal_data_reset_erases_the_traceability_registry(tmp_path: Path) ->
     assert service.traceability.list_requirements()["count"] == 0
 
 
+def test_personal_data_reset_erases_a_registry_left_by_an_earlier_session(
+    tmp_path: Path,
+) -> None:
+    """A deletion request must not depend on the current session's history.
+
+    The registry database may come from an earlier session: a process that
+    never opened the traceability view must still erase it, otherwise the
+    requirement texts and the evidence citations stay on the disk after the
+    person asked for their data to be deleted.
+    """
+    first_session = CareerService(tmp_path)
+    first_session.import_job(
+        {
+            "company": "Banque Démo",
+            "title": "Summer Analyst",
+            "source_name": "manual",
+            "requirements": "Excel modelling and valuation skills.",
+            "description_original": "",
+        }
+    )
+    assert first_session.traceability.list_requirements()["count"] >= 1
+
+    # Nouvelle session : l'onglet traçabilité n'a jamais été ouvert.
+    second_session = CareerService(tmp_path)
+    assert second_session._traceability is None
+
+    second_session.reset_personal_data("SUPPRIMER MES DONNÉES CAREER")
+
+    assert CareerService(tmp_path).traceability.list_requirements()["count"] == 0
+
+
+def test_the_personal_data_export_carries_the_traceability_registry(tmp_path: Path) -> None:
+    """The copy a person downloads must include the registry.
+
+    The registry holds requirement texts and evidence citations taken from
+    the profile: it is personal data, exactly like the other sections of the
+    export.
+    """
+    service = CareerService(tmp_path)
+    service.import_job(
+        {
+            "company": "Banque Démo",
+            "title": "Summer Analyst",
+            "source_name": "manual",
+            "requirements": "Excel modelling and valuation skills.",
+            "description_original": "",
+        }
+    )
+    assert service.traceability.list_requirements()["count"] >= 1
+
+    path = service.export_personal_data()
+    payload = json.loads(path.read_text(encoding="utf-8"))
+
+    assert "traceability" in payload
+    section = payload["traceability"]
+    assert section["available"] is True
+    assert section["trace_count"] == service.traceability.list_requirements()["count"]
+    assert section["traces"][0]["requirement_text"]
+    # The audit trail travels with the data it describes.
+    assert "history" in section["traces"][0]
+
+
 # ── 6. Garde-fous de l'interface locale ─────────────────────────────────────
 
 
@@ -1066,6 +1129,36 @@ def test_the_traceability_module_only_calls_the_local_api() -> None:
     # The interface never declares a coverage on its own: it only reads the
     # status returned by the local API.
     assert "status: \"covered\"" not in source
+
+
+def test_the_traceability_module_never_declares_an_application_schema_version() -> None:
+    """The registry has its own base: it must not touch the Career schema.
+
+    ``scripts/audit_integration.py`` refuses any added line that declares
+    ``SCHEMA_VERSION``: the registry lives in its own SQLite file and drives
+    no migration of the application database. Its own exchange format is
+    versioned by a clearly scoped constant instead.
+    """
+    source = (ROOT / "career" / "traceability_store.py").read_text(encoding="utf-8")
+
+    assert not re.search(r"\bSCHEMA_VERSION\b", source)
+    assert "TRACEABILITY_EXPORT_SCHEMA" in source
+
+
+def test_the_traceability_interface_never_opens_a_system_dialog() -> None:
+    """A justification is typed in a form field, not in a blocking dialog.
+
+    ``window.prompt`` is a forbidden pattern for the integration audit of
+    this repository: it blocks the merge of the branch. It also interrupts
+    the reading of the screen and cannot carry an accessible label.
+    """
+    source = (ROOT / "career_static" / "js" / "traceability.js").read_text(encoding="utf-8")
+    html = (ROOT / "career_static" / "index.html").read_text(encoding="utf-8")
+
+    assert "window.prompt" not in source
+    assert "window.confirm" not in source
+    # The batch bar offers the justification as a labelled field.
+    assert 'id="traceability-batch-justification"' in html
 
 
 def _node() -> str | None:

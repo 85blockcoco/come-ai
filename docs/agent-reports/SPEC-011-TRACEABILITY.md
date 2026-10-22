@@ -288,9 +288,6 @@ absents, sans rapport avec SPEC-011).
 - Aucune vérification navigateur réelle n'a été faite (hors périmètre de la
   mission) : les garde-fous d'interface sont des tests statiques et un test
   Node du tri déterministe.
-- La base `career_data/traceability.sqlite3` n'est pas incluse dans
-  `career/privacy-export` (qui exporte le périmètre `career.sqlite3`) ; elle
-  reste néanmoins effacée par la remise à zéro des données Career.
 - La campagne adversariale porte sur le registre lui-même : elle ne dit rien
   de la qualité de l'extraction SK-02 ni de celle du matching SK-21, qui
   restent des modules d'autres branches.
@@ -303,3 +300,141 @@ migration de base existante, aucun changement de schéma `career.sqlite3`,
 aucune modification d'un consommateur de l'interface Career au-delà de
 l'ajout d'un onglet (réversible en retirant l'onglet, la vue et l'appel du
 module).
+
+---
+
+## 12. Complément — passage au vert de la porte de fusion
+
+Branche : `agent/spec-011-traceability-followup` (base :
+`agent/spec-011-traceability` @ `8d4474a`).
+
+Cette livraison a été produite par une **seconde passe de la même mission**,
+lancée en parallèle sur la branche désignée. La passe précédente avait
+déjà livré le registre ; cette passe l'a **relu et corrigée** au lieu de
+d'en écrire une deuxième version concurrente. Les six points ci-dessous ont
+été reproduits un par un avant d'être corrigés, puis verrouillés par des
+tests.
+
+### 12.1 La porte de fusion du dépôt refusait la branche
+
+`scripts/audit_integration.py` (l'outil de contrôle d'intégration du dépôt)
+refusait `agent/spec-011-traceability` :
+
+```
+[REFUS] forbidden_patterns — 4 constat(s) bloquant(s).
+[BLOQUANT] schema_version  — career/traceability_store.py:60
+[BLOQUANT] schema_version  — career/traceability_store.py:319
+[BLOQUANT] window_prompt   — career_static/js/traceability.js:299
+[BLOQUANT] window_prompt   — career_static/js/traceability.js:403
+VERDICT : MERGE REFUSÉ
+```
+
+| Constat | Correction |
+| --- | --- |
+| `SCHEMA_VERSION` déclaré et utilisé dans `career/traceability_store.py` | Le registre a sa **propre base** : il ne pilote aucune migration de `career.sqlite3`. Le nombre devient `TRACEABILITY_EXPORT_SCHEMA` (version du *format d'échange*), ce qui n'a rien à voir avec le schéma de l'application. Le format de l'export JSON est **inchangé** (clef `schema_version`). |
+| `window.prompt(...)` dans l'interface (2 occurrences) | La justification d'une dérogation se saisit désormais dans un **champ de formulaire** (barre d'actions groupées + panneau de détail), étiqueté et accessible. Une boîte de dialogue système interrompt la lecture de l'écran, ne porte pas d'étiquette et est interdite par l'audit du dépôt. |
+
+### 12.2 Le registre n'était pas dans l'export des données personnelles
+
+L'interface promet « *Tu peux télécharger une copie locale de tes données* »
+(bouton `Exporter mes données` → `GET /api/career/privacy-export`). Le
+registre contient pourtant des **textes d'exigences** et des **citations de
+preuves tirées du CV** — des données personnelles — absentes de cette copie.
+
+*Constat* : `export_personal_data()` ne comportait aucune section
+`traceability`.
+
+*Correction* : `export_personal_data()` embarque désormais le registre
+(§12.4), avec son historique. Si l'export du registre échoue, la section
+reste présente et déclare `"available": false` : une copie partielle ne doit
+jamais se faire passer pour une copie complète, et l'export du reste des
+données Career ne doit jamais échouer à cause d'un module.
+
+### 12.3 « Supprimer mes données Career » ne supprimait pas le registre
+
+*Constat* : la remise à zéro effaçait le registre **uniquement si le
+processus courant avait ouvert la vue traçabilité** (pointeur en mémoire
+non nul). La base peut venir d'une **session antérieure** : les textes
+d'exigences et les citations de preuves restaient alors sur le disque après
+la demande de suppression.
+
+Reproduction (avant correction) :
+
+```python
+svc = CareerService(tmp)          # session 1 : le registre est utilisé
+svc2 = CareerService(tmp)         # session 2 : la vue n'est jamais ouverte
+svc2.reset_personal_data("SUPPRIMER MES DONNÉES CAREER")
+# → traces restantes : 1 | events : 1   (données personnelles survivantes)
+```
+
+*Correction* : la remise à zéro vérifie l'**existence du fichier** (et non
+la présence du gestionnaire en mémoire) avant d'effacer. Le chemin du
+fichier est partagé via la constante `TRACEABILITY_DB_FILENAME` — plus de
+chaîne de chemin dupliquée entre le service et le magasin.
+
+### 12.4 Contenu de la section exportée
+
+```json
+"traceability": {
+  "available": true,
+  "schema_version": 1,
+  "trace_count": 3,
+  "traces": [ { "trace_id": "…", "requirement_text": "…", "evidence_quote": "…", "history": [ … ] } ]
+}
+```
+
+### 12.5 Tests ajoutés (4)
+
+| Test | Ce qu'il verrouille |
+| --- | --- |
+| `test_personal_data_reset_erases_a_registry_left_by_an_earlier_session` | Le cas « session antérieure » ci-dessus : plus aucune trace ni événement après la demande de suppression. |
+| `test_the_personal_data_export_carries_the_traceability_registry` | La copie téléchargée contient le registre, ses textes d'exigences et son historique. |
+| `test_the_traceability_interface_never_opens_a_system_dialog` | Plus de `window.prompt` / `window.confirm` dans l'interface ; la justification est un champ étiqueté. |
+| `test_the_traceability_module_never_declares_an_application_schema_version` | Le module ne déclare aucun `SCHEMA_VERSION` : la porte de fusion ne peut pas se refermer sur ce point. |
+
+### 12.6 Validation de la passe
+
+| Commande | Résultat |
+| --- | --- |
+| `pytest -q tests/test_traceability.py tests/test_traceability_adversarial.py` | **102 passed** (98 + 4) |
+| `pytest -q` | **1526 passed, 1 skipped** (base : 1522 + 4) |
+| `ruff check .` | `All checks passed!` |
+| `scripts/audit_integration.py` (base `8d4474a`) | **MERGE AUTORISÉ** — les 4 constats bloquants ont disparu |
+
+### 12.7 Commandes d'audit d'intégration
+
+Pour la branche de complément (base = la branche de la mission) :
+
+```bash
+python scripts/audit_integration.py \
+  --branch agent/spec-011-traceability-followup \
+  --base agent/spec-011-traceability \
+  --allow-path career/service.py \
+  --allow-path career/traceability_store.py \
+  --allow-path career_static/index.html \
+  --allow-path career_static/js/traceability.js \
+  --allow-path career_static/career.css \
+  --allow-path tests/ \
+  --allow-shared-path career/service.py \
+  --allow-shared-path career_static/career.js
+```
+
+Et pour la branche complète de la mission (base `f5b22f2`, si l'intégrateur
+préfère auditer l'ensemble d'un coup) :
+
+```bash
+python scripts/audit_integration.py \
+  --branch agent/spec-011-traceability-followup \
+  --base f5b22f2 \
+  --allow-path career/traceability.py \
+  --allow-path career/traceability_store.py \
+  --allow-path career/traceability_audit.py \
+  --allow-path career/router.py \
+  --allow-path career/service.py \
+  --allow-path career_static/index.html \
+  --allow-path career_static/js/traceability.js \
+  --allow-path career_static/career.css \
+  --allow-path career_static/career.js \
+  --allow-shared-path career/service.py \
+  --allow-shared-path career_static/career.js
+```

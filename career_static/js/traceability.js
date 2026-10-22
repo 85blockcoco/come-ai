@@ -296,8 +296,15 @@ async function traceabilityBatch(action) {
   if (!traceIds.length) return;
   const payload = { trace_ids: traceIds, action, actor: "user" };
   if (action === "waive") {
-    const justification = window.prompt("Justification de la dérogation (obligatoire) :");
-    if (!justification) return;
+    // La justification se saisit dans le formulaire : jamais dans une boîte
+    // de dialogue système, qui interrompt la lecture de l'écran.
+    const field = document.querySelector("#traceability-batch-justification");
+    const justification = field ? String(field.value || "").trim() : "";
+    if (!justification) {
+      traceabilityNotify("Une dérogation doit être justifiée : écris pourquoi.", true);
+      if (field) field.focus();
+      return;
+    }
     payload.justification = justification;
   }
   try {
@@ -372,7 +379,15 @@ function traceabilityRenderDetail(requirement) {
   if (requirement.status === "waived") {
     actions.append(action("Lever la dérogation", () => traceabilityAction(`${TRACEABILITY_API}/requirements/${requirement.trace_id}/reopen`, "Dérogation levée.")));
   } else {
-    actions.append(action("Lever l’exigence (dérogation)", () => traceabilityWaive(requirement.trace_id)));
+    const justification = traceabilityNode("input", "", "traceability-justification");
+    justification.type = "text";
+    justification.maxLength = 2000;
+    justification.placeholder = "Justification de la dérogation (obligatoire)";
+    justification.setAttribute("aria-label", "Justification de la dérogation");
+    actions.append(justification);
+    actions.append(
+      action("Lever l’exigence (dérogation)", () => traceabilityWaive(requirement.trace_id, justification.value)),
+    );
   }
   holder.append(actions);
 
@@ -399,9 +414,14 @@ async function traceabilityAction(url, successMessage) {
   }
 }
 
-async function traceabilityWaive(traceId) {
-  const justification = window.prompt("Justification de la dérogation (obligatoire) :");
-  if (!justification) return;
+async function traceabilityWaive(traceId, justificationValue) {
+  // La justification se saisit dans le formulaire : jamais dans une boîte de
+  // dialogue système, qui interrompt la lecture de l'écran.
+  const justification = String(justificationValue || "").trim();
+  if (!justification) {
+    traceabilityNotify("Une dérogation doit être justifiée : écris pourquoi.", true);
+    return;
+  }
   try {
     await traceabilityApi(`${TRACEABILITY_API}/requirements/${traceId}/waive`, {
       method: "POST",
