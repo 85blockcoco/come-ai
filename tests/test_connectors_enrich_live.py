@@ -3,7 +3,9 @@
 This control is deliberately separate from the synthetic contract tests and
 never runs by default: it reads the public feed of one reviewed source per
 provider, with one request per provider, a short timeout and a bounded number
-of examined postings.  It is enabled explicitly:
+of examined postings.  The only exception is SmartRecruiters, which publishes
+its advertisement in the response of the posting detail: the control reads at
+most ``MAX_EXAMINED`` of those details.  It is enabled explicitly:
 
     CAREER_LIVE_SOURCE_CHECK=1 .venv/bin/python -m pytest -q tests/test_connectors_enrich_live.py
 
@@ -129,17 +131,23 @@ def test_live_ashby_transmits_its_published_fields() -> None:
 
 
 def test_live_smartrecruiters_transmits_its_published_fields() -> None:
-    company = os.environ.get("CAREER_LIVE_SR_COMPANY", "").strip()
+    # ``Equinox`` is a reviewed public board of the provider: the identifier
+    # is the one the API itself publishes.  Another board can be controlled
+    # with ``CAREER_LIVE_SR_COMPANY``.
+    company = os.environ.get("CAREER_LIVE_SR_COMPANY", "Equinox").strip()
     if not company:
         pytest.skip("no reviewed SmartRecruiters board identifier is available in this environment")
-    connector = SmartRecruitersConnector(enabled=True, max_pages=1)
-    source = _source("smartrecruiters", company_identifier=company)
+    connector = SmartRecruitersConnector(enabled=True, max_pages=1, enrich_details=True,
+                                          max_detail_reads=MAX_EXAMINED)
+    source = _source("smartrecruiters", company_identifier=company, board_token=company)
     pages = connector._pages(source, deadline=None)
     jobs = connector.parse(source, pages[0])
     _check_contract("smartrecruiters", jobs, description_published=True)
     published = jobs[0][CONTRACT_KEY]["smartrecruiters"]
-    for name in ("id", "name", "requisitionId", "postedDate", "releasedDate", "typeOfEmployment"):
+    for name in ("id", "name", "releasedDate", "typeOfEmployment"):
         assert name in published, f"smartrecruiters did not transmit {name!r}"
+    # The advertisement is published by the detail, under its own section names.
+    assert "jobAd.sections" in published, "smartrecruiters did not transmit the published sections"
 
 
 def test_live_welcome_jungle_transmits_its_published_fields() -> None:

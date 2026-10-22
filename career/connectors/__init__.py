@@ -89,7 +89,7 @@ def default_exploration_connectors(greenhouse_connector):
         "greenhouse": greenhouse_connector,
         "lever": LeverConnector(enabled=True),
         "ashby": AshbyConnector(enabled=True),
-        "smartrecruiters": SmartRecruitersConnector(enabled=True),
+        "smartrecruiters": SmartRecruitersConnector(enabled=True, enrich_details=True),
         "welcome_jungle": WelcomeJungleConnector(enabled=True),
         "jobteaser": JobTeaserConnector(enabled=True),
         "talent_com": TalentComConnector(enabled=True),

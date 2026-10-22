@@ -1,10 +1,15 @@
 # SPEC-SK08 — Enrichissement des connecteurs existants
 
 Date : 22 octobre 2026
-Mission : **CVBOOST-29** — ordre `cvboost-29-1792623066` (2ᵉ revue du lot, sur le travail de l'ordre `cvboost-29-1792619869`)
-Branche de travail : `worker/cvboost-29-1792623066` — branche d'intégration `agent/spec-sk08-connectors-enrich`
+Mission : **CVBOOST-29** — ordre `cvboost-29-1792622329` (3ᵉ revue du lot, sur le travail des ordres `cvboost-29-1792619869` puis `cvboost-29-1792623066`)
+Branche de travail : `worker/cvboost-29-1792622329` — branche d'intégration `agent/spec-sk08-connectors-enrich`
 Base : `f5b22f2` (*merge(career): ATS diagnostics and targeted CV variants pipeline*)
-Statut : **TERMINÉE — contrat commun livré pour les 8 connecteurs, 4 défauts de lecture corrigés et prouvés en direct**
+Statut : **TERMINÉE — contrat commun livré pour les 8 connecteurs, 6 défauts de lecture corrigés et prouvés en direct**
+
+> Cette revue ne remplace pas le lot : elle le **consolide**. Elle part du travail déjà
+> livré sur `agent/spec-sk08-connectors-enrich`, l'audite en direct contre les sources
+> publiques, et corrige deux défauts que les revues précédentes n'avaient pas vus parce
+> qu'ils ne se voyaient que sur la **réponse réelle** d'un fournisseur (§ 6.5).
 
 ---
 
@@ -16,14 +21,15 @@ Statut : **TERMINÉE — contrat commun livré pour les 8 connecteurs, 4 défaut
 | `career/connectors/cards.py` | **nouveau** | Lecture des attributs publiés par une carte d'offre (`data-*`, `<time datetime>`) |
 | `career/connectors/http.py` | **nouveau** | Contexte TLS vérifié partagé par les quatre connecteurs HTML (le certificat du serveur est vérifié, comme dans le transport ATS) |
 | `career/exploration.py` | modifié | Nouvelle fonction pure `admit_offer()` : la décision d'admission sort des connecteurs |
-| `career/connectors/public_ats.py` | modifié | Lever, Ashby, SmartRecruiters : champs publiés transmis, sections publiées composées sous leur nom, admission déplacée |
+| `career/connectors/public_ats.py` | modifié | Lever, Ashby, SmartRecruiters : champs publiés transmis, sections publiées composées sous leur nom, **lecture bornée du détail d'offre SmartRecruiters**, admission déplacée |
 | `career/discovery.py` | modifié | Greenhouse : champs publiés transmis, dates structurées reprises, admission déplacée |
 | `career/connectors/welcome_jungle.py` | modifié | Carte Welcome to the Jungle : champs publiés transmis, TLS vérifié, admission déplacée |
 | `career/connectors/jobteaser.py` | modifié | Carte JobTeaser : idem |
 | `career/connectors/talent_com.py` | modifié | Carte Talent.com : idem + lien d'offre publié (`/view?id=`) et résumé publié (`snippet`) lus |
 | `career/connectors/apec.py` | modifié | Carte APEC : idem |
+| `career/connectors/__init__.py` | modifié | Le registre d'exploration active la lecture du détail SmartRecruiters (là où la personne a demandé une recherche) |
 | `career/offer_requirements/extract.py` | modifié | Une entrée de vocabulaire : « additional information » n'est pas une section de prérequis |
-| `tests/test_connectors_enrich.py` | **nouveau** | 60 tests de contrat, 1 fixture synthétique par fournisseur |
+| `tests/test_connectors_enrich.py` | **nouveau** | 66 tests de contrat, 1 fixture synthétique par fournisseur |
 | `tests/fixtures/connectors_enrich/*.json` | **nouveau** | 8 fixtures (une par fournisseur) |
 | `tests/test_connectors_enrich_live.py` | **nouveau** | Contrôle réel borné, séparé, opt-in |
 
@@ -105,22 +111,39 @@ l'affaire de `offer_dates` (SK-02), pas du connecteur.
 `department`, `company`, `applyUrl`, `ref`, `jobAd.sections` → `source_fields.smartrecruiters.*`.
 `releasedDate` → `posted_date` ; `postedDate` est transmis brut.
 
+**La réponse de liste ne publie pas l'annonce.** La documentation de l'API le dit : la réponse de
+liste « might not be set », c'est la réponse de **détail** (`GET /v1/companies/{company}/postings/{id}`)
+qui publie l'annonce (`jobAd.sections`). Une offre SmartRecruiters arrivait donc avec une
+**description vide** : le critère « `description_original` peuplés » n'était pas tenu pour cette
+source, et les sections composées par les revues précédentes ne l'étaient que dans une fixture
+qui ne reproduisait pas la forme réellement servie.
+
+La lecture du détail est donc ajoutée, mais **encadrée** :
+
+| Garde-fou | Valeur |
+|-----------|--------|
+| Opt-in | `enrich_details` (activé dans le registre d'exploration, là où la personne a demandé une recherche) |
+| Borne | `max_detail_reads` — 20 lectures maximum par board, dans l'ordre du flux |
+| Budget | le deadline d'exploration existant s'applique à chaque lecture |
+| Robustesse | une lecture refusée laisse les faits de la liste intacts et n'interrompt jamais le board |
+| Hôte | `api.smartrecruiters.com` uniquement, avec la liste d'hôtes du transport ATS |
+
 **Gain réel :** les sections publiées (`companyDescription`, `jobDescription`, `qualifications`,
 `additionalInformation`) sont composées dans `description_original`, **chacune sous le nom que la
 source lui donne** et dans l'ordre publié :
 
 ```
-Company description
+Company Description
 Synthetic Group is a synthetic employer used by the tests.
 
-Job description
+Job Description
 Join our Corporate Finance team for a six-month placement.
 
 Qualifications
 Bachelor's degree in Finance or Economics
 Excel mastery
 
-Additional information
+Additional Information
 Start date: 2 March 2027. Duration: 6 months.
 ```
 
@@ -241,7 +264,8 @@ produit par le connecteur ; c'est une donnée du contrat, pas une décision d'ad
 Le lot initial (ordre `cvboost-29-1792619869`) avait livré le contrat et documenté quatre
 défauts qui rendaient l'enrichissement **sans effet** sur quatre sources. Trois d'entre eux
 étaient corrigeables dans le périmètre de la mission ; ils le sont maintenant, et le résultat est
-prouvé en direct (§ 7).
+prouvé en direct (§ 8). La présente revue en a trouvé **deux autres**, qui ne se voyaient que
+sur la réponse réelle d'un fournisseur (§ 6.4).
 
 ### 6.1 Les quatre connecteurs HTML ne vérifiaient pas le certificat du serveur
 
@@ -290,8 +314,38 @@ après les qualifications — était lu comme des prérequis exigés (« Start d
 deviendrait une exigence de CV). Aucun autre module n'est modifié, et les 62 tests de la couche
 des prérequis restent verts.
 
-### 6.4 Défauts hors périmètre, documentés
+### 6.4 Deux défauts vus seulement sur la réponse réelle d'un fournisseur
 
+Ces deux défauts sont apparus en rejouant le contrat contre le **flux public** de
+SmartRecruiters (`Equinox`, 746 publications) : les revues précédentes travaillaient sur une
+fixture synthétique qui reproduisait la forme *voulue* de la source, pas celle qu'elle sert.
+
+#### 6.4.1 L'offre SmartRecruiters arrivait sans description
+
+**Défaut.** Le connecteur ne lisait que la réponse de **liste**, qui ne publie pas l'annonce : sur
+la source réelle, les trois offres examinées arrivaient avec `description_original` vide et sans
+`jobAd.sections`. Le critère de la mission « `description_original` peuplés » n'était donc pas
+tenu pour cette source, et lgain annoncé par les revues précédentes (les sections composées
+sous leur nom) **n'était pas réel**.
+
+**Correctif.** La lecture bornée du détail d'offre (§ 3.4), avec son opt-in, sa borne, son
+budget et sa robustesse. Contrôle direct après correction : les offres lues en direct portent
+leur description et leurs sections.
+
+#### 6.4.2 La fixture composait une forme de section que l'API ne sert jamais
+
+**Défaut.** La fixture synthétique publishait les sections comme des chaînes
+(`"qualifications": "<ul>…</ul>"`). L'API publie un **objet** :
+`{"title": "Qualifications", "text": "<ul>…</ul>"}`. Le composeur de description n lisait que
+la forme chaîne : sur la source réelle, une section reçue était ignorée et la description restait
+vide. La fixture masquait donc le défaut — un test vert sur une forme qui n'existe pas.
+
+**Correctif.** Le composeur lit les deux formes, et **le titre publié par la source** est celui
+qui devient l'en-tête de la section (le nom dérivé du nom de champ ne sert plus que de repli).
+La fixture reproduit désormais la forme documentée, et un test vérifie qu'une section reçue sous
+la forme objet est bien lue.
+
+### 6.5 Défauts hors périmètre, documentés
 - **Welcome to the Jungle** — la page de recherche servie ne contient plus aucun balisage de
   carte (0 `data-testid="job-card"`, 0 `<article>`, 0 lien `/fr/companies/*/jobs/` sur 556 Ko) :
   le rendu est fait côté client. Lire la charge utile embarquée ou l'API interne sortirait du
@@ -319,14 +373,18 @@ Chaque fixture contient deux publications synthétiques :
 
 Les fixtures sont synthétiques : aucun board réel, aucune donnée personnelle, aucun appel réseau
 pendant les tests. La fixture Talent.com reproduit la forme de lien publiée le 22 octobre 2026
-(`/view?id=…`) et l'attribut `data-new-id` que la carte publie.
+(`/view?id=…`) et l'attribut `data-new-id` que la carte publie. La fixture SmartRecruiters
+reproduit **les deux réponses séparées** que la source publie — la liste (sans annonce) et le
+détail (avec `jobAd.sections` sous la forme `{title, text}` réellement servie) — pour que la
+fixture ne masque plus la forme de la source.
 
-`tests/test_connectors_enrich.py` couvre 60 cas : champs transmis et leurs noms exacts, dates
-canoniques, sections SmartRecruiters composées sous leur nom publié, prérequis atteints par la
-couche des exigences, attributs de carte, lien d'offre publié de Talent.com, contradictions
-conservées et non tranchées, bornes des valeurs, sérialisation JSON, contrat identique pour les
-8 connecteurs, matière conservée après la décision d'admission, certificat vérifié, absence de
-logique de qualification.
+`tests/test_connectors_enrich.py` couvre 66 cas : champs transmis et leurs noms exacts, dates
+canoniques, sections SmartRecruiters composées sous leur nom publié, lecture bornée du détail
+d'offre (opt-in, borne, robustesse, lien de publication), prérequis atteints par la couche des
+exigences, attributs de carte, lien d'offre publié de Talent.com, contradictions conservées et non
+tranchées, bornes des valeurs, sérialisation JSON, contrat identique pour les 8 connecteurs,
+matière conservée après la décision d'admission, certificat vérifié, absence de logique de
+qualification.
 
 ---
 
@@ -338,7 +396,9 @@ logique de qualification.
 CAREER_LIVE_SOURCE_CHECK=1 .venv/bin/python -m pytest -q tests/test_connectors_enrich_live.py
 ```
 
-Une requête par fournisseur, délai de 10 s, 3 publications examinées au maximum.
+Une requête par fournisseur, délai de 10 s, 3 publications examinées au maximum. Seule
+SmartRecruiters demande des lectures de détail en plus de sa requête de liste : au maximum 3,
+une par publication examinée.
 
 ### Résultat du 22 octobre 2026 (avec le certificat vérifié)
 
@@ -347,16 +407,16 @@ Une requête par fournisseur, délai de 10 s, 3 publications examinées au maxim
 | Greenhouse | `alixpartners` | **Contrat tenu** — `first_published`, `updated_at`, `requisition_id`, `metadata` transmis |
 | Lever | `qonto` | **Contrat tenu** — `createdAt`, `categories`, `hostedUrl` transmis |
 | Ashby | `oaknorth` | **Contrat tenu** — `publishedAt`, `employmentType`, `jobUrl` transmis |
+| SmartRecruiters | `Equinox` | **Contrat tenu** — `releasedDate`, `typeOfEmployment` transmis ; description et sections publiées par le détail effectivement lues (défaut § 6.4.1 corrigé) |
 | Talent.com | recherche publique finance | **Contrat tenu** — `data-job-id`, `data-new-id`, `data-rank`, `datetime`, url `/view?id=…` transmis ; description publiée présente |
-| SmartRecruiters | — | **Non contrôlable** : aucun identifiant de board revu disponible (`totalFound=0` sur 12 identifiants testés, `/v1/companies` → 404). Identifiant injectable via `CAREER_LIVE_SR_COMPANY` |
-| Welcome to the Jungle | — | **Non contrôlable** : rendu côté client, aucun balisage de carte dans le HTML servi (§ 6.4) |
+| Welcome to the Jungle | — | **Non contrôlable** : rendu côté client, aucun balisage de carte dans le HTML servi (§ 6.5) |
 | JobTeaser | — | **Non contrôlable** : `/en/jobs` → **HTTP 410 Gone**, `/en/job-offers` → **HTTP 403** |
 | APEC | — | **Non contrôlable** : **HTTP 403 Forbidden** |
 
-Bilan : **5 contrôles réussis** (Greenhouse, Lever, Ashby, Talent.com + le chemin d'erreur
-explicite), **4 sources non contrôlables** pour une raison documentée. Avant cette campagne :
-4 contrôles réussis, et **Talent.com ne transmettait rien** malgré une page parfaitement
-lisible.
+Bilan : **6 contrôles réussis** (Greenhouse, Lever, Ashby, SmartRecruiters, Talent.com + le chemin
+d'erreur explicite), **3 sources non contrôlables** pour une raison documentée. Avant cette
+revue : 4 contrôles réussis, SmartRecruiters **non contrôlable**, et Talent.com ne transmettait
+rien malgré une page parfaitement lisible.
 
 ---
 
@@ -364,11 +424,11 @@ lisible.
 
 | Commande | Résultat |
 |----------|----------|
-| `.venv/bin/python -m pytest -q tests/test_connectors_enrich.py` | **60 passed** |
-| `.venv/bin/python -m pytest -q` | **1484 passed, 10 skipped** (base : 1424 + 60 nouveaux ; le skip `test_offer_summary_exhaustiveness` et les 9 skips du contrôle réel sont préexistants) |
+| `.venv/bin/python -m pytest -q tests/test_connectors_enrich.py` | **66 passed** |
+| `.venv/bin/python -m pytest -q` | **1490 passed, 10 skipped** (base : 1424 + 66 nouveaux ; le skip `test_offer_summary_exhaustiveness` et les 9 skips du contrôle réel sont préexistants) |
 | `.venv/bin/python -m ruff check .` | **All checks passed** |
 | `git diff --check` | propre |
-| `CAREER_LIVE_SOURCE_CHECK=1 pytest -q tests/test_connectors_enrich_live.py` | 5 passed, 4 skipped (raisons explicites) |
+| `CAREER_LIVE_SOURCE_CHECK=1 pytest -q tests/test_connectors_enrich_live.py` | 6 passed, 3 skipped (raisons explicites) |
 
 ---
 
@@ -393,17 +453,21 @@ lisible.
    champ d'origine de chaque date.
 4. **Le vocabulaire de détection est explicite et restreint.** Un wording inconnu n'est pas une
    contradiction : mieux vaut manquer un cas qu'inventer un désaccord.
-5. **Trois connecteurs HTML restent non observables en direct** (§ 6.4) : la correction de leur
+5. **Trois connecteurs HTML restent non observables en direct** (§ 6.5) : la correction de leur
    lecture demande une mission propre (chemin public, balisage ou API interne), pas un correctif
    ponctuel.
+6. **La lecture du détail SmartRecruiters est partielle.** Au plus 20 détails sont lus par board,
+   dans l'ordre du flux : les offres au-delà gardent les faits de la liste, sans description.
+   Les dépenses par priorité mutualiseraient ce budget, mais cela demanderait de qualifier
+   avant d'avoir lu — hors périmètre SK-08.
 
 ---
 
 ## 11. Intégration
 
 - Branche d'intégration : `agent/spec-sk08-connectors-enrich` (base `f5b22f2`).
-- Branche de l'ordre : `worker/cvboost-29-1792623066` (worktree
-  `/Users/comedelavenne/AI-Excel-Agent-worker-cvboost-29-1792623066`).
+- Branche de l'ordre : `worker/cvboost-29-1792622329` (worktree
+  `/Users/comedelavenne/AI-Excel-Agent-worker-cvboost-29-1792622329`).
 - Aucun conflit possible avec SK-01/02/03/07 : ces lots ne touchent ni `career/connectors/`, ni
   `career/source_fields.py`, ni `career/exploration.py`, ni `career/discovery.py`, ni
   `career/offer_requirements/`.

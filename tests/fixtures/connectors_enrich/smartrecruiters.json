@@ -1,6 +1,7 @@
 {
-  "label": "synthetic SmartRecruiters payload; shaped after the public posting API, not copied from a live board",
+  "label": "synthetic SmartRecruiters payloads; shaped after the public posting API, not copied from a live board",
   "provider": "smartrecruiters",
+  "note": "The list response publishes no advertisement: `jobAd.sections` only exists in the response of the posting detail. The two payloads are kept apart on purpose, as the source publishes them.",
   "payload": {
     "limit": 10,
     "offset": 0,
@@ -8,46 +9,161 @@
     "content": [
       {
         "id": "synthetic-sr-001",
+        "uuid": "34225731-e7cf-4584-b0b7-78098fe1a66b",
         "name": "Synthetic Finance Intern",
         "requisitionId": "REQ-8842",
         "postedDate": "2026-10-03T08:00:00Z",
         "releasedDate": "2026-10-01T09:00:00Z",
-        "location": {"city": "London", "region": "London", "country": "GB"},
-        "typeOfEmployment": {"id": "7", "label": "Internship"},
-        "department": {"id": "12", "label": "Corporate Finance"},
-        "company": {"identifier": "syntheticboard", "name": "Synthetic Group"},
+        "jobAdId": "106f35bc-a0e6-4e55-96f9-56835e3f8349",
+        "visibility": "PUBLIC",
+        "location": {
+          "city": "London",
+          "region": "London",
+          "country": "GB"
+        },
+        "typeOfEmployment": {
+          "id": "7",
+          "label": "Internship"
+        },
+        "department": {
+          "id": "12",
+          "label": "Corporate Finance"
+        },
+        "company": {
+          "identifier": "syntheticboard",
+          "name": "Synthetic Group"
+        },
         "applyUrl": "https://careers.smartrecruiters.com/SyntheticGroup/743999999999",
-        "ref": "https://api.smartrecruiters.com/api-v1/companies/syntheticboard/postings/synthetic-sr-001",
-        "jobAd": {
-          "sections": {
-            "companyDescription": "<p>Synthetic Group is a synthetic employer used by the tests.</p>",
-            "jobDescription": "<p>Join our Corporate Finance team for a six-month placement.</p>",
-            "qualifications": "<ul><li>Bachelor's degree in Finance or Economics</li><li>Excel mastery</li></ul>",
-            "additionalInformation": "<p>Start date: 2 March 2027. Duration: 6 months.</p>"
-          }
-        }
+        "ref": "https://api.smartrecruiters.com/api-v1/companies/syntheticboard/postings/synthetic-sr-001"
       },
       {
         "id": "synthetic-sr-002",
+        "uuid": "34225731-e7cf-4584-b0b7-78098fe1a67c",
         "name": "Synthetic Contradicting Intern",
         "requisitionId": "REQ-8843",
         "postedDate": "2026-10-04T08:00:00Z",
         "releasedDate": "2026-10-02T09:00:00Z",
-        "location": {"city": "London", "region": "London", "country": "GB"},
-        "typeOfEmployment": {"id": "7", "label": "Internship"},
-        "department": {"id": "12", "label": "Corporate Finance"},
-        "company": {"identifier": "syntheticboard", "name": "Synthetic Group"},
+        "jobAdId": "106f35bc-a0e6-4e55-96f9-56835e3f8350",
+        "visibility": "PUBLIC",
+        "location": {
+          "city": "London",
+          "region": "London",
+          "country": "GB"
+        },
+        "typeOfEmployment": {
+          "id": "7",
+          "label": "Internship"
+        },
+        "department": {
+          "id": "12",
+          "label": "Corporate Finance"
+        },
+        "company": {
+          "identifier": "syntheticboard",
+          "name": "Synthetic Group"
+        },
         "applyUrl": "https://careers.smartrecruiters.com/SyntheticGroup/743999999998",
-        "ref": "https://api.smartrecruiters.com/api-v1/companies/syntheticboard/postings/synthetic-sr-002",
-        "jobAd": {
-          "sections": {
-            "companyDescription": "<p>Synthetic Group is a synthetic employer used by the tests.</p>",
-            "jobDescription": "<p>This is a permanent position (CDI), not an internship. The board publishes it as an internship.</p>",
-            "qualifications": "<ul><li>Bachelor's degree in Finance or Economics</li></ul>",
-            "additionalInformation": ""
+        "ref": "https://api.smartrecruiters.com/api-v1/companies/syntheticboard/postings/synthetic-sr-002"
+      }
+    ]
+  },
+  "details": {
+    "synthetic-sr-001": {
+      "id": "synthetic-sr-001",
+      "name": "Synthetic Finance Intern",
+      "jobId": "a8fe8118-455c-407e-8e84-b9d0201697b8",
+      "jobAdId": "106f35bc-a0e6-4e55-96f9-56835e3f8349",
+      "releasedDate": "2026-10-01T09:00:00Z",
+      "active": true,
+      "visibility": "PUBLIC",
+      "postingUrl": "https://jobs.smartrecruiters.com/SyntheticGroup/743999999999",
+      "applyUrl": "https://jobs.smartrecruiters.com/SyntheticGroup/743999999999?oga=true",
+      "referralUrl": "https://jobs.smartrecruiters.com/external-referrals/company/SyntheticGroup/publication/34225731",
+      "typeOfEmployment": {
+        "id": "7",
+        "label": "Internship"
+      },
+      "department": {
+        "id": "12",
+        "label": "Corporate Finance"
+      },
+      "company": {
+        "identifier": "syntheticboard",
+        "name": "Synthetic Group"
+      },
+      "location": {
+        "city": "London",
+        "region": "London",
+        "country": "GB"
+      },
+      "jobAd": {
+        "sections": {
+          "companyDescription": {
+            "title": "Company Description",
+            "text": "<p>Synthetic Group is a synthetic employer used by the tests.</p>"
+          },
+          "jobDescription": {
+            "title": "Job Description",
+            "text": "<p>Join our Corporate Finance team for a six-month placement.</p>"
+          },
+          "qualifications": {
+            "title": "Qualifications",
+            "text": "<ul><li>Bachelor's degree in Finance or Economics</li><li>Excel mastery</li></ul>"
+          },
+          "additionalInformation": {
+            "title": "Additional Information",
+            "text": "<p>Start date: 2 March 2027. Duration: 6 months.</p>"
           }
         }
       }
-    ]
+    },
+    "synthetic-sr-002": {
+      "id": "synthetic-sr-002",
+      "name": "Synthetic Contradicting Intern",
+      "jobId": "a8fe8118-455c-407e-8e84-b9d0201697b9",
+      "jobAdId": "106f35bc-a0e6-4e55-96f9-56835e3f8350",
+      "releasedDate": "2026-10-02T09:00:00Z",
+      "active": true,
+      "visibility": "PUBLIC",
+      "postingUrl": "https://jobs.smartrecruiters.com/SyntheticGroup/743999999998",
+      "applyUrl": "https://jobs.smartrecruiters.com/SyntheticGroup/743999999998?oga=true",
+      "typeOfEmployment": {
+        "id": "7",
+        "label": "Internship"
+      },
+      "department": {
+        "id": "12",
+        "label": "Corporate Finance"
+      },
+      "company": {
+        "identifier": "syntheticboard",
+        "name": "Synthetic Group"
+      },
+      "location": {
+        "city": "London",
+        "region": "London",
+        "country": "GB"
+      },
+      "jobAd": {
+        "sections": {
+          "companyDescription": {
+            "title": "Company Description",
+            "text": "<p>Synthetic Group is a synthetic employer used by the tests.</p>"
+          },
+          "jobDescription": {
+            "title": "Job Description",
+            "text": "<p>This is a permanent position (CDI), not an internship. The board publishes it as an internship.</p>"
+          },
+          "qualifications": {
+            "title": "Qualifications",
+            "text": "<ul><li>Bachelor's degree in Finance or Economics</li></ul>"
+          },
+          "additionalInformation": {
+            "title": "Additional Information",
+            "text": ""
+          }
+        }
+      }
+    }
   }
 }

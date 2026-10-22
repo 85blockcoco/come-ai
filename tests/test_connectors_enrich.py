@@ -20,7 +20,7 @@ from career.connectors import jobteaser as jobteaser_module
 from career.connectors import talent_com as talent_com_module
 from career.connectors import welcome_jungle as welcome_jungle_module
 from career.connectors.public_ats import AshbyConnector, LeverConnector, SmartRecruitersConnector
-from career.discovery import GreenhouseBoard, GreenhouseJobBoardConnector
+from career.discovery import GreenhouseBoard, GreenhouseJobBoardConnector, PublicSourceError
 from career.source_fields import (
     CONFLICTS_KEY,
     CONTRACT_KEY,
@@ -91,6 +91,27 @@ class FixtureFetch:
         if not self.responses:
             raise AssertionError("fixture fetch exhausted")
         return self.responses.pop(0)
+
+
+class DetailTransport:
+    """Answer a posting detail request with the fixture's detail payload.
+
+    SmartRecruiters publishes the advertisement of a posting in its detail
+    response only.  The transport answers on the fixed public API host and
+    records every endpoint it was asked for.
+    """
+
+    def __init__(self, details: dict[str, Any]) -> None:
+        self.details = details
+        self.calls: list[str] = []
+
+    def get_json(self, endpoint: str, timeout_seconds: int) -> Any:
+        self.calls.append(endpoint)
+        posting_id = endpoint.rstrip("/").rsplit("/", 1)[-1]
+        detail = self.details.get(posting_id)
+        if detail is None:
+            raise PublicSourceError("no detail published for this posting", code="not_found")
+        return detail
 
 
 def _fixture(provider: str) -> dict[str, Any]:
@@ -179,7 +200,9 @@ def _material(provider: str) -> list[dict[str, Any]]:
     if provider == "ashby":
         return AshbyConnector(enabled=True).parse(_source(provider), fixture["payload"])
     if provider == "smartrecruiters":
-        return SmartRecruitersConnector(enabled=True).parse(_source(provider), fixture["payload"])
+        transport = DetailTransport(fixture["details"])
+        connector = SmartRecruitersConnector(transport=transport, enabled=True, enrich_details=True)
+        return connector.parse(_source(provider), fixture["payload"])
     module = {
         "welcome_jungle": welcome_jungle_module,
         "jobteaser": jobteaser_module,
@@ -422,14 +445,113 @@ def test_the_published_prerequisites_reach_the_requirements_layer() -> None:
 def test_the_published_sections_keep_the_name_the_source_publishes() -> None:
     clean, _contradicting = _material("smartrecruiters")
     description = clean["description_original"]
-    assert "Company description" in description
-    assert "Job description" in description
+    # The source publishes the title of each section: it is used as it is.
+    assert "Company Description" in description
+    assert "Job Description" in description
     assert "Qualifications" in description
-    assert "Additional information" in description
+    assert "Additional Information" in description
     # The sections are composed in the order the source publishes them.
-    assert description.index("Company description") < description.index("Job description")
-    assert description.index("Job description") < description.index("Qualifications")
-    assert description.index("Qualifications") < description.index("Additional information")
+    assert description.index("Company Description") < description.index("Job Description")
+    assert description.index("Job Description") < description.index("Qualifications")
+    assert description.index("Qualifications") < description.index("Additional Information")
+
+
+def test_the_list_response_alone_publishes_no_advertisement() -> None:
+    """The list response of SmartRecruiters carries no job description.
+
+    The advertisement only exists in the response of the posting detail: this
+    is the shape the source really publishes, and the reason the description
+    of a SmartRecruiters offer used to be empty.
+    """
+    fixture = _fixture("smartrecruiters")
+    for posting in fixture["payload"]["content"]:
+        assert "jobAd" not in posting
+
+    connector = SmartRecruitersConnector(enabled=True)
+    jobs = connector.parse(_source("smartrecruiters"), fixture["payload"])
+
+    assert jobs
+    assert all(job["description_original"] == "" for job in jobs)
+    assert all("jobAd.sections" not in job[CONTRACT_KEY]["smartrecruiters"] for job in jobs)
+
+
+def test_the_posting_detail_publishes_the_advertisement() -> None:
+    """The bounded detail read is what brings the published advertisement."""
+    fixture = _fixture("smartrecruiters")
+    transport = DetailTransport(fixture["details"])
+    connector = SmartRecruitersConnector(transport=transport, enabled=True, enrich_details=True)
+
+    jobs = connector.parse(_source("smartrecruiters"), fixture["payload"])
+
+    assert len(jobs) == 2
+    assert transport.calls, "no posting detail was read"
+    for job in jobs:
+        assert job["description_original"].strip()
+        assert job[CONTRACT_KEY]["smartrecruiters"]["jobAd.sections"]
+    # The detail is read on the fixed public API host of the provider.
+    for endpoint in transport.calls:
+        assert endpoint.startswith("https://api.smartrecruiters.com/v1/companies/")
+
+
+def test_the_detail_read_is_bounded_and_never_blocks_the_board() -> None:
+    """One request per posting is bounded, and a refused read changes nothing."""
+    fixture = _fixture("smartrecruiters")
+    transport = DetailTransport(fixture["details"])
+    connector = SmartRecruitersConnector(transport=transport, enabled=True, enrich_details=True,
+                                          max_detail_reads=1)
+
+    jobs = connector.parse(_source("smartrecruiters"), fixture["payload"])
+
+    assert len(transport.calls) == 1
+    assert len(jobs) == 2
+    # The posting whose detail was not read keeps the facts of the list.
+    without_detail = jobs[-1]
+    assert without_detail["description_original"] == ""
+    assert without_detail[CONTRACT_KEY]["smartrecruiters"]["releasedDate"] == "2026-10-02T09:00:00Z"
+
+
+def test_a_refused_detail_read_leaves_the_published_list_facts_intact() -> None:
+    """A detail read is an enrichment, never a condition of the board."""
+    fixture = _fixture("smartrecruiters")
+
+    class RefusingTransport:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def get_json(self, endpoint: str, timeout_seconds: int) -> Any:
+            self.calls.append(endpoint)
+            raise PublicSourceError("the source refused this posting", code="not_found")
+
+    connector = SmartRecruitersConnector(transport=RefusingTransport(), enabled=True, enrich_details=True)
+    jobs = connector.parse(_source("smartrecruiters"), fixture["payload"])
+
+    assert len(jobs) == 2
+    for job in jobs:
+        assert job["description_original"] == ""
+        assert job[CONTRACT_KEY]["smartrecruiters"]["releasedDate"]
+
+
+def test_the_detail_read_is_opt_in() -> None:
+    """A connector that is not asked to read the details never does it."""
+    fixture = _fixture("smartrecruiters")
+    transport = DetailTransport(fixture["details"])
+    connector = SmartRecruitersConnector(transport=transport, enabled=True)
+
+    connector.parse(_source("smartrecruiters"), fixture["payload"])
+
+    assert transport.calls == []
+
+
+def test_the_published_posting_page_becomes_the_official_link() -> None:
+    """The detail publishes the human page of the offer: it is transmitted."""
+    fixture = _fixture("smartrecruiters")
+    transport = DetailTransport(fixture["details"])
+    connector = SmartRecruitersConnector(transport=transport, enabled=True, enrich_details=True)
+
+    job = connector.parse(_source("smartrecruiters"), fixture["payload"])[0]
+
+    assert job["official_url"] == "https://jobs.smartrecruiters.com/SyntheticGroup/743999999999"
+    assert job[CONTRACT_KEY]["smartrecruiters"]["postingUrl"] == job["official_url"]
 
 
 def test_talent_com_reads_the_published_offer_link() -> None:
