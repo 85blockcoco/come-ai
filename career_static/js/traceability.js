@@ -67,6 +67,9 @@ const traceabilityEventLabels = {
   deleted: "Suppression",
   link_confirmed: "Liaison validée",
   link_rejected: "Liaison rejetée",
+  requirement_changed: "Exigence modifiée",
+  superseded: "Exigence remplacée",
+  restored: "Exigence restaurée",
 };
 
 /* Tri déterministe : criticité, puis statut, puis exigence. Aucun tri
@@ -250,6 +253,11 @@ function traceabilityRenderRow(requirement) {
   if (requirement.review_state === "pending") {
     copy.append(traceabilityNode("p", "Liaison automatique proposée : elle attend ta validation.", "traceability-quote"));
   }
+  if (requirement.superseded_at) {
+    copy.append(
+      traceabilityNode("p", "L’offre ne demande plus cette exigence : elle est remplacée.", "traceability-quote muted"),
+    );
+  }
 
   const actions = traceabilityNode("div", "", "traceability-actions");
   const open = traceabilityNode("button", "Historique", "quiet-button");
@@ -333,6 +341,9 @@ function traceabilityRenderDetail(requirement) {
     ["Validation", traceabilityLabel(traceabilityReviewLabels, requirement.review_state)],
     ["Repère source", requirement.locator || "—"],
   ];
+  if (requirement.superseded_at) {
+    rows.push(["Remplacée le", requirement.superseded_at]);
+  }
   rows.forEach(([label, value]) => {
     facts.append(traceabilityNode("dt", label), traceabilityNode("dd", value || "—"));
   });

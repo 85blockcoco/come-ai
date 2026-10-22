@@ -36,15 +36,18 @@ import os
 import sqlite3
 import threading
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator, Mapping, Sequence
 
 from .models import clean_text, utc_now
 from .traceability import (
     RequirementTrace,
+    TraceEvent,
     TraceabilityError,
     TraceabilityRegistry,
     auto_link_evidence,
+    requirement_trace_id,
 )
 
 
@@ -78,6 +81,28 @@ CSV_COLUMNS: tuple[str, ...] = (
     "updated_at",
     "history_count",
 )
+
+
+def _timestamp_key(value: Any) -> tuple[int, float, str]:
+    """Return a comparable key for an ISO-8601 timestamp.
+
+    Two timestamps written by two different clocks must still be ordered
+    correctly: ``2026-10-22T13:38:17.123456+00:00`` is *after*
+    ``2026-10-22T13:38:17+00:00``, but a plain string comparison says the
+    opposite (``"."`` < ``"+"``).  The key is therefore
+    ``(parsed, instant, raw)``: parsed timestamps are compared as instants,
+    unparsable ones fall back to the raw text.
+    """
+    text = clean_text(value, limit=40)
+    if not text:
+        return (0, 0.0, "")
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return (0, 0.0, text)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return (1, parsed.timestamp(), text)
 
 
 class TraceabilityStore:
@@ -314,6 +339,18 @@ class TraceabilityStore:
 
         A trace already known is **not** overwritten by a stale export: the
         local (newer) version wins, and only the missing events are added.
+
+        Three guards protect the registry:
+
+        * an imported trace must carry the **deterministic identity** of its
+          requirement (``trace_id == requirement_trace_id(source,
+          requirement_id)``) — a forged id could otherwise register a second
+          trace for a requirement that already has one ;
+        * the versions are ordered by **instant**, not by string, so two
+          clocks with different precisions cannot invert the merge ;
+        * the merge copies the **whole** state of the newer version (status,
+          proof, review state, provenance), otherwise a confirmed link would
+          come back as « not required » after an import.
         """
         if not isinstance(payload, Mapping):
             raise TraceabilityError("Le contenu d’import du registre est invalide.")
@@ -322,14 +359,24 @@ class TraceabilityStore:
             raise TraceabilityError("Le contenu d’import du registre est invalide : liste de traces attendue.")
         imported = 0
         skipped = 0
+        invalid = 0
         events_added = 0
         for record in records:
             if not isinstance(record, Mapping):
                 skipped += 1
+                invalid += 1
                 continue
             trace = RequirementTrace.from_dict(record)
-            if not trace.trace_id:
+            if not trace.trace_id or not trace.requirement_id:
                 skipped += 1
+                invalid += 1
+                continue
+            if trace.trace_id != requirement_trace_id(trace.source, trace.requirement_id):
+                # The identity of a trace is derived from its requirement: an
+                # imported id that does not match would duplicate (or shadow)
+                # an existing requirement.
+                skipped += 1
+                invalid += 1
                 continue
             existing = self.get_trace(trace.trace_id)
             if existing is None:
@@ -343,21 +390,40 @@ class TraceabilityStore:
                     merged.append(event)
                     events_added += 1
             existing.history = merged
-            if trace.updated_at > existing.updated_at:
-                existing.category = trace.category
-                existing.criticality = trace.criticality
-                existing.status = trace.status
-                existing.evidence_id = trace.evidence_id
-                existing.evidence_quote = trace.evidence_quote
-                existing.tags = trace.tags
-                existing.updated_at = trace.updated_at
+            if _timestamp_key(trace.updated_at) > _timestamp_key(existing.updated_at):
+                self._copy_state(existing, trace)
             self.save_trace(existing)
             skipped += 1
         return {
             "imported": imported,
             "skipped": skipped,
+            "invalid": invalid,
             "events_added": events_added,
         }
+
+    @staticmethod
+    def _copy_state(target: RequirementTrace, source: RequirementTrace) -> None:
+        """Copy the whole state of the newer trace into the local one."""
+        target.requirement_text = source.requirement_text
+        target.category = source.category
+        target.criticality = source.criticality
+        target.status = source.status
+        target.evidence_id = source.evidence_id
+        target.evidence_quote = source.evidence_quote
+        target.tags = list(source.tags)
+        target.updated_at = source.updated_at
+        target.link_origin = source.link_origin
+        target.review_state = source.review_state
+        target.match_kind = source.match_kind
+        target.locator = source.locator
+        target.source_field = source.source_field
+        target.confidence = source.confidence
+        target.offer_id = source.offer_id
+        target.cv_id = source.cv_id
+        target.deleted = source.deleted
+        target.deleted_at = source.deleted_at
+        target.superseded_at = source.superseded_at
+        target.superseded_by = source.superseded_by
 
 
 class TraceabilityService:
@@ -378,6 +444,49 @@ class TraceabilityService:
         for trace in traces:
             self.store.save_trace(trace)
         return traces[0]
+
+    #: Fields restored when an update is refused (the requirement goes back
+    #: to the state it had before the refused change).
+    _MUTABLE_FIELDS: tuple[str, ...] = (
+        "requirement_text",
+        "category",
+        "criticality",
+        "status",
+        "evidence_id",
+        "evidence_quote",
+        "updated_at",
+        "review_state",
+        "link_origin",
+        "match_kind",
+        "locator",
+        "source_field",
+        "confidence",
+        "offer_id",
+        "cv_id",
+        "deleted",
+        "deleted_at",
+        "superseded_at",
+        "superseded_by",
+    )
+
+    @classmethod
+    def _snapshot(cls, trace: RequirementTrace) -> dict[str, Any]:
+        """Capture the state of a requirement before a mutation."""
+        snapshot: dict[str, Any] = {field: getattr(trace, field) for field in cls._MUTABLE_FIELDS}
+        snapshot["tags"] = list(trace.tags)
+        snapshot["history"] = [event.to_dict() for event in trace.history]
+        return snapshot
+
+    @staticmethod
+    def _restore(trace: RequirementTrace, snapshot: Mapping[str, Any]) -> None:
+        """Put a requirement back into the state captured by ``_snapshot``."""
+        for field, value in snapshot.items():
+            if field == "history":
+                trace.history = [TraceEvent.from_dict(event) for event in value]
+            elif field == "tags":
+                trace.tags = list(value)
+            else:
+                setattr(trace, field, value)
 
     # -- creation -----------------------------------------------------------
     def create_requirement(self, payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -400,10 +509,18 @@ class TraceabilityService:
             self._persist(trace)
             return trace.to_dict()
 
-    def register_offer_analysis(self, analysis: Mapping[str, Any], *, actor: str = "system") -> dict[str, Any]:
+    def register_offer_analysis(
+        self,
+        analysis: Mapping[str, Any],
+        *,
+        actor: str = "system",
+        supersede_missing: bool = False,
+    ) -> dict[str, Any]:
         """Register every requirement of a SK-02 analysis."""
         with self._lock:
-            traces = self.registry.register_offer_analysis(analysis, actor=actor)
+            traces = self.registry.register_offer_analysis(
+                analysis, actor=actor, supersede_missing=supersede_missing
+            )
             self.store.save_traces(traces)
             return {
                 "registered": len(traces),
@@ -445,21 +562,32 @@ class TraceabilityService:
 
     # -- mutations ----------------------------------------------------------
     def update_requirement(self, trace_id: str, payload: Mapping[str, Any]) -> dict[str, Any]:
-        """Update the mutable fields of a requirement (status, tags, …)."""
+        """Update the mutable fields of a requirement (status, tags, …).
+
+        The update is **atomic**: when one of the changes is refused (a
+        ``covered`` status without a cited proof, an unknown category…), the
+        requirement is restored to its previous state.  A refused update
+        never leaves the in-memory registry diverged from the database.
+        """
         with self._lock:
             trace = self.registry.get(trace_id)
             if trace is None:
                 raise TraceabilityError("Cette exigence n’existe pas dans le registre.")
             actor = clean_text(payload.get("actor"), limit=40) or "user"
             comment = clean_text(payload.get("comment"), limit=2_000) or None
-            if payload.get("category"):
-                self.registry.set_category(trace.trace_id, payload["category"], actor=actor, comment=comment)
-            if payload.get("criticality"):
-                self.registry.set_criticality(trace.trace_id, payload["criticality"], actor=actor, comment=comment)
-            if "tags" in payload:
-                self.registry.set_tags(trace.trace_id, payload.get("tags") or [], actor=actor, comment=comment)
-            if payload.get("status"):
-                self.registry.set_status(trace.trace_id, payload["status"], actor=actor, comment=comment)
+            snapshot = self._snapshot(trace)
+            try:
+                if payload.get("category"):
+                    self.registry.set_category(trace.trace_id, payload["category"], actor=actor, comment=comment)
+                if payload.get("criticality"):
+                    self.registry.set_criticality(trace.trace_id, payload["criticality"], actor=actor, comment=comment)
+                if "tags" in payload:
+                    self.registry.set_tags(trace.trace_id, payload.get("tags") or [], actor=actor, comment=comment)
+                if payload.get("status"):
+                    self.registry.set_status(trace.trace_id, payload["status"], actor=actor, comment=comment)
+            except Exception:
+                self._restore(trace, snapshot)
+                raise
             self._persist(trace)
             return trace.to_dict()
 
