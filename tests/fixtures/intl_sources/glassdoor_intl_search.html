@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<!--
+  Synthetic fixture: one page of the international Glassdoor job search.
+
+  Nothing here was downloaded: the markup reproduces the structure of the
+  public result cards so the connector can be exercised offline, and every
+  host uses the reserved ".test" domain.
+
+  Five offers are published outside France (US, GB, DE) and one is published
+  in France: the French card is the probe that proves the excluded country
+  is dropped even when the source answers with it — the country identifier
+  of the request is best effort, the country read on the published location
+  is the guarantee.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Internships | Glassdoor (synthetic fixture)</title>
+</head>
+<body>
+  <ul class="jobs-list">
+    <li class="react-job-listing">
+      <div class="job-search-card">
+        <div class="job-search-card__heading">
+          <h2 class="job-search-card__title">Finance Intern</h2>
+          <div class="job-search-card__info">
+            <span class="job-search-card__name">Example Financial Inc</span>
+            <span class="job-search-card__location">New York, United States</span>
+          </div>
+        </div>
+        <a class="job-search-card__link" href="https://www.glassdoor.com/Job/example-financial-inc-finance-intern-Job-ID-5001">Apply</a>
+      </div>
+    </li>
+    <li class="react-job-listing">
+      <div class="job-search-card">
+        <div class="job-search-card__heading">
+          <h2 class="job-search-card__title">Investment Banking Intern</h2>
+          <div class="job-search-card__info">
+            <span class="job-search-card__name">Example Capital Partners</span>
+            <span class="job-search-card__location">London, United Kingdom</span>
+          </div>
+        </div>
+        <a class="job-search-card__link" href="https://www.glassdoor.com/Job/example-capital-partners-investment-banking-intern-Job-ID-5002">Apply</a>
+      </div>
+    </li>
+    <li class="react-job-listing">
+      <div class="job-search-card">
+        <div class="job-search-card__heading">
+          <h2 class="job-search-card__title">Corporate Finance Intern</h2>
+          <div class="job-search-card__info">
+            <span class="job-search-card__name">Example Bank AG</span>
+            <span class="job-search-card__location">Frankfurt, Germany</span>
+          </div>
+        </div>
+        <a class="job-search-card__link" href="https://www.glassdoor.com/Job/example-bank-ag-corporate-finance-intern-Job-ID-5003">Apply</a>
+      </div>
+    </li>
+    <li class="react-job-listing">
+      <div class="job-search-card">
+        <div class="job-search-card__heading">
+          <h2 class="job-search-card__title">Risk Management Intern</h2>
+          <div class="job-search-card__info">
+            <span class="job-search-card__name">Example Insurance Group</span>
+            <span class="job-search-card__location">Toronto, Canada</span>
+          </div>
+        </div>
+        <a class="job-search-card__link" href="https://www.glassdoor.com/Job/example-insurance-group-risk-management-intern-Job-ID-5004">Apply</a>
+      </div>
+    </li>
+    <li class="react-job-listing">
+      <div class="job-search-card">
+        <div class="job-search-card__heading">
+          <h2 class="job-search-card__title">Accounting Intern</h2>
+          <div class="job-search-card__info">
+            <span class="job-search-card__name">Example Audit LLP</span>
+            <span class="job-search-card__location">London, United Kingdom</span>
+          </div>
+        </div>
+        <a class="job-search-card__link" href="https://www.glassdoor.com/Job/example-audit-llp-accounting-intern-Job-ID-5005">Apply</a>
+      </div>
+    </li>
+    <li class="react-job-listing">
+      <div class="job-search-card">
+        <div class="job-search-card__heading">
+          <h2 class="job-search-card__title">Finance Intern</h2>
+          <div class="job-search-card__info">
+            <span class="job-search-card__name">Example Paris SA</span>
+            <span class="job-search-card__location">Paris, France</span>
+          </div>
+        </div>
+        <a class="job-search-card__link" href="https://www.glassdoor.com/Job/example-paris-sa-finance-intern-Job-ID-5006">Apply</a>
+      </div>
+    </li>
+  </ul>
+</body>
+</html>
