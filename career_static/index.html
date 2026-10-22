@@ -43,6 +43,7 @@
           <button class="career-tab" id="tab-stagehunter" type="button" aria-controls="view-stagehunter" data-view="stagehunter">Stage Hunter</button>
           <button class="career-tab" id="tab-applications" type="button" aria-controls="view-applications" data-product-area="Applications" data-view="applications">Candidatures</button>
           <button class="career-tab" id="tab-interviews" type="button" aria-controls="view-interviews" data-product-area="Interview Coach" data-view="interviews">Coach d’entretien</button>
+          <button class="career-tab" id="tab-traceability" type="button" aria-controls="view-traceability" data-product-area="Traceability" data-view="traceability">Traçabilité</button>
           <button class="career-tab" id="tab-profile" type="button" aria-controls="view-profile" data-view="profile">Mon profil</button>
           <button class="career-tab" id="tab-settings" type="button" aria-controls="view-settings" data-view="settings">Réglages</button>
         </nav>
@@ -83,6 +84,7 @@
               <button class="quick-tool" type="button" data-view-action="studio"><span class="quick-tool-icon" aria-hidden="true">✦</span><span><strong>Préparer un dossier</strong><small>CV et lettre adaptés, vérifiables</small></span></button>
               <button class="quick-tool" type="button" data-view-action="applications"><span class="quick-tool-icon" aria-hidden="true">✓</span><span><strong>Suivre mes candidatures</strong><small>États, prochaines actions et relances</small></span></button>
               <button class="quick-tool" type="button" data-view-action="interviews"><span class="quick-tool-icon" aria-hidden="true">◌</span><span><strong>M’entraîner</strong><small>Questions et simulations d’entretien</small></span></button>
+              <button class="quick-tool" type="button" data-view-action="traceability"><span class="quick-tool-icon" aria-hidden="true">⌗</span><span><strong>Tracer mes exigences</strong><small>Exigences, preuves et gaps</small></span></button>
               <button class="quick-tool" type="button" data-view-action="discover"><span class="quick-tool-icon" aria-hidden="true">⌁</span><span><strong>Gérer mes sources</strong><small>Sources publiques et actualisation</small></span></button>
             </div>
           </section>
@@ -726,6 +728,68 @@
             <p id="coach-history-empty" class="empty-state compact-empty">Aucune séance sauvegardée. Commence par une question technique, fit, case ou liée à une offre.</p>
           </section>
         </section>
+        <section id="view-traceability" class="career-view" tabindex="-1" hidden aria-labelledby="traceability-title">
+          <section class="panel jobs-panel">
+            <div class="panel-heading">
+              <div><p class="eyebrow">Registre local</p><h2 id="traceability-title">Traçabilité des exigences</h2></div>
+              <div class="inline-actions">
+                <button class="quiet-button" type="button" id="traceability-refresh">Actualiser</button>
+                <a class="secondary-button link-button" href="/api/career/traceability/export?export_format=csv">Export CSV</a>
+              </div>
+            </div>
+            <p class="panel-help">Chaque exigence extraite d’une offre est reliée à la preuve qui la couvre, ou reste explicitement non couverte. L’historique est local, immuable et ne vaut jamais preuve à la place du CV.</p>
+            <div class="filter-row">
+              <label for="traceability-import-file">Importer un export
+                <input id="traceability-import-file" class="filter-search" type="file" accept="application/json,.json">
+              </label>
+              <button class="quiet-button" type="button" id="traceability-import">Importer le registre</button>
+            </div>
+            <div id="traceability-metrics" class="metrics" aria-live="polite"></div>
+            <div class="filter-row">
+              <label for="traceability-filter-status">Statut
+                <select id="traceability-filter-status"><option value="">Tous les statuts</option></select>
+              </label>
+              <label for="traceability-filter-category">Catégorie
+                <select id="traceability-filter-category"><option value="">Toutes les catégories</option></select>
+              </label>
+              <label for="traceability-filter-criticality">Criticité
+                <select id="traceability-filter-criticality"><option value="">Toutes les criticités</option></select>
+              </label>
+              <label for="traceability-filter-offer">Offre
+                <input id="traceability-filter-offer" class="filter-search" type="search" placeholder="Identifiant d’offre" autocomplete="off">
+              </label>
+              <label for="traceability-filter-search">Recherche
+                <input id="traceability-filter-search" class="filter-search" type="search" placeholder="Exigence, preuve, étiquette" autocomplete="off">
+              </label>
+              <label for="traceability-sort">Tri
+                <select id="traceability-sort">
+                  <option value="priority">Priorité</option>
+                  <option value="recent">Modification récente</option>
+                  <option value="offer">Par offre</option>
+                </select>
+              </label>
+            </div>
+            <div class="filter-row">
+              <label for="traceability-justification">Justification d’un écart (obligatoire)
+                <input id="traceability-justification" class="filter-search" type="text" placeholder="Pourquoi cette exigence est écartée" autocomplete="off">
+              </label>
+            </div>
+            <div id="traceability-batch-bar" class="application-filters" hidden>
+              <span id="traceability-batch-count">0 exigence sélectionnée</span>
+              <button class="secondary-button" type="button" id="traceability-batch-waive">Écarter la sélection</button>
+              <button class="secondary-button" type="button" id="traceability-batch-unlink">Délier les preuves</button>
+              <button class="quiet-button" type="button" id="traceability-batch-reopen">Rouvrir les écartées</button>
+              <button class="quiet-button" type="button" id="traceability-batch-clear">Vider la sélection</button>
+            </div>
+            <div id="traceability-requirements" class="job-list"></div>
+            <p id="traceability-empty" class="empty-state" hidden>Aucune exigence tracée ne correspond à ces filtres.</p>
+          </section>
+
+          <section id="traceability-detail-panel" class="panel" hidden aria-live="polite">
+            <div class="panel-heading compact-heading"><div><p class="eyebrow">Historique immuable</p><h3>Détail de l’exigence</h3></div></div>
+            <div id="traceability-detail" class="review-list"></div>
+          </section>
+        </section>
       </main>
 
       <footer>
@@ -734,5 +798,6 @@
     </div>
     <script src="/career-static/cv_plan.js" defer></script>
     <script src="/career-static/career.js" defer></script>
+    <script src="/career-static/js/traceability.js" defer></script>
   </body>
 </html>

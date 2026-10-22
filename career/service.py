@@ -125,9 +125,20 @@ from .qualification_persistence import (
     normalize_qualification_snapshot,
     snapshot_matches_current_source,
 )
+from .offer_requirements import analyze_offer
+from .traceability import (
+    RequirementTrace,
+    TraceabilityRegistry,
+    apply_match_result,
+    export_traces,
+    import_traces,
+    sync_offer_analysis,
+)
+from .traceability_audit import audit_report
+from .traceability_store import TraceabilityStore
 
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 # The Stage Hunter brief lives in career_settings as one JSON value: no
 # schema migration, and it is exported with the rest of the local settings.
 STAGE_SEARCH_SETTING_KEY = "stage_search_brief"
@@ -523,6 +534,10 @@ class CareerService:
                 "variant",
                 "TEXT NOT NULL DEFAULT ''",
             )
+            # The traceability tables are created for every database, fresh or
+            # migrated: the statement is idempotent and never rewrites the
+            # offers, the profile or the applications of the person.
+            TraceabilityStore.ensure_schema(connection)
             self._seed_defaults(connection)
         try:
             os.chmod(self.db_path, 0o600)
@@ -584,7 +599,7 @@ class CareerService:
 
     def _migrate(self, connection: sqlite3.Connection, version: int) -> None:
         """Migrate in-place without touching a person's existing Career data."""
-        if version < 1 or version > 7:
+        if version < 1 or version > 8:
             raise UserFacingError("La base Career locale ne peut pas être mise à jour automatiquement.")
         if version == 1:
             self._migrate_to_v2(connection)
@@ -608,6 +623,9 @@ class CareerService:
             version = 7
         if version == 7:
             self._migrate_to_v8(connection)
+            version = 8
+        if version == 8:
+            self._migrate_to_v9(connection)
 
     def _migrate_to_v2(self, connection: sqlite3.Connection) -> None:
         self._add_column_if_missing(connection, "candidate_profile", "contact_email", "TEXT NOT NULL DEFAULT ''")
@@ -753,6 +771,15 @@ class CareerService:
             );
             """
         )
+
+    @staticmethod
+    def _migrate_to_v9(connection: sqlite3.Connection) -> None:
+        """Add the requirement traceability registry without touching existing data.
+
+        The registry lives in its own tables: the offers, the profile and the
+        applications of the person are never rewritten by this migration.
+        """
+        TraceabilityStore.ensure_schema(connection)
 
     def _seed_defaults(self, connection: sqlite3.Connection) -> None:
         now = utc_now()
@@ -4803,6 +4830,327 @@ class CareerService:
                         path.unlink()
                 except OSError:
                     pass
+
+    # ------------------------------------------------------------------
+    # Requirement traceability registry (SPEC-011)
+    # ------------------------------------------------------------------
+    #
+    # The registry links one extracted requirement (SK-02) to one piece of
+    # profile evidence (SK-10), keeps one status and one immutable history.
+    # Every mutation below is persisted in the same transaction as the read
+    # that produced it, and every mutation is audited.
+
+    def _traceability_registry(self, connection: sqlite3.Connection) -> TraceabilityRegistry:
+        """Rebuild the in-memory registry from the local database."""
+        store = TraceabilityStore(connection)
+        events_by_trace = store.load_events_grouped()
+        registry = TraceabilityRegistry()
+        for trace in store.load_traces(include_deleted=True):
+            trace.history = events_by_trace.get(trace.trace_id, [])
+            registry.restore(trace)
+        return registry
+
+    @staticmethod
+    def _persist_traceability(
+        connection: sqlite3.Connection, traces: list[RequirementTrace]
+    ) -> None:
+        """Save the current state and the (append-only) history of the traces."""
+        store = TraceabilityStore(connection)
+        for trace in traces:
+            store.save_trace(trace)
+            store.append_events(trace.trace_id, trace.history)
+
+    def list_traceability_requirements(
+        self,
+        *,
+        status: str = "",
+        category: str = "",
+        criticality: str = "",
+        offer_id: str = "",
+        cv_id: str = "",
+        source: str = "",
+        tag: str = "",
+        include_deleted: bool = False,
+    ) -> dict[str, Any]:
+        """List the traceability requirements with the requested filters."""
+        with self._lock, self._connection() as connection:
+            store = TraceabilityStore(connection)
+            store.ensure_schema(connection)
+            traces = store.load_traces(
+                status=clean_text(status, limit=40) or None,
+                category=clean_text(category, limit=40) or None,
+                criticality=clean_text(criticality, limit=40) or None,
+                offer_id=clean_text(offer_id, limit=160) or None,
+                cv_id=clean_text(cv_id, limit=160) or None,
+                source=clean_text(source, limit=160) or None,
+                tag=clean_text(tag, limit=80) or None,
+                include_deleted=bool(include_deleted),
+            )
+        payload = [trace.to_dict() for trace in traces]
+        return {"requirements": payload, "count": len(payload)}
+
+    def get_traceability_requirement(self, trace_id: str) -> dict[str, Any]:
+        """Return one requirement with its complete history."""
+        with self._lock, self._connection() as connection:
+            store = TraceabilityStore(connection)
+            store.ensure_schema(connection)
+            trace = store.load_trace(clean_text(trace_id, limit=80))
+        if trace is None:
+            raise UserFacingError("Cette exigence de traçabilité est introuvable.")
+        return trace.to_dict()
+
+    def create_traceability_requirement(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Create one traceability requirement and audit its creation."""
+        with self._lock, self._connection() as connection:
+            registry = self._traceability_registry(connection)
+            trace = registry.create(
+                requirement_id=clean_text(payload.get("requirement_id"), limit=160),
+                requirement_text=clean_text(payload.get("requirement_text"), limit=4_000),
+                source=clean_text(payload.get("source"), limit=160) or "manual",
+                category=clean_text(payload.get("category"), limit=40) or "other",
+                criticality=clean_text(payload.get("criticality"), limit=40) or "contextual",
+                offer_id=clean_text(payload.get("offer_id"), limit=160),
+                cv_id=clean_text(payload.get("cv_id"), limit=160),
+                tags=payload.get("tags") or [],
+                actor=clean_text(payload.get("actor"), limit=20) or "user",
+                comment=clean_text(payload.get("comment"), limit=2_000) or None,
+            )
+            self._persist_traceability(connection, [trace])
+        return trace.to_dict()
+
+    def update_traceability_requirement(
+        self, trace_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Update the status, the category, the criticality or the tags."""
+        with self._lock, self._connection() as connection:
+            registry = self._traceability_registry(connection)
+            registry.require(clean_text(trace_id, limit=80))
+            trace = registry.update(
+                clean_text(trace_id, limit=80),
+                status=clean_text(payload.get("status"), limit=40) or None,
+                category=clean_text(payload.get("category"), limit=40) or None,
+                criticality=clean_text(payload.get("criticality"), limit=40) or None,
+                tags=payload.get("tags"),
+                comment=clean_text(payload.get("comment"), limit=2_000) or None,
+                actor=clean_text(payload.get("actor"), limit=20) or "user",
+            )
+            self._persist_traceability(connection, [trace])
+        return trace.to_dict()
+
+    def link_traceability_evidence(
+        self, trace_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Link a proof to a requirement."""
+        with self._lock, self._connection() as connection:
+            registry = self._traceability_registry(connection)
+            trace = registry.link_evidence(
+                clean_text(trace_id, limit=80),
+                evidence_id=clean_text(payload.get("evidence_id"), limit=160),
+                evidence_quote=clean_text(payload.get("evidence_quote"), limit=4_000),
+                status=clean_text(payload.get("status"), limit=40) or None,
+                comment=clean_text(payload.get("comment"), limit=2_000) or None,
+                actor=clean_text(payload.get("actor"), limit=20) or "user",
+            )
+            self._persist_traceability(connection, [trace])
+        return trace.to_dict()
+
+    def unlink_traceability_evidence(
+        self, trace_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Detach the proof of a requirement."""
+        with self._lock, self._connection() as connection:
+            registry = self._traceability_registry(connection)
+            trace = registry.unlink_evidence(
+                clean_text(trace_id, limit=80),
+                comment=clean_text(payload.get("comment"), limit=2_000) or None,
+                actor=clean_text(payload.get("actor"), limit=20) or "user",
+            )
+            self._persist_traceability(connection, [trace])
+        return trace.to_dict()
+
+    def waive_traceability_requirement(
+        self, trace_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Waive a requirement, with a mandatory justification."""
+        with self._lock, self._connection() as connection:
+            registry = self._traceability_registry(connection)
+            trace = registry.waive(
+                clean_text(trace_id, limit=80),
+                justification=clean_text(payload.get("justification"), limit=2_000),
+                comment=clean_text(payload.get("comment"), limit=2_000) or None,
+                actor=clean_text(payload.get("actor"), limit=20) or "user",
+            )
+            self._persist_traceability(connection, [trace])
+        return trace.to_dict()
+
+    def reopen_traceability_requirement(
+        self, trace_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Reopen a waived requirement."""
+        with self._lock, self._connection() as connection:
+            registry = self._traceability_registry(connection)
+            trace = registry.reopen(
+                clean_text(trace_id, limit=80),
+                comment=clean_text(payload.get("comment"), limit=2_000) or None,
+                actor=clean_text(payload.get("actor"), limit=20) or "user",
+            )
+            self._persist_traceability(connection, [trace])
+        return trace.to_dict()
+
+    def validate_traceability_link(
+        self, trace_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Confirm or reject an automatic link made by the matcher."""
+        approved = bool(payload.get("approved"))
+        with self._lock, self._connection() as connection:
+            registry = self._traceability_registry(connection)
+            trace = registry.validate_link(
+                clean_text(trace_id, limit=80),
+                approved=approved,
+                comment=clean_text(payload.get("comment"), limit=2_000) or None,
+                actor=clean_text(payload.get("actor"), limit=20) or "user",
+            )
+            self._persist_traceability(connection, [trace])
+        return trace.to_dict()
+
+    def delete_traceability_requirement(
+        self, trace_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Delete a requirement; its history is kept for the audit trail."""
+        with self._lock, self._connection() as connection:
+            registry = self._traceability_registry(connection)
+            trace = registry.delete(
+                clean_text(trace_id, limit=80),
+                comment=clean_text(payload.get("comment"), limit=2_000) or None,
+                actor=clean_text(payload.get("actor"), limit=20) or "user",
+            )
+            self._persist_traceability(connection, [trace])
+        return trace.to_dict()
+
+    def traceability_coverage_report(self, **filters: Any) -> dict[str, Any]:
+        """Coverage of the requirements, per offer and per CV."""
+        report = self._traceability_audit(**filters)
+        return {
+            "overall": report["overall"],
+            "coverage_by_offer": report["coverage_by_offer"],
+            "coverage_by_cv": report["coverage_by_cv"],
+            "generated_at": report["generated_at"],
+        }
+
+    def traceability_gaps_report(self, **filters: Any) -> dict[str, Any]:
+        """Mandatory requirements that are not covered by a proof."""
+        report = self._traceability_audit(**filters)
+        return {
+            "gaps": report["critical_gaps"],
+            "count": report["critical_gap_count"],
+            "waived_mandatory_count": report["waived_mandatory_count"],
+            "generated_at": report["generated_at"],
+        }
+
+    def traceability_history_report(self, **filters: Any) -> dict[str, Any]:
+        """The audit trail of the registry, per requirement and globally."""
+        report = self._traceability_audit(**filters)
+        return {
+            "timeline": report["timeline"],
+            "evolution": report["evolution"],
+            "waived": report["waived"],
+            "generated_at": report["generated_at"],
+        }
+
+    def _traceability_audit(self, **filters: Any) -> dict[str, Any]:
+        with self._lock, self._connection() as connection:
+            store = TraceabilityStore(connection)
+            store.ensure_schema(connection)
+            traces = store.load_traces(
+                status=clean_text(filters.get("status"), limit=40) or None,
+                category=clean_text(filters.get("category"), limit=40) or None,
+                criticality=clean_text(filters.get("criticality"), limit=40) or None,
+                offer_id=clean_text(filters.get("offer_id"), limit=160) or None,
+                cv_id=clean_text(filters.get("cv_id"), limit=160) or None,
+                source=clean_text(filters.get("source"), limit=160) or None,
+                tag=clean_text(filters.get("tag"), limit=80) or None,
+            )
+            events_by_trace = store.load_events_grouped()
+            events = [event for group in events_by_trace.values() for event in group]
+        for trace in traces:
+            trace.history = events_by_trace.get(trace.trace_id, [])
+        return audit_report(traces, events=events)
+
+    def export_traceability(self, export_format: str = "json") -> str:
+        """Export the whole registry (JSON with the history, or CSV)."""
+        with self._lock, self._connection() as connection:
+            store = TraceabilityStore(connection)
+            store.ensure_schema(connection)
+            traces = store.load_traces(include_deleted=True)
+        return export_traces(traces, export_format=export_format)
+
+    def import_traceability(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Import a registry exported by :meth:`export_traceability`."""
+        with self._lock, self._connection() as connection:
+            registry = self._traceability_registry(connection)
+            result = import_traces(
+                registry,
+                payload,
+                actor=clean_text((payload or {}).get("actor"), limit=20) or "user",
+            )
+            imported = [registry.require(trace_id) for trace_id in result["imported"]]
+            self._persist_traceability(connection, imported)
+        return {
+            "imported": result["imported"],
+            "skipped": result["skipped"],
+            "invalid": result["invalid"],
+            "count": len(result["imported"]),
+        }
+
+    def sync_traceability_from_offer(self, job_id: str) -> dict[str, Any]:
+        """Create or refresh the traces of one offer from its SK-02 analysis.
+
+        The requirements are the ones the extractor actually found: their text
+        is copied verbatim and never rewritten by this method.
+        """
+        job = self.get_job(job_id)
+        analysis = analyze_offer(job)
+        with self._lock, self._connection() as connection:
+            registry = self._traceability_registry(connection)
+            report = sync_offer_analysis(registry, analysis)
+            changed = [
+                registry.require(trace_id)
+                for trace_id in [*report["created"], *report["updated"]]
+            ]
+            self._persist_traceability(connection, changed)
+        return {
+            "job_id": job_id,
+            "offer_id": report["offer_id"],
+            "source": report["source"],
+            "created": report["created"],
+            "updated": report["updated"],
+            "unchanged": report["unchanged"],
+            "skipped": report["skipped"],
+            "requirement_count": len(report["created"]) + len(report["updated"]) + len(report["unchanged"]),
+        }
+
+    def link_traceability_matches(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Link the proofs returned by the matcher to the matching requirements.
+
+        ``payload`` is the matcher result (``actions``: one entry per
+        requirement with the verbatim CV excerpt when a proof exists).  The
+        links it creates are flagged ``auto`` and still have to be confirmed
+        by the person.
+        """
+        match_result = payload.get("match_result") if isinstance(payload, dict) else None
+        if match_result is None:
+            match_result = payload if isinstance(payload, dict) else {}
+        with self._lock, self._connection() as connection:
+            registry = self._traceability_registry(connection)
+            report = apply_match_result(
+                registry,
+                match_result,
+                actor=clean_text((payload or {}).get("actor"), limit=20) or "system",
+                comment=clean_text((payload or {}).get("comment"), limit=2_000) or None,
+            )
+            changed = [registry.require(item["trace_id"]) for item in report["linked"]]
+            self._persist_traceability(connection, changed)
+        return report
 
     def safe_export_path(self, filename: str) -> Path:
         candidate = (self.export_dir / Path(filename).name).resolve()
