@@ -15,7 +15,7 @@ dans les fixtures.
 | `career/interview_prep.py` | **nouveau** (1 975 lignes) | Moteur de préparation : dataclasses du contrat, 8 banques finance, génération, simulation, sérialisation, rendu Markdown. |
 | `career/interview_store.py` | **nouveau** (323 lignes) | Persistance locale SQLite des sessions et de l'historique de simulation. |
 | `career_static/js/interview-prep.js` | **nouveau** (467 lignes) | UI : onglets, mode simulation chronométrée, retour structuré, export. |
-| `tests/test_interview_prep.py` | **nouveau** (567 lignes) | 28 tests (dont un test Node qui *exécute* le chrono et le rendu du feedback). |
+| `tests/test_interview_prep.py` | **nouveau** (567 lignes) | 29 tests (dont un test Node qui *exécute* le chrono et le rendu du feedback). |
 | `docs/agent-reports/SPEC-010-INTERVIEW_PREP.md` | **nouveau** | Ce rapport. |
 | `career/router.py` | modifié | 6 routes `/api/career/interview-prep/…` + 3 payloads Pydantic + accroche du contexte local. |
 | `career/service.py` | modifié | 9 méthodes de service, initialisation du store, capacité `interview_prep`, effacement des données. |
@@ -102,6 +102,11 @@ les références sont les ouvrages canoniques, citées par leur **titre de chapi
 partie** plutôt que par un numéro de chapitre, pour rester vérifiables d'une édition à
 l'autre.
 
+En mode finance, **toute** question préparée porte une source : celle de la banque la
+plus proche de l'exigence quand elle existe, sinon l'ouvrage de référence général
+(Rosenbaum & Pearl, *Investment Banking*) — ce qui couvre par exemple une exigence ERP
+qui n'appartient à aucune des huit banques.
+
 ### 2.5 Le mode simulation
 
 `simulate(preparation, question_id, user_answer, profile=…)` renvoie un
@@ -155,10 +160,10 @@ Commandes exécutées depuis le worktree
 ```
 $ python -m pytest -q tests/test_interview_prep.py
 ...........................                                             [100%]
-28 passed in 6.75s
+29 passed in 7.96s
 
 $ python -m pytest -q
-1452 passed, 1 skipped in 96.10s        (SKIPPED : tests/test_offer_summary_exhaustiveness.py — script ou base absents)
+1453 passed, 1 skipped in 95.54s        (SKIPPED : tests/test_offer_summary_exhaustiveness.py — script ou base absents)
 
 $ python -m ruff check .
 All checks passed!

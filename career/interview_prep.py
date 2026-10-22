@@ -175,6 +175,14 @@ BEHAVIORAL_SOURCE = (
     "(méthode STAR : Situation, Tâche, Action, Résultat)"
 )
 
+# Fallback reference for a finance-mode question that belongs to no specialised
+# bank (for example an ERP requirement): the reference work of the finance
+# interview preparation, cited without a chapter claim.
+FINANCE_GENERAL_SOURCE = (
+    "Rosenbaum & Pearl, *Investment Banking: Valuation, Leveraged Buyouts, and Mergers & Acquisitions* "
+    "(ouvrage de référence de la préparation d’entretien en finance)"
+)
+
 
 @dataclass(frozen=True)
 class InterviewQuestion:
@@ -1151,7 +1159,6 @@ def _make_question(
 def _technical_questions(
     offer: Mapping[str, Any],
     profile: Mapping[str, Any],
-    index: Mapping[str, dict[str, Any]],
     mode: str,
 ) -> list[PrepQuestion]:
     """Technical questions taken from the requirements the offer states."""
@@ -1175,8 +1182,15 @@ def _technical_questions(
         evidence = _find_evidence(profile, tokens)
         related_evidence = [evidence[2]] if evidence else None
         bank_source = _source_for_requirement(text, mode)
-        source = bank_source["source"] if bank_source else None
-        bank = bank_source["bank"] if bank_source else ""
+        if bank_source:
+            source = bank_source["source"]
+            bank = bank_source["bank"]
+        elif mode == "finance":
+            source = FINANCE_GENERAL_SOURCE
+            bank = ""
+        else:
+            source = None
+            bank = ""
         records.append(
             _make_question(
                 f"tech_{record.get('id')}",
@@ -1204,7 +1218,7 @@ def _technical_questions(
     return records
 
 
-def _source_for_requirement(text: str, mode: str) -> Any:
+def _source_for_requirement(text: str, mode: str) -> dict[str, str] | None:
     """Return the pedagogical source of the closest finance bank, if any."""
     if mode != "finance":
         return None
@@ -1276,6 +1290,7 @@ def _gap_questions(
     profile: Mapping[str, Any],
     intake: Mapping[str, Any] | None,
     index: Mapping[str, dict[str, Any]],
+    mode: str = "standard",
 ) -> list[PrepQuestion]:
     """Questions on the requirements the profile does not prove yet."""
     preparation = prepare_application(dict(profile or {}), dict(intake or {}), dict(offer))
@@ -1285,6 +1300,13 @@ def _gap_questions(
         if len(text) < 8:
             continue
         requirement_id = _requirement_id(index, text)
+        bank_source = _source_for_requirement(text, mode)
+        if bank_source:
+            source = bank_source["source"]
+        elif mode == "finance":
+            source = FINANCE_GENERAL_SOURCE
+        else:
+            source = None
         records.append(
             _make_question(
                 f"gap_{requirement_id or hashlib.sha256(text.encode('utf-8')).hexdigest()[:12]}",
@@ -1301,6 +1323,7 @@ def _gap_questions(
                 related_requirement=requirement_id,
                 difficulty="hard",
                 time_estimate_seconds=150,
+                pedagogical_source=source,
                 suggested_structure=_GAP_STRUCTURE,
             )
         )
@@ -1309,10 +1332,7 @@ def _gap_questions(
     return records
 
 
-def _recruiter_questions(
-    offer: Mapping[str, Any],
-    index: Mapping[str, dict[str, Any]],
-) -> list[str]:
+def _recruiter_questions(offer: Mapping[str, Any]) -> list[str]:
     """Questions the candidate can ask, general ones plus offer-targeted ones."""
     questions: list[str] = list(_RECRUITER_BANK)
     analysis = analyze_offer(dict(offer))
@@ -1337,7 +1357,6 @@ def _recruiter_questions(
 def _sensitive_points(
     offer: Mapping[str, Any],
     profile: Mapping[str, Any],
-    index: Mapping[str, dict[str, Any]],
 ) -> list[str]:
     """Points of the CV a recruiter is likely to probe, all verifiable locally."""
     points: list[str] = []
@@ -1464,14 +1483,14 @@ def build_preparation(
         raise UserFacingError("Cette offre Career n’existe pas.")
 
     index = _requirement_index(offer)
-    technical = _technical_questions(offer, profile, index, normalized_mode)
+    technical = _technical_questions(offer, profile, normalized_mode)
     if normalized_mode == "finance":
         finance_records = _finance_technical_questions(offer)
         technical = (finance_records + technical)[:MAX_TECHNICAL_QUESTIONS]
     behavioral = _behavioral_questions(normalized_mode)
-    gaps = _gap_questions(offer, profile, intake, index)
-    sensitive = _sensitive_points(offer, profile, index)
-    recruiter = _recruiter_questions(offer, index)
+    gaps = _gap_questions(offer, profile, intake, index, normalized_mode)
+    sensitive = _sensitive_points(offer, profile)
+    recruiter = _recruiter_questions(offer)
     factsheet = _company_factsheet(offer)
 
     session = InterviewPrepSession(
@@ -1928,7 +1947,7 @@ def render_markdown(preparation: Preparation, simulations: Sequence[Mapping[str,
     )
     if factsheet.interview_process:
         lines.append("- Process d'entretien mentionné dans l'offre :")
-        lines.extend(f"  {step}" for step in factsheet.interview_process)
+        lines.extend(f"- {step}" for step in factsheet.interview_process)
     else:
         lines.append("- Process d'entretien : non renseigné par l'offre.")
     lines.append("- Sources : " + ", ".join(factsheet.sources))
@@ -1955,6 +1974,7 @@ __all__ = [
     "CompanyFactsheet",
     "FINANCE_BANKS",
     "FINANCE_BANK_LABELS",
+    "FINANCE_GENERAL_SOURCE",
     "InterviewPrepSession",
     "InterviewQuestion",
     "LOCAL_PROFILE_IDS",

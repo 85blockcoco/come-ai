@@ -231,6 +231,16 @@ def test_standard_mode_never_uses_the_finance_banks(tmp_path: Path) -> None:
     assert all(not question["bank"] for question in session["questions"])
 
 
+def test_every_finance_question_carries_a_pedagogical_source(tmp_path: Path) -> None:
+    """En mode finance, chaque question préparée cite sa source pédagogique."""
+    service, job = prepared_service(tmp_path)
+    session = service.create_interview_prep_session(job["id"], "user_profile", "finance")
+    for key in ("technical_questions", "behavioral_questions", "gap_questions"):
+        for question in session[key]:
+            assert question["pedagogical_source"], f"{key} : chaque question finance cite sa source"
+            assert len(question["pedagogical_source"]) > 20
+
+
 # --- 4. Les écarts et les points sensibles ------------------------------------
 
 
