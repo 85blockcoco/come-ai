@@ -44,6 +44,7 @@
           <button class="career-tab" id="tab-applications" type="button" aria-controls="view-applications" data-product-area="Applications" data-view="applications">Candidatures</button>
           <button class="career-tab" id="tab-interviews" type="button" aria-controls="view-interviews" data-product-area="Interview Coach" data-view="interviews">Coach d’entretien</button>
           <button class="career-tab" id="tab-profile" type="button" aria-controls="view-profile" data-view="profile">Mon profil</button>
+          <button class="career-tab" id="tab-evidence" type="button" aria-controls="view-evidence" data-view="evidence">Preuves</button>
           <button class="career-tab" id="tab-settings" type="button" aria-controls="view-settings" data-view="settings">Réglages</button>
         </nav>
 
@@ -571,6 +572,131 @@
           <div id="profile-content" class="single-view-content"></div>
         </section>
 
+        <section id="view-evidence" class="career-view" tabindex="-1" hidden aria-labelledby="evidence-title">
+          <header class="view-intro">
+            <p class="eyebrow">Source de vérité locale</p>
+            <h2 id="evidence-title">Centre de preuves</h2>
+            <p>Chaque affirmation de ton profil se trouve ici avec sa source, sa citation et sa décision d’approbation. Rien n’est approuvé automatiquement et rien ne quitte ce Mac.</p>
+          </header>
+          <div class="single-view-content">
+            <section class="panel evidence-panel">
+              <div class="panel-heading">
+                <div><p class="eyebrow">Vue d’ensemble</p><h3>Preuves et affirmations</h3></div>
+                <div class="inline-actions">
+                  <a class="secondary-button link-button" href="/api/career/evidence/export">Export JSON</a>
+                  <a class="secondary-button link-button" href="/api/career/evidence/export?export_format=markdown">Export document</a>
+                </div>
+              </div>
+              <p class="panel-help">« Prouvée » signifie : approuvée par toi, non expirée et non bloquée. Une affirmation sans preuve reste « non prouvée » : ce n’est jamais un échec.</p>
+              <div class="metrics evidence-metrics" id="evidence-metrics">
+                <div class="metric"><p class="eyebrow">Compétences prouvées</p><strong id="evidence-stat-proven">—</strong></div>
+                <div class="metric"><p class="eyebrow">Non prouvées</p><strong id="evidence-stat-unproven">—</strong></div>
+                <div class="metric"><p class="eyebrow">Expirées</p><strong id="evidence-stat-expired">—</strong></div>
+                <div class="metric"><p class="eyebrow">Utilisées</p><strong id="evidence-stat-used">—</strong></div>
+              </div>
+              <div class="filter-row evidence-filters">
+                <label for="evidence-search">Recherche</label>
+                <input id="evidence-search" type="search" placeholder="Affirmation, citation, source…" />
+                <label for="evidence-filter-type">Type</label>
+                <select id="evidence-filter-type">
+                  <option value="">Tous les types</option>
+                  <option value="experience">Expérience</option>
+                  <option value="education">Formation</option>
+                  <option value="skill">Compétence</option>
+                  <option value="language">Langue</option>
+                  <option value="project">Projet</option>
+                  <option value="certification">Certification</option>
+                </select>
+                <label for="evidence-filter-confidence">Confiance</label>
+                <select id="evidence-filter-confidence">
+                  <option value="">Toutes</option>
+                  <option value="direct">Directe</option>
+                  <option value="inferred">Déduite</option>
+                  <option value="declared">Déclarée</option>
+                </select>
+                <label for="evidence-filter-approved">Approbation</label>
+                <select id="evidence-filter-approved">
+                  <option value="">Toutes</option>
+                  <option value="true">Approuvées</option>
+                  <option value="false">Non approuvées</option>
+                </select>
+                <label for="evidence-filter-used">Usage</label>
+                <select id="evidence-filter-used">
+                  <option value="">Tous</option>
+                  <option value="cv">Utilisées dans un CV</option>
+                  <option value="letter">Utilisées dans une lettre</option>
+                </select>
+                <label for="evidence-filter-blocked">Blocage</label>
+                <select id="evidence-filter-blocked">
+                  <option value="">Tous</option>
+                  <option value="true">Bloquées</option>
+                  <option value="false">Non bloquées</option>
+                </select>
+              </div>
+              <div class="evidence-layout">
+                <div class="evidence-grid-panel">
+                  <h3 class="evidence-grid-title">Toutes les preuves</h3>
+                  <div id="evidence-grid" class="evidence-grid" aria-live="polite"></div>
+                </div>
+                <div class="evidence-detail-panel">
+                  <h3 class="evidence-grid-title">Détail de la preuve</h3>
+                  <div id="evidence-detail" class="evidence-detail"></div>
+                </div>
+              </div>
+            </section>
+            <section class="panel evidence-panel">
+              <div class="panel-heading">
+                <div><p class="eyebrow">Ajouter</p><h3>Nouvelle preuve</h3></div>
+              </div>
+              <p class="panel-help">Une preuve sans source ni citation n’est pas acceptée : elle resterait une affirmation. Les fichiers joints sont copiés dans un répertoire privé, jamais référencés par leur chemin d’origine.</p>
+              <form id="evidence-create-form" class="form-stack">
+                <div class="form-row two-columns">
+                  <label class="form-field" for="evidence-claim">Affirmation prouvée
+                    <input id="evidence-claim" name="claim" type="text" maxlength="400" placeholder="Analyse financière et valorisation" required />
+                  </label>
+                  <label class="form-field" for="evidence-type">Type
+                    <select id="evidence-type" name="evidence_type">
+                      <option value="skill">Compétence</option>
+                      <option value="experience">Expérience</option>
+                      <option value="education">Formation</option>
+                      <option value="language">Langue</option>
+                      <option value="project">Projet</option>
+                      <option value="certification">Certification</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="form-row two-columns">
+                  <label class="form-field" for="evidence-confidence">Confiance
+                    <select id="evidence-confidence" name="confidence">
+                      <option value="direct">Directe (citation explicite)</option>
+                      <option value="inferred">Déduite</option>
+                      <option value="declared">Déclarée (sans document)</option>
+                    </select>
+                  </label>
+                  <label class="form-field" for="evidence-tags">Étiquettes
+                    <input id="evidence-tags" name="tags" type="text" maxlength="300" placeholder="finance, excel" />
+                  </label>
+                </div>
+                <div class="form-row two-columns">
+                  <label class="form-field" for="evidence-source-document">Document source
+                    <input id="evidence-source-document" name="source_document" type="text" maxlength="260" placeholder="stage_transaction_services.pdf" />
+                  </label>
+                  <label class="form-field" for="evidence-source-location">Emplacement
+                    <input id="evidence-source-location" name="source_location" type="text" maxlength="260" placeholder="page 2, lignes 14-17" />
+                  </label>
+                </div>
+                <label class="form-field" for="evidence-quote">Citation
+                  <textarea id="evidence-quote" name="quote" maxlength="4000" placeholder="Participation à l’analyse financière…"></textarea>
+                </label>
+                <div class="inline-actions">
+                  <button class="primary-button" type="submit">Enregistrer la preuve</button>
+                  <button class="quiet-button" type="reset">Vider le formulaire</button>
+                </div>
+              </form>
+            </section>
+          </div>
+        </section>
+
         <section id="view-settings" class="career-view" tabindex="-1" hidden aria-labelledby="settings-title">
           <section class="panel settings-panel">
             <div class="panel-heading"><div><p class="eyebrow">Préférences et confidentialité</p><h2 id="settings-title">Réglages</h2></div><span class="local-tag">Données locales</span></div>
@@ -734,5 +860,6 @@
     </div>
     <script src="/career-static/cv_plan.js" defer></script>
     <script src="/career-static/career.js" defer></script>
+    <script src="/career-static/js/evidence-center.js" defer></script>
   </body>
 </html>

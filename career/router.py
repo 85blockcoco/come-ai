@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
+from .evidence import MAX_ATTACHMENT_BYTES
 from .profile_import import MAX_PROFILE_IMPORT_BYTES
 from .service import CareerService
 from workspace_core import UserFacingError, to_jsonable
@@ -236,6 +237,66 @@ class CVAnalyzeResponse(BaseModel):
     provenance: dict[str, Any]
 
 
+class EvidenceCreatePayload(BaseModel):
+    """One proof added by the person to the local evidence center.
+
+    ``approved`` is deliberately absent: the only path to an approved proof is
+    the explicit decision endpoint.
+    """
+
+    claim: str = Field(min_length=1, max_length=400)
+    source_document: str = Field(default="", max_length=260)
+    source_location: str = Field(default="", max_length=260)
+    quote: str = Field(default="", max_length=4_000)
+    evidence_type: str = Field(default="skill", max_length=40)
+    confidence: str = Field(default="declared", max_length=40)
+    tags: list[str] = Field(default_factory=list, max_length=20)
+    expires_at: str = Field(default="", max_length=32)
+
+
+class EvidenceUpdatePayload(BaseModel):
+    """Editable fields of one proof.
+
+    ``approved`` and ``blocked`` are absent on purpose: they are decisions,
+    not content, and they have their own endpoints.
+    """
+
+    claim: str | None = Field(default=None, max_length=400)
+    source_document: str | None = Field(default=None, max_length=260)
+    source_location: str | None = Field(default=None, max_length=260)
+    quote: str | None = Field(default=None, max_length=4_000)
+    evidence_type: str | None = Field(default=None, max_length=40)
+    confidence: str | None = Field(default=None, max_length=40)
+    tags: list[str] | None = Field(default=None, max_length=20)
+    expires_at: str | None = Field(default=None, max_length=32)
+
+
+class EvidenceDecisionPayload(BaseModel):
+    """The person's approval decision on one proof."""
+
+    approved: bool
+
+
+class EvidenceBlockPayload(BaseModel):
+    """Block or unblock the usage of one proof."""
+
+    blocked: bool
+
+
+class EvidenceUsagePayload(BaseModel):
+    """One recorded use of a proof in a CV or a cover letter."""
+
+    target: str = Field(min_length=2, max_length=20)
+    context: str = Field(default="", max_length=200)
+
+
+class EvidenceMergePayload(BaseModel):
+    """Merge duplicated proofs into one identifier."""
+
+    ids: list[str] = Field(min_length=1, max_length=50)
+    keep_id: str = Field(min_length=1, max_length=60)
+
+
 def create_career_router(
     service: CareerService,
     *,
@@ -275,6 +336,7 @@ def create_career_router(
             "interview_coach": capabilities["interview_coach"],
             "calendar_export": capabilities["calendar_export"],
             "stage_search": capabilities["stage_search"],
+            "evidence_center": capabilities["evidence_center"],
         }
 
     @router.post("/api/career/cv/analyze")
@@ -743,7 +805,150 @@ def create_career_router(
         await local(lambda: service.reset_personal_data(payload.confirmation))
         return {"deleted": True}
 
+    # ── Centre de preuves (SPEC-008) ───────────────────────────────────────
+    # Les routes littérales sont déclarées avant les routes paramétrées :
+    # « /evidence/stats » ne doit jamais être capté par « /evidence/{id} ».
+
+    @router.get("/api/career/evidence")
+    async def list_evidence(
+        q: str = Query(default="", max_length=200),
+        evidence_type: str = Query(default="", max_length=40),
+        confidence: str = Query(default="", max_length=40),
+        approved: str = Query(default="", max_length=5),
+        blocked: str = Query(default="", max_length=5),
+        expired: str = Query(default="", max_length=5),
+        used: str = Query(default="", max_length=20),
+    ) -> Any:
+        return await local(
+            lambda: {
+                "evidence": service.list_evidence(
+                    query=q,
+                    evidence_type=evidence_type,
+                    confidence=confidence,
+                    approved=_optional_bool(approved, "approved"),
+                    blocked=_optional_bool(blocked, "blocked"),
+                    expired=_optional_bool(expired, "expired"),
+                    used=used,
+                )
+            }
+        )
+
+    @router.post("/api/career/evidence", status_code=201)
+    async def create_evidence(payload: EvidenceCreatePayload) -> Any:
+        return await local(lambda: service.add_evidence(payload.model_dump()))
+
+    @router.get("/api/career/evidence/stats")
+    async def evidence_stats() -> Any:
+        return await local(service.evidence_stats)
+
+    @router.get("/api/career/evidence/export")
+    async def export_evidence(export_format: str = Query(default="json", max_length=20)) -> FileResponse:
+        wanted = export_format.strip().lower() or "json"
+        path = await run_in_threadpool(lambda: service.export_evidence(wanted))
+        media_type = "text/markdown; charset=utf-8" if wanted == "markdown" else "application/json"
+        return FileResponse(
+            path,
+            filename=path.name,
+            media_type=media_type,
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.post("/api/career/evidence/merge")
+    async def merge_evidence(payload: EvidenceMergePayload) -> Any:
+        return await local(lambda: service.merge_evidence(payload.ids, payload.keep_id))
+
+    @router.get("/api/career/evidence/{evidence_id}")
+    async def get_evidence(evidence_id: str) -> Any:
+        return await local(lambda: service.get_evidence(evidence_id))
+
+    @router.patch("/api/career/evidence/{evidence_id}")
+    async def update_evidence(evidence_id: str, payload: EvidenceUpdatePayload) -> Any:
+        return await local(
+            lambda: service.update_evidence(
+                evidence_id,
+                {key: value for key, value in payload.model_dump().items() if value is not None},
+            )
+        )
+
+    @router.delete("/api/career/evidence/{evidence_id}")
+    async def delete_evidence(evidence_id: str) -> dict[str, bool]:
+        deleted = await local(lambda: service.delete_evidence(evidence_id))
+        return {"deleted": bool(deleted)}
+
+    @router.post("/api/career/evidence/{evidence_id}/approve")
+    async def approve_evidence(evidence_id: str, payload: EvidenceDecisionPayload) -> Any:
+        return await local(lambda: service.mark_evidence_approved(evidence_id, payload.approved))
+
+    @router.post("/api/career/evidence/{evidence_id}/block")
+    async def block_evidence(evidence_id: str, payload: EvidenceBlockPayload) -> Any:
+        return await local(lambda: service.set_evidence_blocked(evidence_id, payload.blocked))
+
+    @router.post("/api/career/evidence/{evidence_id}/usage")
+    async def use_evidence(evidence_id: str, payload: EvidenceUsagePayload) -> Any:
+        return await local(lambda: service.record_evidence_usage(evidence_id, payload.target, payload.context))
+
+    @router.post("/api/career/evidence/{evidence_id}/attach")
+    async def attach_evidence(evidence_id: str, request: Request) -> Any:
+        # The body is read by hand, with explicit bounds: FastAPI would resolve
+        # a file dependency only after Starlette has spooled the whole
+        # multipart body.
+        await local(lambda: service.get_evidence(evidence_id))
+        form = None
+        try:
+            form = await request.form(max_files=1, max_fields=1, max_part_size=64 * 1024)
+        except (HTTPException, ValueError) as error:
+            raise UserFacingError("Pièce jointe invalide : envoie un seul fichier.") from error
+        try:
+            upload_items = [
+                (key, value) for key, value in form.multi_items() if isinstance(value, UploadFile)
+            ]
+            if len(upload_items) != 1 or upload_items[0][0] != "file":
+                raise UserFacingError("Sélectionne un seul fichier dans le champ « file ».")
+            return await _store_evidence_attachment(service, evidence_id, upload_items[0][1])
+        finally:
+            if form is not None:
+                await form.close()
+
     return router
+
+
+def _optional_bool(value: str, label: str) -> bool | None:
+    """Read a tri-state filter (``true`` / ``false`` / vide)."""
+    text = str(value or "").strip().lower()
+    if not text:
+        return None
+    if text in {"true", "1", "oui", "yes"}:
+        return True
+    if text in {"false", "0", "non", "no"}:
+        return False
+    raise HTTPException(status_code=422, detail=f"Le filtre {label} doit valoir true ou false.")
+
+
+async def _store_evidence_attachment(service: CareerService, evidence_id: str, uploaded: UploadFile) -> Any:
+    """Stream one document into the private attachment directory.
+
+    The uploaded file is copied into ``career_data/evidence/attachments``
+    under an opaque name; the original path is never stored and the Career
+    workspace never receives the file.
+    """
+    temporary = service.evidence_upload_temp_path()
+    bytes_written = 0
+    try:
+        with temporary.open("xb") as destination:
+            try:
+                os.chmod(temporary, 0o600)
+            except OSError:
+                pass
+            while chunk := await uploaded.read(PROFILE_UPLOAD_CHUNK_SIZE):
+                bytes_written += len(chunk)
+                if bytes_written > MAX_ATTACHMENT_BYTES:
+                    raise UserFacingError("Pièce jointe trop volumineuse (maximum 10 Mo).")
+                destination.write(chunk)
+        return await run_in_threadpool(
+            lambda: service.attach_evidence_document(evidence_id, temporary, uploaded.filename or "")
+        )
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 async def _store_profile_document(

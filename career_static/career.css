@@ -541,3 +541,33 @@ button, a, .career-tab { transition: background-color .16s ease, border-color .1
   .application-filters label { flex: 1 1 100%; }
   .application-filters select { width: 100%; }
 }
+
+/* ── SPEC-008 · Centre de preuves ───────────────────────────────────────── */
+.evidence-panel { padding: 18px; }
+.evidence-metrics { margin-bottom: 14px; }
+.evidence-metrics .metric strong { display: block; margin-top: 4px; font-size: 1.5rem; line-height: 1.1; }
+.evidence-filters { flex-wrap: wrap; align-items: end; gap: 8px; margin-bottom: 14px; }
+.evidence-filters label { display: grid; gap: 4px; font-size: .74rem; color: var(--muted); }
+.evidence-filters input, .evidence-filters select { min-width: 150px; }
+.evidence-layout { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.evidence-grid-panel, .evidence-detail-panel { min-width: 0; padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: #fcfefd; }
+.evidence-grid-title { margin: 0 0 10px; font-size: .88rem; }
+.evidence-grid { display: grid; gap: 8px; max-height: 520px; overflow-y: auto; }
+.evidence-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 10px; border: 1px solid #dce9e2; border-radius: 11px; background: #fff; }
+.evidence-row.is-selected { border-color: var(--accent); box-shadow: 0 0 0 2px rgb(16 185 129 / 18%); }
+.evidence-merge-select { width: 15px; height: 15px; accent-color: var(--accent); }
+.evidence-row-open { display: grid; gap: 3px; min-width: 0; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.evidence-row-claim { font-size: .84rem; font-weight: 650; line-height: 1.3; }
+.evidence-row-meta { color: var(--muted); font-size: .72rem; line-height: 1.35; }
+.evidence-detail { display: grid; gap: 8px; }
+.evidence-detail-title { margin: 0; font-size: .95rem; line-height: 1.35; }
+.evidence-quote { margin: 0; padding: 9px 11px; border-left: 3px solid var(--accent); border-radius: 0 9px 9px 0; background: var(--surface-soft); font-size: .8rem; line-height: 1.45; }
+.evidence-source { margin: 0; color: var(--muted); font-size: .74rem; line-height: 1.4; }
+.evidence-actions { margin-top: 4px; }
+.evidence-attach-label { display: inline-flex; align-items: center; cursor: pointer; }
+.evidence-attach-label:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
+.evidence-attach-input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.evidence-empty { margin: 0; padding: 12px; border: 1px dashed #d5e6dc; border-radius: 11px; color: var(--muted); font-size: .78rem; line-height: 1.45; }
+@media (max-width: 860px) {
+  .evidence-layout { grid-template-columns: minmax(0, 1fr); }
+}

@@ -414,6 +414,13 @@ def create_app(
     )
     app.add_middleware(
         UploadBodyLimitMiddleware,
+        max_bytes=MAX_CAREER_PROFILE_IMPORT_BYTES,
+        paths=("/api/career/evidence",),
+        prefix=True,
+        error_message="Pièce jointe trop volumineuse (maximum 10 Mo).",
+    )
+    app.add_middleware(
+        UploadBodyLimitMiddleware,
         max_bytes=1_024 * 1_024,
         paths=("/api/devkit",),
         prefix=True,
