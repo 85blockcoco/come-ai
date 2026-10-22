@@ -13,6 +13,22 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
+from .dependencies import (
+    DEFAULT_MAX_DEPTH,
+    DEFAULT_THRESHOLD,
+    DependencyGraph,
+    build_execution_plan,
+    build_graph,
+    critical_nodes,
+    cycle_resolutions,
+    detect_cycles,
+    fragility_report,
+    graph_validation,
+    node_id_for,
+    validate_graph,
+)
+from .dependencies_store import DependencyStore
+from .impact_analysis import ImpactEngine, simulate_scenarios
 from .profile_import import MAX_PROFILE_IMPORT_BYTES
 from .service import CareerService
 from workspace_core import UserFacingError, to_jsonable
@@ -236,6 +252,184 @@ class CVAnalyzeResponse(BaseModel):
     provenance: dict[str, Any]
 
 
+class DependencyGraphPayload(BaseModel):
+    """Entités locales à assembler ; tout est optionnel et déjà local."""
+
+    offers: list[dict[str, Any]] = Field(default_factory=list, max_length=500)
+    requirements: list[dict[str, Any]] = Field(default_factory=list, max_length=2_000)
+    evidences: list[dict[str, Any]] = Field(default_factory=list, max_length=2_000)
+    matchings: list[dict[str, Any]] = Field(default_factory=list, max_length=2_000)
+    applications: list[dict[str, Any]] = Field(default_factory=list, max_length=500)
+    profile: dict[str, Any] = Field(default_factory=dict)
+    merges: list[dict[str, Any]] = Field(default_factory=list, max_length=500)
+    splits: list[dict[str, Any]] = Field(default_factory=list, max_length=500)
+    manual_edges: list[dict[str, Any]] = Field(default_factory=list, max_length=500)
+    refresh_from_career: bool = True
+    replace: bool = True
+
+
+class DependencyEdgePayload(BaseModel):
+    """Arête manuelle explicite ; le poids est une force relative, pas une probabilité."""
+
+    source_id: str = Field(min_length=1, max_length=180)
+    target_id: str = Field(min_length=1, max_length=180)
+    edge_type: str = Field(default="requires", max_length=40)
+    weight: float = Field(default=0.5, ge=0.0, le=1.0)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class DependencyImpactPayload(BaseModel):
+    source_node_id: str = Field(min_length=1, max_length=180)
+    change_type: str = Field(min_length=3, max_length=40)
+    details: dict[str, Any] = Field(default_factory=dict)
+    threshold: float = Field(default=DEFAULT_THRESHOLD, ge=0.0, le=1.0)
+    max_depth: int = Field(default=DEFAULT_MAX_DEPTH, ge=0, le=32)
+
+
+class DependencyScenarioPayload(BaseModel):
+    changes: list[dict[str, Any]] = Field(min_length=1, max_length=50)
+    include_applied_graph: bool = False
+    threshold: float = Field(default=DEFAULT_THRESHOLD, ge=0.0, le=1.0)
+    max_depth: int = Field(default=DEFAULT_MAX_DEPTH, ge=0, le=32)
+
+
+class DependencyPlanPayload(BaseModel):
+    node_ids: list[str] = Field(min_length=1, max_length=200)
+    action: str = Field(default="apply", max_length=40)
+
+
+class DependencySnapshotPayload(BaseModel):
+    label: str = Field(default="", max_length=160)
+
+
+class DependencyRollbackPayload(BaseModel):
+    version: int = Field(ge=1)
+
+
+def _record_key(record: dict[str, Any], *fields: str) -> str:
+    for field in fields:
+        value = record.get(field)
+        if value not in (None, ""):
+            return str(value)
+    return ""
+
+
+def _merge_records(*collections: Any, fields: tuple[str, ...] = ("id",)) -> list[dict[str, Any]]:
+    """Fusionne des listes d'entités locales ; la dernière occurrence gagne."""
+    merged: dict[str, dict[str, Any]] = {}
+    anonymous: list[dict[str, Any]] = []
+    for collection in collections:
+        if not collection:
+            continue
+        records = collection.values() if isinstance(collection, dict) else collection
+        for record in records:
+            if not isinstance(record, dict):
+                continue
+            key = _record_key(record, *fields)
+            if key:
+                merged[key] = dict(record)
+            else:
+                anonymous.append(dict(record))
+    return [*merged.values(), *anonymous]
+
+
+def _career_dependency_payload(service: CareerService) -> dict[str, Any]:
+    """Assemble les entités du Career local sans réseau ni écriture.
+
+    Les exigences viennent de SK-02 (``offer_requirements.analyze_offer``), les
+    preuves des champs factuels du profil, les matchings de SK-21
+    (``application_prep.prepare_application``), les candidatures de SK-11.  Les
+    fusions/scissions restent fournies par l'appelant (SK-08) : elles ne sont
+    jamais devinées.
+    """
+    from .application_prep import prepare_application
+    from .offer_requirements import analyze_offer
+
+    profile = service.get_profile()
+    jobs = service.list_jobs()
+    applications = service.list_applications()
+    intake = service.get_intake()
+
+    evidence_fields = {
+        "education": "Formation déclarée",
+        "experience": "Expérience déclarée",
+        "skills": "Compétences déclarées",
+        "languages": "Langues déclarées",
+    }
+    evidences: list[dict[str, Any]] = []
+    evidence_id_by_field: dict[str, str] = {}
+    for field, label in evidence_fields.items():
+        text = str(profile.get(field) or "").strip()
+        if not text:
+            continue
+        evidence_id = f"profile-{field}"
+        evidence_id_by_field[field] = evidence_id
+        evidences.append(
+            {
+                "id": evidence_id,
+                "title": label,
+                "text": text,
+                "profile_field": field,
+                "quality": "documented" if field != "experience" or any(character.isdigit() for character in text) else "needs_quantification",
+                "source": "profil local",
+                "validates": [],
+            }
+        )
+
+    requirements: list[dict[str, Any]] = []
+    matchings: list[dict[str, Any]] = []
+    requirement_id_by_offer_text: dict[tuple[str, str], str] = {}
+    for job in jobs:
+        job_id = _record_key(job, "id", "job_id")
+        analysis = analyze_offer(job)
+        for record in analysis.get("requirements", []):
+            requirement = dict(record)
+            requirement["offer_id"] = job_id
+            requirements.append(requirement)
+            requirement_id_by_offer_text[(job_id, str(record.get("text") or ""))] = node_id_for(
+                "requirement", record.get("id"), label=record.get("text")
+            )
+
+    for job in jobs:
+        job_id = _record_key(job, "id", "job_id")
+        preparation = prepare_application(profile, intake, job)
+        for index, matched in enumerate(preparation.get("matched_elements", [])):
+            field = str(matched.get("profile_field") or "")
+            evidence_id = evidence_id_by_field.get(field)
+            requirement_text = str(matched.get("requirement") or "")
+            requirement_id = requirement_id_by_offer_text.get((job_id, requirement_text))
+            if not evidence_id or not requirement_id:
+                continue
+            matchings.append(
+                {
+                    "id": f"{job_id}-{index}",
+                    "label": f"Matching local · {job.get('title') or job_id}",
+                    "requirement_id": requirement_id,
+                    "evidence_id": evidence_id,
+                    "score": 0.85,
+                    "source": "application_prep",
+                }
+            )
+
+    return {
+        "offers": jobs,
+        "requirements": requirements,
+        "evidences": evidences,
+        "matchings": matchings,
+        "applications": applications,
+        "profile": profile,
+        "merges": [],
+        "splits": [],
+        "manual_edges": [],
+    }
+
+
+def _dependency_store(service: CareerService) -> DependencyStore:
+    data_dir = getattr(service, "data_dir", None)
+    root = Path(data_dir) if data_dir is not None else CAREER_STATIC_DIR.parent / "career_data"
+    return DependencyStore(root / "dependencies")
+
+
 def create_career_router(
     service: CareerService,
     *,
@@ -247,6 +441,264 @@ def create_career_router(
 
     async def local(call: Any) -> Any:
         return to_jsonable(await run_in_threadpool(call))
+
+    dependency_store = _dependency_store(service)
+
+    def dependency_route(path: str, methods: list[str], endpoint: Any) -> None:
+        """Expose le contrat SPEC-013 sous /dependencies et /api/career/dependencies."""
+        for index, prefix in enumerate(("/dependencies", "/api/career/dependencies")):
+            router.add_api_route(
+                f"{prefix}{path}",
+                endpoint,
+                methods=methods,
+                name=f"{endpoint.__name__}_{index}",
+            )
+
+    def loaded_graph() -> DependencyGraph:
+        return dependency_store.load()
+
+    def graph_payload(graph: DependencyGraph) -> dict[str, Any]:
+        return {
+            "graph": graph.to_dict(),
+            "validation": graph_validation(graph),
+        }
+
+    async def build_dependency_graph(payload: DependencyGraphPayload) -> dict[str, Any]:
+        """Construit ou rafraîchit le graphe depuis les entités locales explicites."""
+
+        def work() -> dict[str, Any]:
+            auto = _career_dependency_payload(service) if payload.refresh_from_career else {}
+            profile = {**(auto.get("profile") or {}), **(payload.profile or {})}
+            graph = build_graph(
+                offers=_merge_records(auto.get("offers"), payload.offers),
+                requirements=_merge_records(auto.get("requirements"), payload.requirements),
+                evidences=_merge_records(auto.get("evidences"), payload.evidences),
+                matchings=_merge_records(auto.get("matchings"), payload.matchings),
+                applications=_merge_records(auto.get("applications"), payload.applications),
+                profile=profile,
+                merges=_merge_records(auto.get("merges"), payload.merges, fields=("merged_id", "id")),
+                splits=_merge_records(auto.get("splits"), payload.splits, fields=("original_id", "id")),
+                manual_edges=[*(auto.get("manual_edges") or []), *payload.manual_edges],
+            )
+            if not payload.replace:
+                existing = dependency_store.load()
+                for node_id, node in graph.nodes.items():
+                    existing.nodes[node_id] = node
+                for edge in graph.edges:
+                    existing.add_edge(
+                        source_id=edge.source_id,
+                        target_id=edge.target_id,
+                        edge_type=edge.edge_type,
+                        weight=edge.weight,
+                        metadata=edge.metadata,
+                    )
+                graph = existing
+            saved = dependency_store.save(graph, action="build" if payload.replace else "merge", label="construction")
+            return graph_payload(saved)
+
+        return await local(work)
+
+    dependency_route("/graph", ["POST"], build_dependency_graph)
+
+    async def read_dependency_graph() -> dict[str, Any]:
+        return await local(lambda: graph_payload(loaded_graph()))
+
+    dependency_route("/graph", ["GET"], read_dependency_graph)
+
+    async def read_dependency_node(node_id: str) -> dict[str, Any]:
+        def work() -> dict[str, Any]:
+            graph = loaded_graph()
+            node = graph.nodes.get(node_id)
+            if node is None:
+                raise HTTPException(status_code=404, detail="Nœud de dépendance introuvable.")
+            neighbors = graph.neighbors(node_id)
+            edges = [
+                edge.to_dict()
+                for edge in graph.edges
+                if edge.source_id == node_id or edge.target_id == node_id
+            ]
+            return {
+                "node": node.to_dict(),
+                "neighbors": neighbors,
+                "edges": sorted(edges, key=lambda item: (item["source_id"], item["edge_type"], item["target_id"])),
+                "graph_version": graph.version,
+            }
+
+        return await local(work)
+
+    dependency_route("/graph/nodes/{node_id}", ["GET"], read_dependency_node)
+
+    async def create_dependency_edge(payload: DependencyEdgePayload) -> dict[str, Any]:
+        def work() -> dict[str, Any]:
+            graph = loaded_graph()
+            if payload.edge_type not in {
+                "requires", "provides", "validates", "contradicts", "derives_from", "blocks", "enables"
+            }:
+                raise UserFacingError("Type de relation de dépendance inconnu.")
+            if payload.source_id not in graph.nodes or payload.target_id not in graph.nodes:
+                raise UserFacingError("Les deux nœuds du lien doivent exister dans le graphe.")
+            edge = graph.add_edge(
+                source_id=payload.source_id,
+                target_id=payload.target_id,
+                edge_type=payload.edge_type,
+                weight=payload.weight,
+                metadata={**payload.metadata, "manual": True},
+            )
+            saved = dependency_store.save(graph, action="edge_add", label=edge.edge_id)
+            return {"edge": edge.to_dict(), "graph_version": saved.version, "validation": graph_validation(saved)}
+
+        return await local(work)
+
+    dependency_route("/edges", ["POST"], create_dependency_edge)
+
+    async def delete_dependency_edge(edge_id: str) -> dict[str, Any]:
+        def work() -> dict[str, Any]:
+            graph = loaded_graph()
+            if not graph.remove_edge(edge_id):
+                raise HTTPException(status_code=404, detail="Arête de dépendance introuvable.")
+            saved = dependency_store.save(graph, action="edge_remove", label=edge_id)
+            return {"deleted": True, "graph_version": saved.version, "validation": graph_validation(saved)}
+
+        return await local(work)
+
+    dependency_route("/edges/{edge_id}", ["DELETE"], delete_dependency_edge)
+
+    async def dependency_impact(payload: DependencyImpactPayload) -> dict[str, Any]:
+        def work() -> dict[str, Any]:
+            graph = loaded_graph()
+            try:
+                analysis = ImpactEngine(graph, threshold=payload.threshold, max_depth=payload.max_depth).analyze(
+                    payload.source_node_id,
+                    payload.change_type,
+                    payload.details,
+                )
+            except (KeyError, ValueError) as error:
+                raise UserFacingError(str(error)) from error
+            return {"analysis": analysis.to_dict(), "graph_version": graph.version}
+
+        return await local(work)
+
+    dependency_route("/impact", ["POST"], dependency_impact)
+
+    async def dependency_scenario(payload: DependencyScenarioPayload) -> dict[str, Any]:
+        def work() -> dict[str, Any]:
+            graph = loaded_graph()
+            try:
+                simulation = simulate_scenarios(
+                    graph,
+                    payload.changes,
+                    threshold=payload.threshold,
+                    max_depth=payload.max_depth,
+                    include_applied_graph=payload.include_applied_graph,
+                )
+            except (KeyError, ValueError) as error:
+                raise UserFacingError(str(error)) from error
+            return simulation.to_dict(include_graph=payload.include_applied_graph)
+
+        return await local(work)
+
+    dependency_route("/scenario", ["POST"], dependency_scenario)
+
+    async def dependency_critical_nodes(top_n: int = Query(default=10, ge=1, le=50)) -> dict[str, Any]:
+        def work() -> dict[str, Any]:
+            graph = loaded_graph()
+            return {
+                "nodes": critical_nodes(graph, top_n=top_n),
+                "graph_version": graph.version,
+                "disclaimer": (
+                    "Criticité structurelle locale (centralité, PageRank, points d'articulation) : "
+                    "elle indique où regarder, pas une panne certaine."
+                ),
+            }
+
+        return await local(work)
+
+    dependency_route("/critical-nodes", ["GET"], dependency_critical_nodes)
+
+    async def dependency_cycles() -> dict[str, Any]:
+        def work() -> dict[str, Any]:
+            graph = loaded_graph()
+            cycles = detect_cycles(graph)
+            return {
+                "cycles": cycles,
+                "count": len(cycles),
+                "resolutions": cycle_resolutions(graph, cycles),
+                "graph_version": graph.version,
+            }
+
+        return await local(work)
+
+    dependency_route("/cycles", ["GET"], dependency_cycles)
+
+    async def dependency_fragility(top_n: int = Query(default=10, ge=1, le=50)) -> dict[str, Any]:
+        def work() -> dict[str, Any]:
+            graph = loaded_graph()
+            report = fragility_report(graph, top_n=top_n)
+            report["cycle_resolutions"] = cycle_resolutions(graph, report.get("cycles"))
+            report["graph_version"] = graph.version
+            return report
+
+        return await local(work)
+
+    dependency_route("/fragility", ["GET"], dependency_fragility)
+
+    async def dependency_plan(payload: DependencyPlanPayload) -> dict[str, Any]:
+        def work() -> dict[str, Any]:
+            graph = loaded_graph()
+            missing = [node_id for node_id in payload.node_ids if node_id not in graph.nodes]
+            if missing:
+                raise UserFacingError(f"Nœuds inconnus dans le graphe : {', '.join(missing[:5])}.")
+            plan = build_execution_plan(graph, payload.node_ids, action=payload.action)
+            return {"plan": plan.to_dict(), "graph_version": graph.version}
+
+        return await local(work)
+
+    dependency_route("/plan", ["POST"], dependency_plan)
+
+    async def dependency_validate() -> dict[str, Any]:
+        def work() -> dict[str, Any]:
+            graph = loaded_graph()
+            return {
+                "validation": graph_validation(graph),
+                "graph_version": graph.version,
+                "issues": validate_graph(graph),
+            }
+
+        return await local(work)
+
+    dependency_route("/validate", ["POST"], dependency_validate)
+
+    async def dependency_snapshot(payload: DependencySnapshotPayload) -> dict[str, Any]:
+        def work() -> dict[str, Any]:
+            try:
+                return dependency_store.snapshot(payload.label)
+            except ValueError as error:
+                raise UserFacingError(str(error)) from error
+
+        return await local(work)
+
+    dependency_route("/snapshot", ["POST"], dependency_snapshot)
+
+    async def dependency_history(limit: int = Query(default=50, ge=1, le=200)) -> dict[str, Any]:
+        return await local(lambda: {"entries": dependency_store.history(limit=limit)})
+
+    dependency_route("/history", ["GET"], dependency_history)
+
+    async def dependency_rollback(payload: DependencyRollbackPayload) -> dict[str, Any]:
+        def work() -> dict[str, Any]:
+            try:
+                graph = dependency_store.rollback(payload.version)
+            except KeyError as error:
+                raise UserFacingError(str(error)) from error
+            return {
+                "rolled_back_to": payload.version,
+                "graph": graph.to_dict(),
+                "validation": graph_validation(graph),
+            }
+
+        return await local(work)
+
+    dependency_route("/rollback", ["POST"], dependency_rollback)
 
     @router.get("/career", include_in_schema=False)
     async def career_page() -> FileResponse:

@@ -209,6 +209,7 @@ function labelForView(viewName) {
     shortlist: "Ma shortlist",
     studio: "Application Studio",
     applications: "Candidatures",
+    dependencies: "Dépendances",
     interviews: "Coach d’entretien",
     profile: "Mon profil",
     settings: "Réglages",
@@ -249,7 +250,7 @@ function organiseViews() {
   }
 }
 
-const careerViews = new Set(["dashboard", "discover", "stagehunter", "shortlist", "studio", "applications", "interviews", "profile", "settings"]);
+const careerViews = new Set(["dashboard", "discover", "stagehunter", "shortlist", "studio", "applications", "dependencies", "interviews", "profile", "settings"]);
 let internalHashChange = false;
 
 function refreshView(viewName) {
@@ -259,6 +260,7 @@ function refreshView(viewName) {
     shortlist: loadShortlist,
     studio: loadStudio,
     applications: loadApplications,
+    dependencies: () => Promise.resolve(window.CareerDependencies?.load?.()),
     interviews: loadCoach,
   };
   loaders[viewName]?.().catch((error) => setMessage(error.message, true));
