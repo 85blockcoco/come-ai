@@ -432,10 +432,16 @@ function renderDashboard(report, drift) {
     container.append(element("p", "Aucun rapport de conformité disponible.", "constitution-empty"));
     return;
   }
+  const entities = report.entities || {};
   const score = element("div", "", "constitution-score");
-  score.append(element("strong", formatScore(report.conformity?.rules?.test_coverage ?? 0)));
-  score.append(element("span", "couverture de test des règles"));
+  score.append(element("strong", formatScore(entities.average_score ?? 0)));
+  score.append(element("span", `score de conformité moyen — ${entities.checked || 0} entité(s) contrôlée(s)`));
   container.append(score);
+
+  const coverage = element("div", "", "constitution-metric");
+  coverage.append(element("strong", formatScore(report.conformity?.rules?.test_coverage ?? 0)));
+  coverage.append(element("span", "couverture de test des règles actives"));
+  container.append(coverage);
 
   const alerts = (drift && drift.alerts) || [];
   const alertList = element("ul", "", "constitution-alerts");
@@ -447,9 +453,9 @@ function renderDashboard(report, drift) {
     item.append(element("strong", alert.metric || ""), element("span", alert.message || ""));
     alertList.append(item);
   }
-  container.append(alertList);
+  container.append(element("h3", "Alertes de dérive", ""), alertList);
 
-  const violations = (report.entities?.history || []).flatMap((entry) => entry.violations || []);
+  const violations = (entities.history || []).flatMap((entry) => entry.violations || []);
   const top = violations.slice(0, 5);
   const topList = element("ul", "", "constitution-violations");
   if (!top.length) {
