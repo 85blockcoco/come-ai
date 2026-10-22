@@ -398,7 +398,9 @@ def create_traceability_router(service: CareerService) -> APIRouter:
                 include_deleted=include_deleted,
             )
             return {
-                "traces": [trace.to_dict() for trace in traces],
+                "traces": [
+                    {**trace.to_dict(), "justification": trace.justification()} for trace in traces
+                ],
                 "count": len(traces),
                 "filters": {
                     "status": status,

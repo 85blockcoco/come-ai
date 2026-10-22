@@ -107,8 +107,10 @@ CRITICALITIES: tuple[str, ...] = ("mandatory", "preferred", "nice_to_have", "con
 
 STATUSES: tuple[str, ...] = ("uncovered", "covered", "partial", "contradicted", "waived")
 
-#: Les huit types d'événements du contrat.  ``DELETED_EVENT`` est une
-#: extension explicite : une suppression doit rester dans la piste d'audit.
+#: Les huit types d'événements du contrat.  ``DELETED_EVENT`` et
+#: ``TAGS_EVENT`` sont des extensions explicites : une suppression et un
+#: changement de tags doivent rester dans la piste d'audit sans falsifier le
+#: vocabulaire du contrat.
 EVENT_TYPES: tuple[str, ...] = (
     "created",
     "linked",
@@ -120,6 +122,8 @@ EVENT_TYPES: tuple[str, ...] = (
     "reopened",
 )
 DELETED_EVENT = "deleted"
+TAGS_EVENT = "tags_changed"
+EXTENDED_EVENT_TYPES: tuple[str, ...] = (*EVENT_TYPES, DELETED_EVENT, TAGS_EVENT)
 
 ACTORS: tuple[str, ...] = ("system", "user", "worker")
 
@@ -310,7 +314,7 @@ class TraceEvent:
         if not isinstance(payload, Mapping):
             raise TraceabilityError("Un événement de traçabilité doit être un objet.")
         event_type = clean_text(payload.get("event_type"), limit=40)
-        if event_type not in EVENT_TYPES and event_type != DELETED_EVENT:
+        if event_type not in EXTENDED_EVENT_TYPES:
             raise TraceabilityError(f"Type d'événement inconnu : {event_type!r}.")
         actor = clean_text(payload.get("actor"), limit=20) or "system"
         if actor not in ACTORS:
@@ -695,7 +699,7 @@ class TraceabilityRegistry:
             if resolved_tags != updated.tags:
                 updated = self._append(
                     updated,
-                    event_type="status_changed",
+                    event_type=TAGS_EVENT,
                     old_value=",".join(updated.tags),
                     new_value=",".join(resolved_tags),
                     actor=resolved_actor,
@@ -704,10 +708,11 @@ class TraceabilityRegistry:
                 )
                 updated = _replace(updated, tags=resolved_tags)
         if evidence_id is not None or evidence_quote is not None:
-            updated = self.link_evidence(
-                trace.trace_id,
+            updated = self._link_evidence(
+                updated,
                 evidence_id=evidence_id if evidence_id is not None else updated.evidence_id or "",
                 evidence_quote=evidence_quote if evidence_quote is not None else updated.evidence_quote or "",
+                status=status,
                 actor=resolved_actor,
                 comment=comment,
                 now=now,
@@ -735,21 +740,24 @@ class TraceabilityRegistry:
         self._traces[trace.trace_id] = updated
         return updated
 
-    def link_evidence(
+    def _link_evidence(
         self,
-        trace_id: str,
-        evidence_id: str,
-        evidence_quote: str = "",
+        trace: RequirementTrace,
         *,
-        status: str | None = None,
-        actor: str = "user",
-        comment: str | None = None,
-        now: str | None = None,
-        keep_status: bool = False,
+        evidence_id: str,
+        evidence_quote: str,
+        status: str | None,
+        actor: str,
+        comment: str | None,
+        now: str | None,
+        keep_status: bool,
     ) -> RequirementTrace:
-        """Attach a proof to a requirement (event ``linked``)."""
+        """Attach a proof to the given trace and return the new trace.
 
-        trace = self.require(trace_id)
+        The trace is not read back from the registry: a caller that already
+        changed other fields keeps them.
+        """
+
         resolved_actor = _actor(actor, "user")
         identifier = _identifier(evidence_id, "L'identifiant de la preuve")
         quote = clean_text(evidence_quote, limit=MAX_EVIDENCE_QUOTE)
@@ -762,9 +770,17 @@ class TraceabilityRegistry:
             comment=comment,
             now=now,
         )
-        updated = _replace(updated, evidence_id=identifier, evidence_quote=quote or trace.evidence_quote)
+        updated = _replace(updated, evidence_id=identifier, evidence_quote=quote or None)
         if not keep_status:
-            resolved_status = _choice(status, STATUSES, "Le statut", "covered")
+            if status is None:
+                if updated.evidence_id and updated.evidence_quote:
+                    resolved_status = "covered"
+                else:
+                    # Une preuve sans citation ne couvre plus rien : le
+                    # registre ne garde pas un statut « covered » orphelin.
+                    resolved_status = "uncovered" if updated.status == "covered" else updated.status
+            else:
+                resolved_status = _choice(status, STATUSES, "Le statut", updated.status)
             if resolved_status == "covered" and not (updated.evidence_id and updated.evidence_quote):
                 raise TraceabilityError(
                     "Une exigence « covered » doit porter evidence_id et evidence_quote."
@@ -780,6 +796,38 @@ class TraceabilityRegistry:
                     now=now,
                 )
                 updated = _replace(updated, status=resolved_status)
+        return updated
+
+    def link_evidence(
+        self,
+        trace_id: str,
+        evidence_id: str,
+        evidence_quote: str = "",
+        *,
+        status: str | None = None,
+        actor: str = "user",
+        comment: str | None = None,
+        now: str | None = None,
+        keep_status: bool = False,
+    ) -> RequirementTrace:
+        """Attach a proof to a requirement (event ``linked``).
+
+        A proof without a citation never covers a requirement: the status
+        then stays what it was.  An explicit ``status="covered"`` without a
+        citation is refused.
+        """
+
+        trace = self.require(trace_id)
+        updated = self._link_evidence(
+            trace,
+            evidence_id=evidence_id,
+            evidence_quote=evidence_quote,
+            status=status,
+            actor=actor,
+            comment=comment,
+            now=now,
+            keep_status=keep_status,
+        )
         self._traces[trace.trace_id] = updated
         return updated
 

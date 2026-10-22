@@ -144,7 +144,7 @@ def test_covered_requirement_always_carries_its_proof(registry: TraceabilityRegi
     with pytest.raises(TraceabilityError):
         registry.update(trace.trace_id, status="covered")
     with pytest.raises(TraceabilityError):
-        registry.link_evidence(trace.trace_id, "ev_1")
+        registry.link_evidence(trace.trace_id, "ev_1", status="covered")
 
 
 def test_link_then_unlink_keeps_the_truth_visible(registry: TraceabilityRegistry) -> None:
@@ -195,10 +195,54 @@ def test_update_records_one_event_per_changed_field(registry: TraceabilityRegist
         actor="user",
     )
     kinds = [event.event_type for event in updated.history]
-    assert kinds == ["created", "category_changed", "criticality_changed", "status_changed"]
+    assert kinds == ["created", "category_changed", "criticality_changed", "tags_changed"]
     assert updated.category == "skill"
     assert updated.criticality == "preferred"
     assert updated.tags == ["finance", "m&a"]
+
+
+def test_linking_a_proof_without_a_quote_never_covers(registry: TraceabilityRegistry) -> None:
+    trace = registry.create(requirement_text="Excel")
+    linked = registry.link_evidence(trace.trace_id, "ev_1")
+    assert linked.status == "uncovered"
+    assert linked.evidence_id == "ev_1"
+    with pytest.raises(TraceabilityError):
+        registry.link_evidence(trace.trace_id, "ev_2", status="covered")
+
+
+def test_relinking_without_a_quote_drops_the_covered_status(registry: TraceabilityRegistry) -> None:
+    trace = registry.create(requirement_text="Excel")
+    registry.link_evidence(trace.trace_id, "ev_1", "Excel, 3 ans")
+    relinked = registry.link_evidence(trace.trace_id, "ev_2")
+    assert relinked.status == "uncovered"
+    assert relinked.evidence_quote is None
+    assert [event.event_type for event in relinked.history][-1] == "status_changed"
+
+
+def test_one_update_keeps_every_requested_change(registry: TraceabilityRegistry) -> None:
+    """Une mise à jour combinée ne perd pas les changements voisins."""
+
+    trace = registry.create(requirement_text="Excel", criticality="preferred")
+    updated = registry.update(
+        trace.trace_id,
+        tags=["finance"],
+        category="tool",
+        evidence_id="ev_1",
+        evidence_quote="Excel, 3 ans",
+        status="covered",
+    )
+    assert updated.tags == ["finance"]
+    assert updated.category == "tool"
+    assert updated.criticality == "preferred"
+    assert updated.evidence_id == "ev_1"
+    assert updated.status == "covered"
+    assert [event.event_type for event in updated.history] == [
+        "created",
+        "category_changed",
+        "tags_changed",
+        "linked",
+        "status_changed",
+    ]
 
 
 def test_delete_keeps_the_audit_trail(populated: TraceabilityRegistry) -> None:

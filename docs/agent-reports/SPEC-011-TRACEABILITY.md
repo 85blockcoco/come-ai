@@ -13,7 +13,7 @@ Statut : TERMINÉE (testé sur fixtures synthétiques ; aucune donnée réelle ;
 | `career_static/js/traceability.js` | UI du registre : filtres, tri, historique par exigence, actions individuelles et groupées |
 | `career_static/index.html` | Onglet « Traçabilité » + vue registre + panneau d'audit |
 | `career_static/career.js` | Routing de la nouvelle vue (hash + titre d'onglet) |
-| `tests/test_traceability.py` | 30 tests (cœur, persistance, audit, intégrations, API HTTP) |
+| `tests/test_traceability.py` | 32 tests (cœur, persistance, audit, intégrations, API HTTP) |
 
 ## 2. Contrat livré
 
@@ -29,7 +29,9 @@ Vocabulaire : `category` ∈ skill · experience · education · language · too
 soft_skill · other ; `criticality` ∈ mandatory · preferred · nice_to_have · contextual ;
 `status` ∈ uncovered · covered · partial · contradicted · waived ;
 `event_type` ∈ created · linked · unlinked · status_changed · category_changed ·
-criticality_changed · waived · reopened (+ extension documentée `deleted`) ;
+criticality_changed · waived · reopened (+ deux extensions documentées : `deleted` pour la
+suppression archivée et `tags_changed` pour un changement de tags — le vocabulaire du
+contrat n'est jamais réinterprété) ;
 `actor` ∈ system · user · worker.
 
 ### Règles métier appliquées
@@ -49,7 +51,8 @@ criticality_changed · waived · reopened (+ extension documentée `deleted`) ;
    réécrit. La suppression archive la trace (`deleted`) : la piste d'audit survit.
 5. **Cohérence** — `status="covered"` **exige** `evidence_id` **et** `evidence_quote`
    (création, mise à jour et liaison). Retirer une preuve fait retomber l'exigence à
-   `uncovered` : le registre ne laisse jamais une exigence couverte sans preuve.
+   `uncovered` : le registre ne laisse jamais une exigence couverte sans preuve. Lier une
+   preuve **sans citation** ne couvre rien : le statut reste ce qu'il était.
 6. **Audit trail** — chaque mutation produit un événement ; les rapports se reconstruisent
    par relecture de l'historique, sans horloge ni supposition.
 
@@ -126,11 +129,15 @@ registre local.
 Worktree : `/Users/comedelavenne/AI-Excel-Agent-worker-cvboost-46-1792666436`,
 branche `worker/cvboost-46-1792666436`, base `f5b22f2`.
 
-- Tests ciblés : `30 passed` (`tests/test_traceability.py`).
-- Suite complète : voir section 6.
-- `ruff check` sur le périmètre : `All checks passed!`.
+- Tests ciblés : `32 passed` (`tests/test_traceability.py`).
+- Suite complète : `1454 passed, 1 skipped` (1 skipped = script optionnel absent,
+  `tests/test_offer_summary_exhaustiveness.py`).
+- `checklist_codex.sh main` : `TOUT VERT` (HEAD `86a6f88`).
+- `checklist_codex.sh secrets` : `TOUT VERT` ; `checklist_codex.sh lint` : `All checks passed!`.
+- `ruff check career/ tests/test_traceability.py` : `All checks passed!`.
 - `git diff --check` : propre.
-- `checklist_codex.sh` : exécuté avec `VENV_PY` pointant sur le venv principal (le worktree
+- `node --check career_static/js/traceability.js` : syntaxe JS valide.
+- `checklist_codex.sh` lancé avec `VENV_PY` pointant sur le venv principal (le worktree
   n'embarque pas de `.venv`).
 
 ## 6. Limites assumées
