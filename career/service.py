@@ -120,11 +120,13 @@ from .profile_import import (
     parse_profile_text,
 )
 from .profile_readiness import assess_profile_readiness
+from .offer_requirements import analyze_offer
 from .qualification_persistence import (
     decode_qualification_snapshot,
     normalize_qualification_snapshot,
     snapshot_matches_current_source,
 )
+from .traceability_store import TraceabilityService
 
 
 SCHEMA_VERSION = 8
@@ -249,6 +251,10 @@ class CareerService:
         self._prep_cache: set[str] = set()
         self._discovery_lock = threading.Lock()
         self._lock = threading.RLock()
+        # SPEC-011 — registre de traçabilité des exigences.  Il vit dans sa
+        # propre base SQLite (career_data/traceability.sqlite3) : le registre
+        # ne dépend ni du schéma du service Career ni de son cycle de vie.
+        self._traceability: TraceabilityService | None = None
         self._ensure_storage()
         self._initialize()
         if ConsentGuard is not None:
@@ -278,6 +284,17 @@ class CareerService:
                 os.chmod(path, 0o700)
             except OSError:
                 pass
+
+    @property
+    def traceability(self) -> TraceabilityService:
+        """Local requirement traceability registry (SPEC-011).
+
+        The registry is created on first use: a Career workspace that never
+        opens the traceability view never creates the extra SQLite file.
+        """
+        if self._traceability is None:
+            self._traceability = TraceabilityService(self.data_dir / "traceability.sqlite3")
+        return self._traceability
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
@@ -2119,6 +2136,13 @@ class CareerService:
             }
         )
         self._prep_cache.add(job_id)
+        # SPEC-011 — the facts matched by the preparation panel propose an
+        # automatic link in the traceability registry.  The link stays
+        # "pending": only the person can confirm it.
+        try:
+            self.sync_traceability_evidence(job_id, analysis.get("matched_elements"))
+        except Exception:
+            pass
         return analysis
 
     def get_application_sprint(self, *, limit: int = 12) -> dict[str, Any]:
@@ -3246,7 +3270,51 @@ class CareerService:
         result = self.get_job(job_id)
         result["created"] = created
         result["duplicate"] = not created
+        # SPEC-011 — the requirements of the offer enter the traceability
+        # registry as soon as the offer is stored.  A registry failure never
+        # invalidates an import: the traceability is a view, the offer is the
+        # source of truth.
+        try:
+            self.sync_traceability_requirements(job_id)
+        except Exception:
+            pass
         return result
+
+    def sync_traceability_requirements(self, job_id: str) -> dict[str, Any]:
+        """Register the SK-02 requirements of a stored offer (SPEC-011).
+
+        The extraction is deterministic and local: the registry receives the
+        verbatim requirement, its locator and its modality mapped to the
+        registry vocabulary.  Nothing is invented and re-importing the same
+        offer never duplicates a trace (the trace id is derived from
+        ``(source, requirement_id)``).
+        """
+        job = self.get_job(job_id)
+        analysis = analyze_offer(job)
+        return self.traceability.register_offer_analysis(analysis, actor="system")
+
+    def sync_traceability_evidence(
+        self, job_id: str, matched_elements: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any]:
+        """Propose the automatic evidence links of one offer (SK-21 → SPEC-011).
+
+        The links are *proposals*: they stay ``pending`` until the person
+        confirms or rejects them.  A machine never declares a requirement
+        covered on its own.
+        """
+        if not matched_elements:
+            return {"linked": [], "linked_count": 0, "considered": 0, "skipped": 0}
+        evidences = [
+            {
+                "evidence_id": f"profile:{job_id}:{index}",
+                "claim": clean_text(item.get("requirement"), limit=600),
+                "quote": clean_text(item.get("evidence"), limit=4_000),
+                "kind": clean_text(item.get("profile_field"), limit=60) or "profile",
+            }
+            for index, item in enumerate(matched_elements)
+            if isinstance(item, dict) and item.get("requirement") and item.get("evidence")
+        ]
+        return self.traceability.auto_link(evidences, actor="system")
 
     def _normalize_job(self, payload: dict[str, Any], *, availability: dict[str, Any]) -> dict[str, Any]:
         company = clean_text(payload.get("company"), limit=240)
@@ -4772,6 +4840,13 @@ class CareerService:
             connection.execute("DELETE FROM career_audit_log")
             self._seed_defaults(connection)
             self._audit(connection, "career_data_reset", "career", "all")
+        # SPEC-011 — the traceability registry holds derived personal data
+        # (requirements, quotes, history): it is erased with everything else.
+        if self._traceability is not None:
+            try:
+                self._traceability.reset()
+            except Exception:
+                pass
         for path in self.export_dir.glob("career_*"):
             try:
                 path.unlink()

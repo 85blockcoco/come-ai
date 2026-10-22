@@ -541,3 +541,30 @@ button, a, .career-tab { transition: background-color .16s ease, border-color .1
   .application-filters label { flex: 1 1 100%; }
   .application-filters select { width: 100%; }
 }
+
+/* ── SPEC-011 : registre de traçabilité ─────────────────────────────────── */
+.traceability-list { display: grid; gap: 10px; margin-top: 14px; }
+.traceability-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 12px; border: 1px solid #d8e9df; border-radius: 12px; background: rgb(255 255 255 / 86%); }
+.traceability-row:hover { border-color: #b8dcca; }
+.traceability-check { width: auto; margin-top: 3px; }
+.traceability-copy { display: grid; min-width: 0; gap: 5px; }
+.traceability-copy strong { font-size: .85rem; line-height: 1.4; }
+.traceability-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; color: var(--muted); font-size: .72rem; }
+.traceability-meta .local-tag { padding: 3px 8px; }
+.traceability-meta .local-tag.good { color: var(--good); background: var(--good-soft); }
+.traceability-meta .local-tag.warning { color: var(--warning); background: var(--warning-soft); }
+.traceability-meta .local-tag.muted { color: var(--muted); background: #f0f5f2; }
+.traceability-quote { margin: 2px 0 0; color: var(--accent-dark); font-size: .76rem; line-height: 1.45; }
+.traceability-quote.muted { color: var(--faint); font-style: italic; }
+.traceability-actions { display: flex; flex: 0 0 auto; gap: 7px; align-items: center; }
+.traceability-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 0 0 12px; }
+.traceability-facts dt { color: var(--muted); font-size: .73rem; }
+.traceability-facts dd { margin: 0; font-size: .78rem; }
+.traceability-timeline { display: grid; gap: 8px; margin: 8px 0 0; padding: 0; list-style: none; }
+.traceability-event { padding: 9px 11px; border-left: 3px solid var(--accent-soft); border-radius: 0 10px 10px 0; background: var(--surface-soft); font-size: .75rem; }
+.traceability-event p { margin: 4px 0 0; color: var(--muted); font-size: .72rem; line-height: 1.4; }
+.trace-filters { align-items: flex-end; }
+@media (max-width: 620px) {
+  .traceability-row { grid-template-columns: auto minmax(0, 1fr); }
+  .traceability-actions { grid-column: 1 / -1; }
+}
