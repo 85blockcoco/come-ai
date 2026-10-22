@@ -8,13 +8,24 @@ from pathlib import Path
 from typing import Any, Callable
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
 from .profile_import import MAX_PROFILE_IMPORT_BYTES
 from .service import CareerService
+from .traceability import TraceabilityRegistry
+from .traceability_audit import (
+    audit_summary,
+    coverage_by_cv,
+    coverage_by_offer,
+    coverage_over_time,
+    critical_gaps,
+    history_timeline,
+    waived_requirements,
+)
+from .traceability_store import TraceabilityStore
 from workspace_core import UserFacingError, to_jsonable
 
 
@@ -236,6 +247,420 @@ class CVAnalyzeResponse(BaseModel):
     provenance: dict[str, Any]
 
 
+# --- SPEC-011 : registre de traçabilité des exigences ------------------------
+
+
+class TraceabilityRequirementPayload(BaseModel):
+    """One requirement to trace (creation)."""
+
+    requirement_id: str = Field(default="", max_length=240)
+    requirement_text: str = Field(min_length=1, max_length=4_000)
+    source: str = Field(default="manual", min_length=1, max_length=240)
+    category: str = Field(default="other", max_length=40)
+    criticality: str = Field(default="contextual", max_length=40)
+    evidence_id: str = Field(default="", max_length=240)
+    evidence_quote: str = Field(default="", max_length=2_000)
+    status: str = Field(default="", max_length=40)
+    tags: list[str] = Field(default_factory=list, max_length=20)
+    comment: str = Field(default="", max_length=2_000)
+    actor: str = Field(default="user", max_length=20)
+
+
+class TraceabilityUpdatePayload(BaseModel):
+    """Partial update of a traced requirement."""
+
+    status: str | None = Field(default=None, max_length=40)
+    evidence_id: str | None = Field(default=None, max_length=240)
+    evidence_quote: str | None = Field(default=None, max_length=2_000)
+    tags: list[str] | None = Field(default=None, max_length=20)
+    category: str | None = Field(default=None, max_length=40)
+    criticality: str | None = Field(default=None, max_length=40)
+    comment: str = Field(default="", max_length=2_000)
+    actor: str = Field(default="user", max_length=20)
+
+
+class TraceabilityLinkPayload(BaseModel):
+    """Evidence to attach to a traced requirement."""
+
+    evidence_id: str = Field(min_length=1, max_length=240)
+    evidence_quote: str = Field(default="", max_length=2_000)
+    status: str = Field(default="", max_length=40)
+    comment: str = Field(default="", max_length=2_000)
+    actor: str = Field(default="user", max_length=20)
+
+
+class TraceabilityCommentPayload(BaseModel):
+    """Comment carried by an action that does not change the proof."""
+
+    comment: str = Field(default="", max_length=2_000)
+    actor: str = Field(default="user", max_length=20)
+
+
+class TraceabilityWaivePayload(BaseModel):
+    """Waiver of a requirement, with its mandatory justification."""
+
+    justification: str = Field(min_length=3, max_length=2_000)
+    actor: str = Field(default="user", max_length=20)
+
+
+class TraceabilityOfferSyncPayload(BaseModel):
+    """Offer whose SK-02 analysis feeds the registry."""
+
+    offer: dict[str, Any] = Field(default_factory=dict)
+    actor: str = Field(default="system", max_length=20)
+
+
+class TraceabilityImportPayload(BaseModel):
+    """Registry previously exported as JSON."""
+
+    registry: dict[str, Any] = Field(default_factory=dict)
+    mode: str = Field(default="replace", pattern="^(replace|merge)$")
+
+
+def _traceability_store(service: CareerService) -> TraceabilityStore:
+    """Return the local registry store of the Career workspace."""
+
+    data_dir = getattr(service, "data_dir", None)
+    base = Path(data_dir) if data_dir else Path.cwd() / "career_data"
+    return TraceabilityStore(base / "traceability" / "registry.json")
+
+
+def create_traceability_router(service: CareerService) -> APIRouter:
+    """CRUD, audit and export routes of the traceability registry (SPEC-011).
+
+    Every route is exposed twice: under the historical Career prefix
+    (``/api/career/traceability/…``) and under the SPEC-011 paths
+    (``/traceability/…``) so both contracts answer the same registry.
+    """
+
+    router = APIRouter()
+
+    async def local(call: Any) -> Any:
+        return to_jsonable(await run_in_threadpool(call))
+
+    def load_registry() -> TraceabilityRegistry:
+        return _traceability_store(service).load()
+
+    def save_registry(registry: TraceabilityRegistry) -> None:
+        _traceability_store(service).save(registry)
+
+    @router.post("/api/career/traceability/requirements", status_code=201)
+    @router.post("/traceability/requirements", status_code=201)
+    async def create_traceability_requirement(payload: TraceabilityRequirementPayload) -> Any:
+        """Record one requirement and start its history."""
+
+        def operation() -> dict[str, Any]:
+            registry = load_registry()
+            trace = registry.create(
+                requirement_id=payload.requirement_id,
+                requirement_text=payload.requirement_text,
+                source=payload.source,
+                category=payload.category,
+                criticality=payload.criticality,
+                evidence_id=payload.evidence_id or None,
+                evidence_quote=payload.evidence_quote or None,
+                status=payload.status or None,
+                tags=payload.tags,
+                actor=payload.actor,
+                comment=payload.comment or None,
+            )
+            save_registry(registry)
+            return trace.to_dict()
+
+        return await local(operation)
+
+    @router.get("/api/career/traceability/requirements")
+    @router.get("/traceability/requirements")
+    async def list_traceability_requirements(
+        status: str = Query(default="", max_length=40),
+        category: str = Query(default="", max_length=40),
+        criticality: str = Query(default="", max_length=40),
+        source: str = Query(default="", max_length=240),
+        offer_id: str = Query(default="", max_length=240),
+        cv_id: str = Query(default="", max_length=240),
+        tag: str = Query(default="", max_length=60),
+        q: str = Query(default="", max_length=240),
+        include_deleted: bool = Query(default=False),
+    ) -> Any:
+        """List the traced requirements, filtered."""
+
+        def operation() -> dict[str, Any]:
+            registry = load_registry()
+            traces = registry.filter(
+                status=status or None,
+                category=category or None,
+                criticality=criticality or None,
+                source=source or None,
+                offer_id=offer_id or None,
+                cv_id=cv_id or None,
+                tag=tag or None,
+                text=q or None,
+                include_deleted=include_deleted,
+            )
+            return {
+                "traces": [trace.to_dict() for trace in traces],
+                "count": len(traces),
+                "filters": {
+                    "status": status,
+                    "category": category,
+                    "criticality": criticality,
+                    "source": source,
+                    "offer_id": offer_id,
+                    "cv_id": cv_id,
+                    "tag": tag,
+                    "q": q,
+                },
+            }
+
+        return await local(operation)
+
+    @router.get("/api/career/traceability/requirements/{trace_id}")
+    @router.get("/traceability/requirements/{trace_id}")
+    async def get_traceability_requirement(trace_id: str) -> Any:
+        """Return one traced requirement with its whole history."""
+
+        def operation() -> dict[str, Any]:
+            registry = load_registry()
+            trace = registry.require(trace_id)
+            payload = trace.to_dict()
+            payload["justification"] = trace.justification()
+            return payload
+
+        return await local(operation)
+
+    @router.patch("/api/career/traceability/requirements/{trace_id}")
+    @router.patch("/traceability/requirements/{trace_id}")
+    async def update_traceability_requirement(trace_id: str, payload: TraceabilityUpdatePayload) -> Any:
+        """Change the status, the proof, the tags or the classification."""
+
+        def operation() -> dict[str, Any]:
+            registry = load_registry()
+            trace = registry.update(
+                trace_id,
+                status=payload.status,
+                evidence_id=payload.evidence_id,
+                evidence_quote=payload.evidence_quote,
+                tags=payload.tags,
+                category=payload.category,
+                criticality=payload.criticality,
+                comment=payload.comment or None,
+                actor=payload.actor,
+            )
+            save_registry(registry)
+            return trace.to_dict()
+
+        return await local(operation)
+
+    @router.post("/api/career/traceability/requirements/{trace_id}/link-evidence")
+    @router.post("/traceability/requirements/{trace_id}/link-evidence")
+    async def link_traceability_evidence(trace_id: str, payload: TraceabilityLinkPayload) -> Any:
+        """Attach a proof to a requirement."""
+
+        def operation() -> dict[str, Any]:
+            registry = load_registry()
+            trace = registry.link_evidence(
+                trace_id,
+                payload.evidence_id,
+                payload.evidence_quote,
+                status=payload.status or None,
+                actor=payload.actor,
+                comment=payload.comment or None,
+            )
+            save_registry(registry)
+            return trace.to_dict()
+
+        return await local(operation)
+
+    @router.post("/api/career/traceability/requirements/{trace_id}/unlink-evidence")
+    @router.post("/traceability/requirements/{trace_id}/unlink-evidence")
+    async def unlink_traceability_evidence(trace_id: str, payload: TraceabilityCommentPayload) -> Any:
+        """Detach the proof of a requirement."""
+
+        def operation() -> dict[str, Any]:
+            registry = load_registry()
+            trace = registry.unlink_evidence(
+                trace_id,
+                actor=payload.actor,
+                comment=payload.comment or None,
+            )
+            save_registry(registry)
+            return trace.to_dict()
+
+        return await local(operation)
+
+    @router.post("/api/career/traceability/requirements/{trace_id}/waive")
+    @router.post("/traceability/requirements/{trace_id}/waive")
+    async def waive_traceability_requirement(trace_id: str, payload: TraceabilityWaivePayload) -> Any:
+        """Waive a requirement with an explicit justification."""
+
+        def operation() -> dict[str, Any]:
+            registry = load_registry()
+            trace = registry.waive(trace_id, payload.justification, actor=payload.actor)
+            save_registry(registry)
+            return trace.to_dict()
+
+        return await local(operation)
+
+    @router.post("/api/career/traceability/requirements/{trace_id}/reopen")
+    @router.post("/traceability/requirements/{trace_id}/reopen")
+    async def reopen_traceability_requirement(trace_id: str, payload: TraceabilityCommentPayload) -> Any:
+        """Reopen a waived requirement."""
+
+        def operation() -> dict[str, Any]:
+            registry = load_registry()
+            trace = registry.reopen(trace_id, actor=payload.actor, comment=payload.comment or None)
+            save_registry(registry)
+            return trace.to_dict()
+
+        return await local(operation)
+
+    @router.delete("/api/career/traceability/requirements/{trace_id}")
+    @router.delete("/traceability/requirements/{trace_id}")
+    async def delete_traceability_requirement(trace_id: str, payload: TraceabilityCommentPayload) -> Any:
+        """Archive a requirement; the audit trail survives the deletion."""
+
+        def operation() -> dict[str, Any]:
+            registry = load_registry()
+            trace = registry.delete(trace_id, actor=payload.actor, comment=payload.comment or None)
+            save_registry(registry)
+            return {"deleted": True, "trace_id": trace.trace_id}
+
+        return await local(operation)
+
+    @router.get("/api/career/traceability/audit/coverage")
+    @router.get("/traceability/audit/coverage")
+    async def traceability_coverage() -> Any:
+        """Coverage report per offer and per CV, plus the coverage curve."""
+
+        def operation() -> dict[str, Any]:
+            registry = load_registry()
+            return {
+                "summary": audit_summary(registry),
+                "by_offer": coverage_by_offer(registry),
+                "by_cv": coverage_by_cv(registry),
+                "over_time": coverage_over_time(registry),
+            }
+
+        return await local(operation)
+
+    @router.get("/api/career/traceability/audit/gaps")
+    @router.get("/traceability/audit/gaps")
+    async def traceability_gaps(
+        limit: int = Query(default=200, ge=1, le=2_000),
+    ) -> Any:
+        """Mandatory requirements that are not covered."""
+
+        def operation() -> dict[str, Any]:
+            registry = load_registry()
+            gaps = critical_gaps(registry, limit=limit)
+            return {"gaps": gaps, "count": len(gaps)}
+
+        return await local(operation)
+
+    @router.get("/api/career/traceability/audit/history")
+    @router.get("/traceability/audit/history")
+    async def traceability_history(
+        trace_id: str = Query(default="", max_length=64),
+        event_type: str = Query(default="", max_length=40),
+        actor: str = Query(default="", max_length=20),
+        source: str = Query(default="", max_length=240),
+        since: str = Query(default="", max_length=64),
+        until: str = Query(default="", max_length=64),
+        limit: int = Query(default=500, ge=1, le=5_000),
+    ) -> Any:
+        """Chronological, filtered audit trail."""
+
+        def operation() -> dict[str, Any]:
+            registry = load_registry()
+            events = history_timeline(
+                registry,
+                trace_id=trace_id or None,
+                event_type=event_type or None,
+                actor=actor or None,
+                source_filter=source or None,
+                since=since or None,
+                until=until or None,
+                limit=limit,
+            )
+            return {"events": events, "count": len(events)}
+
+        return await local(operation)
+
+    @router.get("/api/career/traceability/audit/waived")
+    @router.get("/traceability/audit/waived")
+    async def traceability_waived() -> Any:
+        """Waived requirements with their justification."""
+
+        def operation() -> dict[str, Any]:
+            registry = load_registry()
+            waived = waived_requirements(registry)
+            return {"waived": waived, "count": len(waived)}
+
+        return await local(operation)
+
+    @router.get("/api/career/traceability/export")
+    @router.get("/traceability/export")
+    async def export_traceability(
+        export_format: str = Query(default="json", pattern="^(json|csv)$"),
+    ) -> Any:
+        """Export the whole registry (JSON or CSV)."""
+
+        def operation() -> Any:
+            store = _traceability_store(service)
+            registry = store.load()
+            if export_format == "csv":
+                return Response(
+                    content=store.export_csv(registry),
+                    media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": 'attachment; filename="traceability.csv"'},
+                )
+            return Response(
+                content=store.export_json(registry),
+                media_type="application/json",
+                headers={"Content-Disposition": 'attachment; filename="traceability.json"'},
+            )
+
+        return await run_in_threadpool(operation)
+
+    @router.post("/api/career/traceability/sync-offer")
+    @router.post("/traceability/sync-offer")
+    async def sync_traceability_offer(payload: TraceabilityOfferSyncPayload) -> Any:
+        """Create the traces of an offer from its SK-02 analysis."""
+
+        def operation() -> dict[str, Any]:
+            from career.offer_requirements import analyze_offer
+
+            analysis = analyze_offer(payload.offer)
+            registry = load_registry()
+            summary = registry.sync_offer_analysis(analysis, actor=payload.actor)
+            save_registry(registry)
+            return {"summary": summary, "requirements": len(analysis.get("requirements", []))}
+
+        return await local(operation)
+
+    @router.post("/api/career/traceability/import")
+    @router.post("/traceability/import")
+    async def import_traceability(payload: TraceabilityImportPayload) -> Any:
+        """Import a registry exported as JSON."""
+
+        def operation() -> dict[str, Any]:
+            store = _traceability_store(service)
+            imported = store.import_json(payload.registry)
+            if payload.mode == "merge":
+                registry = store.load()
+                for trace in imported.traces(include_deleted=True):
+                    if registry.get(trace.trace_id) is None:
+                        registry.add(trace)
+            else:
+                registry = imported
+            store.save(registry)
+            return {"imported": len(registry.traces()), "mode": payload.mode}
+
+        return await local(operation)
+
+    return router
+
+
 def create_career_router(
     service: CareerService,
     *,
@@ -244,6 +669,9 @@ def create_career_router(
     if not CAREER_STATIC_DIR.is_dir():
         raise RuntimeError("Les fichiers Career Agent sont introuvables.")
     router = APIRouter()
+    # SPEC-011 : le registre de traçabilité partage le même service Career et
+    # le même espace de données local ; il n'ouvre aucune connexion réseau.
+    router.include_router(create_traceability_router(service))
 
     async def local(call: Any) -> Any:
         return to_jsonable(await run_in_threadpool(call))

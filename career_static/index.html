@@ -44,6 +44,7 @@
           <button class="career-tab" id="tab-applications" type="button" aria-controls="view-applications" data-product-area="Applications" data-view="applications">Candidatures</button>
           <button class="career-tab" id="tab-interviews" type="button" aria-controls="view-interviews" data-product-area="Interview Coach" data-view="interviews">Coach d’entretien</button>
           <button class="career-tab" id="tab-profile" type="button" aria-controls="view-profile" data-view="profile">Mon profil</button>
+          <button class="career-tab" id="tab-traceability" type="button" aria-controls="view-traceability" data-view="traceability">Traçabilité</button>
           <button class="career-tab" id="tab-settings" type="button" aria-controls="view-settings" data-view="settings">Réglages</button>
         </nav>
 
@@ -571,6 +572,80 @@
           <div id="profile-content" class="single-view-content"></div>
         </section>
 
+        <section id="view-traceability" class="career-view" tabindex="-1" hidden aria-labelledby="traceability-title">
+          <header class="view-intro">
+            <p class="eyebrow">Registre de traçabilité</p>
+            <h2 id="traceability-title">Exigences, preuves et historique</h2>
+            <p>Chaque exigence extraite d’une offre est reliée à sa preuve. Une exigence sans preuve reste visible comme un manque : rien n’est déclaré couvert à ta place. Tout reste local, aucun envoi automatique.</p>
+          </header>
+
+          <section class="panel jobs-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Registre</p>
+                <h3>Exigences tracées</h3>
+              </div>
+              <div class="inline-actions">
+                <button class="quiet-button" id="traceability-refresh" type="button">Actualiser</button>
+                <a class="quiet-button" id="traceability-export-json" href="/api/career/traceability/export?export_format=json" download>Export JSON</a>
+                <a class="quiet-button" id="traceability-export-csv" href="/api/career/traceability/export?export_format=csv" download>Export CSV</a>
+              </div>
+            </div>
+
+            <form id="traceability-filters" class="filter-row">
+              <label>Statut<select id="traceability-filter-status"><option value="">Tous</option></select></label>
+              <label>Catégorie<select id="traceability-filter-category"><option value="">Toutes</option></select></label>
+              <label>Criticité<select id="traceability-filter-criticality"><option value="">Toutes</option></select></label>
+              <label>Offre<input id="traceability-filter-offer" type="text" placeholder="offer_42" maxlength="240" /></label>
+              <label>CV<input id="traceability-filter-cv" type="text" placeholder="cv_7" maxlength="240" /></label>
+              <label>Tag<input id="traceability-filter-tag" type="text" placeholder="finance" maxlength="60" /></label>
+              <label>Recherche<input id="traceability-filter-text" type="text" placeholder="texte de l’exigence" maxlength="240" /></label>
+              <label>Trier par
+                <select id="traceability-sort">
+                  <option value="updated_at">Dernière mise à jour</option>
+                  <option value="criticality">Criticité</option>
+                  <option value="status">Statut</option>
+                </select>
+              </label>
+              <button class="primary-button" type="submit">Filtrer</button>
+            </form>
+
+            <p id="traceability-count" class="scoring-disclaimer" role="status" aria-live="polite"></p>
+
+            <div class="filter-row">
+              <label>Statut de l’action groupée<select id="traceability-batch-status-value"><option value="">Choisir…</option></select></label>
+              <label>Commentaire<input id="traceability-batch-comment" type="text" placeholder="Action groupée" maxlength="2000" /></label>
+              <label>Justification de renonciation<input id="traceability-batch-justification" type="text" placeholder="Non pertinent pour ce poste" maxlength="2000" /></label>
+              <button class="secondary-button" id="traceability-batch-status" type="button">Appliquer le statut</button>
+              <button class="secondary-button" id="traceability-batch-waive" type="button">Renoncer</button>
+            </div>
+
+            <div id="traceability-table" class="job-list"></div>
+            <p id="traceability-empty" class="empty-state" hidden>Aucune exigence tracée pour l’instant. Les exigences apparaissent automatiquement quand une offre est analysée.</p>
+          </section>
+
+          <section class="panel jobs-panel">
+            <div class="panel-heading compact-heading">
+              <div>
+                <p class="eyebrow">Audit</p>
+                <h3>Couverture, gaps et renonciations</h3>
+              </div>
+            </div>
+            <div id="traceability-audit"></div>
+          </section>
+
+          <section class="panel jobs-panel" id="traceability-detail-panel" hidden>
+            <div class="panel-heading compact-heading">
+              <div>
+                <p class="eyebrow">Détail</p>
+                <h3 id="traceability-detail-title">Exigence et historique</h3>
+              </div>
+              <button class="quiet-button" id="traceability-detail-close" type="button">Fermer</button>
+            </div>
+            <div id="traceability-detail"></div>
+          </section>
+        </section>
+
         <section id="view-settings" class="career-view" tabindex="-1" hidden aria-labelledby="settings-title">
           <section class="panel settings-panel">
             <div class="panel-heading"><div><p class="eyebrow">Préférences et confidentialité</p><h2 id="settings-title">Réglages</h2></div><span class="local-tag">Données locales</span></div>
@@ -734,5 +809,6 @@
     </div>
     <script src="/career-static/cv_plan.js" defer></script>
     <script src="/career-static/career.js" defer></script>
+    <script src="/career-static/js/traceability.js" defer></script>
   </body>
 </html>

@@ -211,6 +211,7 @@ function labelForView(viewName) {
     applications: "Candidatures",
     interviews: "Coach d’entretien",
     profile: "Mon profil",
+    traceability: "Registre de traçabilité",
     settings: "Réglages",
   }[viewName] || "Career";
 }
@@ -249,7 +250,7 @@ function organiseViews() {
   }
 }
 
-const careerViews = new Set(["dashboard", "discover", "stagehunter", "shortlist", "studio", "applications", "interviews", "profile", "settings"]);
+const careerViews = new Set(["dashboard", "discover", "stagehunter", "shortlist", "studio", "applications", "interviews", "profile", "traceability", "settings"]);
 let internalHashChange = false;
 
 function refreshView(viewName) {
@@ -260,6 +261,8 @@ function refreshView(viewName) {
     studio: loadStudio,
     applications: loadApplications,
     interviews: loadCoach,
+    // SPEC-011 : le registre de traçabilité charge ses propres données.
+    traceability: () => window.careerTraceability?.load(),
   };
   loaders[viewName]?.().catch((error) => setMessage(error.message, true));
 }
