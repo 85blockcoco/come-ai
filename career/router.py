@@ -188,6 +188,23 @@ class ApplicationDraftEditPayload(BaseModel):
     letter_markdown: str = Field(min_length=1, max_length=18_000)
 
 
+class ApplicationDossierPayload(BaseModel):
+    """One explicit action to build the verifiable dossier of one application."""
+
+    language: str = Field(default="", max_length=16)
+
+
+class ApplicationDossierEditPayload(BaseModel):
+    """Edited dossier bodies; the verifier runs again on what is saved."""
+
+    cv_recommendations: str | None = Field(default=None, max_length=60_000)
+    adapted_cv: str | None = Field(default=None, max_length=60_000)
+    cover_letter: str | None = Field(default=None, max_length=60_000)
+    prep_sheet: str | None = Field(default=None, max_length=60_000)
+    interview_questions: str | None = Field(default=None, max_length=60_000)
+    checklist: str | None = Field(default=None, max_length=60_000)
+
+
 class JobSummaryPayload(BaseModel):
     mode: str = Field(default="local", max_length=12)
     consent_external: bool = False
@@ -637,6 +654,33 @@ def create_career_router(
         return await local(
             lambda: service.update_application_draft(draft_id, payload.cv_markdown, payload.letter_markdown)
         )
+
+    # SK-11 : dossier de candidature 1 clic, vérifiable. Aucun envoi automatique.
+    @router.post("/api/career/applications/{application_id}/dossier")
+    async def build_application_dossier(
+        application_id: str, payload: ApplicationDossierPayload
+    ) -> Any:
+        language = payload.language.strip() or None
+        return await local(lambda: service.build_application_dossier(application_id, language))
+
+    @router.get("/api/career/applications/{application_id}/dossier")
+    async def get_application_dossier(application_id: str) -> Any:
+        return await local(lambda: service.get_application_dossier(application_id))
+
+    @router.patch("/api/career/applications/{application_id}/dossier")
+    async def update_application_dossier(
+        application_id: str, payload: ApplicationDossierEditPayload
+    ) -> Any:
+        edits = {
+            key: value
+            for key, value in payload.model_dump().items()
+            if isinstance(value, str)
+        }
+        return await local(lambda: service.update_application_dossier(application_id, edits))
+
+    @router.post("/api/career/applications/{application_id}/dossier/export")
+    async def export_application_dossier(application_id: str) -> Any:
+        return await local(lambda: service.export_application_dossier(application_id))
 
     @router.post("/api/career/applications", status_code=201)
     async def create_application(payload: ApplicationCreatePayload) -> Any:
