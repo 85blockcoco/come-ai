@@ -20,7 +20,12 @@ from html.parser import HTMLParser
 from typing import Any, Callable, Iterator
 
 from ..discovery import DiscoveryPayload, PublicSourceError, source_html_to_text
-from ..countries import canonical_country_codes, country_from_source, split_location
+from ..countries import (
+    GeoFilter,
+    geo_filter,
+    resolve_published_country,
+    split_location,
+)
 from ..models import clean_text, canonical_url
 from ..exploration import classify_internship, criteria_admit, ranking_key
 from ..offer_qualification import qualify_offer
@@ -210,16 +215,22 @@ def _parse_location(location_text: str) -> tuple[str, str]:
     return location_text, ""
 
 
-def _is_excluded_location(city: str, country: str, excluded_codes: frozenset[str]) -> str:
-    """Canonical country of a location when it is excluded, else an empty string.
+def _is_excluded_location(city: str, country: str, geo: GeoFilter, location_text: str = "") -> str:
+    """Canonical country of a location when it is rejected, else an empty string.
 
     The country is normalized before the comparison, so ``"France"``,
     ``"FR"``, ``"FRA"`` and ``"fr"`` are all the same country while
     ``"Frankfurt"`` (Germany) is never mistaken for ``"FR"``.  A city alone
     never designates a country: an unknown country is not a French offer.
+
+    A source that publishes the country alone (``"France"``, ``"Germany"``)
+    publishes a country: it is read on the country name, never guessed.  A
+    posting that names several countries is kept as soon as one of them is
+    allowed.
     """
-    code = country_from_source(country)
-    return code if code and code in excluded_codes else ""
+    _ = city
+    _canonical, excluded = resolve_published_country(None, location_text or country, geo)
+    return excluded
 
 
 def _is_finance_role(title: str, description: str) -> bool:
@@ -249,12 +260,13 @@ def _is_stage_role(title: str, description: str, contract_type: str) -> bool:
 
 
 def _iter_raw_offers(
-    countries_exclude: frozenset[str] = frozenset(),
+    geo: GeoFilter | None = None,
     query: str = "finance internship",
     fetch: Callable[[str], str | None] | None = None,
 ) -> Iterator[dict[str, Any]]:
     """Iterate over raw internship offers from JobTeaser."""
     fetch_fn = fetch or _default_fetch
+    geo_filter_object = geo or GeoFilter()
     for page in range(1, _JT_MAX_PAGES + 1):
         url = _build_search_url(query, page)
         html = fetch_fn(url)
@@ -283,7 +295,6 @@ def _iter_raw_offers(
             url_raw = clean_text(raw.get("url", ""), limit=2000)
             location_text = clean_text(raw.get("location", ""), limit=160)
             contract_type = clean_text(raw.get("contract_type", ""), limit=120)
-            description = source_html_to_text(raw.get("description", ""))
 
             if not title or not company or not url_raw:
                 _HEALTH.filtered_count += 1
@@ -299,7 +310,8 @@ def _iter_raw_offers(
 
             # The excluded countries are dropped here, on the source side: the
             # offer never becomes a local record and never consumes a slot.
-            excluded_code = _is_excluded_location(city, country, countries_exclude)
+            # The check runs before the description is even parsed.
+            excluded_code = _is_excluded_location(city, country, geo_filter_object, location_text)
             if excluded_code:
                 _HEALTH.excluded_by_country[excluded_code] = (
                     _HEALTH.excluded_by_country.get(excluded_code, 0) + 1
@@ -307,6 +319,8 @@ def _iter_raw_offers(
                 _HEALTH.excluded_count += 1
                 _HEALTH.filtered_count += 1
                 continue
+
+            description = source_html_to_text(raw.get("description", ""))
 
             _HEALTH.valid_offers += 1
 
@@ -328,6 +342,10 @@ def _iter_raw_offers(
             if not job_id:
                 job_id = str(hash(official_url))[-12:]
 
+            canonical_country, _excluded = resolve_published_country(
+                None, location_text, geo_filter_object
+            )
+
             yield {
                 "company": company,
                 "title": title,
@@ -337,7 +355,7 @@ def _iter_raw_offers(
                 "apply_url": official_url,
                 "city": city,
                 "country": country,
-                "country_canonical": country_from_source(country),
+                "country_canonical": canonical_country,
                 "posted_date": "",
                 "deadline_date": "",
                 "start_date": "",
@@ -386,6 +404,7 @@ class JobTeaserConnector:
     def discover_internships(
         self, source: dict[str, Any], *, selection_brief: dict[str, Any], deadline: float | None = None,
         countries_exclude: list[str] | tuple[str, ...] | None = None,
+        countries_include: list[str] | tuple[str, ...] | None = None,
     ) -> DiscoveryPayload:
         if not isinstance(source, dict) or source.get("provider") != "jobteaser":
             raise PublicSourceError("La source ne correspond pas au connecteur JobTeaser.", code="invalid_source")
@@ -393,9 +412,7 @@ class JobTeaserConnector:
             raise PublicSourceError("Une source officielle vérifiée est requise avant toute consultation.", code="unverified_source")
 
         brief = validate_brief(selection_brief) if selection_brief else default_brief()
-        excluded_codes = frozenset(canonical_country_codes(
-            countries_exclude if countries_exclude is not None else brief.get("countries_exclude")
-        ))
+        geo = geo_filter(countries_exclude, countries_include, brief)
 
         _HEALTH.raw_offers = 0
         _HEALTH.valid_offers = 0
@@ -411,7 +428,7 @@ class JobTeaserConnector:
         raw_count = evaluated = invalid = confirmed = uncertain = excluded = relevant = filtered = 0
         ranked: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
 
-        for raw in _iter_raw_offers(countries_exclude=excluded_codes, fetch=self._fetch):
+        for raw in _iter_raw_offers(geo=geo, fetch=self._fetch):
             if deadline is not None and self.monotonic() >= deadline:
                 raise PublicSourceError("Le budget de recherche est atteint.", code="budget")
             raw_count += 1

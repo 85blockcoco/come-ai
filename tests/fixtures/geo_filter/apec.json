@@ -1,0 +1,17 @@
+{
+  "connector": "html",
+  "provider": "apec",
+  "href": "/emploi/{identifier}",
+  "note": "APEC is a French-first source: its offers are dropped by the same country filter as every other connector.",
+  "cases": [
+    {
+      "case_id": "apec_paris",
+      "description": "Une offre APEC publiée à Paris est filtrée à la source.",
+      "countries_exclude": ["FR"],
+      "cards": [
+        {"identifier": "apec-fr-1", "title": "Corporate Finance Intern", "company": "Synthetic Finance", "location": "Paris, France"}
+      ],
+      "expect": {"kept_source_ids": [], "excluded_by_country": {"FR": 1}}
+    }
+  ]
+}

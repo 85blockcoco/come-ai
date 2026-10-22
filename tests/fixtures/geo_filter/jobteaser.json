@@ -1,0 +1,35 @@
+{
+  "connector": "html",
+  "provider": "jobteaser",
+  "href": "/jobs/{identifier}",
+  "note": "JobTeaser publishes a location string inside the result card.",
+  "cases": [
+    {
+      "case_id": "jobteaser_remote_company_french",
+      "description": "Une offre JobTeaser en télétravail, dont la société est française, est gardée : une offre à distance n'est pas une offre française.",
+      "countries_exclude": ["FR"],
+      "cards": [
+        {"identifier": "jt-remote-1", "title": "Corporate Finance Intern", "company": "Synthetic Finance", "location": "Remote"}
+      ],
+      "expect": {"kept_source_ids": ["jt-remote-1"], "excluded_by_country": {}}
+    },
+    {
+      "case_id": "jobteaser_paris",
+      "description": "Une offre JobTeaser publiée à Paris, France est filtrée à la source.",
+      "countries_exclude": ["FR"],
+      "cards": [
+        {"identifier": "jt-fr-1", "title": "Corporate Finance Intern", "company": "Synthetic Finance", "location": "Paris, France"}
+      ],
+      "expect": {"kept_source_ids": [], "excluded_by_country": {"FR": 1}}
+    },
+    {
+      "case_id": "jobteaser_country_only_france",
+      "description": "Une carte JobTeaser qui publie le pays seul (« France ») est filtrée : la source publie un pays.",
+      "countries_exclude": ["FR"],
+      "cards": [
+        {"identifier": "jt-country-fr", "title": "Corporate Finance Intern", "company": "Synthetic Finance", "location": "France"}
+      ],
+      "expect": {"kept_source_ids": [], "excluded_by_country": {"FR": 1}}
+    }
+  ]
+}

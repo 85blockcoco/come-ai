@@ -20,7 +20,12 @@ import urllib.request
 from typing import Any, Callable, Protocol
 
 from ..discovery import DiscoveryPayload, PublicSourceError, _location_parts, source_html_to_text
-from ..countries import canonical_country_codes, country_from_source
+from ..countries import (
+    canonicalize_country,
+    country_from_location,
+    geo_filter,
+    resolve_published_country,
+)
 from ..exploration import EXPLORATION_MAX_RESULTS, criteria_admit, ranking_key, classify_internship
 from ..offer_qualification import qualify_offer
 from ..scoring import classify_job_family
@@ -159,7 +164,8 @@ class PublicATSConnector:
 
     def discover_internships(self, source: dict[str, Any], *, selection_brief: dict[str, Any],
                              deadline: float | None = None,
-                             countries_exclude: list[str] | tuple[str, ...] | None = None) -> DiscoveryPayload:
+                             countries_exclude: list[str] | tuple[str, ...] | None = None,
+                             countries_include: list[str] | tuple[str, ...] | None = None) -> DiscoveryPayload:
         if not self.enabled:
             raise PublicSourceError("Ce connecteur est désactivé par défaut.", code="connector_disabled")
         if not isinstance(source, dict) or source.get("provider") != self.provider:
@@ -171,9 +177,7 @@ class PublicATSConnector:
             raise PublicSourceError("Une source officielle vérifiée est requise avant toute consultation.",
                                     code="unverified_source")
         brief = validate_brief(selection_brief) if selection_brief else default_brief()
-        excluded_codes = set(canonical_country_codes(
-            countries_exclude if countries_exclude is not None else brief.get("countries_exclude")
-        ))
+        geo = geo_filter(countries_exclude, countries_include, brief)
         excluded_by_country: dict[str, int] = {}
         pages = self._pages(source, deadline=deadline)
         raw_count = evaluated = invalid = confirmed = uncertain = excluded = relevant = filtered = 0
@@ -188,22 +192,27 @@ class PublicATSConnector:
                 if not isinstance(raw, dict):
                     invalid += 1
                     continue
+                # The country is read on the raw row, before the offer is
+                # normalized: an excluded country costs no description
+                # parsing, no qualification and no local record.
+                explicit_country, location = self._country_of_raw(raw)
+                country_canonical, excluded_code = resolve_published_country(
+                    explicit_country, location, geo
+                )
+                if excluded_code:
+                    country_excluded += 1
+                    excluded += 1
+                    evaluated += 1
+                    excluded_by_country[excluded_code] = (
+                        excluded_by_country.get(excluded_code, 0) + 1
+                    )
+                    continue
                 try:
                     job = self._normalise_one(source, raw)
                 except (KeyError, TypeError, ValueError):
                     invalid += 1
                     continue
                 evaluated += 1
-                country_canonical = country_from_source(job.get("country"))
-                if country_canonical and country_canonical in excluded_codes:
-                    # The excluded country is filtered on the source side: the
-                    # offer never becomes a local record.
-                    country_excluded += 1
-                    excluded += 1
-                    excluded_by_country[country_canonical] = (
-                        excluded_by_country.get(country_canonical, 0) + 1
-                    )
-                    continue
                 classification = classify_internship(job)
                 qualification = qualify_offer(
                     job,
@@ -266,6 +275,17 @@ class PublicATSConnector:
     def _normalise_one(self, source: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:
         raise NotImplementedError
 
+    def _country_of_raw(self, raw: dict[str, Any]) -> tuple[Any, Any]:
+        """The country fields this vendor publishes, read on the raw row.
+
+        The answer is the pair ``(explicit country, location)``: the explicit
+        country is a published field when the vendor has one, and the
+        location is the prose the source writes.  The default is an unknown
+        country: an offer whose country cannot be read is never turned into
+        a geography, and never dropped because of one.
+        """
+        return None, None
+
     def _raw_items(self, payload: Any) -> list[Any]:
         raise NotImplementedError
 
@@ -307,6 +327,12 @@ class LeverConnector(PublicATSConnector):
                            raw.get("hostedUrl"), raw.get("applyUrl"), raw.get("descriptionPlain"),
                            categories.get("location"), raw.get("country"), categories.get("commitment"), "")
 
+    def _country_of_raw(self, raw: dict[str, Any]) -> tuple[Any, Any]:
+        """Lever publishes the country in ``country`` and the location in
+        ``categories.location``; the explicit country wins."""
+        categories = raw.get("categories") if isinstance(raw.get("categories"), dict) else {}
+        return raw.get("country"), categories.get("location")
+
 
 class AshbyConnector(PublicATSConnector):
     """Ashby public job-board feed (official docs: https://developers.ashbyhq.com/docs/public-job-posting-api)."""
@@ -342,6 +368,12 @@ class AshbyConnector(PublicATSConnector):
         return _common_job(self.provider, source, raw.get("id") or fallback_id, raw.get("title"),
                            job_url, raw.get("applyUrl"), raw.get("descriptionPlain"),
                            location, country, raw.get("employmentType"), raw.get("publishedAt"))
+
+    def _country_of_raw(self, raw: dict[str, Any]) -> tuple[Any, Any]:
+        """Ashby publishes the country in ``address.postalAddress.addressCountry``."""
+        address = raw.get("address") if isinstance(raw.get("address"), dict) else {}
+        postal = address.get("postalAddress") if isinstance(address.get("postalAddress"), dict) else {}
+        return postal.get("addressCountry"), postal.get("addressLocality")
 
 
 class SmartRecruitersConnector(PublicATSConnector):
@@ -391,6 +423,24 @@ class SmartRecruitersConnector(PublicATSConnector):
                            location.get("country"), contract.get("label"), raw.get("releasedDate"),
                            company_name=company.get("name"))
 
+    def _country_of_raw(self, raw: dict[str, Any]) -> tuple[Any, Any]:
+        """SmartRecruiters publishes the country in ``location.country``."""
+        location = raw.get("location") if isinstance(raw.get("location"), dict) else {}
+        return location.get("country"), location.get("city")
+
+
+def _canonical_country(country: Any, location: Any) -> str:
+    """The canonical country of a normalized posting.
+
+    The explicit country field of the vendor wins; the location prose is
+    read on country names only.  An offer whose country cannot be read
+    keeps an unknown country: it is shown to the person as *to verify*.
+    """
+    code = canonicalize_country(country)
+    if code:
+        return code
+    return country_from_location(location)
+
 
 def _common_job(provider: str, source: dict[str, Any], job_id: Any, title: Any, official_url: Any,
                 apply_url: Any, description: Any, location: Any, country: Any,
@@ -425,7 +475,7 @@ def _common_job(provider: str, source: dict[str, Any], job_id: Any, title: Any, 
         "apply_url": clean_text(apply_url, limit=2_000),
         "city": city,
         "country": country_text,
-        "country_canonical": country_from_source(country_text),
+        "country_canonical": _canonical_country(country, location),
         "posted_date": posted,
         "deadline_date": "",
         "start_date": "",

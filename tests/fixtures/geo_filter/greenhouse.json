@@ -1,0 +1,126 @@
+{
+  "connector": "greenhouse",
+  "provider": "greenhouse",
+  "note": "Greenhouse publishes the country inside the location wording, and sometimes structurally (office.country_code).",
+  "cases": [
+    {
+      "case_id": "greenhouse_paris_france",
+      "description": "Une offre publiée à Paris, France est filtrée à la source.",
+      "countries_exclude": ["FR"],
+      "feed": {
+        "jobs": [
+          {
+            "id": "gh-fr-1",
+            "title": "Corporate Finance Intern",
+            "absolute_url": "https://careers.example.test/jobs/gh-fr-1",
+            "location": {"name": "Paris, France"},
+            "content": "<p>Financial analysis and valuation. This synthetic internship lasts six months.</p>"
+          }
+        ]
+      },
+      "expect": {"kept_source_ids": [], "excluded_by_country": {"FR": 1}}
+    },
+    {
+      "case_id": "greenhouse_london_united_kingdom",
+      "description": "Une offre publiée à London, United Kingdom est gardée.",
+      "countries_exclude": ["FR"],
+      "feed": {
+        "jobs": [
+          {
+            "id": "gh-uk-1",
+            "title": "Corporate Finance Intern",
+            "absolute_url": "https://careers.example.test/jobs/gh-uk-1",
+            "location": {"name": "London, United Kingdom"},
+            "content": "<p>Financial analysis and valuation. This synthetic internship lasts six months.</p>"
+          }
+        ]
+      },
+      "expect": {"kept_source_ids": ["gh-uk-1"], "excluded_by_country": {}}
+    },
+    {
+      "case_id": "greenhouse_multi_location_paris_london",
+      "description": "Une offre multi-villes « Paris/London » est gardée : la source publie plusieurs pays et aucun pays n'est déduit.",
+      "countries_exclude": ["FR"],
+      "feed": {
+        "jobs": [
+          {
+            "id": "gh-multi-1",
+            "title": "Corporate Finance Intern",
+            "absolute_url": "https://careers.example.test/jobs/gh-multi-1",
+            "location": {"name": "Paris/London"},
+            "content": "<p>Financial analysis and valuation. This synthetic internship lasts six months.</p>"
+          }
+        ]
+      },
+      "expect": {"kept_source_ids": ["gh-multi-1"], "excluded_by_country": {}}
+    },
+    {
+      "case_id": "greenhouse_unknown_country",
+      "description": "Une offre sans pays publié est gardée : un pays inconnu est un fait à vérifier, jamais une France devinée.",
+      "countries_exclude": ["FR"],
+      "feed": {
+        "jobs": [
+          {
+            "id": "gh-unknown-1",
+            "title": "Corporate Finance Intern",
+            "absolute_url": "https://careers.example.test/jobs/gh-unknown-1",
+            "location": {"name": "Zurich"},
+            "content": "<p>Financial analysis and valuation. This synthetic internship lasts six months.</p>"
+          }
+        ]
+      },
+      "expect": {"kept_source_ids": ["gh-unknown-1"], "excluded_by_country": {}}
+    },
+    {
+      "case_id": "greenhouse_structural_country_code_fr",
+      "description": "Un code pays structurel (office.country_code) vaut plus que la prose de la localisation : l'offre est filtrée.",
+      "countries_exclude": ["FR"],
+      "feed": {
+        "jobs": [
+          {
+            "id": "gh-structural-fr",
+            "title": "Corporate Finance Intern",
+            "absolute_url": "https://careers.example.test/jobs/gh-structural-fr",
+            "location": {"name": "London, United Kingdom", "office": {"country_code": "FR"}},
+            "content": "<p>Financial analysis and valuation. This synthetic internship lasts six months.</p>"
+          }
+        ]
+      },
+      "expect": {"kept_source_ids": [], "excluded_by_country": {"FR": 1}}
+    },
+    {
+      "case_id": "greenhouse_country_only_france",
+      "description": "Un board qui publie le pays seul (« France ») publie un pays : l'offre est filtrée.",
+      "countries_exclude": ["FR"],
+      "feed": {
+        "jobs": [
+          {
+            "id": "gh-country-fr",
+            "title": "Corporate Finance Intern",
+            "absolute_url": "https://careers.example.test/jobs/gh-country-fr",
+            "location": {"name": "France"},
+            "content": "<p>Financial analysis and valuation. This synthetic internship lasts six months.</p>"
+          }
+        ]
+      },
+      "expect": {"kept_source_ids": [], "excluded_by_country": {"FR": 1}}
+    },
+    {
+      "case_id": "greenhouse_country_only_germany",
+      "description": "Un board qui publie le pays seul (« Germany ») est lu comme une offre allemande, et l'offre est gardée.",
+      "countries_exclude": ["FR"],
+      "feed": {
+        "jobs": [
+          {
+            "id": "gh-country-de",
+            "title": "Corporate Finance Intern",
+            "absolute_url": "https://careers.example.test/jobs/gh-country-de",
+            "location": {"name": "Germany"},
+            "content": "<p>Financial analysis and valuation. This synthetic internship lasts six months.</p>"
+          }
+        ]
+      },
+      "expect": {"kept_source_ids": ["gh-country-de"], "excluded_by_country": {}}
+    }
+  ]
+}

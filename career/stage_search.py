@@ -174,6 +174,9 @@ def default_brief() -> dict[str, Any]:
         # Countries a connector must never return.  The person never wants
         # French postings, so the default excludes France at the source.
         "countries_exclude": list(DEFAULT_COUNTRIES_EXCLUDE),
+        # Countries a source is allowed to publish.  Empty by default: every
+        # country is allowed.
+        "countries_include": [],
         "require_known_location": False,
         "start_date": "",
         "duration_months": None,
@@ -233,11 +236,14 @@ def _ranking_values(value: Any) -> dict[str, float]:
 def _countries_exclude(payload: dict[str, Any]) -> list[str]:
     """Countries a connector must never return, as canonical ISO codes.
 
-    Three inputs are read, in this order:
+    Four inputs are read, in this order:
 
     * ``countries_exclude`` — the explicit list, written in ISO codes.  An
       empty list turns the filter off: it is the only way for a French
       posting to reach the person.
+    * ``geo_excluded_countries`` — the same list under the name the
+      geographic mission uses.  It is read when the explicit list is
+      absent, so an external caller can use either name.
     * ``excluded_countries`` — the older free-text list the interface still
       edits.  An emptied list means the person removed every country
       exclusion, so the source filter must follow instead of silently
@@ -255,6 +261,13 @@ def _countries_exclude(payload: dict[str, Any]) -> list[str]:
         if len(raw) > 20:
             raise UserFacingError("Les pays exclus par défaut contiennent trop d’éléments (maximum 20).")
         return list(canonical_country_codes(raw))
+    if "geo_excluded_countries" in payload and payload.get("geo_excluded_countries") is not None:
+        raw_geo = payload.get("geo_excluded_countries")
+        if not isinstance(raw_geo, list):
+            raise UserFacingError("Les pays exclus doivent être une liste.")
+        if len(raw_geo) > 20:
+            raise UserFacingError("Les pays exclus contiennent trop d’éléments (maximum 20).")
+        return list(canonical_country_codes(raw_geo))
     if "excluded_countries" in payload:
         raw_legacy = payload.get("excluded_countries") or []
         if not isinstance(raw_legacy, list):
@@ -269,6 +282,23 @@ def _countries_exclude(payload: dict[str, Any]) -> list[str]:
         return legacy or list(DEFAULT_COUNTRIES_EXCLUDE)
     wanted = set(canonical_country_codes(payload.get("countries") or []))
     return [code for code in DEFAULT_COUNTRIES_EXCLUDE if code not in wanted]
+
+
+def _countries_include(payload: dict[str, Any]) -> list[str]:
+    """Countries a source is allowed to publish, as canonical ISO codes.
+
+    The list is empty by default: every country is allowed.  It exists for
+    the sources that only publish a targeted geography, so a stray posting
+    published outside of it is dropped on the source side.
+    """
+    if "countries_include" not in payload or payload.get("countries_include") is None:
+        return []
+    raw = payload.get("countries_include")
+    if not isinstance(raw, list):
+        raise UserFacingError("Les pays ciblés doivent être une liste.")
+    if len(raw) > 20:
+        raise UserFacingError("Les pays ciblés contiennent trop d’éléments (maximum 20).")
+    return list(canonical_country_codes(raw))
 
 
 def validate_brief(payload: Any) -> dict[str, Any]:
@@ -344,6 +374,7 @@ def validate_brief(payload: Any) -> dict[str, Any]:
             payload.get("excluded_cities", []), "Les villes exclues", max_items=20, max_length=120
         ),
         "countries_exclude": _countries_exclude(payload),
+        "countries_include": _countries_include(payload),
         "require_known_location": require_known_location,
         "start_date": start_text,
         "duration_months": duration,

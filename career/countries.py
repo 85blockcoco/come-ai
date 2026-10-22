@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from dataclasses import dataclass
 from typing import Any
 
 from .models import clean_text
@@ -217,3 +218,185 @@ def canonical_country_codes(values: Any) -> tuple[str, ...]:
         if code and code not in codes:
             codes.append(code)
     return tuple(codes)
+
+
+# Wordings that are a city, not a country name.  A source that publishes
+# "Dubai" publishes a city: the country stays unknown unless the source
+# publishes it too.
+_CITY_NAMES = frozenset({"dubai"})
+
+# US state postal abbreviations that are also ISO 3166-1 alpha-2 codes.  In a
+# prose location they publish a state, not a country: "Chicago, IL" is
+# Illinois, not Israel.  They are only read when the source publishes them in
+# a structural country field, where the code is a published fact.
+_STATE_CODES = frozenset({
+    "AL", "AR", "CA", "CO", "DE", "GA", "ID", "IL", "IN", "LA", "MA", "MD",
+    "ME", "MN", "MO", "MS", "MT", "NE", "SC", "SD",
+})
+
+
+def _country_slot_code(location: Any) -> str:
+    """The country the last part of a location publishes, when it publishes one.
+
+    A source writes the country last (``"Paris, FR"``).  A code that is
+    also a US state abbreviation is never read here: it publishes a state.
+    """
+    text = clean_text(location, limit=300)
+    if not text:
+        return ""
+    parts = [part.strip() for part in re.split(_LOCATION_SEPARATORS, text) if part.strip()]
+    if len(parts) < 2:
+        return ""
+    code = canonicalize_country(parts[-1])
+    if code in _STATE_CODES:
+        return ""
+    return code
+
+
+def _country_name_code(piece: Any) -> str:
+    """The country a single location part names, on country names only."""
+    text = clean_text(piece, limit=120)
+    if not text:
+        return ""
+    folded = _fold(text)
+    if not folded or folded in _CITY_NAMES:
+        return ""
+    return _NAMES_TO_ALPHA2.get(folded, "")
+
+
+def countries_named_in_location(value: Any) -> tuple[str, ...]:
+    """Every country a published location names, in the order it writes them.
+
+    A location is read on country **names** only.  A two-letter wording is
+    ambiguous in a prose location — ``"Chicago, IL"`` publishes an American
+    state, not Israel — so it is never turned into a geography here.  The
+    structural country fields of the sources (Greenhouse
+    ``office.country_code``, Ashby ``addressCountry``) are read elsewhere,
+    where the code is a published fact.
+
+    ``"London, Greater London, England, United Kingdom, Paris, France"``
+    names two countries; ``"Paris"`` names none at all.
+    """
+    text = clean_text(value, limit=300)
+    if not text:
+        return ()
+    codes: list[str] = []
+    for piece in re.split(_LOCATION_SEPARATORS, text):
+        code = _country_name_code(piece)
+        if code and code not in codes:
+            codes.append(code)
+    return tuple(codes)
+
+
+def country_from_location(value: Any) -> str:
+    """The first country a published location names, when it names one.
+
+    A location is read on country **names** only.  A two-letter wording is
+    ambiguous in a prose location — ``"Chicago, IL"`` publishes an American
+    state, not Israel — so it is never turned into a geography here.  The
+    structural country fields of the sources (Greenhouse ``office.country_code``,
+    Ashby ``addressCountry``) are read elsewhere, where the code is a fact.
+
+    The first country wins: a source writes its main location first, and
+    ``"Paris"`` names no country at all.
+    """
+    codes = countries_named_in_location(value)
+    return codes[0] if codes else ""
+
+
+def resolve_published_country(explicit: Any, location: Any, geo: GeoFilter) -> tuple[str, str]:
+    """Resolve the country of one published posting.
+
+    The structural country of the source wins when it publishes one: it is a
+    published fact, not a reading of a prose.  Otherwise the location is
+    read:
+
+    * the countries it **names** (``"Paris, France"``, ``"France"``) are read
+      first, because a name is never ambiguous;
+    * a posting that names several countries is kept as soon as one of them
+      is allowed — a London role published next to Paris is still a London
+      role — and it is dropped only when every country it names is excluded;
+    * a location that publishes a bare code in its country slot
+      (``"Paris, FR"``) is read on that code, unless the code is also a US
+      state abbreviation: ``"Chicago, IL"`` publishes Illinois, not Israel.
+
+    The answer is the pair ``(canonical code, excluded code)``:
+
+    * the canonical code is the first country the posting publishes that the
+      filter keeps, and is empty when the posting publishes none;
+    * the excluded code is the country that caused the drop, and is empty
+      when the posting is kept.
+    """
+    code = canonicalize_country(explicit)
+    if code:
+        return ("", code) if geo.rejects(code) else (code, "")
+    named = countries_named_in_location(location)
+    if len(named) > 1:
+        allowed = [item for item in named if not geo.rejects(item)]
+        if allowed:
+            return allowed[0], ""
+        return named[0], named[0]
+    if named:
+        code = named[0]
+        return ("", code) if geo.rejects(code) else (code, "")
+    slot = _country_slot_code(location)
+    if slot:
+        return ("", slot) if geo.rejects(slot) else (slot, "")
+    return "", ""
+
+
+@dataclass(frozen=True)
+class GeoFilter:
+    """The geographic filter a connector applies on its own side.
+
+    Two lists are read:
+
+    * ``exclude`` — the countries the person never wants.  France is the
+      default and is always excluded unless the person explicitly empties
+      the list.
+    * ``include`` — the countries a source is allowed to publish.  It is
+      empty by default (every country is allowed) and is meant for the
+      sources that only publish a targeted geography.
+
+    An offer whose country is unknown is never dropped: a missing country
+    is an unknown fact, and the product shows it to the person as *to
+    verify* instead of guessing a geography for it.
+    """
+
+    exclude: frozenset[str] = frozenset()
+    include: frozenset[str] = frozenset()
+
+    def rejects(self, code: str) -> bool:
+        """True when an offer published in ``code`` must be dropped."""
+        if not code:
+            return False
+        if code in self.exclude:
+            return True
+        if self.include and code not in self.include:
+            return True
+        return False
+
+    def rejects_wording(self, country: Any) -> str:
+        """Canonical country of a wording when it is rejected, else ``""``."""
+        code = country_from_source(country)
+        return code if self.rejects(code) else ""
+
+
+def geo_filter(
+    countries_exclude: Any = None,
+    countries_include: Any = None,
+    brief: dict[str, Any] | None = None,
+) -> GeoFilter:
+    """Build the filter a connector must apply.
+
+    The explicit parameters win; the brief is the fallback.  An explicit
+    empty list is a real choice and disables that side of the filter: it is
+    the only way a French posting reaches the person again.
+    """
+    payload = brief or {}
+    exclude = countries_exclude if countries_exclude is not None else payload.get("countries_exclude")
+    include = countries_include if countries_include is not None else payload.get("countries_include")
+    return GeoFilter(
+        exclude=frozenset(canonical_country_codes(exclude)),
+        include=frozenset(canonical_country_codes(include)),
+    )
