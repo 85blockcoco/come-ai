@@ -37,7 +37,11 @@
     "career/connectors/apec.py",
     "tests/test_connectors_geo_filter.py"
   ],
-  "output": "Filtre pays poussé aux 8 connecteurs (countries_exclude + countries_include), filtrage avant la normalisation complète, métrique offers_filtered_geo, service qui passe explicitement la liste de pays ; 3 défauts réels corrigés sur sources publiques (localisation « France » seule non lue, code d'État US lu comme Israël, service ne passant pas le paramètre). Livraison CVBOOST-11 consolidée sur main, 21 fixtures synthétiques, contrôle live borné, 1499 tests verts.",
-  "logs": "pytest -q → 1499 passed, 3 skipped (base main : 1424 verts, aucune régression)\npytest -q tests/test_geo_filter_connectors.py → 39 passed (matrice d'acceptation de la mission, 21 cas)\nCAREER_GEO_LIVE=1 pytest -q tests/test_geo_filter_connectors_live.py → 2 passed\nruff check . → All checks passed\nchecklist_codex.sh main|lint|secrets → TOUT VERT\ngit diff --check → propre\nMesures réelles (15 boards Greenhouse, 1380 offres lues) : 65 offres écartées par le pays (toutes FR), 129 conservées, 0 offre française dans le résultat.\nCommits : 09c6d8e consolidation CVBOOST-11 sur main, 171e6c7 corrections, 0d8bd35 rapport.",
+  "files_removed": [
+    "career/geo.py",
+    "tests/fixtures/geo_filter/geo_filter_cases.json"
+  ],
+  "output": "Filtre pays poussé aux 8 connecteurs (countries_exclude + countries_include), filtrage avant la normalisation complète, métrique offers_filtered_geo avec détail par pays, service qui passe explicitement la liste de pays ; 3 défauts réels corrigés sur sources publiques (localisation « France » seule non lue, code d'État US lu comme Israël, service ne passant pas le paramètre). Livraison CVBOOST-11 consolidée sur main ET livraison parallèle de la mission fusionnée en une seule implémentation (vocabulaire d'indices de ville repris). 27 fixtures synthétiques, contrôle live borné, 1507 tests verts.",
+  "logs": "pytest -q → 1507 passed, 3 skipped (base main : 1424 verts, aucune régression)\npytest -q tests/test_geo_filter_connectors.py → 47 passed (matrice d'acceptation, 27 cas)\nCAREER_GEO_LIVE=1 pytest -q tests/test_geo_filter_connectors_live.py → 2 passed\nruff check . → All checks passed\nchecklist_codex.sh main|lint|secrets → TOUT VERT\ngit diff --check → propre\nMesures réelles (15 boards Greenhouse, 1380 offres lues) : 65 offres écartées par le pays (toutes FR), 129 conservées, 0 offre française dans le résultat.\nCommits : 14d1145 livraison parallèle (fusionnée), 09c6d8e consolidation CVBOOST-11 sur main, 171e6c7 corrections, 0d8bd35 rapport, 242b92a résultat, 1a2b5a7 indices de ville, ea39d0c fusion des deux livraisons.",
   "error": null
 }
