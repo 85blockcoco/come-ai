@@ -195,6 +195,18 @@ régression) et ajoute ce qui manquait :
 C'est cette branche qu'il faut relire et intégrer ; l'ancienne peut être
 abandonnée.
 
+### Branches
+
+Le même commit est publié sur les deux noms attendus :
+
+- `origin/worker/cvboost-46-1792666523` (branche de la mission, suivi par
+  l'orchestrateur) ;
+- `origin/agent/spec-011-traceability` (nom de branche demandé dans la
+  mission).
+
+La base est `f5b22f2`, c'est-à-dire l'état courant de `main` : l'intégration
+est un fast-forward ou un merge sans conflit.
+
 ## 8. Checklist de validation
 
 `./checklist_codex.sh` exécuté dans le worktree avec le venv du dépôt principal
