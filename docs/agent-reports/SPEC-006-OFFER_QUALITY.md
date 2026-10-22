@@ -2,7 +2,9 @@
 
 **Mission** : CVBOOST-36 (ordre `cvboost-36-1792648573`)
 **Branche de travail** : `worker/cvboost-36-1792648573` (worktree `/Users/comedelavenne/AI-Excel-Agent-worker-cvboost-36-1792648573`)
+**Branche de mission** : `agent/spec-006-offer-freshness-dedup` (même commit, poussée aussi)
 **Base** : `main` @ `f5b22f2`
+**Commit de la mission** : `2666cd5`
 **Date** : 2026-10-22
 **Statut** : livrée, vérifiée, poussée
 
