@@ -308,6 +308,30 @@ def test_check_conformance_calcule_un_score_honnete(tmp_path: Path) -> None:
     assert report.entity_type == "offer"
 
 
+def test_la_repartition_des_severites_egale_le_nombre_d_echecs(tmp_path: Path) -> None:
+    """Le rapport ne doit ni perdre ni inventer un échec."""
+    store = ConstitutionStore(tmp_path)
+    seed_active_rule(store, "matching.demo.error", "matching.score >= 90", severity="error")
+    seed_active_rule(store, "matching.demo.info", "matching.score >= 90", severity="info")
+    seed_active_rule(store, "matching.demo.critical", "matching.score >= 90", severity="critical")
+    store.create_ruleset(
+        {
+            "ruleset_id": "test.severites",
+            "name": "Jeu de sévérités",
+            "rules": ["matching.demo.error", "matching.demo.info", "matching.demo.critical"],
+        },
+        actor="alice",
+    )
+    engine = ConstitutionEngine(store=store)
+    report = engine.check_conformance({"matching": {"score": 50}}, "test.severites")
+    assert report.total_rules == 3
+    assert report.passed == 0
+    assert report.critical == 1
+    assert report.errors == 1
+    assert report.warnings == 1
+    assert report.warnings + report.errors + report.critical == len(report.violations)
+
+
 def test_une_regle_non_approuvee_n_est_pas_effectivee(tmp_path: Path) -> None:
     """Gouvernance : un brouillon ne s'applique jamais aux entités."""
     store = ConstitutionStore(tmp_path)

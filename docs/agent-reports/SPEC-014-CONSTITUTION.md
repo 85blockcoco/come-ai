@@ -18,7 +18,7 @@ Statut : **TERMINÉE — module, API, UI, CI et tests livrés**
 | `career/router.py` | 20 endpoints `/api/constitution/...` (modification additive) | +330 |
 | `career_static/js/constitution.js` | Éditeur DSL, dashboard, graphe, historique, audit trail (module autonome, fonctions pures testables hors navigateur) | 763 |
 | `career_static/index.html`, `career_static/career.js`, `career_static/career.css` | Onglet « Constitution », section complète, styles | +220 |
-| `tests/test_constitution.py` | 76 tests (moteur, gouvernance, dérive, API, CLI, UI) | 1 120 |
+| `tests/test_constitution.py` | 77 tests (moteur, gouvernance, dérive, API, CLI, UI) | 1 150 |
 | `.github/workflows/constitution.yml` | Validation de la Constitution à chaque PR, blocage si violation critique | 34 |
 
 Aucun appel réseau, aucun envoi de données, aucune dépendance ajoutée : la pile
@@ -68,6 +68,11 @@ Constitution ne le transforme pas en échec automatique.
 
 **Une expression non booléenne est une erreur d'écriture**, pas un résultat
 faux : le résultat porte `status = "error"` et le motif exact.
+
+**La répartition des sévérités est complète** : dans un rapport de conformité,
+`warnings + errors + critical` est toujours égal au nombre d'échecs (les
+échecs de sévérité « info » sont regroupés avec les avertissements : ils ne
+bloquent rien). Un test verrouille cette invariant.
 
 ### Performance
 
@@ -224,13 +229,13 @@ Le fichier ne contient aucune URL distante (vérifié par test) et n'appelle que
 ## 8. Tests
 
 ```text
-.venv/bin/python -m pytest -q tests/test_constitution.py   → 76 passed
-.venv/bin/python -m pytest -q                               → 1500 passed, 1 skipped
+.venv/bin/python -m pytest -q tests/test_constitution.py   → 77 passed
+.venv/bin/python -m pytest -q                               → 1501 passed, 1 skipped
 .venv/bin/python -m ruff check .                            → All checks passed!
 git diff --check                                            → propre
 ```
 
-Répartition : 17 tests de DSL et de sécurité, 8 tests de moteur, 13 tests de
+Répartition : 17 tests de DSL et de sécurité, 9 tests de moteur, 13 tests de
 gouvernance, 7 tests de référentiel, 6 tests de dérive et d'audit, 13 tests
 d'API HTTP, 2 tests de tests générés, 4 tests de CLI, 3 tests d'interface
 (dont un test Node qui exécute les fonctions pures du module), 3 tests de

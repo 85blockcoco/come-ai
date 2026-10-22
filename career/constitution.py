@@ -1381,7 +1381,7 @@ class ConstitutionEngine:
             rule_id=rule.rule_id,
             passed=value,
             details=details,
-            severity=severity if not value else "info",
+            severity=severity,
             remediation=remediation if not value else None,
             status="passed" if value else "failed",
             message="Règle respectée." if value else "Règle non respectée.",
@@ -1408,7 +1408,10 @@ class ConstitutionEngine:
         passed = sum(1 for result in results if result.passed)
         not_evaluable = sum(1 for result in results if result.status == "not_evaluable")
         failed = [result for result in results if not result.passed and result.status != "not_evaluable"]
-        warnings = sum(1 for result in failed if result.severity == "warning")
+        # Les échecs de sévérité « info » sont regroupés avec les
+        # avertissements : ils ne bloquent rien, mais la somme
+        # warnings + errors + critical reste égale au nombre d'échecs.
+        warnings = sum(1 for result in failed if SEVERITY_ORDER.get(result.severity, 0) <= SEVERITY_ORDER["warning"])
         errors = sum(1 for result in failed if result.severity == "error")
         critical = sum(1 for result in failed if result.severity == "critical")
         denominator = passed + len(failed)
