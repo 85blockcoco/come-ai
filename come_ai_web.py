@@ -886,6 +886,12 @@ def create_app(
         career_ai_generator = generate_career_application
 
     app.include_router(create_career_router(career, ai_generator=career_ai_generator))
+    try:
+        from career.ai import create_ai_router
+
+        app.include_router(create_ai_router())
+    except Exception:
+        pass
     from devkit.router import create_developer_router
 
     app.include_router(create_developer_router(get_workshop))

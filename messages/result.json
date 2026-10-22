@@ -1,0 +1,21 @@
+{
+  "status": "done",
+  "files_created": [
+    "career/ai/__init__.py",
+    "career/ai/models.py",
+    "career/ai/config.py",
+    "career/ai/cache.py",
+    "career/ai/providers.py",
+    "career/ai/jury.py",
+    "career/ai/arena.py",
+    "career/ai/router.py",
+    "tests/test_ai_arena.py",
+    "docs/agent-reports/SPEC-017-AI_ARENA_CORE.md"
+  ],
+  "files_modified": [
+    "come_ai_web.py"
+  ],
+  "output": "Module AI Arena Core livré : 3 providers (opencode, ollama, gemini) avec détection de disponibilité, exécution concurrente async avec timeouts, jury déterministe, cache memoïsé désactivable, endpoints HTTP, 15 tests verts.",
+  "logs": "env -u GEMINI_API_KEY pytest -q -> 1439 passed, 1 skipped\nruff check career/ai come_ai_web.py tests/test_ai_arena.py -> All checks passed\ngit diff --check -> clean\n./checklist_codex.sh -> TOUT VERT",
+  "error": null
+}
