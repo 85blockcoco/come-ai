@@ -103,6 +103,13 @@ def clean_text(value: Any, *, limit: int = 10_000) -> str:
     return text[:limit]
 
 
+#: The single marker used whenever a fact is missing from the approved
+#: profile.  The targeted generator (``career.application_studio``) writes it,
+#: the review workspace (``career.cv_review``) reads it: one convention, one
+#: meaning — "a proof is still missing here".
+EVIDENCE_PLACEHOLDER = "[AJOUTER PREUVE CHIFFRÉE]"
+
+
 def normalized_text(value: Any) -> str:
     text = unicodedata.normalize("NFKD", clean_text(value).lower())
     text = "".join(character for character in text if not unicodedata.combining(character))

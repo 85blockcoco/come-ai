@@ -1,0 +1,287 @@
+/* SPEC-004 — Espace de revue du CV ciblé.
+   Vue split (source / proposition), diff coloré, badges de preuve et barre
+   de progression. Les couleurs reprennent celles du reste du workspace. */
+
+.cv-review-panel {
+  margin-top: 1.25rem;
+}
+
+.cv-review-progress {
+  display: grid;
+  gap: 0.35rem;
+  margin: 1rem 0 0.5rem;
+}
+
+.cv-review-progress-track {
+  position: relative;
+  height: 0.6rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.12);
+  overflow: hidden;
+}
+
+.cv-review-progress-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #1d4ed8, #2563eb);
+  transition: width 160ms ease-out;
+}
+
+.cv-review-reasons {
+  margin: 0.75rem 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.92rem;
+}
+
+.cv-review-reason-blocking {
+  color: #b91c1c;
+}
+
+.cv-review-reason-warning {
+  color: #a16207;
+}
+
+.cv-review-blocks {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.cv-review-block {
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  border-radius: 0.9rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.cv-review-block-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.cv-review-block-title {
+  margin: 0;
+  font-size: 1.02rem;
+}
+
+.cv-review-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.cv-review-badge,
+.cv-review-status,
+.cv-review-badge-critical {
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.cv-review-badge-verified {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.cv-review-badge-pending {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.cv-review-badge-placeholder {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.cv-review-badge-critical {
+  background: rgba(29, 78, 216, 0.12);
+  color: #1e40af;
+}
+
+.cv-review-status {
+  background: rgba(15, 23, 42, 0.07);
+  color: #334155;
+}
+
+.cv-review-status-verified {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.cv-review-status-accepted {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.cv-review-status-rejected {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.cv-review-status-modified {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.cv-review-placeholder {
+  margin: 0.6rem 0 0;
+  padding: 0.5rem 0.7rem;
+  border-left: 3px solid #dc2626;
+  background: rgba(220, 38, 38, 0.07);
+  border-radius: 0.4rem;
+  font-size: 0.92rem;
+}
+
+.cv-review-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+}
+
+.cv-review-column {
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 0.7rem;
+  padding: 0.65rem 0.75rem;
+  background: rgba(248, 250, 252, 0.9);
+}
+
+.cv-review-column-source {
+  border-left: 3px solid #64748b;
+}
+
+.cv-review-column-proposed {
+  border-left: 3px solid #2563eb;
+}
+
+.cv-review-column-title {
+  margin: 0 0 0.4rem;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #475569;
+}
+
+.cv-review-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 0.94rem;
+  line-height: 1.45;
+}
+
+.cv-review-diff-box,
+.cv-review-evidence-box {
+  margin-top: 0.85rem;
+}
+
+.cv-review-diff {
+  display: block;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.94rem;
+  line-height: 1.5;
+}
+
+.cv-review-diff-equal {
+  color: #334155;
+}
+
+.cv-review-diff-insert {
+  background: #dcfce7;
+  color: #14532d;
+  border-radius: 0.2rem;
+  padding: 0 0.15rem;
+}
+
+.cv-review-diff-delete {
+  background: #fee2e2;
+  color: #7f1d1d;
+  text-decoration: line-through;
+  border-radius: 0.2rem;
+  padding: 0 0.15rem;
+}
+
+.cv-review-diff-empty {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.92rem;
+}
+
+.cv-review-evidence {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.cv-review-evidence-none {
+  margin: 0;
+  color: #b45309;
+  font-size: 0.92rem;
+}
+
+.cv-review-evidence-origin {
+  font-weight: 600;
+  color: #334155;
+  margin-right: 0.35rem;
+}
+
+.cv-review-evidence-offset {
+  display: block;
+  color: #64748b;
+  font-size: 0.78rem;
+}
+
+.cv-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.9rem;
+}
+
+.cv-review-editor {
+  margin-top: 0.75rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.cv-review-editor-text {
+  width: 100%;
+  border: 1px solid rgba(15, 23, 42, 0.2);
+  border-radius: 0.6rem;
+  padding: 0.55rem 0.65rem;
+  font-family: inherit;
+  font-size: 0.94rem;
+}
+
+.cv-review-editor-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.cv-review-block-hint {
+  margin: 0.6rem 0 0;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+#cv-review-status {
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+  color: #334155;
+}
+
+#cv-review-status.cv-review-status-error {
+  color: #b91c1c;
+}

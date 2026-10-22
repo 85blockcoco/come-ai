@@ -24,6 +24,7 @@ from docx import Document
 from career.cv_fit import CoverageResult
 from career.cv_quality.models import CVAnalysisResult
 from career.cv_variants import CVVariant
+from career.models import EVIDENCE_PLACEHOLDER
 from workspace_core import UserFacingError
 
 
@@ -54,6 +55,30 @@ class ApplicationKitResult:
     variant: CVVariant
     generated_at: str
     provenance_map: dict[str, dict[str, Any]]
+
+
+@dataclass(frozen=True, slots=True)
+class TargetedParagraph:
+    """One rendered paragraph of the targeted CV.
+
+    ``source_line`` keeps the profile line the paragraph was built from: it
+    is the anchor used to prove (or to challenge) the wording later, in the
+    evidence-backed review workspace.
+    """
+
+    text: str
+    style: str = "bullet"
+    source_line: str | None = None
+    line_index: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class TargetedSection:
+    """One section of the targeted CV, with the profile field it reads."""
+
+    heading: str
+    field: str
+    paragraphs: tuple[TargetedParagraph, ...] = ()
 
 
 _FIXED_ZIP_TIME = (1980, 1, 1, 0, 0, 0)
@@ -98,32 +123,85 @@ def _profile_lines(profile: dict[str, Any], field: str) -> list[str]:
     return [line.strip(" •-\t") for line in value.splitlines() if line.strip(" •-\t")]
 
 
-def _add_heading_and_lines(
-    document: Document,
-    heading: str,
-    lines: list[str],
-    *,
-    variant: CVVariant,
-    provenance_map: dict[str, dict[str, Any]],
-    source: str,
-) -> None:
-    document.add_heading(heading, level=1)
+def build_targeted_sections(
+    *, profile: dict[str, Any], variant: CVVariant
+) -> tuple[TargetedSection, ...]:
+    """Render the targeted CV sections from the approved profile only.
+
+    The function is pure: the same profile and variant always produce the
+    same sections.  It is the single source of truth shared by the targeted
+    kit generator (``generate_application_kit``) and by the evidence-backed
+    review workspace (``career.cv_review``), so what the user reviews is
+    exactly what the targeted CV contains.
+    """
+
+    content_by_section = {
+        "professional experience": ("experience", _profile_lines(profile, "experience")),
+        "transaction experience": ("experience", _profile_lines(profile, "experience")),
+        "quantitative projects": ("projects", _profile_lines(profile, "projects")),
+        "finance experience": ("experience", _profile_lines(profile, "experience")),
+        "reporting & analysis": ("experience", _profile_lines(profile, "experience")),
+        "education": ("education", _profile_lines(profile, "education")),
+        "technical skills": ("skills", _profile_lines(profile, "skills")),
+        "projects": ("projects", _profile_lines(profile, "projects")),
+        "languages": ("languages", _profile_lines(profile, "languages")),
+        "certifications": ("certifications", _profile_lines(profile, "certifications")),
+    }
+    sections: list[TargetedSection] = []
+    for heading in variant.section_order:
+        field, lines = content_by_section.get(heading.casefold(), ("profile", []))
+        sections.append(
+            TargetedSection(
+                heading=heading,
+                field=field,
+                paragraphs=_targeted_paragraphs(lines, field=field, variant=variant),
+            )
+        )
+    return tuple(sections)
+
+
+def _targeted_paragraphs(
+    lines: list[str], *, field: str, variant: CVVariant
+) -> tuple[TargetedParagraph, ...]:
+    """Render one section into the paragraphs of the targeted CV."""
+
     if not lines:
-        document.add_paragraph("[AJOUTER PREUVE CHIFFRÉE]")
-        return
+        return (TargetedParagraph(text=EVIDENCE_PLACEHOLDER, style="paragraph"),)
+    paragraphs: list[TargetedParagraph] = []
     for index, line in enumerate(lines):
         rendered = _variant_text(line, variant)
-        if source == "profile.experience" and rendered.count("|") >= 2:
+        if field == "experience" and rendered.count("|") >= 2:
             date_text, role, company_and_result = (
                 part.strip() for part in rendered.split("|", 2)
             )
             company, separator, result = company_and_result.partition(" — ")
-            document.add_paragraph(f"{date_text} | {role} | {company}")
+            paragraphs.append(
+                TargetedParagraph(
+                    text=f"{date_text} | {role} | {company}",
+                    style="paragraph",
+                    source_line=line,
+                    line_index=index,
+                )
+            )
             if separator and result:
-                document.add_paragraph(result, style="List Bullet")
+                paragraphs.append(
+                    TargetedParagraph(
+                        text=result,
+                        style="bullet",
+                        source_line=line,
+                        line_index=index,
+                    )
+                )
         else:
-            document.add_paragraph(rendered, style="List Bullet")
-        provenance_map[f"{heading}:{index}"] = _citation(source, line)
+            paragraphs.append(
+                TargetedParagraph(
+                    text=rendered,
+                    style="bullet",
+                    source_line=line,
+                    line_index=index,
+                )
+            )
+    return tuple(paragraphs)
 
 
 def generate_application_kit(
@@ -179,32 +257,21 @@ def generate_application_kit(
         "profile.skills", profile.get("skills")
     )
 
-    content_by_section = {
-        "professional experience": ("experience", _profile_lines(profile, "experience")),
-        "transaction experience": ("experience", _profile_lines(profile, "experience")),
-        "quantitative projects": ("projects", _profile_lines(profile, "projects")),
-        "finance experience": ("experience", _profile_lines(profile, "experience")),
-        "reporting & analysis": ("experience", _profile_lines(profile, "experience")),
-        "education": ("education", _profile_lines(profile, "education")),
-        "technical skills": ("skills", _profile_lines(profile, "skills")),
-        "projects": ("projects", _profile_lines(profile, "projects")),
-        "languages": ("languages", _profile_lines(profile, "languages")),
-        "certifications": ("certifications", _profile_lines(profile, "certifications")),
-    }
-    for heading in variant.section_order:
-        field, lines = content_by_section.get(heading.casefold(), ("profile", []))
-        _add_heading_and_lines(
-            cv,
-            heading,
-            lines,
-            variant=variant,
-            provenance_map=provenance_map,
-            source=f"profile.{field}",
-        )
+    for section in build_targeted_sections(profile=profile, variant=variant):
+        cv.add_heading(section.heading, level=1)
+        for paragraph in section.paragraphs:
+            cv.add_paragraph(
+                paragraph.text,
+                style="List Bullet" if paragraph.style == "bullet" else None,
+            )
+            if paragraph.source_line is not None:
+                provenance_map[f"{section.heading}:{paragraph.line_index}"] = _citation(
+                    f"profile.{section.field}", paragraph.source_line
+                )
     for gap in coverage.gaps:
         if gap.provenance is None:
             cv.add_paragraph(
-                f"{gap.requirement}: [AJOUTER PREUVE CHIFFRÉE]", style="List Bullet"
+                f"{gap.requirement}: {EVIDENCE_PLACEHOLDER}", style="List Bullet"
             )
 
     cv_path = destination / "cv.docx"
@@ -227,7 +294,7 @@ def generate_application_kit(
             evidence = _text(gap.provenance.get("quote"))
             provenance_map[f"cover_letter:{index}"] = dict(gap.provenance)
         else:
-            evidence = "[AJOUTER PREUVE CHIFFRÉE]"
+            evidence = EVIDENCE_PLACEHOLDER
         letter.add_paragraph(f"{gap.requirement}: {evidence}")
     letter.add_paragraph(
         "I will review and submit this application manually; no automatic submission is performed."

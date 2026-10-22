@@ -26,6 +26,7 @@ from typing import Any, Iterator
 from .models import (
     AVAILABILITY_STATES,
     APPLICATION_STAGES,
+    EVIDENCE_PLACEHOLDER,
     GENERIC_APPLICATION_STAGES,
     JOB_FAMILIES,
     PRIMARY_LOCATIONS,
@@ -48,6 +49,7 @@ from .application_studio import (
     build_ai_prompt,
     build_kit_texts,
     build_local_application_draft,
+    build_targeted_sections,
     generate_application_kit,
     normalize_language,
     parse_ai_draft,
@@ -73,6 +75,23 @@ from .cv_fit import (
     generate_diff,
     serialize_gap,
 )
+from .cv_review import (
+    CV_REVIEW_PROFILE_FIELDS,
+    REVIEW_SECTIONS,
+    SECTION_LABELS,
+    ProposedParagraph,
+    ProposedSection,
+    ReviewWorkspace,
+    SourceSection,
+    build_workspace,
+    can_export,
+    canonical_section,
+    decide_block,
+    gap_section,
+    render_export_markdown,
+    workspace_to_dict,
+)
+from .cv_review_store import CVReviewStore
 from .cv_variants import ALL_VARIANTS
 
 try:
@@ -4173,6 +4192,405 @@ class CareerService:
             )
             self._audit(connection, "application_kit_texts_updated", "application", identifier)
         return self.get_application_kit(identifier, str(draft_row["language"]) if draft_row else "fr")
+
+    # ------------------------------------------------------------------ #
+    # SPEC-004 — Evidence-backed CV review workspace
+    # ------------------------------------------------------------------ #
+
+    def _current_cv_document(self) -> dict[str, str]:
+        """Return the latest imported CV document (text and file name).
+
+        The reviewed source of the workspace is the document itself when one
+        was imported: the user then compares the targeted CV with *their own
+        CV*, not with the profile fields it was generated from.
+        """
+
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT original_name, extracted_text
+                FROM profile_imports
+                WHERE source_kind = 'cv'
+                ORDER BY CASE status WHEN 'applied' THEN 0 ELSE 1 END,
+                         created_at DESC
+                LIMIT 1
+                """
+            ).fetchone()
+        if not row:
+            return {"text": "", "filename": ""}
+        return {
+            "text": str(row["extracted_text"] or ""),
+            "filename": str(row["original_name"] or ""),
+        }
+
+    def _cv_review_context(self, job_id: str, variant: Any) -> dict[str, Any]:
+        """Collect the local facts a review workspace is built from."""
+
+        profile = self.get_profile()
+        job = self.get_job(job_id)
+        prep = self.get_job_prep(job_id)
+        job.update(prep)
+        job["qualification"] = qualify_offer(job).to_dict()
+        cv_analysis = self._current_cv_analysis()
+        coverage = compute_coverage(job, cv_analysis, profile, variant)
+        gaps = generate_diff(coverage, cv_analysis, profile, variant)
+        coverage = replace(
+            coverage,
+            gaps=gaps,
+            recommended_variant=variant,
+            variant_rationale=(
+                f"Variante {variant.label} sélectionnée explicitement ; "
+                "couverture recalculée sur les preuves locales."
+            ),
+        )
+        return {
+            "profile": profile,
+            "job": job,
+            "coverage": coverage,
+            "cv_analysis": cv_analysis,
+        }
+
+    def _cv_review_sources(
+        self,
+        cv_analysis: Any,
+        document: dict[str, str],
+        profile: dict[str, Any],
+    ) -> dict[str, SourceSection]:
+        """Resolve the reviewed source of every canonical section.
+
+        When a CV document was imported, it *is* the reviewed source: the
+        user compares the targeted CV with the document they actually send.
+        A section the document does not carry is reviewed with an empty
+        source, so the words the proposal adds are visible and must be
+        accepted.  Without any document, the approved profile fields are the
+        source.
+        """
+
+        sources: dict[str, SourceSection] = {}
+        text = document.get("text") or ""
+        filename = document.get("filename") or ""
+        if text.strip():
+            detected: set[str] = set()
+            for section in getattr(cv_analysis, "sections", []) or []:
+                canonical = canonical_section(section.title)
+                if not canonical or canonical in detected:
+                    continue
+                detected.add(canonical)
+                sources[canonical] = SourceSection(
+                    text=self._cv_review_section_text(text, section),
+                    source="cv",
+                    label=filename or "CV importé",
+                )
+            for canonical in REVIEW_SECTIONS:
+                sources.setdefault(
+                    canonical,
+                    SourceSection(
+                        text="",
+                        source="cv",
+                        label=filename or "CV importé",
+                    ),
+                )
+            return sources
+        for canonical, field in CV_REVIEW_PROFILE_FIELDS.items():
+            excerpt = clean_text(profile.get(field), limit=12_000)
+            if not excerpt:
+                continue
+            sources[canonical] = SourceSection(
+                text=excerpt,
+                source=f"profile.{field}",
+                label=f"Profil approuvé › {field}",
+            )
+        return sources
+
+    @staticmethod
+    def _cv_review_section_text(text: str, section: Any) -> str:
+        """Return the content of one detected section, without its heading."""
+
+        start = int(section.start_offset)
+        end = int(section.end_offset)
+        header_end = text.find("\n", start)
+        content_start = header_end + 1 if 0 <= header_end < end else start
+        return text[content_start:end].strip()
+
+    def _cv_review_proposals(
+        self,
+        profile: dict[str, Any],
+        variant: Any,
+        coverage: Any,
+    ) -> dict[str, ProposedSection]:
+        """Build the proposed sections of the targeted CV, gap by gap.
+
+        The targeted generator is the single source of truth: the workspace
+        proposes exactly what the targeted CV would contain, plus the
+        evidence gaps it still has to close.
+        """
+
+        paragraphs: dict[str, list[ProposedParagraph]] = {}
+        headings: dict[str, list[str]] = {}
+        for section in build_targeted_sections(profile=profile, variant=variant):
+            canonical = canonical_section(section.heading)
+            if not canonical:
+                continue
+            bucket = paragraphs.setdefault(canonical, [])
+            known = {paragraph.text for paragraph in bucket}
+            headings.setdefault(canonical, [])
+            if section.heading not in headings[canonical]:
+                headings[canonical].append(section.heading)
+            for paragraph in section.paragraphs:
+                if paragraph.text in known:
+                    continue
+                known.add(paragraph.text)
+                bucket.append(
+                    ProposedParagraph(
+                        text=paragraph.text,
+                        source_line=paragraph.source_line,
+                        style=paragraph.style,
+                        origin_field=section.field if paragraph.source_line else "",
+                    )
+                )
+        for gap in getattr(coverage, "gaps", []) or []:
+            if getattr(gap, "provenance", None) is not None:
+                continue
+            canonical = gap_section(gap, variant)
+            if not canonical:
+                continue
+            if paragraphs.get(canonical):
+                # The proposal already carries that section: the block itself
+                # is what the user reviews, a second placeholder would only
+                # repeat it.
+                continue
+            paragraphs.setdefault(canonical, []).append(
+                ProposedParagraph(
+                    text=f"{gap.requirement}: {EVIDENCE_PLACEHOLDER}",
+                    style="bullet",
+                )
+            )
+        proposals: dict[str, ProposedSection] = {}
+        for canonical, bucket in paragraphs.items():
+            section_headings = tuple(headings.get(canonical, ()))
+            proposals[canonical] = ProposedSection(
+                heading=section_headings[0]
+                if section_headings
+                else SECTION_LABELS.get(canonical, canonical),
+                paragraphs=tuple(bucket),
+                headings=section_headings,
+            )
+        return proposals
+
+    def _cv_review_sync(
+        self, identifier: str, language: Any = "fr", variant: Any = ""
+    ) -> ReviewWorkspace:
+        """Rebuild the workspace of one application and persist it.
+
+        Explicit user decisions survive a rebuild as long as the reviewed
+        content did not change; when it did, the block is reopened and the
+        reopening is written to the immutable history.
+        """
+
+        kit = self.get_application_kit(identifier, language, variant)
+        draft = kit.get("draft") if isinstance(kit.get("draft"), dict) else {}
+        selected = self._variant_config(variant or draft.get("variant") or "m_a")
+        kit_language = clean_text(kit.get("language"), limit=8) or "fr"
+        job = kit.get("job") if isinstance(kit.get("job"), dict) else {}
+        job_id = clean_text(job.get("id"), limit=80)
+        if not job_id:
+            raise UserFacingError("Cette candidature Career n’existe pas.")
+        context = self._cv_review_context(job_id, selected)
+        document = self._current_cv_document()
+        sources = self._cv_review_sources(
+            context["cv_analysis"], document, context["profile"]
+        )
+        proposals = self._cv_review_proposals(
+            context["profile"], selected, context["coverage"]
+        )
+        profile_fields = {
+            field: clean_text(context["profile"].get(field), limit=12_000)
+            for field in CV_REVIEW_PROFILE_FIELDS.values()
+        }
+        store = self._cv_review_store()
+        saved = store.load_workspace(identifier)
+        workspace = build_workspace(
+            identifier,
+            language=kit_language,
+            variant=selected,
+            sources=sources,
+            proposals=proposals,
+            profile=profile_fields,
+            source_document=document.get("filename", ""),
+            saved=saved,
+            now=utc_now(),
+        )
+        if saved is not None:
+            previous = {block.block_id: block for block in saved.blocks}
+            for block in workspace.blocks:
+                old = previous.get(block.block_id)
+                if old is None:
+                    continue
+                if old.status in {"accepted", "rejected", "modified"} and block.status == "pending":
+                    store.append_history(
+                        identifier,
+                        {
+                            "entry_id": uuid.uuid4().hex,
+                            "application_id": identifier,
+                            "block_id": block.block_id,
+                            "section": block.section,
+                            "action": "reopened",
+                            "from_status": old.status,
+                            "to_status": block.status,
+                            "user_text": None,
+                            "decided_at": utc_now(),
+                            "decided_by": "system",
+                            "reason": "Le contenu revu a changé : le bloc doit être relu.",
+                        },
+                    )
+        store.save_workspace(workspace)
+        return workspace
+
+    def cv_review_workspace(
+        self, application_id: str, language: Any = "fr", variant: Any = ""
+    ) -> dict[str, Any]:
+        """Return the evidence-backed review workspace of one application."""
+
+        identifier = clean_text(application_id, limit=80)
+        if not identifier:
+            raise UserFacingError("Cette candidature Career n’existe pas.")
+        workspace = self._cv_review_sync(identifier, language, variant)
+        return workspace_to_dict(workspace)
+
+    def decide_cv_review(
+        self,
+        application_id: str,
+        block_id: str,
+        status: Any,
+        user_text: Any = None,
+    ) -> dict[str, Any]:
+        """Apply one user decision to one review block and keep the trail."""
+
+        identifier = clean_text(application_id, limit=80)
+        target = clean_text(block_id, limit=80)
+        requested = clean_text(status, limit=40).lower()
+        if not identifier or not target:
+            raise UserFacingError("Cette décision de revue est incomplète.")
+        workspace = self._cv_review_sync(identifier)
+        previous = next(
+            (block for block in workspace.blocks if block.block_id == target), None
+        )
+        if previous is None:
+            raise UserFacingError("Ce bloc de revue n’existe pas.")
+        try:
+            updated, block = decide_block(
+                workspace,
+                target,
+                requested,
+                user_text=clean_text(user_text, limit=6_000) or None,
+                now=utc_now(),
+            )
+        except ValueError as error:
+            raise UserFacingError(str(error)) from error
+        store = self._cv_review_store()
+        store.save_workspace(updated)
+        store.append_history(
+            identifier,
+            {
+                "entry_id": uuid.uuid4().hex,
+                "application_id": identifier,
+                "block_id": block.block_id,
+                "section": block.section,
+                "action": block.status,
+                "from_status": previous.status,
+                "to_status": block.status,
+                "user_text": block.user_text,
+                "decided_at": block.decided_at,
+                "decided_by": block.decided_by,
+                "reason": None,
+            },
+        )
+        return workspace_to_dict(updated)
+
+    def cv_review_history(self, application_id: str) -> dict[str, Any]:
+        """Return the immutable decision history of one application."""
+
+        identifier = clean_text(application_id, limit=80)
+        if not identifier:
+            raise UserFacingError("Cette candidature Career n’existe pas.")
+        entries = self._cv_review_store().load_history(identifier)
+        return {
+            "application_id": identifier,
+            "entries": entries,
+            "count": len(entries),
+        }
+
+    def export_cv_review(self, application_id: str) -> Path:
+        """Export the reviewed CV as a local DOCX, when the gate allows it."""
+
+        identifier = clean_text(application_id, limit=80)
+        workspace = self._cv_review_sync(identifier)
+        allowed, reasons = can_export(workspace)
+        if not allowed:
+            raise UserFacingError(
+                "Export bloqué : " + " ".join(reasons)
+            )
+        profile = self.get_profile()
+        kit = self.get_application_kit(identifier, "fr", "")
+        job = kit.get("job") if isinstance(kit.get("job"), dict) else {}
+        company = clean_text(job.get("company"), limit=120)
+        title = clean_text(job.get("title"), limit=120)
+        markdown = render_export_markdown(
+            workspace,
+            name=clean_text(profile.get("display_name"), limit=160),
+            contact=self._cv_review_contact(profile),
+            headline=self._cv_review_headline(title, company, workspace.language),
+        )
+        document_title = f"CV — {company} — {title}".strip(" —")
+        target = (
+            self.studio_dir
+            / f"cv_revue_{re_sub_filename(company)}_{re_sub_filename(title)}_{uuid.uuid4().hex[:8]}.docx"
+        )
+        try:
+            write_docx(
+                markdown=markdown,
+                title=document_title,
+                language=workspace.language,
+                target=target,
+            )
+        except Exception as error:
+            target.unlink(missing_ok=True)
+            raise UserFacingError(
+                "Le CV révisé n’a pas pu être généré localement."
+            ) from error
+        try:
+            os.chmod(target, 0o600)
+        except OSError:
+            pass
+        return target
+
+    @staticmethod
+    def _cv_review_contact(profile: dict[str, Any]) -> str:
+        return " · ".join(
+            part
+            for part in (
+                clean_text(profile.get("contact_email"), limit=320),
+                clean_text(profile.get("contact_phone"), limit=80),
+                clean_text(profile.get("linkedin_url"), limit=2_000),
+            )
+            if part
+        )
+
+    @staticmethod
+    def _cv_review_headline(title: str, company: str, language: str) -> str:
+        if not title and not company:
+            return ""
+        templates = {
+            "fr": "Candidature au poste de {title} chez {company}.",
+            "en": "Application for the {title} role at {company}.",
+            "it": "Candidatura per il ruolo di {title} presso {company}.",
+            "de": "Bewerbung als {title} bei {company}.",
+        }
+        template = templates.get(language, templates["en"])
+        return template.format(title=title or "[poste à compléter]", company=company or "[entreprise à compléter]")
+
+    def _cv_review_store(self) -> CVReviewStore:
+        return CVReviewStore(self.data_dir / "cv_review")
 
     @staticmethod
     def _dashboard_action(

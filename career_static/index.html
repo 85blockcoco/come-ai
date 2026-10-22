@@ -7,6 +7,7 @@
     <title>Côme AI Career — espace local</title>
     <link rel="stylesheet" href="/career-static/career.css" />
     <link rel="stylesheet" href="/career-static/cv_plan.css" />
+    <link rel="stylesheet" href="/career-static/cv_review.css" />
   </head>
   <body>
     <a class="skip-link" href="#career-main">Aller au contenu Career</a>
@@ -680,6 +681,33 @@
             <div id="applications-list" class="application-list"></div>
             <p id="applications-empty" class="empty-state">Crée un suivi depuis une offre enregistrée ou depuis ta shortlist.</p>
           </section>
+
+          <section id="cv-review-panel" class="panel cv-review-panel" aria-labelledby="cv-review-title">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Relire le CV ciblé</p>
+                <h3 id="cv-review-title">Revue du CV ciblé</h3>
+              </div>
+              <div class="inline-actions">
+                <button id="cv-review-refresh" class="secondary-button" type="button">Actualiser</button>
+                <button id="cv-review-export" class="primary-button" type="button" disabled>Exporter en DOCX</button>
+              </div>
+            </div>
+            <p class="panel-help">Chaque adaptation du CV ciblé est affichée à côté de ton texte source, avec la preuve exacte qui la soutient. Tu acceptes, modifies, refuses ou rouvres chaque bloc avant l’export. Rien n’est envoyé : l’export DOCX reste local.</p>
+            <label for="cv-review-application">Candidature à relire</label>
+            <select id="cv-review-application"></select>
+            <div id="cv-review-progress" class="cv-review-progress" hidden>
+              <strong id="cv-review-progress-label">Blocs critiques validés</strong>
+              <span id="cv-review-progress-count">0/0</span>
+              <div id="cv-review-progress-bar" class="cv-review-progress-track" role="progressbar" aria-label="Progression de la revue du CV ciblé" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <div id="cv-review-progress-fill" class="cv-review-progress-fill"></div>
+              </div>
+            </div>
+            <ul id="cv-review-reasons" class="cv-review-reasons" hidden></ul>
+            <p id="cv-review-status" role="status"></p>
+            <div id="cv-review-blocks" class="cv-review-blocks" aria-live="polite"></div>
+            <p id="cv-review-empty" class="empty-state">Choisis une candidature pour relire son CV ciblé.</p>
+          </section>
         </section>
 
         <section id="view-interviews" class="career-view" tabindex="-1" hidden aria-labelledby="interviews-title">
@@ -733,6 +761,7 @@
       </footer>
     </div>
     <script src="/career-static/cv_plan.js" defer></script>
+    <script src="/career-static/js/cv-review.js" defer></script>
     <script src="/career-static/career.js" defer></script>
   </body>
 </html>

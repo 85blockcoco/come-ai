@@ -236,6 +236,14 @@ class CVAnalyzeResponse(BaseModel):
     provenance: dict[str, Any]
 
 
+class CVReviewDecisionPayload(BaseModel):
+    """One user decision on one review block of the targeted CV."""
+
+    block_id: str = Field(min_length=1, max_length=80)
+    status: str = Field(pattern="^(accepted|rejected|modified|pending)$")
+    user_text: str = Field(default="", max_length=6_000)
+
+
 def create_career_router(
     service: CareerService,
     *,
@@ -691,6 +699,41 @@ def create_career_router(
     @router.post("/api/career/applications/{application_id}/checklist")
     async def application_checklist(application_id: str, payload: ApplicationChecklistPayload) -> Any:
         return await local(lambda: service.set_application_checklist(application_id, payload.checked))
+
+    # SPEC-004 — revue du CV ciblé, avec preuve derrière chaque adaptation.
+    @router.get("/api/career/cv-review/{application_id}")
+    async def cv_review_workspace(
+        application_id: str,
+        language: str = Query(default="fr", max_length=8),
+        variant: str = Query(default="", max_length=40),
+    ) -> Any:
+        return await local(
+            lambda: service.cv_review_workspace(application_id, language, variant)
+        )
+
+    @router.post("/api/career/cv-review/{application_id}/decide")
+    async def cv_review_decide(
+        application_id: str, payload: CVReviewDecisionPayload
+    ) -> Any:
+        return await local(
+            lambda: service.decide_cv_review(
+                application_id, payload.block_id, payload.status, payload.user_text
+            )
+        )
+
+    @router.get("/api/career/cv-review/{application_id}/history")
+    async def cv_review_history(application_id: str) -> Any:
+        return await local(lambda: service.cv_review_history(application_id))
+
+    @router.get("/api/career/cv-review/{application_id}/export")
+    async def cv_review_export(application_id: str) -> FileResponse:
+        path = await run_in_threadpool(lambda: service.export_cv_review(application_id))
+        return FileResponse(
+            path,
+            filename=path.name,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Cache-Control": "no-store"},
+        )
 
     @router.get("/api/career/interview-sessions")
     async def interview_sessions() -> Any:

@@ -1,0 +1,17 @@
+{
+  "company": "Banque de Démo",
+  "title": "Stagiaire M&A",
+  "source_name": "manual",
+  "source_id": "REF-DEMO-2027-014",
+  "official_url": "https://careers.example.test/jobs/demo-42",
+  "job_family": "M&A / Investment Banking",
+  "city": "Paris",
+  "country": "France",
+  "requirements": "Financial modeling, valuation, M&A deal rationale.",
+  "description_original": "Stage de démonstration sur données entièrement synthétiques.",
+  "deadline_date": "2027-01-15",
+  "start_date": "2027-02-01",
+  "end_date": "2027-05-31",
+  "duration_months": 4,
+  "source_status": "open"
+}
