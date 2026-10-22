@@ -121,6 +121,47 @@
         ]
       },
       "expect": {"kept_source_ids": ["gh-country-de"], "excluded_by_country": {}}
+    },
+    {
+      "case_id": "greenhouse_france_kept_when_germany_is_excluded",
+      "description": "Le filtre ne refuse que les pays demandés : la France est gardée quand c'est l'Allemagne qui est exclue.",
+      "countries_exclude": ["DE"],
+      "feed": {
+        "jobs": [
+          {
+            "id": "gh-fr-kept",
+            "title": "Corporate Finance Intern",
+            "absolute_url": "https://careers.example.test/jobs/gh-fr-kept",
+            "location": {"name": "Paris, France"},
+            "content": "<p>Financial analysis and valuation. This synthetic internship lasts six months.</p>"
+          }
+        ]
+      },
+      "expect": {"kept_source_ids": ["gh-fr-kept"], "excluded_by_country": {}}
+    },
+    {
+      "case_id": "greenhouse_france_and_germany_both_excluded",
+      "description": "Deux pays exclus : les deux offres sont filtrées, et le compteur nomme chaque pays.",
+      "countries_exclude": ["FR", "DE"],
+      "feed": {
+        "jobs": [
+          {
+            "id": "gh-two-fr",
+            "title": "Corporate Finance Intern",
+            "absolute_url": "https://careers.example.test/jobs/gh-two-fr",
+            "location": {"name": "Paris, France"},
+            "content": "<p>Financial analysis and valuation. This synthetic internship lasts six months.</p>"
+          },
+          {
+            "id": "gh-two-de",
+            "title": "Corporate Finance Intern",
+            "absolute_url": "https://careers.example.test/jobs/gh-two-de",
+            "location": {"name": "Frankfurt, Germany"},
+            "content": "<p>Financial analysis and valuation. This synthetic internship lasts six months.</p>"
+          }
+        ]
+      },
+      "expect": {"kept_source_ids": [], "excluded_by_country": {"FR": 1, "DE": 1}}
     }
   ]
 }
