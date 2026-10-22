@@ -5,6 +5,13 @@ Branche : `worker/cvboost-40-1792650659` (worktree dédié
 `AI-Excel-Agent-worker-cvboost-40-1792650659`, base `f5b22f2`)
 Commande : `cvboost-40-1792650659`
 
+> Note de branche : l'énoncé textuel de la mission demande une branche
+> `agent/spec-010-interview-prep`, mais la commande machine lisible
+> (`messages/task.json` : `"branch": "worker/cvboost-40-1792650659"`) et le
+> worktree créé par le driver portent cette seconde branche. C'est celle-ci qui
+> a été utilisée et poussée, pour que l'orchestrateur retrouve la livraison
+> sans cherry-pick.
+
 Aucune dépendance ajoutée, aucun modèle, aucun appel réseau, aucune donnée réelle
 dans les fixtures.
 
