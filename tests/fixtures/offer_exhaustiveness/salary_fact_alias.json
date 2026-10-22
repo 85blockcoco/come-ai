@@ -1,0 +1,21 @@
+{
+  "qualification": {
+    "provenance": {
+      "salary_fact": {
+        "value": [
+          {
+            "value": {
+              "currency": "EUR",
+              "min_monthly": 1150,
+              "max_monthly": 1300
+            },
+            "source": "description_passage",
+            "quote": "Gratification de 1 150 € à 1 300 € mensuels"
+          }
+        ],
+        "source": "accept",
+        "quote": ""
+      }
+    }
+  }
+}

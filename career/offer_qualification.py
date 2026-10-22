@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import date
 from typing import Any
 
 from .exploration import _SENIOR_TITLE, classify_internship
 from .models import canonical_url, clean_text
+from .offer_exhaustiveness import ExhaustivenessScore, compute_exhaustiveness
 
 
 @dataclass(frozen=True)
@@ -46,9 +47,26 @@ class QualifiedOffer:
     missing_fields: tuple[str, ...]
     provenance: dict[str, FactEvidence]
     reasons: tuple[str, ...]
+    exhaustiveness_score: int = 0
+    exhaustiveness_breakdown: dict[str, int] = field(default_factory=lambda: {
+        "missions": 0, "salary": 0, "conditions": 0, "education": 0, "dates": 0})
+    exhaustiveness_missing: tuple[str, ...] = ("missions", "salary", "conditions", "education", "dates")
+    exhaustiveness_badge: str = "Exhaustivité 0% | Rémunération : non communiquée"
+    exhaustiveness_badge_color: str = "gray"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+    def exhaustiveness(self) -> ExhaustivenessScore:
+        """Rebuild the mutable scoring object from the frozen fields."""
+        return ExhaustivenessScore(
+            overall_score=self.exhaustiveness_score,
+            breakdown=dict(self.exhaustiveness_breakdown),
+            missing=list(self.exhaustiveness_missing),
+            present=[name for name, weight in self.exhaustiveness_breakdown.items() if weight],
+            badge_label=self.exhaustiveness_badge,
+            badge_color=self.exhaustiveness_badge_color,  # type: ignore[arg-type]
+        )
 
 
 _CONTRACT_PATTERNS = (
@@ -416,6 +434,24 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
     elif target_status != "non_conforming":
         reasons.append("La source officielle ou le lien reste à vérifier.")
 
+    # Exhaustiveness (SK-20) counts only the evidence collected above; no
+    # extractor is relaunched and nothing is inferred here.
+    exhaustiveness = compute_exhaustiveness({
+        "start_date": str(parsed_start) if parsed_start else start_date,
+        "deadline_date": deadline or None,
+        "qualification": {
+            "provenance": {key: {"value": item.value} for key, item in evidence.items()},
+            "duration_min_months": low,
+        },
+    })
+    evidence["exhaustiveness"] = FactEvidence(
+        exhaustiveness.overall_score, "exhaustiveness_component_scores",
+        "Missions:{} Salaire:{} Conditions:{} Education:{} Dates:{}".format(
+            exhaustiveness.breakdown["missions"], exhaustiveness.breakdown["salary"],
+            exhaustiveness.breakdown["conditions"], exhaustiveness.breakdown["education"],
+            exhaustiveness.breakdown["dates"]),
+    )
+
     return QualifiedOffer(
         contract_type=contract_type,
         contract_status=internship["status"],
@@ -437,4 +473,9 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
         missing_fields=tuple(dict.fromkeys(missing)),
         provenance=evidence,
         reasons=tuple(reasons),
+        exhaustiveness_score=exhaustiveness.overall_score,
+        exhaustiveness_breakdown=dict(exhaustiveness.breakdown),
+        exhaustiveness_missing=tuple(exhaustiveness.missing),
+        exhaustiveness_badge=exhaustiveness.badge_label,
+        exhaustiveness_badge_color=exhaustiveness.badge_color,
     )

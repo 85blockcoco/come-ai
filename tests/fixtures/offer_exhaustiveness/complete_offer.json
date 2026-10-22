@@ -1,0 +1,65 @@
+{
+  "start_date": "2027-02-10",
+  "qualification": {
+    "provenance": {
+      "missions": {
+        "value": [
+          {
+            "value": "Assister l'équipe M&A dans l'analyse de dossiers de financement.",
+            "source": "description_passage",
+            "quote": "Vos missions : analyse de dossiers"
+          },
+          {
+            "value": "Participer aux visioconférences trimestrielles.",
+            "source": "description_passage",
+            "quote": "Vos missions : visioconférences"
+          },
+          {
+            "value": "Préparer une note de synthèse hebdomadaire.",
+            "source": "description_passage",
+            "quote": "Vos missions : note de synthèse"
+          }
+        ],
+        "source": "accept",
+        "quote": ""
+      },
+      "salary": {
+        "value": [
+          {
+            "value": {
+              "currency": "EUR",
+              "min_monthly": 1150,
+              "max_monthly": 1300
+            },
+            "source": "description_passage",
+            "quote": "Gratification de 1 150 € à 1 300 € mensuels"
+          }
+        ],
+        "source": "accept",
+        "quote": ""
+      },
+      "conditions": {
+        "value": [
+          {
+            "value": "Restauration d'entreprise + 60% de frais de transport remboursés",
+            "source": "description_passage",
+            "quote": "Nous offrons : titres-restaurant"
+          }
+        ],
+        "source": "accept",
+        "quote": ""
+      },
+      "education_required": {
+        "value": [
+          {
+            "value": "Master 1 ou 2 en finance",
+            "source": "description_passage",
+            "quote": "Étudiant en Master 2 Finance"
+          }
+        ],
+        "source": "accept",
+        "quote": ""
+      }
+    }
+  }
+}
