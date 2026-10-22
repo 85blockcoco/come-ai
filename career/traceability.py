@@ -97,10 +97,13 @@ CRITICALITIES: tuple[str, ...] = ("mandatory", "preferred", "nice_to_have", "con
 STATUSES: tuple[str, ...] = ("uncovered", "covered", "partial", "contradicted", "waived")
 
 #: Types d'événements.  Les huit premiers sont ceux du contrat SPEC-011 ;
-#: ``tags_changed``, ``deleted``, ``link_confirmed`` et ``link_rejected`` sont
-#: des extensions nécessaires à la règle « toute modification est tracée »
-#: (les tags sont modifiables), à l'objectif « traquer les suppressions » et
-#: à la validation manuelle des liaisons automatiques (règle métier n° 3).
+#: ``tags_changed``, ``deleted``, ``link_confirmed``, ``link_rejected``,
+#: ``requirement_changed``, ``superseded`` et ``restored`` sont des extensions
+#: nécessaires à la règle « toute modification est tracée » (les tags sont
+#: modifiables), à l'objectif « traquer les suppressions », à la validation
+#: manuelle des liaisons automatiques (règle métier n° 3) et à la traçabilité
+#: des modifications de l'exigence elle-même (règle métier n° 3 : création,
+#: modification, suppression, résolution).
 EVENT_TYPES: tuple[str, ...] = (
     "created",
     "linked",
@@ -114,6 +117,9 @@ EVENT_TYPES: tuple[str, ...] = (
     "deleted",
     "link_confirmed",
     "link_rejected",
+    "requirement_changed",
+    "superseded",
+    "restored",
 )
 
 #: Auteur d'un événement.
@@ -269,6 +275,22 @@ def _bounded_tags(values: Any) -> list[str]:
     return tags
 
 
+def _coverage_allowed(trace: RequirementTrace) -> bool:
+    """Tell whether a requirement may honestly be declared ``covered``.
+
+    Two conditions, and only two:
+
+    * the requirement carries a proof **and** its citation (règle métier n° 5) ;
+    * the link was **confirmed by a person** — an automatic link waiting for a
+      review (``review_state="pending"``) is a proposal, never a coverage
+      (règle métier n° 2 et n° 3 : une machine ne décide jamais qu'une
+      exigence est couverte).
+    """
+    if not (trace.evidence_id and trace.evidence_quote):
+        return False
+    return trace.review_state != "pending"
+
+
 # ── Modèles ─────────────────────────────────────────────────────────────────
 
 
@@ -344,11 +366,23 @@ class RequirementTrace:
     match_kind: str = ""
     deleted: bool = False
     deleted_at: str = ""
+    superseded_at: str = ""
+    superseded_by: str = ""
 
     # -- properties ---------------------------------------------------------
     @property
     def is_deleted(self) -> bool:
         return bool(self.deleted)
+
+    @property
+    def is_superseded(self) -> bool:
+        """True when the requirement no longer exists in its source.
+
+        A superseded requirement is *not* a gap: the offer no longer asks for
+        it.  It stays in the history (the event that superseded it is kept)
+        but it leaves the coverage denominator.
+        """
+        return bool(self.superseded_at)
 
     @property
     def has_evidence(self) -> bool:
@@ -384,6 +418,8 @@ class RequirementTrace:
             "match_kind": self.match_kind,
             "deleted": self.deleted,
             "deleted_at": self.deleted_at,
+            "superseded_at": self.superseded_at,
+            "superseded_by": self.superseded_by,
         }
 
     @classmethod
@@ -422,6 +458,8 @@ class RequirementTrace:
             match_kind=clean_text(payload.get("match_kind"), limit=60),
             deleted=bool(payload.get("deleted")),
             deleted_at=clean_text(payload.get("deleted_at"), limit=40),
+            superseded_at=clean_text(payload.get("superseded_at"), limit=40),
+            superseded_by=clean_text(payload.get("superseded_by"), limit=200),
         )
 
 
@@ -513,9 +551,15 @@ class TraceabilityRegistry:
     ) -> RequirementTrace:
         """Register one requirement — idempotent on ``(source, requirement_id)``.
 
-        Registering the same requirement twice returns the existing trace
-        untouched (no duplicated event): importing an offer twice must not
-        inflate the audit trail.
+        Registering the same requirement twice never duplicates the trace
+        (importing an offer twice must not inflate the audit trail), but a
+        *changed* requirement is not ignored: the verbatim text, the category
+        and the criticality are refreshed and the change is traced
+        (``requirement_changed``, ``category_changed``,
+        ``criticality_changed``).  A requirement deleted by a person and
+        found again in its source comes back with an explicit ``restored``
+        event: the registry never silently drops a requirement the source
+        still states.
         """
         identifier = clean_text(requirement_id, limit=200)
         text = clean_text(requirement_text, limit=MAX_REQUIREMENT_CHARS)
@@ -528,6 +572,14 @@ class TraceabilityRegistry:
         trace_id = requirement_trace_id(source_text, identifier)
         existing = self._traces.get(trace_id)
         if existing is not None:
+            self._refresh_registration(
+                existing,
+                text=text,
+                category=category,
+                criticality=criticality,
+                actor=actor,
+                comment=comment,
+            )
             return existing
 
         kind, source_identifier = self._split_source(source_text)
@@ -574,12 +626,60 @@ class TraceabilityRegistry:
         self._traces[trace_id] = trace
         return trace
 
+    def _refresh_registration(
+        self,
+        trace: RequirementTrace,
+        *,
+        text: str,
+        category: str,
+        criticality: str,
+        actor: str,
+        comment: str | None,
+    ) -> None:
+        """Refresh a registered requirement when its source changed.
+
+        Nothing is invented: only the values carried by the new registration
+        are compared with the ones already recorded, and every difference
+        leaves an immutable event behind.
+        """
+        if trace.deleted:
+            # The source still states the requirement: the registry follows
+            # the source and says so in the history.
+            trace.deleted = False
+            trace.deleted_at = ""
+            self._record(
+                trace,
+                "restored",
+                old_value="deleted",
+                new_value="active",
+                actor=actor,
+                comment=comment or "Exigence de nouveau présente dans sa source : elle redevient active.",
+            )
+        if trace.requirement_text != text:
+            old_text = trace.requirement_text
+            trace.requirement_text = text
+            self._record(
+                trace,
+                "requirement_changed",
+                old_value=old_text[:200],
+                new_value=text[:200],
+                actor=actor,
+                comment=comment or "Texte de l’exigence mis à jour depuis sa source.",
+            )
+        new_category = map_category(category)
+        if new_category != trace.category:
+            self.set_category(trace.trace_id, new_category, actor=actor, comment=comment)
+        new_criticality = map_criticality(criticality)
+        if new_criticality != trace.criticality:
+            self.set_criticality(trace.trace_id, new_criticality, actor=actor, comment=comment)
+
     def register_offer_analysis(
         self,
         analysis: Mapping[str, Any],
         *,
         actor: str = "system",
         comment: str | None = None,
+        supersede_missing: bool = False,
     ) -> list[RequirementTrace]:
         """Register every requirement of a SK-02 ``analyze_offer`` result.
 
@@ -590,12 +690,19 @@ class TraceabilityRegistry:
         are the statements flagged ``injection_suspect``: an offer is
         untrusted data, never an instruction, and a flagged statement never
         becomes a requirement.
+
+        ``supersede_missing`` is only used by the SK-02 integration path,
+        where the analysis is known to be complete: a requirement that
+        disappeared from the offer is then marked *superseded* (it leaves the
+        coverage denominator and stops being a gap).  A truncated analysis
+        never supersedes anything — a clipped list is not a complete list.
         """
         payload = analysis or {}
         offer_id = clean_text(payload.get("offer_id"), limit=120)
         source = f"offer_{offer_id}" if offer_id else "manual"
         traces: list[RequirementTrace] = []
         records = payload.get("requirements") or []
+        present: set[str] = set()
         for record in records:
             if not isinstance(record, Mapping):
                 continue
@@ -605,6 +712,7 @@ class TraceabilityRegistry:
             text = clean_text(record.get("text"), limit=MAX_REQUIREMENT_CHARS)
             if not identifier or not text:
                 continue
+            present.add(identifier)
             traces.append(
                 self.register(
                     identifier,
@@ -620,7 +728,55 @@ class TraceabilityRegistry:
                     confidence=record.get("confidence"),
                 )
             )
+        if supersede_missing and self._analysis_is_complete(payload):
+            self._supersede_missing(source, present, actor=actor)
         return traces
+
+    @staticmethod
+    def _analysis_is_complete(payload: Mapping[str, Any]) -> bool:
+        """Tell whether an analysis lists *all* the requirements of its offer.
+
+        The SK-02 contract flags a clipped extraction with ``truncated`` and
+        a missing requirement list with an absent ``requirements`` key: in
+        both cases the absence of a requirement proves nothing.
+        """
+        if not isinstance(payload.get("requirements"), list):
+            return False
+        if payload.get("truncated"):
+            return False
+        return True
+
+    def _supersede_missing(
+        self,
+        source: str,
+        present: set[str],
+        *,
+        actor: str = "system",
+    ) -> list[RequirementTrace]:
+        """Mark the requirements of ``source`` that its source no longer states.
+
+        A requirement removed from the offer is not a gap anymore: it is
+        *superseded*.  The trace stays in the registry (with its history) and
+        leaves the coverage denominator.
+        """
+        superseded: list[RequirementTrace] = []
+        for trace in self._traces.values():
+            if trace.source != source or trace.deleted or trace.superseded_at:
+                continue
+            if trace.requirement_id in present:
+                continue
+            trace.superseded_at = self._now()
+            trace.superseded_by = ""
+            self._record(
+                trace,
+                "superseded",
+                old_value=trace.status,
+                new_value="superseded",
+                actor=actor,
+                comment="Exigence absente de la nouvelle analyse de l’offre : elle n’est plus exigée.",
+            )
+            superseded.append(trace)
+        return superseded
 
     def register_facts(
         self,
@@ -677,6 +833,11 @@ class TraceabilityRegistry:
         for it).  An automatic link (``origin="auto"``) does **not** claim a
         coverage: the trace stays in review (``review_state="pending"``) until
         a person confirms or rejects it.
+
+        The link is **atomic**: a refused status (a ``covered`` without a
+        citation, a ``covered`` carried by an automatic link) is detected
+        *before* the requirement is touched, so a refused link never leaves
+        a half-applied proof behind.
         """
         trace = self._require(trace_id)
         evidence = clean_text(evidence_id, limit=200)
@@ -685,6 +846,23 @@ class TraceabilityRegistry:
         quote = clean_text(evidence_quote, limit=MAX_EVIDENCE_QUOTE_CHARS) or None
         origin_value = _choice(origin, LINK_ORIGINS, "Origine du lien", default="manual")
         actor_value = _choice(actor, ACTORS, "Auteur", default="user")
+        requested_status: str | None = None
+        if status is not None:
+            requested_status = _choice(status, STATUSES, "Statut")
+            if requested_status == "waived":
+                raise TraceabilityError(
+                    "Une exigence ne peut être « waived » que via la dérogation motivée (waive)."
+                )
+            if requested_status == "covered":
+                if not quote:
+                    raise TraceabilityError(
+                        "Une exigence « covered » doit porter une preuve (evidence_id) et sa citation (evidence_quote)."
+                    )
+                if origin_value == "auto":
+                    raise TraceabilityError(
+                        "Une liaison automatique ne peut pas rendre l’exigence couverte : "
+                        "elle attend une validation manuelle."
+                    )
 
         old_evidence = trace.evidence_id
         old_quote = trace.evidence_quote
@@ -715,12 +893,21 @@ class TraceabilityRegistry:
             comment=event_comment,
         )
 
-        if status is not None:
-            self.set_status(trace.trace_id, status, actor=actor_value, comment=comment)
+        if requested_status is not None:
+            self.set_status(trace.trace_id, requested_status, actor=actor_value, comment=comment)
         elif origin_value == "manual" and quote and trace.status in {"uncovered", "partial"}:
             # A manual link is only a coverage when it carries its citation:
             # an evidence without a quote proves nothing yet.
             self.set_status(trace.trace_id, "covered", actor=actor_value, comment=comment)
+        elif origin_value == "auto" and trace.status == "covered":
+            # An automatic proposal never carries a coverage: the previous
+            # proof was replaced by a link that no person has validated yet.
+            self.set_status(
+                trace.trace_id,
+                "uncovered",
+                actor=actor_value,
+                comment=comment or "Liaison automatique proposée : la couverture attend sa validation.",
+            )
         elif not quote and trace.status == "covered":
             # A coverage without a citation is not a coverage: replacing the
             # proof by an uncited one drops the orphan status instead of
@@ -744,11 +931,16 @@ class TraceabilityRegistry:
     ) -> RequirementTrace:
         """Unlink the evidence of a requirement (the proof stays in history)."""
         trace = self._require(trace_id)
+        # Validate before touching the requirement: a refused unlink never
+        # leaves the proof removed.
+        review_value = _choice(review_state, REVIEW_STATES, "État de validation", default="not_required")
+        actor_value = _choice(actor, ACTORS, "Auteur", default="user")
+        status_value = _choice(status, STATUSES, "Statut") if status is not None else None
         old_evidence = trace.evidence_id
         old_quote = trace.evidence_quote
         trace.evidence_id = None
         trace.evidence_quote = None
-        trace.review_state = _choice(review_state, REVIEW_STATES, "État de validation", default="not_required")
+        trace.review_state = review_value
         trace.match_kind = ""
         event_comment = clean_text(comment, limit=MAX_COMMENT_CHARS) or None
         if old_quote:
@@ -761,11 +953,13 @@ class TraceabilityRegistry:
             "unlinked",
             old_value=old_evidence,
             new_value=None,
-            actor=_choice(actor, ACTORS, "Auteur", default="user"),
+            actor=actor_value,
             comment=event_comment,
         )
-        if status is not None and trace.status != status:
-            self.set_status(trace.trace_id, status, actor=actor, comment=comment)
+        if status_value is not None and trace.status != status_value and trace.status != "waived":
+            # A waiver is an explicit human decision: removing a proof never
+            # cancels it silently.
+            self.set_status(trace.trace_id, status_value, actor=actor, comment=comment)
         return trace
 
     def confirm_link(
@@ -779,6 +973,11 @@ class TraceabilityRegistry:
         trace = self._require(trace_id)
         if not trace.evidence_id:
             raise TraceabilityError("Cette exigence n’a aucune preuve à valider.")
+        if not trace.evidence_quote:
+            raise TraceabilityError(
+                "Une liaison sans citation ne peut pas être validée comme couverture : "
+                "ajoute la citation de la preuve avant de la valider."
+            )
         trace.review_state = "confirmed"
         self._record(
             trace,
@@ -834,10 +1033,16 @@ class TraceabilityRegistry:
         """Change the status of a requirement (coherence rules enforced)."""
         trace = self._require(trace_id)
         status_value = _choice(status, STATUSES, "Statut")
-        if status_value == "covered" and not (trace.evidence_id and trace.evidence_quote):
-            raise TraceabilityError(
-                "Une exigence « covered » doit porter une preuve (evidence_id) et sa citation (evidence_quote)."
-            )
+        if status_value == "covered":
+            if not (trace.evidence_id and trace.evidence_quote):
+                raise TraceabilityError(
+                    "Une exigence « covered » doit porter une preuve (evidence_id) et sa citation (evidence_quote)."
+                )
+            if trace.review_state == "pending":
+                raise TraceabilityError(
+                    "Une liaison automatique en attente de validation ne peut pas rendre l’exigence couverte : "
+                    "valide d’abord la liaison."
+                )
         if status_value == "waived":
             raise TraceabilityError(
                 "Une exigence ne peut être « waived » que via la dérogation motivée (waive)."
@@ -964,7 +1169,7 @@ class TraceabilityRegistry:
         if trace.status != "waived":
             return trace
         old_status = trace.status
-        new_status = "covered" if (trace.evidence_id and trace.evidence_quote) else "uncovered"
+        new_status = "covered" if _coverage_allowed(trace) else "uncovered"
         trace.status = new_status
         self._record(
             trace,
@@ -1148,14 +1353,19 @@ def auto_link_evidence(
     (``review_state="pending"``).  A machine never decides that a requirement
     is covered.
 
-    Returns a summary: ``linked``, ``pending``, ``skipped``, ``considered``.
+    Returns a summary: ``linked`` (the proposals), ``linked_count``,
+    ``pending_count`` (proposals waiting for a validation), ``considered``
+    (the requirements examined), ``skipped`` (the requirements already linked
+    or waived) and ``evidence_count`` (the evidences read).
     """
     views = [evidence_view(item) for item in evidences or []]
     views = [view for view in views if view["evidence_id"]]
     linked: list[dict[str, str]] = []
     considered = 0
+    skipped = 0
     for trace in registry.all():
         if trace.status == "waived" or trace.evidence_id:
+            skipped += 1
             continue
         considered += 1
         for view in views:
@@ -1184,6 +1394,8 @@ def auto_link_evidence(
     return {
         "linked": linked,
         "linked_count": len(linked),
+        "pending_count": len(linked),
         "considered": considered,
-        "skipped": len(views),
+        "skipped": skipped,
+        "evidence_count": len(views),
     }

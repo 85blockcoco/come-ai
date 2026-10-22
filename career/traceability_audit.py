@@ -21,8 +21,11 @@ DÉFINITIONS (explicites, pour que les chiffres soient discutables)
 ------------------------------------------------------------------
 * Une exigence ``waived`` est **exclue** du dénominateur de couverture :
   une dérogation motivée n'est ni un succès ni un échec.
-* Le taux de couverture est ``covered / (total - waived)``, arrondi à
-  quatre décimales ; il vaut ``0.0`` quand il n'y a rien à évaluer.
+* Une exigence **superseded** (elle n'est plus demandée par son offre) est
+  exclue du dénominateur pour la même raison : elle n'est plus évaluable.
+* Le taux de couverture est ``covered / (total - waived - superseded)``,
+  arrondi à quatre décimales ; il vaut ``0.0`` quand il n'y a rien à
+  évaluer.
 * Le taux « mandatory » ne considère que les exigences obligatoires.
 * Les incohérences (exigence ``partial`` sans preuve, exigence ``covered``
   sans citation) sont **signalées**, jamais corrigées silencieusement.
@@ -44,6 +47,7 @@ __all__ = [
     "coverage_summary",
     "critical_gaps",
     "history_timeline",
+    "superseded_requirements",
     "waived_requirements",
 ]
 
@@ -76,9 +80,13 @@ def coverage_summary(traces: Iterable[RequirementTrace]) -> dict[str, Any]:
     """Return the global coverage of the registry."""
     items = list(traces)
     counts = _status_counts(items)
-    evaluated = len(items) - counts.get("waived", 0)
+    waived = counts.get("waived", 0)
+    superseded = sum(1 for trace in items if trace.is_superseded)
+    evaluated = len(items) - waived - superseded
     mandatory = [trace for trace in items if trace.criticality == "mandatory"]
-    mandatory_evaluated = len(mandatory) - sum(1 for trace in mandatory if trace.status == "waived")
+    mandatory_evaluated = len(mandatory) - sum(1 for trace in mandatory if trace.status == "waived") - sum(
+        1 for trace in mandatory if trace.is_superseded
+    )
     mandatory_covered = sum(1 for trace in mandatory if trace.status == "covered")
     by_category: dict[str, dict[str, Any]] = {}
     for trace in items:
@@ -111,6 +119,8 @@ def coverage_summary(traces: Iterable[RequirementTrace]) -> dict[str, Any]:
         "by_category": by_category,
         "by_criticality": by_criticality,
         "pending_reviews": sum(1 for trace in items if trace.review_state == "pending"),
+        "waived_count": waived,
+        "superseded_count": superseded,
     }
 
 
@@ -125,9 +135,13 @@ def _group_coverage(traces: Sequence[RequirementTrace], key: str) -> list[dict[s
     for identifier in sorted(groups):
         items = groups[identifier]
         counts = _status_counts(items)
-        evaluated = len(items) - counts.get("waived", 0)
+        waived = counts.get("waived", 0)
+        superseded = sum(1 for trace in items if trace.is_superseded)
+        evaluated = len(items) - waived - superseded
         mandatory = [trace for trace in items if trace.criticality == "mandatory"]
-        mandatory_evaluated = len(mandatory) - sum(1 for trace in mandatory if trace.status == "waived")
+        mandatory_evaluated = len(mandatory) - sum(1 for trace in mandatory if trace.status == "waived") - sum(
+            1 for trace in mandatory if trace.is_superseded
+        )
         mandatory_covered = sum(1 for trace in mandatory if trace.status == "covered")
         report.append(
             {
@@ -138,7 +152,8 @@ def _group_coverage(traces: Sequence[RequirementTrace], key: str) -> list[dict[s
                 "partial": counts.get("partial", 0),
                 "uncovered": counts.get("uncovered", 0),
                 "contradicted": counts.get("contradicted", 0),
-                "waived": counts.get("waived", 0),
+                "waived": waived,
+                "superseded": superseded,
                 "coverage_rate": _rate(counts.get("covered", 0), evaluated),
                 "mandatory_total": len(mandatory),
                 "mandatory_covered": mandatory_covered,
@@ -162,7 +177,8 @@ def critical_gaps(traces: Iterable[RequirementTrace]) -> list[dict[str, Any]]:
     """Return the mandatory requirements that are not covered.
 
     ``partial`` and ``contradicted`` requirements are gaps too: a partial
-    coverage of a mandatory requirement is not a coverage.
+    coverage of a mandatory requirement is not a coverage.  A *superseded*
+    requirement is not a gap: the offer does not ask for it anymore.
     """
     gaps: list[dict[str, Any]] = []
     for trace in traces:
@@ -170,11 +186,30 @@ def critical_gaps(traces: Iterable[RequirementTrace]) -> list[dict[str, Any]]:
             continue
         if trace.status in {"covered", "waived"}:
             continue
+        if trace.is_superseded:
+            continue
         payload = _trace_view(trace)
         payload["gap_reason"] = trace.status
         gaps.append(payload)
     gaps.sort(key=lambda item: (item.get("offer_id") or "", item.get("requirement_id") or ""))
     return gaps
+
+
+def superseded_requirements(traces: Iterable[RequirementTrace]) -> list[dict[str, Any]]:
+    """Return the requirements their source no longer states.
+
+    A superseded requirement is neither a success nor a failure: it left the
+    offer.  It stays in the registry with the event that superseded it.
+    """
+    superseded: list[dict[str, Any]] = []
+    for trace in traces:
+        if not trace.is_superseded:
+            continue
+        payload = _trace_view(trace)
+        payload["superseded_at"] = trace.superseded_at
+        superseded.append(payload)
+    superseded.sort(key=lambda item: (item.get("offer_id") or "", item.get("requirement_id") or ""))
+    return superseded
 
 
 def waived_requirements(traces: Iterable[RequirementTrace]) -> list[dict[str, Any]]:
@@ -247,18 +282,21 @@ def coverage_over_time(traces: Iterable[RequirementTrace]) -> list[dict[str, Any
 
     The statuses are replayed in chronological order: only the events that
     change a status (``created``, ``status_changed``, ``waived``,
-    ``reopened``) are applied.  The result is therefore the history of the
-    registry, not a snapshot of the present.
+    ``reopened``, ``superseded``) are applied.  The result is therefore the
+    history of the registry, not a snapshot of the present.
+
+    A point counts **only the requirements that existed at that moment**: a
+    requirement created later never inflates the denominator of an earlier
+    point (otherwise the curve would start below zero coverage for a
+    registry that did not yet hold those requirements).
     """
     items = list(traces)
-    states: dict[str, str] = {}
     points: list[tuple[str, str, int, str, str]] = []
     for trace in items:
-        states[trace.trace_id] = "uncovered"
         status_events = [
             event
             for event in trace.history
-            if event.event_type in {"created", "status_changed", "waived", "reopened"}
+            if event.event_type in {"created", "status_changed", "waived", "reopened", "superseded"}
         ]
         if not status_events:
             points.append((trace.created_at or trace.updated_at, trace.trace_id, 0, "created", trace.status))
@@ -274,12 +312,16 @@ def coverage_over_time(traces: Iterable[RequirementTrace]) -> list[dict[str, Any
     # The index inside the history is the tiebreaker: two events sharing the
     # same timestamp keep their causal order (the history is append-only).
     points.sort(key=lambda item: (item[0], item[1], item[2]))
+    states: dict[str, str] = {}
+    superseded: set[str] = set()
     timeline: list[dict[str, Any]] = []
     for timestamp, trace_id, _index, event_type, new_status in points:
         states[trace_id] = new_status
+        if event_type == "superseded":
+            superseded.add(trace_id)
         covered = sum(1 for status in states.values() if status == "covered")
         waived = sum(1 for status in states.values() if status == "waived")
-        evaluated = len(states) - waived
+        evaluated = len(states) - waived - len(superseded)
         timeline.append(
             {
                 "timestamp": timestamp,
@@ -288,6 +330,7 @@ def coverage_over_time(traces: Iterable[RequirementTrace]) -> list[dict[str, Any
                 "status": new_status,
                 "covered": covered,
                 "waived": waived,
+                "superseded": len(superseded),
                 "evaluated": evaluated,
                 "coverage_rate": _rate(covered, evaluated),
             }
@@ -339,6 +382,7 @@ def audit_report(traces: Iterable[RequirementTrace]) -> dict[str, Any]:
         "by_cv": coverage_by_cv(items),
         "gaps": critical_gaps(items),
         "waived": waived_requirements(items),
+        "superseded": superseded_requirements(items),
         "timeline": history_timeline(items, limit=1000),
         "evolution": coverage_over_time(items),
         "inconsistencies": _inconsistencies(items),

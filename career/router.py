@@ -24,6 +24,7 @@ from .traceability_audit import (
     coverage_summary,
     critical_gaps,
     history_timeline,
+    superseded_requirements,
     waived_requirements,
 )
 from workspace_core import UserFacingError, to_jsonable
@@ -954,6 +955,16 @@ def create_career_router(
         def report() -> dict[str, Any]:
             waived = waived_requirements(service.traceability.registry.all())
             return {"count": len(waived), "waived": waived}
+
+        return await local(report)
+
+    @router.get("/api/career/traceability/audit/superseded")
+    async def traceability_superseded() -> Any:
+        """The requirements their offer no longer states (SPEC-011)."""
+
+        def report() -> dict[str, Any]:
+            superseded = superseded_requirements(service.traceability.registry.all())
+            return {"count": len(superseded), "superseded": superseded}
 
         return await local(report)
 

@@ -2142,7 +2142,7 @@ class CareerService:
         try:
             self.sync_traceability_evidence(job_id, analysis.get("matched_elements"))
         except Exception:
-            pass
+            self._record_traceability_failure("evidence", job_id)
         return analysis
 
     def get_application_sprint(self, *, limit: int = 12) -> dict[str, Any]:
@@ -3277,8 +3277,22 @@ class CareerService:
         try:
             self.sync_traceability_requirements(job_id)
         except Exception:
-            pass
+            self._record_traceability_failure("requirements", job_id)
         return result
+
+    def _record_traceability_failure(self, kind: str, job_id: str) -> None:
+        """Leave a trace of a traceability sync failure in the audit log.
+
+        The traceability registry is a *view* of the offer, never a blocker:
+        a failure must not invalidate an import.  But it must not be silent
+        either — the local audit log records that the synchronisation failed
+        so the registry can be rebuilt.
+        """
+        try:
+            with self._lock, self._connection() as connection:
+                self._audit(connection, f"traceability_{kind}_sync_failed", "job", job_id)
+        except Exception:
+            pass
 
     def sync_traceability_requirements(self, job_id: str) -> dict[str, Any]:
         """Register the SK-02 requirements of a stored offer (SPEC-011).
@@ -3288,10 +3302,17 @@ class CareerService:
         registry vocabulary.  Nothing is invented and re-importing the same
         offer never duplicates a trace (the trace id is derived from
         ``(source, requirement_id)``).
+
+        The analysis of a *complete* extraction also supersedes the
+        requirements the offer no longer states: they leave the coverage
+        denominator instead of remaining permanent gaps.  A truncated
+        extraction never supersedes anything.
         """
         job = self.get_job(job_id)
         analysis = analyze_offer(job)
-        return self.traceability.register_offer_analysis(analysis, actor="system")
+        return self.traceability.register_offer_analysis(
+            analysis, actor="system", supersede_missing=True
+        )
 
     def sync_traceability_evidence(
         self, job_id: str, matched_elements: list[dict[str, Any]] | None = None
@@ -3303,7 +3324,14 @@ class CareerService:
         covered on its own.
         """
         if not matched_elements:
-            return {"linked": [], "linked_count": 0, "considered": 0, "skipped": 0}
+            return {
+                "linked": [],
+                "linked_count": 0,
+                "pending_count": 0,
+                "considered": 0,
+                "skipped": 0,
+                "evidence_count": 0,
+            }
         evidences = [
             {
                 "evidence_id": f"profile:{job_id}:{index}",
