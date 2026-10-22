@@ -18,6 +18,14 @@ Usage:
 
 from __future__ import annotations
 
+from .missions_extractor import (
+    MissionFact,
+    classify_mission_type,
+    detect_implied_skills,
+    detect_language,
+    extract_missions,
+    missions_as_dicts,
+)
 from .models import (
     CVAnalysisResult,
     DocumentInput,
@@ -46,6 +54,13 @@ __all__ = [
     "ExperienceEntry",
     "ReadabilityScore",
     "Provenance",
+    # Mission extraction (SK-18)
+    "MissionFact",
+    "classify_mission_type",
+    "detect_implied_skills",
+    "detect_language",
+    "extract_missions",
+    "missions_as_dicts",
     # Status constants
     "STATUS_OK",
     "STATUS_INFO",

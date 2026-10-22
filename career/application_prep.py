@@ -14,6 +14,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from .cv_quality.missions_extractor import extract_missions, missions_as_dicts
 from .models import clean_text, normalized_text
 
 MAX_REQUIREMENTS = 40
@@ -296,7 +297,10 @@ def prepare_application(
 
     requirements = extract_requirements(job)
     profile_blob = normalized_text(_profile_text(working_profile))
-
+    # SK-18 : les missions annoncées par l'offre, avec leur type et les
+    # compétences techniques qu'elles impliquent. Ce sont des extraits
+    # verbatim du texte de l'offre, jamais des reformulations.
+    missions = missions_as_dicts(extract_missions(job.get("description_original", "")))
     matched: list[dict[str, Any]] = []
     unverified: list[dict[str, Any]] = []
     for requirement in requirements:
@@ -484,6 +488,7 @@ def prepare_application(
             "last_verified_at": clean_text(job.get("last_verified_at"), limit=40),
         },
         "requirements": requirements,
+        "missions": missions,
         "source_excerpt": clean_text(job.get("description_original"), limit=MAX_SOURCE_EXCERPT),
         "matched_elements": matched,
         "unverified_elements": unverified,
@@ -528,7 +533,13 @@ def summarize_offer(job: dict[str, Any]) -> dict[str, Any]:
         "qualification_status": clean_text(qualification.get("target_status"), limit=40) or "to_verify",
         "qualification_missing": list(qualification.get("missing_fields") or []),
         "qualification_provenance": dict(qualification.get("provenance") or {}),
+        # Clé historique : les extraits d'exigences (mesure d'exhaustivité et
+        # repli d'affichage). Les missions réellement annoncées par l'offre
+        # sont détaillées dans « mission_details ».
         "missions": [clean_text(r.get("text"), limit=300) for r in requirements],
+        "mission_details": missions_as_dicts(
+            extract_missions(job.get("description_original", ""))
+        ),
         "prerequisites_count": len(requirements),
         "official_url": clean_text(job.get("official_url"), limit=2_000),
         "uncertainty": [
