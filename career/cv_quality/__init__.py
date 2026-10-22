@@ -25,6 +25,7 @@ from .missions_extractor import (
     detect_language,
     extract_missions,
     missions_as_dicts,
+    normalize_offer_text,
 )
 from .models import (
     CVAnalysisResult,
@@ -61,6 +62,7 @@ __all__ = [
     "detect_language",
     "extract_missions",
     "missions_as_dicts",
+    "normalize_offer_text",
     # Status constants
     "STATUS_OK",
     "STATUS_INFO",

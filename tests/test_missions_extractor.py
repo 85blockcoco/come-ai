@@ -32,6 +32,7 @@ from career.cv_quality.missions_extractor import (
     detect_language,
     extract_missions,
     missions_as_dicts,
+    normalize_offer_text,
 )
 
 FIXTURES_PATH = (
@@ -99,13 +100,31 @@ def test_offsets_point_at_the_verbatim_text(fixture_id: str) -> None:
 @pytest.mark.parametrize("fixture_id", sorted(FIXTURES_BY_ID))
 def test_quote_is_a_verbatim_excerpt_of_the_offer(fixture_id: str) -> None:
     data = fixture(fixture_id)
-    description = data["description_original"]
-    for fact in extract_missions(description):
+    description = normalize_offer_text(data["description_original"])
+    for fact in extract_missions(data["description_original"]):
         assert fact.quote, f"{fixture_id} : une mission doit être citée."
         assert fact.quote in description, (
             f"{fixture_id} : la citation doit être un extrait du texte source."
         )
         assert fact.source_field == "description_original"
+
+
+def test_html_description_is_normalised_before_extraction() -> None:
+    html = (
+        "<h2>Missions</h2><ul><li>Modélisation financière</li>"
+        "<li>Reporting mensuel</li></ul><p>Profil : Bac+5</p>"
+    )
+    facts = extract_missions(html)
+    assert [fact.text for fact in facts] == ["Modélisation financière", "Reporting mensuel"]
+    # La preuve reste résolvable dans le texte normalisé.
+    assert facts[0].quote in normalize_offer_text(html)
+
+
+def test_html_entities_are_decoded() -> None:
+    assert normalize_offer_text("Missions&nbsp;: Mod&eacute;lisation") == (
+        "Missions : Modélisation"
+    )
+    assert normalize_offer_text("Missions : M&A") == "Missions : M&A"
 
 
 def test_missions_are_sorted_by_offset() -> None:

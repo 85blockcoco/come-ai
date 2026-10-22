@@ -57,8 +57,12 @@ missions, offre sans rubrique missions).
 
 ## 2. Comment l'extraction fonctionne
 
-1. **Préparation** — le texte est tronqué à 30 000 caractères (les octets nuls sont retirés) ;
-   les offsets renvoyés sont relatifs à cette chaîne.
+1. **Préparation** — le texte est d'abord normalisé (`normalize_offer_text()`) : si la
+   description contient du HTML, les balises de bloc deviennent des sauts de ligne, les autres
+   balises sont retirées et les entités décodées ; le texte est ensuite tronqué à
+   30 000 caractères (les octets nuls sont retirés). **Les offsets et la citation portent sur
+   ce texte normalisé**, que `normalize_offer_text()` restitue : chaque preuve reste donc
+   résolvable.
 2. **Langue** — `detect_language()` compte les marqueurs lexicaux de chaque langue
    (mots outils + vocabulaire métier, 30 marqueurs par langue) ; à égalité, l'ordre
    `fr, en, de, it, es, nl` tranche. En mode `auto`, une rubrique de missions écrite dans
@@ -70,10 +74,10 @@ missions, offre sans rubrique missions).
    La correspondance est faite sur la suite de mots : « Rôle et missions » et « le profil
    recherché » sont reconnus via leurs mots constituents, le titre le plus long l'emportant.
 4. **État de section** — un titre de missions ouvre la lecture, un titre « autre » la ferme,
-   une ligne vide la ferme si la ligne suivante ressemble à de la prose (et non à une
-   nouvelle liste). Un titre inconnu (rubrique non cataloguée) la ferme aussi, sauf s'il
-   porte un marqueur de mission — sinon « Modélisation financière » serait pris pour une
-   rubrique.
+   une ligne vide la ferme si la ligne suivante ressemble à de la prose (et non à un item de
+   mission : une liste d'items séparée par des lignes vides reste ouverte). Un titre inconnu
+   (rubrique non cataloguée) la ferme aussi, sauf s'il porte un marqueur de mission — sinon
+   « Modélisation financière » serait pris pour une rubrique.
 5. **Découpe en items** — puces (`•`, `-`, `▪`), numérotations (`1.`, `b)`) et phrases
    (coupure sur `[.!?]` suivie d'une majuscule ; une phrase commençant par une minuscule
    ou un chiffre est recollée à la précédente). Une puce = une mission ; un paragraphe = une
@@ -114,8 +118,8 @@ missions, offre sans rubrique missions).
 ## 5. Validation
 
 ```
-.venv/bin/python -m pytest -q tests/test_missions_extractor.py   → 145 passed
-.venv/bin/python -m pytest -q                                     → 1569 passed, 1 skipped
+.venv/bin/python -m pytest -q tests/test_missions_extractor.py   → 147 passed
+.venv/bin/python -m pytest -q                                     → 1571 passed, 1 skipped
 .venv/bin/python -m ruff check .                                 → All checks passed!
 git diff --check                                                  → propre
 ```
@@ -125,7 +129,7 @@ Le test `tests/test_offer_summary_exhaustiveness.py` est **skippé** dans le wor
 répertoire principal pour vérifier que la livraison n'y fait pas descendre le score
 (10,6 % → 10,6 %, seuil 10,5 %).
 
-### 5.1 Ce que couvrent les 145 tests
+### 5.1 Ce que couvrent les 147 tests
 
 - **Corpus** : les 29 fixtures sont vérifiées mission par mission (type, texte, confiance,
   compétences implicites), plus la validité des **offsets** (`description[start:end] == text`)
@@ -133,7 +137,9 @@ répertoire principal pour vérifier que la livraison n'y fait pas descendre le 
 - **Contrat** : entrées vides/invalides, déterminisme, troncature à 500, filtrage du vague,
   section « profil » jamais lue comme mission, puces vides et numéros seuls, déduplication,
   les six types classifiables, les trois niveaux de confiance, l'exposition des conflits,
-  14 compétences implicites, langue explicite restrictive, `missions_as_dicts` JSON-sûr.
+  14 compétences implicites, langue explicite restrictive, `missions_as_dicts` JSON-sûr,
+  **HTML** (balises de bloc → sauts de ligne, entités décodées, `M&A` intact),
+  CRLF et tabulations.
 - **Garde-fous du module** : analyse AST du fichier — aucun import réseau
   (`requests`, `urllib`, `httpx`, `socket`, `subprocess`), aucun appel dynamique
   (`eval`, `exec`, `compile`, `__import__`), aucune horloge (`datetime`, `time.time`).
@@ -171,6 +177,9 @@ linéaire sur ~130 titres à chaque ligne) et normalisation unique par item (au 
 - La section missions est fermée par une ligne vide suivie de prose : une annonce qui
   enchaîne ses missions sur un paragraphe libre **sans** titre ni liste perd ces lignes
   (choix assumé : mieux vaut manquer que fabriquer des missions).
+- Le HTML est **converti** avant extraction : les offsets et la citation portent donc sur le
+  texte normalisé (`normalize_offer_text()`), pas sur la chaîne HTML brute. C'est le prix de
+  l'indépendance du module vis-à-vis du nettoyage appliqué en amont par les connecteurs.
 
 ## 8. Fichiers
 

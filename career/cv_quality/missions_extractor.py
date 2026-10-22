@@ -400,6 +400,25 @@ _NUMBER_MARKER = re.compile(r"(?:^|(?<=[\s]))(\d{1,2}[.)]|[A-Za-z][.)])(?=\s)")
 _LEADING_JUNK = re.compile(r"^[\s\"'«»“”„]+")
 _TRAILING_JUNK = re.compile(r"[\s\"'«»“”„]+$")
 
+# HTML : les annonces publiques arrivent souvent balisées. Les balises de
+# bloc deviennent des sauts de ligne, les autres sont retirées, les entités
+# sont décodées. Le texte normalisé est public : `normalize_offer_text()`
+# le restitue, ce qui garde les offsets et les citations résolvables.
+_HTML_BLOCK = re.compile(
+    r"</?(?:p|div|li|ul|ol|h[1-6]|br|tr|td|th|table|section|article|header|"
+    r"footer|blockquote|pre|dl|dt|dd)\b[^>]*>",
+    re.IGNORECASE,
+)
+_HTML_TAG = re.compile(r"<[^<>\n]{1,200}>")
+_HTML_ENTITIES = {
+    "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'",
+    "&nbsp;": " ", "&#39;": "'", "&laquo;": "«", "&raquo;": "»",
+    "&eacute;": "é", "&egrave;": "è", "&agrave;": "à", "&ccedil;": "ç",
+    "&uuml;": "ü", "&ouml;": "ö", "&auml;": "ä", "&szlig;": "ß",
+}
+_HTML_NUMERIC_ENTITY = re.compile(r"&#(\d{1,6});")
+_HTML_SPACES = re.compile(r"[ \t]{2,}")
+
 
 # ------------------------------------------------------------------- modèle
 
@@ -429,6 +448,29 @@ class MissionFact:
 def _fold(text: str) -> str:
     """Forme normalisée utilisée pour les recherches lexicales."""
     return normalized_text(text)
+
+
+def normalize_offer_text(text: str) -> str:
+    """Convertit une description d'offre en texte brut (sans balises).
+
+    Une description contenant du HTML est convertie **avant** extraction :
+    les balises de bloc deviennent des sauts de ligne, les autres balises
+    sont retirées et les entités décodées. Les offsets et la citation de
+    chaque mission portent sur ce texte normalisé — c'est cette fonction
+    qui le restitue, ce qui garde chaque preuve résolvable.
+    """
+    if not isinstance(text, str) or ("<" not in text and "&" not in text):
+        return text
+    cleaned = _HTML_BLOCK.sub("\n", text)
+    cleaned = _HTML_TAG.sub("", cleaned)
+    for entity, char in _HTML_ENTITIES.items():
+        cleaned = cleaned.replace(entity, char)
+    cleaned = _HTML_NUMERIC_ENTITY.sub(
+        lambda match: chr(int(match.group(1))) if int(match.group(1)) < 0x110000 else "",
+        cleaned,
+    )
+    cleaned = _HTML_SPACES.sub(" ", cleaned)
+    return cleaned
 
 
 def language_scores(text: str) -> dict[str, int]:
@@ -798,12 +840,15 @@ def _scan(
         stripped = line.strip()
 
         if not stripped:
-            # Une ligne vide ferme la section missions si du texte suivi
-            # ressemble à de la prose (et pas à une nouvelle liste).
+            # Une ligne vide ferme la section missions si le texte suivant
+            # ressemble à de la prose : une liste d'items séparée par des
+            # lignes vides (HTML, mise en page aérée) reste ouverte.
             if section == "missions" and section_items > 0:
                 following = _next_meaningful(lines, index + 1)
-                if following is not None and not _starts_with_marker(following[0]):
-                    section = "other"
+                if following is not None:
+                    upcoming = following[0].strip()
+                    if not _starts_with_marker(upcoming) and not _has_content_hint(upcoming):
+                        section = "other"
             index += 1
             continue
 
@@ -951,7 +996,7 @@ def extract_missions(text: str, lang: str = "auto") -> list[MissionFact]:
     """
     if not isinstance(text, str) or not text.strip():
         return []
-    raw = text.replace("\x00", "")[:MAX_INPUT_CHARS]
+    raw = normalize_offer_text(text).replace("\x00", "")[:MAX_INPUT_CHARS]
     requested = lang.strip().lower() if isinstance(lang, str) else ""
     explicit = requested in SUPPORTED_LANGUAGES
     primary = requested if explicit else detect_language(raw)
@@ -991,4 +1036,5 @@ __all__ = [
     "detect_language",
     "extract_missions",
     "missions_as_dicts",
+    "normalize_offer_text",
 ]
