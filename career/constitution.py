@@ -264,6 +264,7 @@ class ConformanceReport:
     ruleset_id: str = ""
     not_evaluable: int = 0
     checked_at: str = ""
+    unresolved_rules: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -281,6 +282,7 @@ class ConformanceReport:
             "ruleset_id": self.ruleset_id,
             "not_evaluable": self.not_evaluable,
             "checked_at": self.checked_at,
+            "unresolved_rules": list(self.unresolved_rules),
         }
 
 
@@ -1389,14 +1391,22 @@ class ConstitutionEngine:
 
     def evaluate_all(self, ruleset: RuleSet, entity: Mapping[str, Any]) -> list[ValidationResult]:
         """Évalue toutes les règles d'un RuleSet sur une entité."""
-        payload = entity if isinstance(entity, Mapping) else {}
+        results, _ = self._evaluate_rules(ruleset, entity if isinstance(entity, Mapping) else {})
+        return results
+
+    def _evaluate_rules(
+        self, ruleset: RuleSet, payload: Mapping[str, Any]
+    ) -> tuple[list[ValidationResult], list[str]]:
+        """Évalue les règles du jeu et signale celles qui ne sont plus applicables."""
         results: list[ValidationResult] = []
+        unresolved: list[str] = []
         for rule_id in ruleset.rules:
             rule = self.resolve_rule(rule_id)
             if rule is None:
+                unresolved.append(rule_id)
                 continue
             results.append(self.evaluate(rule, payload))
-        return results
+        return results, unresolved
 
     def check_conformance(self, entity: Mapping[str, Any], ruleset_id: str) -> ConformanceReport:
         """Évalue une entité face à un RuleSet et renvoie le rapport de conformité."""
@@ -1404,7 +1414,7 @@ class ConstitutionEngine:
         if ruleset is None:
             raise UserFacingError(f"Le jeu de règles « {ruleset_id} » est introuvable.")
         payload = entity if isinstance(entity, Mapping) else {}
-        results = self.evaluate_all(ruleset, payload)
+        results, unresolved = self._evaluate_rules(ruleset, payload)
         passed = sum(1 for result in results if result.passed)
         not_evaluable = sum(1 for result in results if result.status == "not_evaluable")
         failed = [result for result in results if not result.passed and result.status != "not_evaluable"]
@@ -1444,6 +1454,7 @@ class ConstitutionEngine:
             ruleset_id=ruleset_id,
             not_evaluable=not_evaluable,
             checked_at=utc_now(),
+            unresolved_rules=unresolved,
         )
 
     def _trends(self, entity: Mapping[str, Any], score: float) -> dict[str, float]:

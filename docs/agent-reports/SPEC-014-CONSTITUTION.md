@@ -74,6 +74,11 @@ faux : le résultat porte `status = "error"` et le motif exact.
 échecs de sévérité « info » sont regroupés avec les avertissements : ils ne
 bloquent rien). Un test verrouille cette invariant.
 
+**Une règle qui n'est plus applicable est signalée, pas effacée** : le rapport
+liste `unresolved_rules` (règle archivée ou disparue du référentiel), pour
+qu'un jeu de règles ne puisse pas silencieusement contrôler moins de règles
+qu'il n'en paraît.
+
 ### Performance
 
 Les expressions sont compilées une fois puis mises en cache
@@ -229,13 +234,13 @@ Le fichier ne contient aucune URL distante (vérifié par test) et n'appelle que
 ## 8. Tests
 
 ```text
-.venv/bin/python -m pytest -q tests/test_constitution.py   → 77 passed
-.venv/bin/python -m pytest -q                               → 1501 passed, 1 skipped
+.venv/bin/python -m pytest -q tests/test_constitution.py   → 78 passed
+.venv/bin/python -m pytest -q                               → 1502 passed, 1 skipped
 .venv/bin/python -m ruff check .                            → All checks passed!
 git diff --check                                            → propre
 ```
 
-Répartition : 17 tests de DSL et de sécurité, 9 tests de moteur, 13 tests de
+Répartition : 17 tests de DSL et de sécurité, 10 tests de moteur, 13 tests de
 gouvernance, 7 tests de référentiel, 6 tests de dérive et d'audit, 13 tests
 d'API HTTP, 2 tests de tests générés, 4 tests de CLI, 3 tests d'interface
 (dont un test Node qui exécute les fonctions pures du module), 3 tests de

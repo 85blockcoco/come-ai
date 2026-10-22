@@ -25,7 +25,6 @@ import os
 import secrets
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator, Mapping, Sequence
 
@@ -1165,11 +1164,6 @@ class ConstitutionStore:
             self.create_ruleset(payload, actor=actor)
             created_rulesets.append(payload["ruleset_id"])
         return {"rules": created_rules, "rulesets": created_rulesets}
-
-
-def _now_iso() -> str:
-    """Horodatage ISO-8601 UTC (aide de test et d'export)."""
-    return datetime.now(timezone.utc).isoformat(timespec="microseconds")
 
 
 def load_rules(store: ConstitutionStore, *, statuses: Sequence[str] | None = None) -> list[Rule]:

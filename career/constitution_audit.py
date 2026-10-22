@@ -13,7 +13,7 @@ répond à trois questions.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from typing import Any, Mapping
 
 from .constitution import Rule, validate_rule_payload
@@ -297,7 +297,3 @@ def build_entity_report(store: Any, entity_id: str, *, now: datetime | None = No
         },
         "history": history,
     }
-
-
-def _today() -> date:
-    return date.today()

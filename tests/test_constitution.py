@@ -355,6 +355,36 @@ def test_une_regle_non_approuvee_n_est_pas_effectivee(tmp_path: Path) -> None:
     assert report.compliance_score == 1.0
 
 
+def test_le_rapport_signale_les_regles_devenu_non_applicables(tmp_path: Path) -> None:
+    """Une règle archivée reste listée : le rapport ne la fait pas disparaître."""
+    store = ConstitutionStore(tmp_path)
+    seed_active_rule(store, "matching.demo.applicable", "matching.score >= 10")
+    store.create_rule(
+        {
+            "rule_id": "matching.demo.retiree",
+            "name": "Règle retirée",
+            "domain": "matching",
+            "expression": "matching.score >= 20",
+            "scope": ["offer"],
+        },
+        actor="alice",
+    )
+    store.approve_rule("matching.demo.retiree", approver="bob")
+    store.archive_rule("matching.demo.retiree", actor="bob", reason="Retirée du référentiel")
+    store.create_ruleset(
+        {
+            "ruleset_id": "test.retraite",
+            "name": "Jeu avec règle retirée",
+            "rules": ["matching.demo.applicable", "matching.demo.retiree"],
+        },
+        actor="alice",
+    )
+    engine = ConstitutionEngine(store=store)
+    report = engine.check_conformance({"matching": {"score": 50}}, "test.retraite")
+    assert report.total_rules == 1
+    assert report.unresolved_rules == ["matching.demo.retiree"]
+
+
 def test_get_violations_filtre_par_severite_minimale() -> None:
     engine = ConstitutionEngine()
     engine.register(make_rule(rule_id="matching.demo.info", severity="info", expression="matching.score >= 90"))
