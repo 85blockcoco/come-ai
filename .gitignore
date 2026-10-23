@@ -18,3 +18,5 @@ __pycache__/
 
 # Environnement virtuel local
 .venv/
+messages/
+messages/result.json
