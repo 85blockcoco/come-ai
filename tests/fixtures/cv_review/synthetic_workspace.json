@@ -1,0 +1,72 @@
+{
+  "format": "career-cv-review/1",
+  "application_id": "app_demo_review",
+  "job_id": "j_demo_review",
+  "variant_id": "m_a",
+  "language": "fr",
+  "created_at": "2026-10-22T09:00:00.000000+00:00",
+  "updated_at": "2026-10-22T09:05:00.000000+00:00",
+  "source_document": "cv-demo.pdf",
+  "invalidated_blocks": [],
+  "header": {
+    "display_name": "Personne Démo",
+    "contact_line": "",
+    "education_line": "Master Finance (démo)"
+  },
+  "blocks": [
+    {
+      "block_id": "summary",
+      "section": "skills",
+      "heading": "Professional Summary",
+      "index": 0,
+      "source_text": "Excel, analyse financière, financial modeling",
+      "proposed_text": "Targeting Stagiaire M&A. Documented profile skills: Excel, analyse financière, financial modelling",
+      "status": "accepted",
+      "placeholder_reason": null,
+      "user_text": null,
+      "decided_at": "2026-10-22T09:05:00.000000+00:00",
+      "decided_by": "user",
+      "evidence": [
+        {
+          "source": "profile.skills",
+          "quote": "Excel, analyse financière, financial modeling",
+          "offset": 0
+        }
+      ]
+    },
+    {
+      "block_id": "skills-technical-skills-0",
+      "section": "skills",
+      "heading": "Technical Skills",
+      "index": 0,
+      "source_text": "Excel, analyse financière, financial modeling",
+      "proposed_text": "Excel, analyse financière, financial modelling",
+      "status": "verified",
+      "placeholder_reason": null,
+      "user_text": null,
+      "decided_at": null,
+      "decided_by": "",
+      "evidence": [
+        {
+          "source": "profile.skills",
+          "quote": "Excel, analyse financière, financial modeling",
+          "offset": 0
+        }
+      ]
+    },
+    {
+      "block_id": "requirement-competences",
+      "section": "skills",
+      "heading": "Technical Skills",
+      "index": 0,
+      "source_text": "",
+      "proposed_text": "Compétences: [AJOUTER PREUVE CHIFFRÉE]",
+      "status": "pending",
+      "placeholder_reason": "Exigence mandatory sans preuve dans le profil : « Compétences ».",
+      "user_text": null,
+      "decided_at": null,
+      "decided_by": "",
+      "evidence": null
+    }
+  ]
+}
