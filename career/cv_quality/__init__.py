@@ -38,6 +38,7 @@ from .missions_extractor import (
     missions_as_dicts,
     normalize_offer_text,
 )
+from .education_extractor import EducationFact, extract_education
 from .models import (
     CVAnalysisResult,
     Currency,
@@ -117,6 +118,9 @@ __all__ = [
     "extract_missions",
     "missions_as_dicts",
     "normalize_offer_text",
+    # Education requirement extraction (SK-19)
+    "EducationFact",
+    "extract_education",
     # Status constants
     "STATUS_OK",
     "STATUS_INFO",
