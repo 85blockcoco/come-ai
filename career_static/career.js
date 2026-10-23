@@ -1014,6 +1014,10 @@ function jobCard(job, mode = "discover", qualification = null) {
     if (note) card.append(note);
   }
   card.append(actions);
+  // SPEC-006 : the badges of freshness, completeness and source trust are
+  // read from the local offer-quality contract.  The module is optional:
+  // the card stays usable when it is not loaded.
+  if (window.CareerOfferQuality?.decorate) window.CareerOfferQuality.decorate(card, job);
   return card;
 }
 
