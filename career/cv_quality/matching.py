@@ -117,6 +117,31 @@ def _content_tokens(text: str) -> list[str]:
     return result
 
 
+def extract_keywords(text: str) -> list[str]:
+    """Return deterministic significant terms used by the public matcher API."""
+    return _content_tokens(text)
+
+
+def find_evidence_in_cv(
+    cv_result: CVAnalysisResult, requirement: str, category: str = ""
+) -> MatchEvidence | None:
+    """Return a verbatim CV line containing a significant requirement term."""
+    source = cv_result.provenance.source_text or cv_result.text
+    if not source:
+        return None
+    normalized, mapping = _normalize_with_map(source)
+    for keyword in extract_keywords(requirement):
+        position = normalized.find(keyword)
+        if position < 0:
+            continue
+        original = mapping[position]
+        start, end = _line_bounds(source, original)
+        text = source[start:end].strip()
+        offset = source.find(text, start, end)
+        return MatchEvidence(text=text, offset=offset, field="document", confidence=0.9)
+    return None
+
+
 def _token_matches(word: str, token: str) -> bool:
     """True when a token satisfies a keyword.
 
@@ -789,8 +814,30 @@ def match_cv_to_offer(
     warnings: list[str] = []
     actions: list[MatchAction] = []
 
-    analysis = analyze_offer(offer)
+    structured_records = [
+        item for item in offer.get("requirements", []) if isinstance(item, dict)
+    ] if isinstance(offer.get("requirements"), list) else []
+    offer_for_analysis = offer
+    if structured_records:
+        offer_for_analysis = dict(offer)
+        offer_for_analysis["requirements"] = "\n".join(
+            str(item.get("text", "")) for item in structured_records
+        )
+    analysis = analyze_offer(offer_for_analysis)
     requirements = list(analysis.get("requirements", []))
+    if structured_records:
+        metadata = {str(item.get("text", "")): item for item in structured_records}
+        for requirement in requirements:
+            record = metadata.get(requirement["text"])
+            if not record:
+                continue
+            requirement["category"] = record.get("category", requirement.get("category", "other"))
+            if record.get("modality"):
+                requirement["modality"] = record["modality"]
+            elif record.get("mandatory") is True:
+                requirement["modality"] = "required"
+            elif record.get("mandatory") is False:
+                requirement["modality"] = "preferred"
 
     for missing in _unextracted_requirements(offer, [r["text"] for r in requirements]):
         warnings.append(

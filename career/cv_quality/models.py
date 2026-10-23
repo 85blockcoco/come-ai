@@ -197,6 +197,7 @@ class Provenance:
     filetype: str
     text_length: int
     page_count: int | None
+    source_text: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -303,8 +304,10 @@ MatchActionCode = Literal["HIGHLIGHT", "REPHRASE", "DO_NOT_ADD", "QUANTIFY", "CO
 class MatchEvidence:
     text: str
     offset: int
-    kind: str
+    kind: str = "document"
     field: str | None = None
+    confidence: float = 1.0
+    coverage: float = 1.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -316,6 +319,7 @@ class MatchAction:
     reason: str
     confidence: float
     evidence: MatchEvidence | None = None
+    cv_evidence_field: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

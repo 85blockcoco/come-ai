@@ -47,12 +47,13 @@ from .models import (
 from .parser import extract_salary, extract_text_from_bytes, extract_text_from_file
 from .structure import analyze_cv
 from .ats import describe_risk, run_ats_check, run_ats_check_bytes, run_ats_check_file
-from .matching import match_cv_to_offer
+from .matching import find_evidence_in_cv, match_cv_to_offer
 
 __all__ = [
     # Main entry points
     "analyze_cv",
     "match_cv_to_offer",
+    "find_evidence_in_cv",
     "run_ats_check",
     "run_ats_check_bytes",
     "run_ats_check_file",
