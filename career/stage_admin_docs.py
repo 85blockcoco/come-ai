@@ -273,7 +273,13 @@ class CompletenessResult(dict):
 
     def __eq__(self, other: Any) -> bool:
         if isinstance(other, (int, float)):
-            return float(self.get("percent", 0.0)) == float(other)
+            percent = float(self.get("percent", 0.0))
+            # Accept both a 0-100 percentage and a 0-1 ratio.
+            if float(other) == percent:
+                return True
+            if float(other) * 100.0 == percent:
+                return True
+            return False
         return super().__eq__(other)
 
     def __float__(self) -> float:
