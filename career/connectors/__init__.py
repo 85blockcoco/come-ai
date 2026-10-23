@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from .public_ats import AshbyConnector, LeverConnector, SmartRecruitersConnector
+from .public_ats import AshbyConnector, LeverConnector, RecruiteeConnector, SmartRecruitersConnector
 from .welcome_jungle import WelcomeJungleConnector, register_welcome_jungle_connector
 from .jobteaser import JobTeaserConnector, register_jobteaser_connector
 from .talent_com import TalentComConnector, register_talent_com_connector
@@ -15,6 +15,7 @@ class ConnectorSpec:
     documentation_url: str
     doc_verified: bool
     enabled_by_default: bool = False
+    known_conditions: str = ""
 
 
 CONNECTOR_SPECS = {
@@ -22,36 +23,49 @@ CONNECTOR_SPECS = {
         provider="lever",
         documentation_url="https://github.com/lever/postings-api",
         doc_verified=True,
+        known_conditions="Flux public documenté sans clé ; pagination bornée côté client.",
     ),
     "ashby": ConnectorSpec(
         provider="ashby",
         documentation_url="https://developers.ashbyhq.com/docs/public-job-posting-api",
         doc_verified=True,
+        known_conditions="Flux public documenté sans clé ; une ressource par board.",
     ),
     "smartrecruiters": ConnectorSpec(
         provider="smartrecruiters",
         documentation_url="https://developers.smartrecruiters.com/docs/posting-api",
         doc_verified=True,
+        known_conditions="API posting publique documentée ; pagination bornée.",
+    ),
+    "recruitee": ConnectorSpec(
+        provider="recruitee",
+        documentation_url="https://support.recruitee.com/en/articles/1066286-show-jobs-on-your-own-website",
+        doc_verified=True,
+        known_conditions="API publique du site carrière sans authentification ; photographie temporelle.",
     ),
     "welcome_jungle": ConnectorSpec(
         provider="welcome_jungle",
         documentation_url="https://www.welcometothejungle.com/fr/jobs",
         doc_verified=True,
+        known_conditions="Source publique ; extraction locale bornée et déclenchée explicitement.",
     ),
     "jobteaser": ConnectorSpec(
         provider="jobteaser",
         documentation_url="https://www.jobteaser.com/en/jobs",
         doc_verified=True,
+        known_conditions="Source publique ; extraction locale bornée et déclenchée explicitement.",
     ),
     "talent_com": ConnectorSpec(
         provider="talent_com",
         documentation_url="https://www.talent.com",
         doc_verified=True,
+        known_conditions="Source publique ; extraction locale bornée et déclenchée explicitement.",
     ),
     "apec": ConnectorSpec(
         provider="apec",
         documentation_url="https://www.apec.fr",
         doc_verified=True,
+        known_conditions="Source publique ; extraction locale bornée et déclenchée explicitement.",
     ),
 }
 
@@ -66,6 +80,7 @@ def _init_connector_registry() -> dict[str, tuple]:
     registry["lever"] = (LeverConnector, "class")
     registry["ashby"] = (AshbyConnector, "class")
     registry["smartrecruiters"] = (SmartRecruitersConnector, "class")
+    registry["recruitee"] = (RecruiteeConnector, "class")
     # New source connectors (function-based)
     register_welcome_jungle_connector(registry)
     register_jobteaser_connector(registry)
@@ -103,5 +118,6 @@ __all__ = [
     "ConnectorSpec",
     "default_exploration_connectors",
     "LeverConnector",
+    "RecruiteeConnector",
     "SmartRecruitersConnector",
 ]

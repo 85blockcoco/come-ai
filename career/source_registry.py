@@ -161,4 +161,18 @@ CURATED_SOURCES: tuple[dict[str, str], ...] = (
         "provenance_url": "https://www.apec.fr",
         "verified_at": "2026-10-20T00:00:00+00:00",
     },
+    {
+        "id": "registry:recruitee:bunq", "provider": "recruitee", "company": "bunq",
+        "board_token": "bunq", "public_url": "https://careers.bunq.com/",
+        "provenance_url": "https://www.bunq.com/careers",
+        "conditions": "Flux public Recruitee sans clé ; photographie temporelle sans promesse.",
+        "verified_at": "2026-10-20T10:30:00+00:00",
+    },
+    {
+        "id": "registry:smartrecruiters:experian", "provider": "smartrecruiters", "company": "Experian",
+        "company_identifier": "Experian", "public_url": "https://jobs.smartrecruiters.com/Experian",
+        "provenance_url": "https://jobs.experian.com/",
+        "conditions": "API posting publique sans clé ; pagination bornée côté client.",
+        "verified_at": "2026-10-20T10:30:00+00:00",
+    },
 )
