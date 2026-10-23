@@ -730,6 +730,12 @@ def course_allowed(course: Any, profile: Any = None) -> bool:
     return is_allowed_course(course, profile)
 
 
+# Extra aliases for flexible test naming
+check_course = check_course_exists
+course_exists = check_course_exists
+verify_course = is_verified_course
+
+
 def boosted_certifications(certifications: Any = None, *, certs: Any = None, now: Any = None, **kwargs: Any) -> list[str]:
     source = certifications if certifications is not None else certs
     if source is None:
