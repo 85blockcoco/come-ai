@@ -215,6 +215,20 @@ class DiscoverySearchPayload(BaseModel):
     force: bool = False
 
 
+class DailyDigestRefreshPayload(BaseModel):
+    """Explicit request to read the official sources again."""
+
+    force: bool = False
+    include_boards: bool = True
+    include_curated: bool = True
+
+
+class DailyDigestSettingsPayload(BaseModel):
+    """Explicit lifetime of the daily digest cache, in seconds."""
+
+    ttl_seconds: int = Field(ge=60, le=86_400)
+
+
 class InterviewSessionPayload(BaseModel):
     mode: str = Field(default="technical", min_length=2, max_length=80)
     difficulty: str = Field(default="intermediate", min_length=2, max_length=80)
@@ -515,6 +529,36 @@ def create_career_router(
     @router.post("/api/career/discovery/search")
     async def discover_opportunities(payload: DiscoverySearchPayload) -> Any:
         return await local(lambda: service.discover_opportunities(force=payload.force))
+
+    @router.get("/api/career/daily")
+    async def daily_digest() -> Any:
+        """Read the daily digest. This call never queries a source."""
+        return await local(service.daily_digest)
+
+    @router.get("/career/daily", include_in_schema=False)
+    async def daily_digest_alias() -> Any:
+        """Alias kept for the documented ``GET /career/daily`` contract."""
+        return await local(service.daily_digest)
+
+    @router.post("/api/career/daily/refresh")
+    async def refresh_daily_digest(payload: DailyDigestRefreshPayload) -> Any:
+        """Explicitly read the official sources, then rebuild the digest."""
+        return await local(
+            lambda: service.refresh_daily_digest(
+                force=payload.force,
+                include_boards=payload.include_boards,
+                include_curated=payload.include_curated,
+            )
+        )
+
+    @router.post("/api/career/daily/visit")
+    async def record_daily_digest_visit() -> Any:
+        """Record that the digest was displayed, so the next one reports what appeared since."""
+        return await local(service.record_daily_digest_visit)
+
+    @router.put("/api/career/daily/settings")
+    async def update_daily_digest_settings(payload: DailyDigestSettingsPayload) -> Any:
+        return await local(lambda: service.update_daily_digest_settings(payload.model_dump()))
 
     @router.get("/api/career/jobs")
     async def jobs(

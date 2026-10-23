@@ -78,6 +78,12 @@ h1 span { color: var(--accent); }
 .dashboard-hero .inline-actions { justify-content: flex-end; }
 .dashboard-content { margin-top: 16px; }
 .dashboard-content .metrics { margin-bottom: 0; }
+.daily-digest-panel { margin-bottom: 16px; }
+.daily-digest-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 11px; margin-bottom: 16px; }
+.daily-digest-summary .metric { padding: 11px 13px; }
+.daily-digest-summary .metric strong { font-size: 1.2rem; }
+.daily-digest-section { margin-top: 16px; }
+.daily-digest-section .panel-heading { margin-bottom: 2px; }
 .action-plan-panel { display: grid; gap: 0; margin-top: 16px; padding: 19px; border-color: #cce5d7; background: linear-gradient(135deg, #fff 0%, #f6fcf8 100%); }
 .action-plan-heading { margin-bottom: 7px; }
 .action-plan-heading .local-tag { flex: 0 0 auto; }
@@ -437,6 +443,7 @@ button, a, .career-tab { transition: background-color .16s ease, border-color .1
 
 @media (max-width: 1050px) {
   .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .daily-digest-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 860px) {
   .career-topbar, .dashboard-hero { align-items: flex-start; flex-direction: column; }
@@ -458,6 +465,7 @@ button, a, .career-tab { transition: background-color .16s ease, border-color .1
   .stage-detail-hero { flex-direction: column; }
   .stage-detail-hero .primary-button { width: 100%; }
   .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .daily-digest-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .two-columns, .three-columns { grid-template-columns: 1fr; }
   .profile-import-field-controls { grid-template-columns: 1fr; }
   .profile-import-history-item { align-items: flex-start; flex-direction: column; }
@@ -480,6 +488,7 @@ button, a, .career-tab { transition: background-color .16s ease, border-color .1
 }
 @media (max-width: 420px) {
   .metrics { grid-template-columns: 1fr; }
+  .daily-digest-summary { grid-template-columns: 1fr; }
   .career-shell { width: min(100% - 20px, 760px); }
   .brand-mark { width: 42px; height: 42px; border-radius: 13px; }
   .top-actions { width: 100%; }

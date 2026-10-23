@@ -17,12 +17,27 @@ import threading
 import time
 import urllib.parse
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import replace
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterator, Mapping
+from typing import Any, Iterator
 
+from .daily_digest import (
+    DAILY_DIGEST_SETTING,
+    DAILY_DIGEST_TTL_SECONDS,
+    DAILY_DIGEST_TTL_SETTING,
+    MAX_PARALLEL_SOURCES,
+    MAX_TTL_SECONDS,
+    MIN_TTL_SECONDS,
+    build_tracks,
+    empty_state as empty_daily_digest_state,
+    moment_text,
+    normalize_ttl,
+    parse_moment,
+    project_digest,
+)
 from .models import (
     AVAILABILITY_STATES,
     APPLICATION_STAGES,
@@ -99,17 +114,8 @@ from .interview import (
     select_question,
 )
 from .ocr import LocalVisionOCR, OCRResult
-from .discovery import (
-    DiscoveryPayload,
-    GreenhouseBoard,
-    GreenhouseJobBoardConnector,
-    PublicSourceError,
-    callable_geo_kwargs,
-    connector_geo_kwargs,
-    parse_greenhouse_board_token,
-)
+from .discovery import DiscoveryPayload, GreenhouseBoard, GreenhouseJobBoardConnector, PublicSourceError, callable_geo_kwargs, parse_greenhouse_board_token
 from .connectors import default_exploration_connectors
-from .countries import DEFAULT_COUNTRIES_EXCLUDE
 from .exploration import (
     EXPLORATION_LAST_SETTING,
     EXPLORATION_MAX_RESULTS,
@@ -120,12 +126,6 @@ from .exploration import (
     ranking_key,
 )
 from .offer_qualification import qualify_offer
-from .offer_intelligence import (
-    align_display_requirements,
-    build_snapshot,
-    snapshot_summary,
-)
-from . import offer_intelligence_store
 from .scoring import classify_job_family, score_job
 from workspace_core import UserFacingError, extract_text, safe_error
 from .profile_import import (
@@ -149,22 +149,6 @@ STAGE_SEARCH_SETTING_KEY = "stage_search_brief"
 DISCOVERY_CACHE_SECONDS = 10 * 60
 
 
-def _geo_arguments(brief: dict[str, Any]) -> dict[str, list[str]]:
-    """The country lists a connector must apply, read from the brief.
-
-    The list is resolved once, here, so every connector receives the same
-    countries and no wording is interpreted twice.  France stays excluded
-    unless the person explicitly emptied the list.
-    """
-    excluded = brief.get("countries_exclude")
-    if not isinstance(excluded, list):
-        excluded = list(DEFAULT_COUNTRIES_EXCLUDE)
-    included = brief.get("countries_include")
-    if not isinstance(included, list):
-        included = []
-    return {"countries_exclude": list(excluded), "countries_include": list(included)}
-
-
 def _attach_qualification_presentation(match: dict[str, Any], qualification: dict[str, Any]) -> dict[str, Any]:
     """Keep relevance and mandatory eligibility distinct in every API path."""
     status = clean_text(qualification.get("target_status"), limit=40) or "to_verify"
@@ -182,20 +166,6 @@ def _attach_qualification_presentation(match: dict[str, Any], qualification: dic
         else:
             match["label"] = "Informations obligatoires à vérifier"
     return match
-
-
-def _requirement_ids_of(job: dict[str, Any]) -> list[str]:
-    """Return the requirement identifiers of the current snapshot of an offer.
-
-    The explorer, the detailed view, the matching panel and the preparation
-    panel all read this list: a requirement keeps one identifier everywhere.
-    """
-    summary = job.get("offer_intelligence_summary")
-    if not isinstance(summary, dict):
-        return []
-    return [str(item) for item in summary.get("requirement_ids") or []]
-
-
 DELETE_CONFIRMATION = "SUPPRIMER MES DONNÉES CAREER"
 PROFILE_EDITABLE_FIELDS = (
     "display_name",
@@ -266,6 +236,7 @@ class CareerService:
         discovery_connector: GreenhouseJobBoardConnector | None = None,
         curated_sources: tuple[dict[str, Any], ...] | None = None,
         exploration_connectors: dict[str, Any] | None = None,
+        daily_digest_ttl_seconds: int = DAILY_DIGEST_TTL_SECONDS,
     ):
         self.base_dir = base_dir.resolve()
         self.data_dir = self.base_dir / "career_data"
@@ -294,6 +265,9 @@ class CareerService:
         self._prep_cache: set[str] = set()
         self._discovery_lock = threading.Lock()
         self._lock = threading.RLock()
+        # The daily digest cache lifetime is explicit and configurable: a
+        # constructor default, overridable later from the local settings.
+        self.daily_digest_ttl_seconds = normalize_ttl(daily_digest_ttl_seconds)
         self._ensure_storage()
         self._initialize()
         if ConsentGuard is not None:
@@ -569,9 +543,6 @@ class CareerService:
                 "TEXT NOT NULL DEFAULT ''",
             )
             self._seed_defaults(connection)
-            # The versioned offer-intelligence snapshot lives beside the offers,
-            # never as a new column on the offers themselves.
-            offer_intelligence_store.ensure_schema(connection)
         try:
             os.chmod(self.db_path, 0o600)
         except OSError:
@@ -1606,17 +1577,11 @@ class CareerService:
             profile = self._row_dict(connection.execute("SELECT * FROM candidate_profile WHERE id = 1").fetchone())
             intake_row = connection.execute("SELECT * FROM career_intake WHERE id = 1").fetchone()
             job_row = connection.execute("SELECT * FROM jobs WHERE id = ?", (identifier,)).fetchone()
-            snapshot = offer_intelligence_store.load_snapshot(connection, identifier)
         if not job_row:
             raise UserFacingError("Cette offre Career n’existe pas.")
         if not intake_row:
             raise UserFacingError("Le mini-entretien Career local est indisponible.")
-        job = dict(job_row)
-        if snapshot:
-            # The CV and the cover letter quote the same canonical
-            # requirements as every other screen of the workspace.
-            job["offer_intelligence"] = snapshot
-        return profile, self._serialize_intake_row(intake_row), job, normalized_language
+        return profile, self._serialize_intake_row(intake_row), dict(job_row), normalized_language
 
     def create_application_draft(
         self,
@@ -2046,14 +2011,7 @@ class CareerService:
                     require_known_location=brief.get("require_known_location", True),
                 ).to_dict()
                 _attach_qualification_presentation(stage_match, qualification)
-                matches.append({
-                    "job": job,
-                    "stage_match": stage_match,
-                    "qualification": qualification,
-                    # The matching panel points at the very same requirement
-                    # identifiers as the explorer and the detailed view.
-                    "requirement_ids": _requirement_ids_of(job),
-                })
+                matches.append({"job": job, "stage_match": stage_match, "qualification": qualification})
             # Break ties by source identity, never a random database ID or
             # import/update time: the same postings have the same ordering
             # after a board reorders its feed or the application restarts.
@@ -2082,7 +2040,6 @@ class CareerService:
                     require_known_location=brief.get("require_known_location", True),
                 ).to_dict()
                 matches.append({"job": job, "stage_match": None, "qualification": qualification,
-                                "requirement_ids": _requirement_ids_of(job),
                                 "education_access": score_brief_match(brief, job)["education_access"]})
         payload["matches"] = matches
         return payload
@@ -2126,12 +2083,7 @@ class CareerService:
         job = self.get_job(job_id)
         context = self._scoring_context()
         profile = context.get("profile") or {}
-        analysis = prepare_application(
-            profile,
-            context.get("intake") or {},
-            job,
-            intelligence=job.get("offer_intelligence"),
-        )
+        analysis = prepare_application(profile, context.get("intake") or {}, job)
         cv_analysis = self._current_cv_analysis()
         qualification = qualify_offer(job).to_dict()
         fit_job = {
@@ -2181,38 +2133,12 @@ class CareerService:
                     "mandatory_pct": coverage.mandatory_pct,
                     "preferred_pct": coverage.preferred_pct,
                 },
-                "gaps": self._gaps_with_requirement_ids(gaps, job),
+                "gaps": [serialize_gap(gap) for gap in gaps],
                 "automatic_submission": False,
             }
         )
         self._prep_cache.add(job_id)
         return analysis
-
-    @staticmethod
-    def _gaps_with_requirement_ids(
-        gaps: list[Any], job: dict[str, Any]
-    ) -> list[dict[str, Any]]:
-        """Attach the canonical requirement identifier to every CV gap.
-
-        The gap keeps its own wording; the identifier is the one of the
-        versioned snapshot, so the matching panel points at the very same
-        requirement as the explorer, the detailed view, the cover letter and
-        the application checklist.  A gap without a canonical counterpart
-        simply has no identifier: none is ever invented.
-        """
-        payload = [serialize_gap(gap) for gap in gaps]
-        snapshot = job.get("offer_intelligence")
-        if not isinstance(snapshot, Mapping):
-            return payload
-        aligned = align_display_requirements(
-            [{"text": str(item.get("requirement") or "")} for item in payload],
-            snapshot,
-        )
-        for gap, entry in zip(payload, aligned):
-            identifier = entry.get("requirement_id")
-            if identifier:
-                gap["requirement_id"] = identifier
-        return payload
 
     def get_application_sprint(self, *, limit: int = 12) -> dict[str, Any]:
         """Prioritise a bounded batch for local preparation, without sending.
@@ -2667,13 +2593,7 @@ class CareerService:
                         # Future connectors receive their own source descriptor.
                         descriptor = GreenhouseBoard(source_id, company, parse_greenhouse_board_token(source.get("board_token"))) if provider == "greenhouse" else source
                         outcome["attempted"] = True
-                        # The country filter is pushed to the connector: an
-                        # excluded country is dropped on the source side and
-                        # never reaches the local database.
-                        geo_kwargs = connector_geo_kwargs(connector, **_geo_arguments(brief))
-                        result = connector.discover_internships(
-                            descriptor, selection_brief=brief, deadline=deadline, **geo_kwargs
-                        )
+                        result = connector.discover_internships(descriptor, selection_brief=brief, deadline=deadline)
                         if not isinstance(result, DiscoveryPayload) or not isinstance(result.jobs, tuple) or any(not isinstance(job, dict) for job in result.jobs):
                             raise PublicSourceError("Le connecteur n’a pas renvoyé un résultat d’exploration valide.", code="invalid_payload")
                         counts = (result.raw_count, result.evaluated_count, result.invalid_count,
@@ -2953,12 +2873,15 @@ class CareerService:
                 ),
             )
 
-    def discover_opportunities(self, *, force: bool = False) -> dict[str, Any]:
+    def discover_opportunities(self, *, force: bool = False, max_parallel: int = 1) -> dict[str, Any]:
         """Refresh explicitly configured official boards after a user action.
 
         A source failure is isolated: existing data survives unchanged, while
         other enabled boards continue.  There is no automatic scheduler and
         no provider/model call anywhere in this workflow.
+
+        ``max_parallel`` never exceeds two simultaneous sources: the bound is
+        a resource guarantee for the local machine, not a tuning knob.
         """
         if not self._discovery_lock.acquire(blocking=False):
             raise UserFacingError("Une recherche d’opportunités est déjà en cours. Attends sa fin avant de relancer.")
@@ -2982,208 +2905,449 @@ class CareerService:
                 raise UserFacingError("Ajoute d’abord au moins un board Greenhouse public à suivre.")
 
             outcomes: list[dict[str, Any]] = []
-            for row in sources:
-                source = dict(row)
-                source_id = str(source["id"])
-                selection_key = f"stage_search_selection:{source_id}"
-                started_at = utc_now()
-                if (
-                    not force
-                    and self._discovery_cache_valid(str(source["last_success_at"]))
-                    and cached_selections.get(selection_key) == selection_fingerprint
-                ):
-                    run_id = self._record_discovery_run(
-                        source_id,
-                        status="cached",
-                        started_at=started_at,
-                        finished_at=utc_now(),
-                        message="Résultats conservés : vérification réussie il y a moins de 10 minutes.",
-                    )
+            bounded_parallel = max(1, min(int(max_parallel), MAX_PARALLEL_SOURCES))
+            if bounded_parallel > 1 and len(sources) > 1:
+                # At most two official sources are read at the same time. The
+                # bound is a resource guarantee, not a tuning knob.
+                with ThreadPoolExecutor(max_workers=bounded_parallel) as executor:
+                    futures = [
+                        executor.submit(
+                            self._refresh_discovery_source,
+                            row,
+                            brief,
+                            force=force,
+                            cached_selections=cached_selections,
+                            selection_fingerprint=selection_fingerprint,
+                        )
+                        for row in sources
+                    ]
+                    outcomes = [future.result() for future in futures]
+            else:
+                for row in sources:
                     outcomes.append(
-                        {
-                            "source_id": source_id,
-                            "company": source["company"],
-                            "status": "cached",
-                            "run_id": run_id,
-                            "message": "Résultats récents conservés (cache de 10 minutes).",
-                            "verified_at": source["last_success_at"],
-                        }
-                    )
-                    continue
-
-                run_id = self._record_discovery_run(source_id, status="running", started_at=started_at)
-                with self._lock, self._connection() as connection:
-                    connection.execute(
-                        "UPDATE discovery_sources SET last_checked_at = ?, updated_at = ? WHERE id = ?",
-                        (started_at, started_at, source_id),
-                    )
-                try:
-                    board = GreenhouseBoard(
-                        id=source_id,
-                        company=str(source["company"]),
-                        board_token=str(source["board_token"]),
-                    )
-                    ranked_discovery = getattr(self.discovery_connector, "discover_ranked", None)
-                    if callable(ranked_discovery):
-                        # The country filter is pushed to the connector, so a
-                        # French posting never becomes a local record.
-                        geo_kwargs = callable_geo_kwargs(
-                            ranked_discovery, **_geo_arguments(brief)
-                        )
-                        result = ranked_discovery(board, selection_brief=brief, **geo_kwargs)
-                    else:
-                        # Retain the original injectable connector contract.
-                        # Production Greenhouse always uses ranked discovery;
-                        # legacy fixtures/connectors return their own payload.
-                        result = self.discovery_connector.discover(board)
-                except Exception as caught:
-                    # A connector is isolated from the rest of the local
-                    # tracker.  The public implementation raises
-                    # ``PublicSourceError`` for expected source failures, but
-                    # an unexpected parser/transport defect must still close
-                    # this run cleanly rather than leaving it marked running
-                    # or surfacing a server error to the browser.
-                    error = (
-                        caught
-                        if isinstance(caught, PublicSourceError)
-                        else PublicSourceError(
-                            "Cette source officielle a rencontré une erreur locale inattendue. Les offres déjà enregistrées sont conservées.",
-                            code="unexpected",
+                        self._refresh_discovery_source(
+                            row,
+                            brief,
+                            force=force,
+                            cached_selections=cached_selections,
+                            selection_fingerprint=selection_fingerprint,
                         )
                     )
-                    message = clean_text(str(error), limit=1_000)
-                    self._finish_discovery_run(
-                        run_id,
-                        status="error",
-                        found_count=0,
-                        imported_count=0,
-                        updated_count=0,
-                        skipped_count=0,
-                        message=message,
-                    )
-                    with self._lock, self._connection() as connection:
-                        connection.execute(
-                            """
-                            UPDATE discovery_sources
-                            SET last_error_code = ?, last_error_at = ?, updated_at = ? WHERE id = ?
-                            """,
-                            (clean_text(getattr(error, "code", "error"), limit=80), utc_now(), utc_now(), source_id),
-                        )
-                        self._audit(connection, "discovery_source_error", "discovery_source", source_id)
-                    outcomes.append(
-                        {
-                            "source_id": source_id,
-                            "company": source["company"],
-                            "status": "error",
-                            "run_id": run_id,
-                            "message": message,
-                            "verified_at": source["last_success_at"],
-                        }
-                    )
-                    continue
-
-                imported = updated = 0
-                skipped = result.invalid_count
-                seen_at = result.verified_at
-                availability = self._current_availability_values()
-                for raw_job in result.jobs:
-                    try:
-                        payload = dict(raw_job)
-                        raw_source_id = clean_text(payload.get("source_id"), limit=240)
-                        if not raw_source_id:
-                            skipped += 1
-                            continue
-                        payload["source_id"] = f"{source_id}:{raw_source_id}"
-                        imported_job = self.import_job(payload, availability=availability)
-                        if imported_job["created"]:
-                            imported += 1
-                        else:
-                            updated += 1
-                        with self._lock, self._connection() as connection:
-                            connection.execute(
-                                """
-                                UPDATE jobs
-                                SET discovery_source_id = ?, last_seen_at = ?, last_verified_at = ?
-                                WHERE id = ?
-                                """,
-                                (source_id, seen_at, seen_at, imported_job["id"]),
-                            )
-                    except UserFacingError:
-                        # One malformed remote posting must not prevent other
-                        # official postings on the same board from being saved.
-                        skipped += 1
-
-                with self._lock, self._connection() as connection:
-                    # A successful full feed no longer showing an earlier role
-                    # is evidence only that it was not observed now.  It is not
-                    # safe to call the role closed automatically.
-                    # Exclusion from a ranked top-150 or a malformed source
-                    # row is not evidence that an earlier posting vanished.
-                    # Preserve its last verified state and tracking instead.
-                    if not result.truncated and not result.invalid_count:
-                        connection.execute(
-                            """
-                            UPDATE jobs SET source_status = 'unknown', updated_at = ?
-                            WHERE discovery_source_id = ? AND last_seen_at != ? AND source_status = 'open'
-                            """,
-                            (utc_now(), source_id, seen_at),
-                        )
-                    connection.execute(
-                        """
-                        UPDATE discovery_sources
-                        SET last_success_at = ?, last_error_code = '', last_error_at = '', updated_at = ?
-                        WHERE id = ?
-                        """,
-                        (seen_at, utc_now(), source_id),
-                    )
-                    # An additive setting, not a schema replacement. This
-                    # fingerprint also makes an in-flight search using an old
-                    # brief non-cacheable after the person saves new criteria.
-                    connection.execute(
-                        """
-                        INSERT INTO career_settings (setting_key, setting_value) VALUES (?, ?)
-                        ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value
-                        """,
-                        (selection_key, selection_fingerprint),
-                    )
-                    self._audit(connection, "discovery_source_refreshed", "discovery_source", source_id)
-                status = "partial" if skipped else "success"
-                message = f"{len(result.jobs)} offre(s) publiée(s) vérifiée(s), {imported} nouvelle(s), {updated} actualisée(s)."
-                if skipped:
-                    message += f" {skipped} entrée(s) source ignorée(s) car incomplète(s) ou invalide(s)."
-                if result.truncated:
-                    message += (
-                        f" Les 150 offres les plus pertinentes parmi {result.evaluated_count} entrées admissibles "
-                        "ont été conservées après classement local selon tes critères "
-                        "(ordre neutre et déterministe sans critères). "
-                        "Les autres offres déjà suivies restent conservées."
-                    )
-                self._finish_discovery_run(
-                    run_id,
-                    status=status,
-                    found_count=len(result.jobs),
-                    imported_count=imported,
-                    updated_count=updated,
-                    skipped_count=skipped,
-                    message=message,
-                )
-                outcomes.append(
-                    {
-                        "source_id": source_id,
-                        "company": source["company"],
-                        "status": status,
-                        "run_id": run_id,
-                        "found_count": len(result.jobs),
-                        "imported_count": imported,
-                        "updated_count": updated,
-                        "skipped_count": skipped,
-                        "verified_at": seen_at,
-                        "message": message,
-                    }
-                )
             return {"outcomes": outcomes, "sources": self.list_discovery_sources()}
         finally:
             self._discovery_lock.release()
+
+    def _refresh_discovery_source(
+        self,
+        row: sqlite3.Row,
+        brief: dict[str, Any],
+        *,
+        force: bool,
+        cached_selections: dict[str, str],
+        selection_fingerprint: str,
+    ) -> dict[str, Any]:
+        """Read one official board and record what it changed.
+
+        A source failure is isolated: the offers already stored survive, and
+        the other boards continue. The method never sends anything.
+        """
+        source = dict(row)
+        source_id = str(source["id"])
+        selection_key = f"stage_search_selection:{source_id}"
+        started_at = utc_now()
+        if (
+            not force
+            and self._discovery_cache_valid(str(source["last_success_at"]))
+            and cached_selections.get(selection_key) == selection_fingerprint
+        ):
+            run_id = self._record_discovery_run(
+                source_id,
+                status="cached",
+                started_at=started_at,
+                finished_at=utc_now(),
+                message="Résultats conservés : vérification réussie il y a moins de 10 minutes.",
+            )
+            return {
+                    "source_id": source_id,
+                    "company": source["company"],
+                    "status": "cached",
+                    "run_id": run_id,
+                    "message": "Résultats récents conservés (cache de 10 minutes).",
+                    "verified_at": source["last_success_at"],
+            }
+
+        run_id = self._record_discovery_run(source_id, status="running", started_at=started_at)
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                "UPDATE discovery_sources SET last_checked_at = ?, updated_at = ? WHERE id = ?",
+                (started_at, started_at, source_id),
+            )
+        try:
+            board = GreenhouseBoard(
+                id=source_id,
+                company=str(source["company"]),
+                board_token=str(source["board_token"]),
+            )
+            ranked_discovery = getattr(self.discovery_connector, "discover_ranked", None)
+            if callable(ranked_discovery):
+                geo_kwargs = callable_geo_kwargs(
+                    ranked_discovery,
+                    countries_exclude=brief.get("countries_exclude", []),
+                    countries_include=brief.get("countries_include", []),
+                )
+                result = ranked_discovery(board, selection_brief=brief, **geo_kwargs)
+            else:
+                # Retain the original injectable connector contract.
+                # Production Greenhouse always uses ranked discovery;
+                # legacy fixtures/connectors return their own payload.
+                result = self.discovery_connector.discover(board)
+        except Exception as caught:
+            # A connector is isolated from the rest of the local
+            # tracker.  The public implementation raises
+            # ``PublicSourceError`` for expected source failures, but
+            # an unexpected parser/transport defect must still close
+            # this run cleanly rather than leaving it marked running
+            # or surfacing a server error to the browser.
+            error = (
+                caught
+                if isinstance(caught, PublicSourceError)
+                else PublicSourceError(
+                    "Cette source officielle a rencontré une erreur locale inattendue. Les offres déjà enregistrées sont conservées.",
+                    code="unexpected",
+                )
+            )
+            message = clean_text(str(error), limit=1_000)
+            self._finish_discovery_run(
+                run_id,
+                status="error",
+                found_count=0,
+                imported_count=0,
+                updated_count=0,
+                skipped_count=0,
+                message=message,
+            )
+            with self._lock, self._connection() as connection:
+                connection.execute(
+                    """
+                    UPDATE discovery_sources
+                    SET last_error_code = ?, last_error_at = ?, updated_at = ? WHERE id = ?
+                    """,
+                    (clean_text(getattr(error, "code", "error"), limit=80), utc_now(), utc_now(), source_id),
+                )
+                self._audit(connection, "discovery_source_error", "discovery_source", source_id)
+            return {
+                    "source_id": source_id,
+                    "company": source["company"],
+                    "status": "error",
+                    "run_id": run_id,
+                    "message": message,
+                    "verified_at": source["last_success_at"],
+            }
+
+        imported = updated = 0
+        skipped = result.invalid_count
+        seen_at = result.verified_at
+        availability = self._current_availability_values()
+        for raw_job in result.jobs:
+            try:
+                payload = dict(raw_job)
+                raw_source_id = clean_text(payload.get("source_id"), limit=240)
+                if not raw_source_id:
+                    skipped += 1
+                    continue
+                payload["source_id"] = f"{source_id}:{raw_source_id}"
+                imported_job = self.import_job(payload, availability=availability)
+                if imported_job["created"]:
+                    imported += 1
+                else:
+                    updated += 1
+                with self._lock, self._connection() as connection:
+                    connection.execute(
+                        """
+                        UPDATE jobs
+                        SET discovery_source_id = ?, last_seen_at = ?, last_verified_at = ?
+                        WHERE id = ?
+                        """,
+                        (source_id, seen_at, seen_at, imported_job["id"]),
+                    )
+            except UserFacingError:
+                # One malformed remote posting must not prevent other
+                # official postings on the same board from being saved.
+                skipped += 1
+
+        with self._lock, self._connection() as connection:
+            # A successful full feed no longer showing an earlier role
+            # is evidence only that it was not observed now.  It is not
+            # safe to call the role closed automatically.
+            # Exclusion from a ranked top-150 or a malformed source
+            # row is not evidence that an earlier posting vanished.
+            # Preserve its last verified state and tracking instead.
+            if not result.truncated and not result.invalid_count:
+                connection.execute(
+                    """
+                    UPDATE jobs SET source_status = 'unknown', updated_at = ?
+                    WHERE discovery_source_id = ? AND last_seen_at != ? AND source_status = 'open'
+                    """,
+                    (utc_now(), source_id, seen_at),
+                )
+            connection.execute(
+                """
+                UPDATE discovery_sources
+                SET last_success_at = ?, last_error_code = '', last_error_at = '', updated_at = ?
+                WHERE id = ?
+                """,
+                (seen_at, utc_now(), source_id),
+            )
+            # An additive setting, not a schema replacement. This
+            # fingerprint also makes an in-flight search using an old
+            # brief non-cacheable after the person saves new criteria.
+            connection.execute(
+                """
+                INSERT INTO career_settings (setting_key, setting_value) VALUES (?, ?)
+                ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value
+                """,
+                (selection_key, selection_fingerprint),
+            )
+            self._audit(connection, "discovery_source_refreshed", "discovery_source", source_id)
+        status = "partial" if skipped else "success"
+        message = f"{len(result.jobs)} offre(s) publiée(s) vérifiée(s), {imported} nouvelle(s), {updated} actualisée(s)."
+        if skipped:
+            message += f" {skipped} entrée(s) source ignorée(s) car incomplète(s) ou invalide(s)."
+        if result.truncated:
+            message += (
+                f" Les 150 offres les plus pertinentes parmi {result.evaluated_count} entrées admissibles "
+                "ont été conservées après classement local selon tes critères "
+                "(ordre neutre et déterministe sans critères). "
+                "Les autres offres déjà suivies restent conservées."
+            )
+        self._finish_discovery_run(
+            run_id,
+            status=status,
+            found_count=len(result.jobs),
+            imported_count=imported,
+            updated_count=updated,
+            skipped_count=skipped,
+            message=message,
+        )
+        return {
+            "source_id": source_id,
+            "company": source["company"],
+            "status": status,
+            "run_id": run_id,
+            "found_count": len(result.jobs),
+            "imported_count": imported,
+            "updated_count": updated,
+            "skipped_count": skipped,
+            "verified_at": seen_at,
+            "message": message,
+        }
+
+    # ------------------------------------------------------------------
+    # Daily digest (SK-09): what appeared, what changed, what expires.
+    # ------------------------------------------------------------------
+
+    def _daily_digest_ttl(self) -> int:
+        """Return the configured lifetime of the digest cache, in seconds."""
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT setting_value FROM career_settings WHERE setting_key = ?",
+                (DAILY_DIGEST_TTL_SETTING,),
+            ).fetchone()
+        stored = clean_text(row["setting_value"], limit=32) if row else ""
+        if stored:
+            try:
+                return normalize_ttl(int(stored))
+            except (TypeError, ValueError):
+                pass
+        return normalize_ttl(self.daily_digest_ttl_seconds)
+
+    def update_daily_digest_settings(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Store an explicit cache lifetime for the daily digest."""
+        seconds = self._bounded_int(
+            payload.get("ttl_seconds"), MIN_TTL_SECONDS, MAX_TTL_SECONDS, "La durée du cache"
+        )
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO career_settings (setting_key, setting_value) VALUES (?, ?)
+                ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value
+                """,
+                (DAILY_DIGEST_TTL_SETTING, str(seconds)),
+            )
+            self._audit(connection, "daily_digest_settings_updated", "preferences", "daily_digest")
+        return {"ttl_seconds": seconds, "min_ttl_seconds": MIN_TTL_SECONDS, "max_ttl_seconds": MAX_TTL_SECONDS}
+
+    def _daily_digest_state(self) -> dict[str, Any]:
+        """Read the stored digest state; a damaged value never breaks the screen."""
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT setting_value FROM career_settings WHERE setting_key = ?",
+                (DAILY_DIGEST_SETTING,),
+            ).fetchone()
+        state = empty_daily_digest_state()
+        if row:
+            try:
+                decoded = json.loads(str(row["setting_value"]))
+            except (TypeError, ValueError):
+                decoded = None
+            if isinstance(decoded, dict):
+                state.update(decoded)
+        if not isinstance(state.get("tracks"), dict):
+            state["tracks"] = {}
+        if not isinstance(state.get("digest"), dict):
+            state["digest"] = {}
+        # A run still marked as running never completed: the screen says so
+        # instead of presenting a half-refresh as a finished one.
+        if clean_text(state.get("status"), limit=40) == "running":
+            state["partial"] = True
+        return state
+
+    def _store_daily_digest_state(self, state: dict[str, Any]) -> None:
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO career_settings (setting_key, setting_value) VALUES (?, ?)
+                ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value
+                """,
+                (DAILY_DIGEST_SETTING, json.dumps(state, ensure_ascii=False)),
+            )
+
+    def _explorer_outcomes(self) -> list[dict[str, Any]]:
+        """Return the outcome of every curated source read during the last exploration."""
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT setting_value FROM career_settings WHERE setting_key = ?",
+                (EXPLORATION_LAST_SETTING,),
+            ).fetchone()
+        if not row:
+            return []
+        try:
+            snapshot = json.loads(str(row["setting_value"]))
+        except (TypeError, ValueError):
+            return []
+        outcomes = snapshot.get("outcomes") if isinstance(snapshot, dict) else None
+        if not isinstance(outcomes, list):
+            return []
+        return [item for item in outcomes if isinstance(item, dict)]
+
+    def _daily_digest_matches(self) -> list[dict[str, Any]]:
+        """Rank every stored offer against the saved criteria, exactly like the tracker."""
+        payload = self.list_stage_matches()
+        matches = payload.get("matches")
+        return [item for item in matches if isinstance(item, dict)] if isinstance(matches, list) else []
+
+    def _build_daily_digest(self, state: dict[str, Any], now: datetime, matches: list[dict[str, Any]]) -> dict[str, Any]:
+        """Project the digest from the local facts; no request is ever made here."""
+        return project_digest(
+            matches=matches,
+            sources=self.list_discovery_sources(),
+            explorer_outcomes=self._explorer_outcomes(),
+            state=state,
+            now=now,
+            ttl_seconds=self._daily_digest_ttl(),
+        )
+
+    def daily_digest(self) -> dict[str, Any]:
+        """Read the daily digest.
+
+        This call never performs any network request and never writes to the
+        database: opening the page cannot read a source behind the user's
+        back.  A cached digest is served as long as it is fresh; otherwise the
+        digest is rebuilt from the facts already stored locally and the screen
+        says that a manual refresh is expected.
+        """
+        state = self._daily_digest_state()
+        ttl = self._daily_digest_ttl()
+        now = datetime.now(timezone.utc)
+        cached = state.get("digest") if isinstance(state.get("digest"), dict) else {}
+        expires = parse_moment(state.get("expires_at"))
+        if cached and expires is not None and now < expires:
+            return {**cached, "cache_status": "fresh", "requires_refresh": False, "ttl_seconds": ttl}
+        digest = self._build_daily_digest(state, now, self._daily_digest_matches())
+        return {
+            **digest,
+            "cache_status": "expired" if expires is not None else "missing",
+            "requires_refresh": True,
+            "ttl_seconds": ttl,
+        }
+
+    def refresh_daily_digest(
+        self,
+        *,
+        force: bool = False,
+        max_parallel: int = MAX_PARALLEL_SOURCES,
+        include_boards: bool = True,
+        include_curated: bool = True,
+    ) -> dict[str, Any]:
+        """Explicitly refresh the official sources, then rebuild the digest.
+
+        This is the only entry point allowed to read a public source, and it
+        is never called when the page opens.  The run is marked as started
+        before the first request, so an interruption leaves a visible trace
+        instead of a silent half-refresh.
+        """
+        state = self._daily_digest_state()
+        ttl = self._daily_digest_ttl()
+        now = datetime.now(timezone.utc)
+        cached = state.get("digest") if isinstance(state.get("digest"), dict) else {}
+        expires = parse_moment(state.get("expires_at"))
+        if cached and expires is not None and now < expires and not force:
+            # The cache is still valid: an explicit refresh inside the TTL
+            # must not query a source again.
+            return {**cached, "cache_status": "fresh", "requires_refresh": False, "refreshed": False, "ttl_seconds": ttl}
+
+        interrupted = clean_text(state.get("status"), limit=40) == "running"
+        notes: list[str] = []
+        if interrupted:
+            notes.append(
+                "Une actualisation précédente avait été interrompue. Les données déjà enregistrées sont conservées et le résultat est signalé comme partiel."
+            )
+        state["status"] = "running"
+        state["started_at"] = moment_text(now)
+        state["interrupted_at"] = clean_text(state.get("started_at"), limit=40) if interrupted else ""
+        state["partial"] = interrupted
+        self._store_daily_digest_state(state)
+
+        if include_boards:
+            try:
+                self.discover_opportunities(force=True, max_parallel=max_parallel)
+            except UserFacingError as error:
+                notes.append(clean_text(str(error), limit=300))
+        if include_curated:
+            try:
+                self.explore_internships(force=True)
+            except UserFacingError as error:
+                notes.append(clean_text(str(error), limit=300))
+
+        finished = datetime.now(timezone.utc)
+        # The refresh time is part of the digest it produces.
+        state["last_refresh"] = moment_text(finished)
+        # The run that just finished is complete; the interrupted previous one
+        # stays visible in the notes.
+        state["partial"] = False
+        matches = self._daily_digest_matches()
+        digest = self._build_daily_digest(state, finished, matches)
+        if notes:
+            digest["notes"] = list(digest.get("notes") or []) + notes
+        # The comparison state is replaced only after the changes have been
+        # named, so a refresh reports exactly what it changed.
+        state["tracks"] = build_tracks(matches)
+        state["digest"] = digest
+        state["status"] = "completed"
+        state["built_at"] = moment_text(finished)
+        state["expires_at"] = moment_text(finished + timedelta(seconds=ttl))
+        state["partial"] = False
+        state["note"] = " ".join(notes)
+        self._store_daily_digest_state(state)
+        return {**digest, "cache_status": "fresh", "requires_refresh": False, "refreshed": True, "ttl_seconds": ttl}
+
+    def record_daily_digest_visit(self) -> dict[str, Any]:
+        """Record that the digest was shown, so the next one reports what appeared since."""
+        state = self._daily_digest_state()
+        now = datetime.now(timezone.utc)
+        state["last_visit"] = moment_text(now)
+        self._store_daily_digest_state(state)
+        return {"last_visit": state["last_visit"], "recorded": True}
 
     def _replace_preferences(
         self,
@@ -3262,40 +3426,6 @@ class CareerService:
             snapshot | {"job_id": job_id, "updated_at": utc_now()},
         )
 
-    @staticmethod
-    def _offer_intelligence_qualification(job: dict[str, Any]) -> dict[str, Any]:
-        """Return the source-attributed qualification of one offer.
-
-        The criteria of the person (contract types, excluded countries, minimum
-        duration) are deliberately neutral here: the snapshot describes the
-        offer, not the match between the offer and a brief.
-        """
-        try:
-            return qualify_offer(job).to_dict()
-        except (TypeError, ValueError):
-            return {}
-
-    @classmethod
-    def _store_offer_intelligence(
-        cls,
-        connection: sqlite3.Connection,
-        job: dict[str, Any],
-        *,
-        now: str,
-    ) -> dict[str, Any]:
-        """Derive and version the intelligence snapshot of one offer.
-
-        An unchanged source keeps its version and its identifiers; a changed
-        source creates a new version and retires the previous one, which stays
-        in the history but is never presented as the current analysis.
-        """
-        snapshot = build_snapshot(
-            job,
-            cls._offer_intelligence_qualification(job),
-            clock=lambda: now,
-        )
-        return offer_intelligence_store.store_snapshot(connection, snapshot, now=now)
-
     def import_job(self, payload: dict[str, Any], *, availability: dict[str, Any] | None = None,
                    preserve_unknown_source_fields: bool = False) -> dict[str, Any]:
         current_availability = availability or self._current_availability_values()
@@ -3355,7 +3485,6 @@ class CareerService:
                 self._audit(connection, "job_refreshed_without_duplicate", "job", job_id)
                 if qualification is not None:
                     self._store_qualification_snapshot(connection, job_id, qualification, payload)
-                self._store_offer_intelligence(connection, {**job, "id": job_id}, now=now)
                 created = False
             else:
                 job_id = f"job_{uuid.uuid4().hex}"
@@ -3381,7 +3510,6 @@ class CareerService:
                 self._audit(connection, f"job_imported_{audit_source}", "job", job_id)
                 if qualification is not None:
                     self._store_qualification_snapshot(connection, job_id, qualification, payload)
-                self._store_offer_intelligence(connection, {**job, "id": job_id}, now=now)
                 created = True
         result = self.get_job(job_id)
         result["created"] = created
@@ -3479,52 +3607,9 @@ class CareerService:
                 """,
                 (job_id,),
             ).fetchone()
-            if not row:
-                raise UserFacingError("Cette offre Career n’existe pas.")
-            result = self._serialize_job(row, self._scoring_context())
-            self._attach_offer_intelligence(connection, result, full=True)
-        return result
-
-    @staticmethod
-    def _attach_offer_intelligence(
-        connection: sqlite3.Connection,
-        result: dict[str, Any],
-        *,
-        full: bool = False,
-    ) -> None:
-        """Attach the current intelligence snapshot of one offer.
-
-        The explorer only receives the compact summary: it points at the very
-        same identifiers as the detailed view, it never recomputes them.
-        """
-        job_id = str(result.get("id") or "")
-        current = offer_intelligence_store.load_current(connection, job_id)
-        if current is None:
-            result["offer_intelligence"] = None
-            result["offer_intelligence_summary"] = None
-            result["offer_intelligence_version"] = None
-            result["offer_intelligence_current"] = False
-            return
-        result["offer_intelligence_summary"] = snapshot_summary(current["snapshot"])
-        result["offer_intelligence_version"] = current["version"]
-        result["offer_intelligence_current"] = True
-        if full:
-            result["offer_intelligence"] = current["snapshot"]
-        else:
-            result["offer_intelligence"] = None
-
-    def get_offer_intelligence(self, job_id: str) -> dict[str, Any]:
-        """Return the current intelligence snapshot of one offer, with its history."""
-        job = self.get_job(job_id)
-        with self._lock, self._connection() as connection:
-            history = offer_intelligence_store.load_history(connection, job_id)
-        return {
-            "job_id": job_id,
-            "snapshot": job.get("offer_intelligence"),
-            "summary": job.get("offer_intelligence_summary"),
-            "version": job.get("offer_intelligence_version"),
-            "history": history,
-        }
+        if not row:
+            raise UserFacingError("Cette offre Career n’existe pas.")
+        return self._serialize_job(row, self._scoring_context())
 
     def list_jobs(
         self,
@@ -3579,32 +3664,8 @@ class CareerService:
         """
         with self._lock, self._connection() as connection:
             rows = connection.execute(statement, params).fetchall()
-            summaries: dict[str, dict[str, Any]] = {}
-            versions: dict[str, int] = {}
-            for item in connection.execute(
-                "SELECT job_id, version, summary_json FROM job_offer_intelligence_snapshots "
-                "WHERE is_current = 1"
-            ).fetchall():
-                identifier = str(item["job_id"])
-                versions[identifier] = int(item["version"] or 0)
-                try:
-                    payload = json.loads(item["summary_json"] or "{}")
-                except (TypeError, ValueError):
-                    payload = {}
-                summaries[identifier] = payload if isinstance(payload, dict) else {}
         context = self._scoring_context()
         jobs = [self._serialize_job(row, context) for row in rows]
-        for job in jobs:
-            # The explorer shows the identifiers of the current snapshot: it
-            # never recomputes a requirement on its own.  The summary is the
-            # very same document as the one of the detailed view: only the
-            # version travels beside it, never inside it.
-            identifier = str(job.get("id") or "")
-            summary = summaries.get(identifier)
-            job["offer_intelligence_summary"] = summary
-            job["offer_intelligence"] = None
-            job["offer_intelligence_current"] = identifier in versions
-            job["offer_intelligence_version"] = versions.get(identifier)
         source_rank = {"open": 0, "unknown": 1, "closed": 2}
         jobs.sort(
             key=lambda job: (
@@ -3869,11 +3930,6 @@ class CareerService:
                     continue
                 job_row = connection.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
                 jobs_by_id[job_id] = dict(job_row) if job_row else {}
-            # The checklist reads the very same snapshot as the other screens.
-            for job_id in list(jobs_by_id):
-                snapshot = offer_intelligence_store.load_snapshot(connection, job_id)
-                if snapshot:
-                    jobs_by_id[job_id]["offer_intelligence"] = snapshot
         context = self._scoring_context()
         return build_dashboard_payload(
             [dict(row) for row in application_rows],
@@ -4091,23 +4147,11 @@ class CareerService:
 
         This reuses the deterministic preparation fact-checker: a requirement
         is "non trouvé dans ton profil" until the profile itself proves it.
-        The kit never claims it is satisfied.  Each line keeps the canonical
-        identifier of the requirement, the one every other screen uses.
+        The kit never claims it is satisfied.
         """
         prep = prepare_application(profile or {}, intake or {}, job)
-        intelligence = prep.get("offer_intelligence")
-        intelligence = intelligence if isinstance(intelligence, dict) else {}
-        by_id = intelligence.get("requirements_by_id")
-        by_id = by_id if isinstance(by_id, dict) else {}
-        by_text = {
-            str(record.get("text") or ""): str(identifier)
-            for identifier, record in by_id.items()
-            if isinstance(record, dict)
-        }
         return [
             {
-                "requirement_id": clean_text(item.get("requirement_id"), limit=80)
-                or by_text.get(clean_text(item.get("requirement"), limit=300), ""),
                 "requirement": clean_text(item.get("requirement"), limit=300),
                 "note": clean_text(item.get("note"), limit=300),
             }
@@ -4295,9 +4339,6 @@ class CareerService:
                 """,
                 (identifier,),
             ).fetchall()
-            # The letter and the fact-checker of the kit read the same snapshot
-            # as the explorer, the detailed view and the preparation panel.
-            snapshot = offer_intelligence_store.load_snapshot(connection, job_id)
         kit_language = normalize_language(str(draft_row["language"])) if draft_row else normalized_language
         job = {
             "id": job_id,
@@ -4309,12 +4350,8 @@ class CareerService:
             "reference": clean_text(application["source_id"], limit=200),
             "deadline_date": clean_text(application["deadline_date"], limit=32),
         }
-        kit_job = dict(job_row) if job_row else dict(job)
-        if snapshot:
-            kit_job["offer_intelligence"] = snapshot
-            job["offer_intelligence_summary"] = snapshot_summary(snapshot)
         intake = self._serialize_intake_row(intake_row) if intake_row else {"answers": {}}
-        kit_texts = build_kit_texts(profile, intake, kit_job, kit_language)
+        kit_texts = build_kit_texts(profile, intake, job, kit_language)
         # Each saved edit is an event row storing a partial JSON delta; they
         # replay in order so the possible last save wins per field only.
         edits: dict[str, str] = {}
@@ -4322,7 +4359,7 @@ class CareerService:
             edits.update(self._kit_content_edits(str(row["detail"])))
         kit_texts.update(edits)
         draft = self._serialize_application_draft(draft_row, include_content=True) if draft_row else None
-        unverified = self._kit_unverified_requirements(profile, intake, kit_job)
+        unverified = self._kit_unverified_requirements(profile, intake, dict(job_row) if job_row else job)
         return {
             "application": {
                 "id": identifier,
@@ -4759,6 +4796,15 @@ class CareerService:
                 "enabled": True,
                 "ai_required": False,
                 "local_only": True,
+                "invented_facts": False,
+            },
+            "daily_digest": {
+                "enabled": True,
+                "local_only": True,
+                "manual_trigger_only": True,
+                "cache_seconds": self._daily_digest_ttl(),
+                "max_parallel_sources": MAX_PARALLEL_SOURCES,
+                "network_on_page_load": False,
                 "invented_facts": False,
             },
         }
