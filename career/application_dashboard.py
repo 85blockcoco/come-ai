@@ -389,12 +389,18 @@ def prep_evaluation(
 
     known = [factor["percent"] for factor in factors.values()]
     score = round(sum(known) / len(known)) if known else None
+    intelligence = analysis.get("offer_intelligence")
+    intelligence = intelligence if isinstance(intelligence, dict) else {}
     return {
         "score": score,
         "scale": "0-100",
         "partial": bool(unknowns),
         "factors": factors,
         "unknowns": unknowns,
+        # The checklist reads the very same snapshot as the explorer, the
+        # detailed view and the preparation panel: it points at the same
+        # requirement identifiers instead of recomputing its own list.
+        "requirement_ids": list(intelligence.get("requirement_ids") or []),
         "formula": (
             "Note = moyenne simple des pourcentages des trois facteurs "
             "(couverture CV, vérification des faits, checklist) ; chaque facteur connu "
