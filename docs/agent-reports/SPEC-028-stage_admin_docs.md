@@ -8,12 +8,13 @@
 - Preuves exigées (`required_proofs`) + références de preuves (`proof_refs`).
 - Calcul de complétion (global et pièces requises) + liste `blocking_missing`.
 - Récap exportable (Markdown/texte).
+- Fixture synthétique `tests/fixtures/admin_docs_synthetic.json` : scénarios par pays (statuts, preuves `syn-*`, complétion attendue), consommés par `test_synthetic_fixture_scenarios`.
 - Endpoints REST via `create_app()` :
   - `GET /api/career/admin-docs/checklist` (alias `/stage-admin-docs/...`)
   - `POST /api/career/admin-docs/checklist`
   - `GET /api/career/admin-docs/requirements`
   - `GET /api/career/admin-docs/recap`
-- Tests : `tests/test_stage_admin_docs.py` (17 tests, dont smoke HTTP et cas adversarial).
+- Tests : `tests/test_stage_admin_docs.py` (18 tests, dont smoke HTTP, cas adversariaux et scénarios fixture synthétique).
 
 ## Décisions
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -192,3 +193,30 @@ def test_create_app_still_works() -> None:
     import come_ai_web
 
     assert hasattr(come_ai_web, "create_app")
+
+
+FIXTURE_PATH = Path(__file__).parent / "fixtures" / "admin_docs_synthetic.json"
+
+
+def test_synthetic_fixture_scenarios() -> None:
+    data = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
+    assert "synthetic" in data["label"].lower()
+    countries = data["countries"]
+    # FR + the 4 countries already covered by the international connectors.
+    assert set(countries) >= {"France", "United Kingdom", "Germany", "Netherlands", "Belgium"}
+    for country, scenario in countries.items():
+        checklist = build_admin_checklist(
+            country,
+            statuses=scenario["statuses"],
+            proof_refs=scenario["proof_refs"],
+        )
+        result = completeness(checklist)
+        assert result["percent"] == scenario["expected_percent"], country
+        assert result["required_percent"] == scenario["expected_required_percent"], country
+        assert result["blocking_missing"] == scenario["expected_blocking"], country
+        for item in checklist.items:
+            if item.key in scenario["proof_refs"]:
+                refs = scenario["proof_refs"][item.key]
+                assert item.proof_refs == refs, (country, item.key)
+                # Synthetic-only: every proof reference is tagged as synthetic.
+                assert all(ref.startswith("syn-") for ref in refs), (country, item.key)
