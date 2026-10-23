@@ -24,6 +24,10 @@ from .models import (
     DocumentInput,
     ExperienceEntry,
     Finding,
+    MatchAction,
+    MatchActionCode,
+    MatchEvidence,
+    MatchResult,
     Provenance,
     ReadabilityScore,
     SectionReading,
@@ -39,10 +43,12 @@ from .models import (
 from .parser import extract_text_from_bytes, extract_text_from_file
 from .structure import analyze_cv
 from .ats import describe_risk, run_ats_check, run_ats_check_bytes, run_ats_check_file
+from .matching import match_cv_to_offer
 
 __all__ = [
     # Main entry points
     "analyze_cv",
+    "match_cv_to_offer",
     "run_ats_check",
     "run_ats_check_bytes",
     "run_ats_check_file",
@@ -57,6 +63,10 @@ __all__ = [
     "ExperienceEntry",
     "ReadabilityScore",
     "Provenance",
+    "MatchAction",
+    "MatchActionCode",
+    "MatchEvidence",
+    "MatchResult",
     # ATS models
     "ATSFinding",
     "ATSRiskLevel",

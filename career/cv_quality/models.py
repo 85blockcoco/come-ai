@@ -122,6 +122,7 @@ class CVAnalysisResult:
     experiences: list[ExperienceEntry]
     readability: ReadabilityScore
     provenance: Provenance
+    text: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -199,3 +200,36 @@ class ATSCheckResult:
     pages_analyzed: int
     parse_errors: list[str]
     risk_interpretation: str = ""
+
+
+# Matching models (Mission 08)
+MatchActionCode = Literal["HIGHLIGHT", "REPHRASE", "DO_NOT_ADD", "QUANTIFY", "CONFIRM_LANGUAGE"]
+
+
+@dataclass(frozen=True, slots=True)
+class MatchEvidence:
+    text: str
+    offset: int
+    kind: str
+    field: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class MatchAction:
+    code: MatchActionCode
+    requirement_text: str
+    cv_evidence_text: str | None
+    cv_evidence_offset: int | None
+    reason: str
+    confidence: float
+    evidence: MatchEvidence | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class MatchResult:
+    overall_score: float
+    matched_requirements: int
+    total_requirements: int
+    actions: list[MatchAction]
+    missing_critical: list[str]
+    warnings: list[str]
