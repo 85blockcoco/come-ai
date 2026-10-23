@@ -281,6 +281,9 @@ function showView(viewName, { focus = true, updateHash = true } = {}) {
     view.hidden = view.id !== `view-${viewName}`;
   });
   refreshView(viewName);
+  if (viewName === "profile") {
+    window.careerProfileBuilder?.refresh?.();
+  }
   document.title = `${labelForView(viewName)} — Côme AI Career`;
   if (updateHash && window.location.hash !== `#career/${viewName}`) {
     internalHashChange = true;

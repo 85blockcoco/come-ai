@@ -44,7 +44,7 @@ from .models import (
     ATSFinding,
     ATSRiskLevel,
 )
-from .parser import extract_salary, extract_text_from_bytes, extract_text_from_file
+from .parser import extract_pages_from_bytes, extract_salary, extract_text_from_bytes, extract_text_from_file
 from .structure import analyze_cv
 from .ats import describe_risk, run_ats_check, run_ats_check_bytes, run_ats_check_file
 from .matching import find_evidence_in_cv, match_cv_to_offer
@@ -89,4 +89,5 @@ __all__ = [
     # Parser helpers
     "extract_text_from_file",
     "extract_text_from_bytes",
+    "extract_pages_from_bytes",
 ]

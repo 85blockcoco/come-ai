@@ -248,6 +248,28 @@ class CVAnalyzePayload(BaseModel):
     filetype: str = Field(default="txt", pattern="^(txt|pdf|docx)$")
 
 
+class CandidateProfileProposalsPayload(BaseModel):
+    """Ask for the facts proposed by one local document or pasted text."""
+
+    import_id: str = Field(default="", max_length=80)
+    text: str = Field(default="", max_length=100_000)
+    filename: str = Field(default="", max_length=180)
+
+
+class CandidateFactDecisionPayload(BaseModel):
+    """One explicit decision of the person on one proposed fact."""
+
+    decision: str = Field(min_length=3, max_length=20)
+    value: str = Field(default="", max_length=2_000)
+    note: str = Field(default="", max_length=500)
+
+
+class CandidateProfileApplyPayload(BaseModel):
+    """Apply the approved facts to the local profile fields."""
+
+    fact_ids: list[str] = Field(default_factory=list, max_length=60)
+
+
 class CVAnalyzeResponse(BaseModel):
     """Response payload for CV structural analysis."""
     findings: list[dict[str, Any]]
@@ -293,6 +315,7 @@ def create_career_router(
             },
             "ocr": capabilities["ocr"],
             "guided_intake": capabilities["guided_intake"],
+            "candidate_profile": capabilities["candidate_profile"],
             "application_studio": capabilities["application_studio"],
             "ai_enhancement": {"available": ai_generator is not None, "explicit_consent_required": True},
             "discovery": capabilities["discovery"],
@@ -414,6 +437,63 @@ def create_career_router(
     @router.get("/api/career/profile-imports/{import_id}")
     async def profile_import(import_id: str) -> Any:
         return await local(lambda: service.get_profile_import(import_id))
+
+    # ── SK-10 : profil candidat avec preuves approuvées ─────────────────────
+    # Les faits proposés ne sont jamais approuvés automatiquement : seule une
+    # décision explicite de la personne, fait par fait, change un statut.
+
+    @router.get("/api/career/candidate-profile/facts")
+    async def candidate_facts(status: str = Query(default="", max_length=20)) -> Any:
+        return await local(
+            lambda: {
+                "facts": service.list_candidate_facts(status),
+                "counts": service.candidate_fact_counts(),
+            }
+        )
+
+    @router.post("/api/career/candidate-profile/proposals", status_code=201)
+    async def candidate_profile_proposals(payload: CandidateProfileProposalsPayload) -> Any:
+        return await local(
+            lambda: service.build_candidate_facts(
+                import_id=payload.import_id,
+                text=payload.text,
+                filename=payload.filename,
+            )
+        )
+
+    @router.get("/api/career/candidate-profile/active")
+    async def active_candidate_profile() -> Any:
+        return await local(service.active_candidate_profile)
+
+    @router.post("/api/career/candidate-profile/apply")
+    async def apply_candidate_facts(payload: CandidateProfileApplyPayload) -> Any:
+        return await local(lambda: service.apply_candidate_facts(payload.fact_ids))
+
+    @router.get("/api/career/candidate-profile/export")
+    async def export_candidate_profile() -> FileResponse:
+        path = await run_in_threadpool(service.export_candidate_profile)
+        return FileResponse(
+            path,
+            filename=path.name,
+            media_type="application/json",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.patch("/api/career/candidate-profile/facts/{fact_id}")
+    async def decide_candidate_fact(fact_id: str, payload: CandidateFactDecisionPayload) -> Any:
+        return await local(
+            lambda: service.decide_candidate_fact(
+                fact_id,
+                payload.decision,
+                value=payload.value,
+                note=payload.note,
+            )
+        )
+
+    @router.delete("/api/career/candidate-profile/facts/{fact_id}")
+    async def delete_candidate_fact(fact_id: str) -> dict[str, bool]:
+        await local(lambda: service.delete_candidate_fact(fact_id))
+        return {"deleted": True}
 
     @router.post("/api/career/profile-imports/{import_id}/apply")
     async def apply_profile_import(import_id: str, payload: ProfileImportApplyPayload) -> Any:

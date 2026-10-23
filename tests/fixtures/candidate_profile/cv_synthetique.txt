@@ -1,0 +1,23 @@
+Camille Exemple
+camille.exemple@example.test
++33 6 12 34 56 78
+
+EXPERIENCE
+2023-2025 | Analyste financier | Groupe Synthetique
+- Analyse de 120 tableaux de bord et reduction de 20% du temps de cloture
+2022-2023 | Stagiaire controle de gestion | Cabinet Synthetique
+- Production de 30 livrables mensuels
+
+FORMATION
+2021-2023 | Master Finance d'entreprise | Universite Synthetique
+2019-2021 | Licence Economie | Universite Synthetique
+
+COMPETENCES
+Excel, Power BI, SQL, analyse financiere
+
+LANGUES
+Francais - natif
+Anglais - C1
+
+CERTIFICATIONS
+Certification Synthetic Data Analytics (2024)
