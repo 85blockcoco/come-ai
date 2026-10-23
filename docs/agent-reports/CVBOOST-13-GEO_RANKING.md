@@ -147,6 +147,12 @@ score = None if base_score is None else max(0, min(100, base_score + geo_score))
 | `geo_score` | -50, 0 ou +20 |
 | `geo_reason` | « Pays exclu (FR) », « Pays ciblé (DE) », « Pays neutre (US) », « Pays inconnu » |
 
+Le libellé de correspondance (« Correspondance forte », …) reste calculé sur la
+**pertinence** (`base_score`) : une préférence géographique ne transforme pas une bonne
+adéquation en mauvaise adéquation. Le signal géographique est expliqué sur sa propre
+ligne (« Pays exclu (FR) : -50 points au classement. »), et c'est le score total qui
+déplace l'offre dans la liste.
+
 La découverte (`career/discovery.py`) ajoute en plus un rang géographique explicite : une
 offre pénalisée passe **derrière toutes les autres**, même devant une offre non conforme.
 
