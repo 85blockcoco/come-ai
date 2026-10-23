@@ -86,6 +86,9 @@ def apply_ranking(plan: Any) -> list[str]:
 reorder_courses = rank_courses
 order_education = rank_education
 sort_courses = rank_courses
+rank = rank_courses
+reorder = reorder_education
+sort = sort_courses
 
 __all__ = [
     "rank_courses",
