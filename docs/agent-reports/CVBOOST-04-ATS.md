@@ -392,6 +392,7 @@ touché aucun fichier du périmètre autorisé. Seuls `parser.py` (+ octets brut
 | `pytest -q tests/test_cv_quality_ats.py tests/test_cv_quality_structure.py` | **96 passed** |
 | `pytest -q` (suite globale, worktree propre) | **1508 passed, 1 skipped** (575 s) |
 | `pytest -q` (suite globale, avant fusion de `main`) | **1452 passed** (633 s) |
+| `pytest -q` via `./checklist_codex.sh` (arbre de travail courant) | **1509 passed** (195 s) |
 | `ruff check .` | **All checks passed!** |
 | `./checklist_codex.sh all` | **TOUT VERT** |
 | `git diff --check` (diff de la branche) | propre |
