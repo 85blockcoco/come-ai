@@ -413,6 +413,13 @@ erreur. Les scripts d'exécution locaux non versionnés (`mission_driver.py`,
 `watchdog_hangs.py`, `guardian_anti_fake_done.py`) ont été nettoyés de la même façon pour
 que la checklist locale soit verte — ils ne font pas partie de la branche.
 
+> `git diff --check` : **propre sur tout le périmètre de la mission et sur les fichiers de
+> code** (`career/`, `tests/test_cv_quality_ats.py`, `orchestrator.py`, `model_health.py`,
+> ce rapport). Les seuls avertissements restants portent sur deux **journaux d'exécution**
+> commités par l'orchestrateur (`model_health.log`, `probe_full.log`) : ce sont des lignes de
+> log terminées par une espace, hors périmètre de la mission et non modifiables sans
+> interferer avec les processus qui écrivent dedans.
+
 ### Compatibilité avec les diagnostics ATS déjà présents dans `main`
 
 `main` expose déjà un « diagnostic structurel local » à l'import d'un CV
