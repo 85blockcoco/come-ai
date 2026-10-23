@@ -1,0 +1,15 @@
+{
+  "status": "done",
+  "files_created": [
+    "career/stage_admin_docs.py",
+    "tests/test_stage_admin_docs.py",
+    "docs/agent-reports/SPEC-028-stage_admin_docs.md"
+  ],
+  "files_modified": [
+    "career/router.py",
+    "career/service.py"
+  ],
+  "output": "SPEC-028 livré : checklist administrative par pays (FR + 4 pays), statuts, preuves, complétion, récap exportable, endpoints REST, 17 tests verts.",
+  "logs": "pytest -q tests/test_stage_admin_docs.py -> 17 passed\nruff check . -> All checks passed\ngit diff --check -> clean",
+  "error": null
+}
