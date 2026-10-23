@@ -340,6 +340,7 @@ def create_career_router(
             "interview_coach": capabilities["interview_coach"],
             "calendar_export": capabilities["calendar_export"],
             "stage_search": capabilities["stage_search"],
+            "daily_digest": capabilities["daily_digest"],
         }
 
     @router.post("/api/career/cv/analyze")
@@ -404,6 +405,47 @@ def create_career_router(
     @router.get("/api/career/dashboard")
     async def dashboard() -> Any:
         return await local(service.dashboard)
+
+    @router.get("/api/career/daily")
+    async def daily_digest(force: bool = False) -> Any:
+        """SPEC-005 : cockpit quotidien local, mis en cache.
+
+        Cette route ne récupère rien sur le réseau et n'envoie rien : elle
+        agrége les enregistrements Career déjà présents sur le disque.
+        """
+        return await local(lambda: service.get_daily_digest(force_refresh=bool(force)))
+
+    @router.post("/api/career/daily/refresh")
+    async def refresh_daily_digest() -> Any:
+        """Invalide le cache local puis recalcule le cockpit (bouton « Actualiser »)."""
+        return await local(lambda: service.refresh_daily_digest())
+
+    @router.get("/api/career/daily/ics")
+    async def export_daily_calendar() -> FileResponse:
+        """Export calendrier local (.ics) de la journée du cockpit."""
+        path = await run_in_threadpool(service.export_daily_calendar)
+        return FileResponse(
+            path,
+            filename=path.name,
+            media_type="text/calendar; charset=utf-8",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    # Les chemins courts du contrat SPEC-005 restent disponibles : ils
+    # délèguent aux mêmes routes et renvoient exactement la même donnée.
+    @router.get("/career/daily")
+    async def daily_digest_shortcut() -> Any:
+        return await local(lambda: service.get_daily_digest())
+
+    @router.get("/career/daily/ics")
+    async def export_daily_calendar_shortcut() -> FileResponse:
+        path = await run_in_threadpool(service.export_daily_calendar)
+        return FileResponse(
+            path,
+            filename=path.name,
+            media_type="text/calendar; charset=utf-8",
+            headers={"Cache-Control": "no-store"},
+        )
 
     @router.get("/api/career/profile")
     async def profile() -> Any:

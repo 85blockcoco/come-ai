@@ -347,6 +347,23 @@ def _event_lines(candidate: _CalendarCandidate) -> list[str]:
     return lines
 
 
+def escape_ical_text(value: str) -> str:
+    """Public RFC 5545 text escaper, shared with the other local calendar exports.
+
+    Exposed so that every calendar produced by Career escapes and folds its
+    content lines the same way, instead of each module re-implementing the
+    encoding rules.
+    """
+
+    return _escape_text(value)
+
+
+def fold_ical_line(line: str) -> str:
+    """Public ICS line folder, shared with the other local calendar exports."""
+
+    return _fold_ical_line(line)
+
+
 def _fold_ical_line(line: str) -> str:
     """Fold an ICS content line at 75 UTF-8 octets, preserving characters.
 

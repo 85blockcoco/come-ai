@@ -4025,6 +4025,10 @@ class CareerService:
             "ttl_seconds": ttl,
         }
 
+    def get_daily_digest(self, *, force_refresh: bool = False) -> dict[str, Any]:
+        """Compatibility entry point shared by SPEC-005 and SK-09."""
+        return self.refresh_daily_digest(force=True) if force_refresh else self.daily_digest()
+
     def refresh_daily_digest(
         self,
         *,
