@@ -493,6 +493,11 @@ class SmartRecruitersConnector(PublicATSConnector):
         return (f"https://api.smartrecruiters.com/v1/companies/{urllib.parse.quote(company, safe='')}"
                 f"/postings/{urllib.parse.quote(posting_id, safe='')}")
 
+    def _country_of_raw(self, raw: dict[str, Any]) -> tuple[Any, Any]:
+        """SmartRecruiters publishes the country in ``location.country``."""
+        location = raw.get("location") if isinstance(raw.get("location"), dict) else {}
+        return location.get("country"), location.get("city")
+
     def _pages(self, source: dict[str, Any], *, deadline: float | None) -> list[Any]:
         self._detail_reads = 0
         pages: list[Any] = []
@@ -670,11 +675,6 @@ def _published_section_title(name: str) -> str:
         return name
     title = " ".join(word if index == 0 else word.lower() for index, word in enumerate(words))
     return title[:1].upper() + title[1:]
-
-    def _country_of_raw(self, raw: dict[str, Any]) -> tuple[Any, Any]:
-        """SmartRecruiters publishes the country in ``location.country``."""
-        location = raw.get("location") if isinstance(raw.get("location"), dict) else {}
-        return location.get("country"), location.get("city")
 
 
 def _canonical_country(country: Any, location: Any) -> str:

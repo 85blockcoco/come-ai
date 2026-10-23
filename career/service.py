@@ -162,6 +162,7 @@ from .offer_intelligence import (
 )
 from . import offer_intelligence_store
 from .scoring import classify_job_family, score_job
+from .traceability_store import TRACEABILITY_DB_FILENAME, TraceabilityService
 from workspace_core import UserFacingError, extract_text, safe_error
 from .profile_import import (
     ALLOWED_PROFILE_SUFFIXES,
@@ -195,6 +196,7 @@ from .qualification_persistence import (
     normalize_qualification_snapshot,
     snapshot_matches_current_source,
 )
+from .offer_requirements import analyze_offer
 
 
 SCHEMA_VERSION = 12
@@ -346,6 +348,9 @@ class CareerService:
         # The daily digest cache lifetime is explicit and configurable: a
         # constructor default, overridable later from the local settings.
         self.daily_digest_ttl_seconds = normalize_ttl(daily_digest_ttl_seconds)
+        # SPEC-011 : le registre de traçabilité vit dans sa propre base
+        # locale, créée à la demande pour ne pas ralentir le démarrage.
+        self._traceability: TraceabilityService | None = None
         self._ensure_storage()
         self._initialize()
         # SPEC-010 — the targeted interview preparation keeps its own private
@@ -391,6 +396,43 @@ class CareerService:
                 os.chmod(path, 0o700)
             except OSError:
                 pass
+
+    @property
+    def traceability(self) -> TraceabilityService:
+        """Magasin local du registre de traçabilité des exigences (SPEC-011).
+
+        La base est dédiée et vit dans le répertoire privé ``career_data/`` :
+        le schéma versionné de l'application n'est jamais modifié par le
+        registre, et l'effacement des données Career efface aussi ces traces.
+        """
+        if self._traceability is None:
+            self._traceability = TraceabilityService(self.traceability_db_path())
+        return self._traceability
+
+    def traceability_db_path(self) -> Path:
+        """Path of the registry database, without creating it.
+
+        The personal-data reset needs to know whether the file exists even
+        when this process never opened the traceability view: the registry
+        may come from an earlier session and must not survive a deletion
+        request.
+        """
+        return self.data_dir / TRACEABILITY_DB_FILENAME
+
+    def _traceability_export(self) -> dict[str, Any]:
+        """Return the traceability registry for the personal-data export.
+
+        SPEC-011: the registry holds requirement texts, evidence citations
+        taken from the profile and the audit history. That is personal data:
+        the copy a person downloads ("Exporter mes données") must carry it,
+        otherwise the copy is silently incomplete.
+        """
+        try:
+            return {"available": True, **self.traceability.store.export_json()}
+        except Exception:
+            # An export must not lose the rest of the personal data because
+            # of one module: the section stays present and says it is missing.
+            return {"available": False, "trace_count": 0, "traces": []}
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
@@ -3163,6 +3205,13 @@ class CareerService:
             }
         )
         self._prep_cache.add(job_id)
+        # SPEC-011 — the facts matched by the preparation panel propose an
+        # automatic link in the traceability registry.  The link stays
+        # "pending": only the person can confirm it.
+        try:
+            self.sync_traceability_evidence(job_id, analysis.get("matched_elements"))
+        except Exception:
+            self._record_traceability_failure("evidence", job_id)
         return analysis
 
     @staticmethod
@@ -3644,7 +3693,17 @@ class CareerService:
                         # Future connectors receive their own source descriptor.
                         descriptor = GreenhouseBoard(source_id, company, parse_greenhouse_board_token(source.get("board_token"))) if provider == "greenhouse" else source
                         outcome["attempted"] = True
-                        result = connector.discover_internships(descriptor, selection_brief=brief, deadline=deadline)
+                        geo_kwargs = callable_geo_kwargs(
+                            connector.discover_internships,
+                            countries_exclude=brief.get("countries_exclude"),
+                            countries_include=brief.get("countries_include"),
+                        )
+                        result = connector.discover_internships(
+                            descriptor,
+                            selection_brief=brief,
+                            deadline=deadline,
+                            **geo_kwargs,
+                        )
                         if not isinstance(result, DiscoveryPayload) or not isinstance(result.jobs, tuple) or any(not isinstance(job, dict) for job in result.jobs):
                             raise PublicSourceError("Le connecteur n’a pas renvoyé un résultat d’exploration valide.", code="invalid_payload")
                         counts = (result.raw_count, result.evaluated_count, result.invalid_count,
@@ -4605,7 +4664,79 @@ class CareerService:
         result = self.get_job(job_id)
         result["created"] = created
         result["duplicate"] = not created
+        # SPEC-011 — the requirements of the offer enter the traceability
+        # registry as soon as the offer is stored.  A registry failure never
+        # invalidates an import: the traceability is a view, the offer is the
+        # source of truth.
+        try:
+            self.sync_traceability_requirements(job_id)
+        except Exception:
+            self._record_traceability_failure("requirements", job_id)
         return result
+
+    def _record_traceability_failure(self, kind: str, job_id: str) -> None:
+        """Leave a trace of a traceability sync failure in the audit log.
+
+        The traceability registry is a *view* of the offer, never a blocker:
+        a failure must not invalidate an import.  But it must not be silent
+        either — the local audit log records that the synchronisation failed
+        so the registry can be rebuilt.
+        """
+        try:
+            with self._lock, self._connection() as connection:
+                self._audit(connection, f"traceability_{kind}_sync_failed", "job", job_id)
+        except Exception:
+            pass
+
+    def sync_traceability_requirements(self, job_id: str) -> dict[str, Any]:
+        """Register the SK-02 requirements of a stored offer (SPEC-011).
+
+        The extraction is deterministic and local: the registry receives the
+        verbatim requirement, its locator and its modality mapped to the
+        registry vocabulary.  Nothing is invented and re-importing the same
+        offer never duplicates a trace (the trace id is derived from
+        ``(source, requirement_id)``).
+
+        The analysis of a *complete* extraction also supersedes the
+        requirements the offer no longer states: they leave the coverage
+        denominator instead of remaining permanent gaps.  A truncated
+        extraction never supersedes anything.
+        """
+        job = self.get_job(job_id)
+        analysis = analyze_offer(job)
+        return self.traceability.register_offer_analysis(
+            analysis, actor="system", supersede_missing=True
+        )
+
+    def sync_traceability_evidence(
+        self, job_id: str, matched_elements: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any]:
+        """Propose the automatic evidence links of one offer (SK-21 → SPEC-011).
+
+        The links are *proposals*: they stay ``pending`` until the person
+        confirms or rejects them.  A machine never declares a requirement
+        covered on its own.
+        """
+        if not matched_elements:
+            return {
+                "linked": [],
+                "linked_count": 0,
+                "pending_count": 0,
+                "considered": 0,
+                "skipped": 0,
+                "evidence_count": 0,
+            }
+        evidences = [
+            {
+                "evidence_id": f"profile:{job_id}:{index}",
+                "claim": clean_text(item.get("requirement"), limit=600),
+                "quote": clean_text(item.get("evidence"), limit=4_000),
+                "kind": clean_text(item.get("profile_field"), limit=60) or "profile",
+            }
+            for index, item in enumerate(matched_elements)
+            if isinstance(item, dict) and item.get("requirement") and item.get("evidence")
+        ]
+        return self.traceability.auto_link(evidences, actor="system")
 
     def _normalize_job(self, payload: dict[str, Any], *, availability: dict[str, Any]) -> dict[str, Any]:
         company = clean_text(payload.get("company"), limit=240)
@@ -6980,6 +7111,11 @@ class CareerService:
                 # The CV review workspace is personal data too: it holds the
                 # wording of the CV and the decisions taken on it.
                 "cv_review": list_workspaces(self.review_dir),
+                # SPEC-011 — the traceability registry holds requirement texts,
+                # evidence citations taken from the profile and the audit
+                # history: that is personal data and belongs in the copy the
+                # person downloads, exactly like the other sections.
+                "traceability": self._traceability_export(),
                 "exported_at": utc_now(),
             }
         target.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -7021,6 +7157,17 @@ class CareerService:
         # The interview-preparation rehearsals live in their own private file.
         # A reset is an explicit request to erase the whole Career space.
         self.interview_prep_store.clear()
+        # SPEC-011 — the traceability registry holds derived personal data
+        # (requirements, quotes, history): it is erased with everything else.
+        # The check is on the *file*, not on the in-memory handle: the
+        # database may come from an earlier session even when this process
+        # never opened the traceability view, and a deletion request must
+        # leave no requirement text and no citation on the disk.
+        try:
+            if self._traceability is not None or self.traceability_db_path().exists():
+                self.traceability.reset()
+        except Exception:
+            pass
         for path in self.export_dir.glob("career_*"):
             try:
                 path.unlink()

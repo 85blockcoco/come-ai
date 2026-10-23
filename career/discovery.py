@@ -559,7 +559,6 @@ class GreenhouseJobBoardConnector:
                     "education": raw.get("education"),
                     "metadata": raw.get("metadata"),
                 })
-                evaluated_count += 1
                 total_score = None
                 geo_score = 0
                 status_rank = 0
