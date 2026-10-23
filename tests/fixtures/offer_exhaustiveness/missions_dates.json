@@ -1,0 +1,28 @@
+{
+  "qualification": {
+    "provenance": {
+      "missions": {
+        "value": [
+          {
+            "value": "Assister l'équipe M&A dans l'analyse de dossiers de financement.",
+            "source": "description_passage",
+            "quote": "Vos missions : analyse de dossiers"
+          },
+          {
+            "value": "Participer aux visioconférences trimestrielles.",
+            "source": "description_passage",
+            "quote": "Vos missions : visioconférences"
+          },
+          {
+            "value": "Préparer une note de synthèse hebdomadaire.",
+            "source": "description_passage",
+            "quote": "Vos missions : note de synthèse"
+          }
+        ],
+        "source": "accept",
+        "quote": ""
+      }
+    },
+    "duration_min_months": 6
+  }
+}

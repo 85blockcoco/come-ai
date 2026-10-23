@@ -1,0 +1,17 @@
+{
+  "qualification": {
+    "provenance": {
+      "conditions": {
+        "value": [
+          {
+            "value": "Restauration d'entreprise + 60% de frais de transport remboursés",
+            "source": "description_passage",
+            "quote": "Nous offrons : titres-restaurant"
+          }
+        ],
+        "source": "accept",
+        "quote": ""
+      }
+    }
+  }
+}

@@ -2793,6 +2793,19 @@ function renderStageMap(matches) {
   map.append(list);
 }
 
+// SK-20 : badge "Exhaustivité XX%" par offre, alimenté par le score calculé
+// côté service (career.offer_exhaustiveness). Rien n'est calculé ici : le
+// label et la couleur viennent de la qualification, ou rien ne s'affiche.
+function renderExhaustivenessBadge(qualification) {
+  const color = qualification?.exhaustiveness_badge_color;
+  const label = qualification?.exhaustiveness_badge;
+  if (!label || !color) return null;
+  const missing = (qualification?.exhaustiveness_missing || []).join(", ");
+  const badge = make("span", label, `exhaustiveness-badge is-${color}`);
+  if (missing) badge.title = `Manquant : ${missing}`;
+  return badge;
+}
+
 function renderStageMatches(payload) {
   const target = $("#stagehunter-matches");
   const empty = $("#stagehunter-matches-empty");
@@ -2832,6 +2845,8 @@ function renderStageMatches(payload) {
       ...(match.qualification || {}),
     };
     chips?.after(stageOfferOverview(match.job || {}, qualificationFacts));
+    const exhaustivenessBadge = renderExhaustivenessBadge(qualificationFacts);
+    if (exhaustivenessBadge) chips?.append(exhaustivenessBadge);
     const actions = card.querySelector(".job-actions");
     const prep = make("button", "Préparer cette candidature", "secondary-button");
     prep.type = "button";
