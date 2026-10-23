@@ -11,7 +11,11 @@ Rôles:
    puis cooling arrivés à échéance).
 État persistant: model_health.json. Probes: log model_health.log.
 """
-import json, subprocess, time, re, os, sys
+import json
+import re
+import subprocess
+import sys
+import time
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -38,7 +42,8 @@ UNAVAIL_PAT = re.compile(r"unavailable|not found|error|failed|no such model", re
 def log(msg):
     line = f"[mh {time.strftime('%H:%M:%S')}] {msg}"
     print(line, flush=True)
-    with LOGF.open("a") as f: f.write(line + "\n")
+    with LOGF.open("a") as f:
+        f.write(line + "\n")
 
 def load_state():
     if STATE.exists():
@@ -90,7 +95,8 @@ def apply_results(s, results):
                                         "fails": 0, "last_reset_wait": None, "ok_count": 0})
         st["last_probe"] = time.strftime("%Y-%m-%d %H:%M:%S")
         if v == "OK":
-            st["verdict"] = "OK"; st["score"] = round(60.0 / max(lat, 1.5), 2)
+            st["verdict"] = "OK"
+            st["score"] = round(60.0 / max(lat, 1.5), 2)
             st["ok_count"] = st.get("ok_count", 0) + 1
             # LEÇON du reset observé: si le modèle revient AVANT/AUTOUR du cooldown,
             # enregistrer le vrai temps de recharge (plafonné à la sortie du cooldown).
@@ -106,11 +112,14 @@ def apply_results(s, results):
                 ema = s["observations"].setdefault(k, {"wait_min": 90, "n": 0})
                 ema["n"] += 1
                 ema["wait_min"] = round(0.6 * ema["wait_min"] + 0.4 * observed, 1)
-            st["cooldown_until"] = 0; st["cooldown_set_at"] = 0; st["fails"] = 0
+            st["cooldown_until"] = 0
+            st["cooldown_set_at"] = 0
+            st["fails"] = 0
         elif v == "LIMIT":
             if st.get("verdict") == "OK":
                 st["fails"] = 0
-            st["verdict"] = "LIMIT"; st["fails"] = st.get("fails", 0) + 1
+            st["verdict"] = "LIMIT"
+            st["fails"] = st.get("fails", 0) + 1
             st["last_limit_reason"] = (extra.split("|")[0].strip().lower()[:24]) or "limit"
             base = s["observations"].get(st["last_limit_reason"], {}).get("wait_min", 90.0)
             wait = max(30.0, min(150.0, base * (1.25 if st["fails"] > 1 else 1.0)))
@@ -118,7 +127,8 @@ def apply_results(s, results):
             st["cooldown_set_at"] = now
             st["cooldown_next_min"] = wait
         else:  # UNAVAIL / SLOW
-            st["verdict"] = v; st["score"] = 0
+            st["verdict"] = v
+            st["score"] = 0
             if v == "SLOW":
                 # régime dégradé: de côté, retest court (~20 min)
                 st["cooldown_until"] = now + 20 * 60
@@ -137,8 +147,10 @@ def mark_run_ok(model, duration_s=0.0):
     st = s["models"].setdefault(model, {"verdict": "OK", "score": 0, "cooldown_until": 0,
                                         "fails": 0, "ok_count": 0})
     if st["verdict"] != "OK":
-        st["verdict"] = "OK"; st["fails"] = 0
-        st["cooldown_until"] = 0; st["cooldown_set_at"] = 0
+        st["verdict"] = "OK"
+        st["fails"] = 0
+        st["cooldown_until"] = 0
+        st["cooldown_set_at"] = 0
         log(f"{model} réconfirmé OK par run runtime ({duration_s}s)")
     save_state(s)
 
@@ -169,7 +181,9 @@ if __name__ == "__main__":
     if cmd == "probe":
         probe_all()
     elif cmd == "pool":
-        for i, m in enumerate(pick_pool(), 1): print(f"{i}. {m}")
+        for i, m in enumerate(pick_pool(), 1):
+            print(f"{i}. {m}")
     else:  # cycle: retester les échus puis afficher le pool
         refresh_due()
-        for i, m in enumerate(pick_pool(), 1): print(f"{i}. {m}")
+        for i, m in enumerate(pick_pool(), 1):
+            print(f"{i}. {m}")

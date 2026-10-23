@@ -10,7 +10,7 @@ import os
 import subprocess
 import time
 import threading
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Optional
@@ -209,12 +209,16 @@ def run_worker(worktree_path: str, prompt: str, order_id: str) -> dict:
         instant_death = duration < 60 and "opencode" not in blob.lower()[:200]
         quota_like = any(k in blob.lower() for k in ("quota", "exceeded your current", "model unavailable", "unavailable:"))
         if result.returncode == 0:
-            try: mh.mark_run_ok(model, round(duration, 1))
-            except Exception: pass
+            try:
+                mh.mark_run_ok(model, round(duration, 1))
+            except Exception:
+                pass
             break
         if quota_like or instant_death:
-            try: mh.record_limit(model, "quota" if quota_like else "unavailable")
-            except Exception: pass
+            try:
+                mh.record_limit(model, "quota" if quota_like else "unavailable")
+            except Exception:
+                pass
             if attempt < len(_FREE_POOL) - 1:
                 log(f"⚠️ Modèle {model} a échoué instantanément (quota/indisponible) → cooldown, essai suivant")
                 continue
@@ -356,12 +360,11 @@ def main_loop():
                                 log(f"🔍 from_A lu: status={data.get('status')}, order_id={data.get('order_id')}")
                                 if data.get("status") == "ready_for_worker" and data.get("order_id"):
                                     order_id = data["order_id"]
-                                    prompt = data.get("prompt_for_worker", "")
                                     log(f"✅ Condition remplie, soumission mission {order_id}")
                                     
                                     # Marquer comme processing immédiatement
                                     write_from_a_status("processing", order_id)
-                                    log(f"📝 Status mis à jour: processing")
+                                    log("📝 Status mis à jour: processing")
                                     
                                     # Soumettre au pool de threads
                                     future = executor.submit(process_mission, order_id, data.get("prompt_for_worker", ""))
