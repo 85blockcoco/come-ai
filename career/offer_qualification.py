@@ -14,6 +14,7 @@ from datetime import date
 from typing import Any
 
 from .cv_quality.conditions_extractor import extract_conditions_from_offer
+from .cv_quality.missions_extractor import extract_missions
 from .exploration import _SENIOR_TITLE, classify_internship
 from .models import (
     DEFAULT_GEO_EXCLUDED_COUNTRIES,
@@ -281,6 +282,17 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
     employment = clean_text(offer.get("employment_type"), limit=120)
     evidence: dict[str, FactEvidence] = {}
     missing: list[str] = []
+
+    # SK-18 : les missions annoncées (responsabilités, tâches, livrables,
+    # KPI) sont extraites du texte de l'offre et citées comme preuve. Rien
+    # n'est interprété : chaque mission est un extrait verbatim du texte.
+    missions = extract_missions(description)
+    if missions:
+        evidence["missions"] = FactEvidence(
+            [mission.text for mission in missions],
+            "missions_extractor",
+            missions[0].quote,
+        )
 
     def field(name: str, label: str | None = None) -> str | None:
         value = clean_text(offer.get(name), limit=240)

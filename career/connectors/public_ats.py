@@ -27,10 +27,10 @@ from ..countries import (
     geo_filter,
     resolve_published_country,
 )
-from ..exploration import EXPLORATION_MAX_RESULTS, criteria_admit, ranking_key, classify_internship
-from ..offer_qualification import qualify_offer
+from ..exploration import EXPLORATION_MAX_RESULTS, admit_offer, ranking_key
 from ..scoring import classify_job_family
-from ..stage_search import default_brief, score_brief_match, validate_brief
+from ..source_fields import attach_source_material
+from ..stage_search import default_brief, validate_brief
 from ..models import clean_text
 
 
@@ -45,12 +45,19 @@ _USER_AGENT = "Come-AI-Career/3.2 (local reader of published public job postings
 _LISTING_HOSTS = {
     "lever": frozenset({"jobs.lever.co", "jobs.eu.lever.co"}),
     "ashby": frozenset({"jobs.ashbyhq.com"}),
-    "smartrecruiters": frozenset({"www.smartrecruiters.com", "careers.smartrecruiters.com", "api.smartrecruiters.com"}),
+    # ``jobs.smartrecruiters.com`` is the public career host the Posting API
+    # itself publishes as ``postingUrl``/``applyUrl``.
+    "smartrecruiters": frozenset({"www.smartrecruiters.com", "careers.smartrecruiters.com",
+                                   "jobs.smartrecruiters.com", "api.smartrecruiters.com"}),
     # Recruitee tenant boards live on a managed subdomain or on an employer's
     # verified custom domain; the per-source allowance is derived from the
     # verified registry record, never from a code constant.
     "recruitee": frozenset({"recruitee.com"}),
 }
+
+#: A posting detail read is one request per posting: the number of reads is
+#: bounded explicitly instead of following the size of the feed.
+MAX_DETAIL_READS = 20
 
 
 class JsonTransport(Protocol):
@@ -261,39 +268,25 @@ class PublicATSConnector:
                     )
                     continue
                 try:
-                    job = self._normalise_one(source, raw)
+                    job = self._normalise_one(source, raw, deadline=deadline)
                 except (KeyError, TypeError, ValueError):
                     invalid += 1
                     continue
                 evaluated += 1
-                classification = classify_internship(job)
-                qualification = qualify_offer(
-                    job,
-                    allowed_contract_types=brief.get("contract_types"),
-                    allowed_start_months=brief.get("start_months"),
-                    minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
-                    excluded_countries=brief.get("excluded_countries"),
-                    excluded_cities=brief.get("excluded_cities"),
-                    require_known_location=brief.get("require_known_location", False),
-                ).to_dict()
-                job["qualification"] = qualification
-                target = qualification["target_status"]
+                # The admission layer decides; the connector only transmits.
+                verdict = admit_offer(job, brief)
+                target = verdict["target_status"]
                 confirmed += int(target == "conforming")
                 uncertain += int(target == "to_verify")
                 excluded += int(target == "non_conforming")
-                if target == "non_conforming":
+                if verdict["status"] == "excluded":
                     continue
-                if (not job.get("official_url") or
-                        (qualification["contract_type"] == "unknown" and not classification.get("evidence"))):
-                    filtered += 1
-                    continue
-                match = score_brief_match(brief, job)
-                if not criteria_admit(match, job, brief):
+                if verdict["status"] != "admitted":
                     filtered += 1
                     continue
                 relevant += 1
-                job["internship_classification"] = classification
-                ranked.append((ranking_key(job, match), {"job": job, "match": match}))
+                job = verdict["job"]
+                ranked.append((ranking_key(job, verdict["match"]), {"job": job, "match": verdict["match"]}))
         selected = heapq.nsmallest(self.max_results, ranked, key=lambda item: item[0])
         self._last_metrics = {
             "raw_count": raw_count,
@@ -325,7 +318,8 @@ class PublicATSConnector:
             "excluded_by_country": dict(metrics.get("excluded_by_country", {})),
         }
 
-    def _normalise_one(self, source: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:
+    def _normalise_one(self, source: dict[str, Any], raw: dict[str, Any], *,
+                        deadline: float | None = None) -> dict[str, Any]:
         raise NotImplementedError
 
     def _country_of_raw(self, raw: dict[str, Any]) -> tuple[Any, Any]:
@@ -372,13 +366,31 @@ class LeverConnector(PublicATSConnector):
         return payload if isinstance(payload, list) else []
 
     def parse(self, source: dict[str, Any], payload: Any) -> list[dict[str, Any]]:
-        return [self._normalise_one(source, item) for item in self._raw_items(payload) if isinstance(item, dict)]
+        return [self._normalise_one(source, item, deadline=None) for item in self._raw_items(payload)
+                if isinstance(item, dict)]
 
-    def _normalise_one(self, source: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:
+    def _normalise_one(self, source: dict[str, Any], raw: dict[str, Any], *,
+                        deadline: float | None = None) -> dict[str, Any]:
         categories = raw.get("categories") if isinstance(raw.get("categories"), dict) else {}
-        return _common_job(self.provider, source, raw.get("id"), raw.get("text"),
+        job = _common_job(self.provider, source, raw.get("id"), raw.get("text"),
                            raw.get("hostedUrl"), raw.get("applyUrl"), raw.get("descriptionPlain"),
                            categories.get("location"), raw.get("country"), categories.get("commitment"), "")
+        # Every published field is transmitted under its own name; the
+        # description itself is transmitted as ``description_original``.
+        return attach_source_material(job, self.provider, {
+            "id": raw.get("id"),
+            "text": raw.get("text"),
+            "createdAt": raw.get("createdAt"),
+            "updatedAt": raw.get("updatedAt"),
+            "hostedUrl": raw.get("hostedUrl"),
+            "applyUrl": raw.get("applyUrl"),
+            "country": raw.get("country"),
+            "workplaceType": raw.get("workplaceType"),
+            "categories": categories,
+            "openingPlain": raw.get("openingPlain"),
+            "additionalPlain": raw.get("additionalPlain"),
+            "lists": raw.get("lists"),
+        })
 
     def _country_of_raw(self, raw: dict[str, Any]) -> tuple[Any, Any]:
         """Lever publishes the country in ``country`` and the location in
@@ -408,19 +420,36 @@ class AshbyConnector(PublicATSConnector):
         return payload["jobs"]
 
     def parse(self, source: dict[str, Any], payload: Any) -> list[dict[str, Any]]:
-        return [self._normalise_one(source, item) for item in self._raw_items(payload)
+        return [self._normalise_one(source, item, deadline=None) for item in self._raw_items(payload)
                 if isinstance(item, dict) and item.get("isListed") is not False]
 
-    def _normalise_one(self, source: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:
+    def _normalise_one(self, source: dict[str, Any], raw: dict[str, Any], *,
+                        deadline: float | None = None) -> dict[str, Any]:
         address = raw.get("address") if isinstance(raw.get("address"), dict) else {}
         postal = address.get("postalAddress") if isinstance(address.get("postalAddress"), dict) else {}
         location = postal.get("addressLocality") or raw.get("location")
         country = postal.get("addressCountry")
         job_url = raw.get("jobUrl")
         fallback_id = urllib.parse.urlsplit(str(job_url or "")).path.rstrip("/").rsplit("/", 1)[-1]
-        return _common_job(self.provider, source, raw.get("id") or fallback_id, raw.get("title"),
+        job = _common_job(self.provider, source, raw.get("id") or fallback_id, raw.get("title"),
                            job_url, raw.get("applyUrl"), raw.get("descriptionPlain"),
                            location, country, raw.get("employmentType"), raw.get("publishedAt"))
+        return attach_source_material(job, self.provider, {
+            "id": raw.get("id"),
+            "title": raw.get("title"),
+            "publishedAt": raw.get("publishedAt"),
+            "employmentType": raw.get("employmentType"),
+            "workplaceType": raw.get("workplaceType"),
+            "isRemote": raw.get("isRemote"),
+            "isListed": raw.get("isListed"),
+            "department": raw.get("department"),
+            "team": raw.get("team"),
+            "secondaryLocations": raw.get("secondaryLocations"),
+            "location": raw.get("location"),
+            "address": address,
+            "jobUrl": raw.get("jobUrl"),
+            "applyUrl": raw.get("applyUrl"),
+        })
 
     def _country_of_raw(self, raw: dict[str, Any]) -> tuple[Any, Any]:
         """Ashby publishes the country in ``address.postalAddress.addressCountry``."""
@@ -434,14 +463,38 @@ class SmartRecruitersConnector(PublicATSConnector):
     provider = "smartrecruiters"
     api_host = "api.smartrecruiters.com"
     documentation_url = "https://developers.smartrecruiters.com/docs/posting-api"
-    listing_hosts = frozenset({"www.smartrecruiters.com", "careers.smartrecruiters.com", "api.smartrecruiters.com"})
+    listing_hosts = frozenset({"www.smartrecruiters.com", "careers.smartrecruiters.com",
+                                "jobs.smartrecruiters.com", "api.smartrecruiters.com"})
+
+    def __init__(self, *, transport: JsonTransport | None = None, enabled: bool = False,
+                 clock: Callable[[], str] | None = None, monotonic: Callable[[], float] = time.monotonic,
+                 sleeper: Callable[[float], None] = time.sleep,
+                 max_pages: int = MAX_PAGES, page_size: int = PAGE_SIZE,
+                 max_results: int = EXPLORATION_MAX_RESULTS,
+                 enrich_details: bool = False, max_detail_reads: int = MAX_DETAIL_READS) -> None:
+        super().__init__(transport=transport, enabled=enabled, clock=clock, monotonic=monotonic,
+                         sleeper=sleeper, max_pages=max_pages, page_size=page_size, max_results=max_results)
+        # The list response publishes no job description: the advertisement
+        # only exists in the posting detail.  That read is one request per
+        # posting, so it stays opt-in and bounded instead of silently
+        # multiplying the number of requests made to a public board.
+        self.enrich_details = bool(enrich_details)
+        self.max_detail_reads = max(0, min(MAX_DETAIL_READS, int(max_detail_reads)))
+        self._detail_reads = 0
 
     def build_endpoint(self, source: dict[str, Any], *, offset: int = 0) -> str:
         company = self._identifier(source, "company_identifier", "board_token")
         query = urllib.parse.urlencode({"limit": self.page_size, "offset": max(0, offset), "destination": "PUBLIC"})
         return f"https://api.smartrecruiters.com/v1/companies/{urllib.parse.quote(company, safe='')}/postings?{query}"
 
+    def build_detail_endpoint(self, source: dict[str, Any], posting_id: str) -> str:
+        """Official detail endpoint of one posting of the same company."""
+        company = self._identifier(source, "company_identifier", "board_token")
+        return (f"https://api.smartrecruiters.com/v1/companies/{urllib.parse.quote(company, safe='')}"
+                f"/postings/{urllib.parse.quote(posting_id, safe='')}")
+
     def _pages(self, source: dict[str, Any], *, deadline: float | None) -> list[Any]:
+        self._detail_reads = 0
         pages: list[Any] = []
         offset = 0
         for _ in range(self.max_pages):
@@ -462,19 +515,161 @@ class SmartRecruitersConnector(PublicATSConnector):
         return payload["content"]
 
     def parse(self, source: dict[str, Any], payload: Any) -> list[dict[str, Any]]:
-        return [self._normalise_one(source, item) for item in self._raw_items(payload) if isinstance(item, dict)]
+        return [self._normalise_one(source, item, deadline=None) for item in self._raw_items(payload)
+                if isinstance(item, dict)]
 
-    def _normalise_one(self, source: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:
+    def _detail_for(self, source: dict[str, Any], raw: dict[str, Any], *,
+                     deadline: float | None) -> dict[str, Any] | None:
+        """Read one posting detail, best effort and within the read budget."""
+        if not self.enrich_details or self._detail_reads >= self.max_detail_reads:
+            return None
+        posting_id = clean_text(raw.get("id"), limit=240)
+        if not posting_id:
+            return None
+        self._detail_reads += 1
+        try:
+            detail = self._request(self.build_detail_endpoint(source, posting_id), deadline=deadline)
+        except (PublicSourceError, OSError, ValueError, TypeError, KeyError):
+            # A detail read is an enrichment, never a condition: a board that
+            # refuses one posting keeps the facts the list already published.
+            return None
+        return detail if isinstance(detail, dict) else None
+
+    def _normalise_one(self, source: dict[str, Any], raw: dict[str, Any], *,
+                        deadline: float | None = None) -> dict[str, Any]:
         location = raw.get("location") if isinstance(raw.get("location"), dict) else {}
         company = raw.get("company") if isinstance(raw.get("company"), dict) else {}
         contract = raw.get("typeOfEmployment") if isinstance(raw.get("typeOfEmployment"), dict) else {}
         # The documented list response's `ref` is an official API detail URL;
         # a human apply link is used when a source supplies one directly.
         official_url = raw.get("applyUrl") or raw.get("ref")
-        return _common_job(self.provider, source, raw.get("id"), raw.get("name"), official_url,
-                           raw.get("applyUrl"), raw.get("description"), location.get("city"),
+        apply_url = raw.get("applyUrl")
+        sections = _smartrecruiters_sections(raw)
+        detail = self._detail_for(source, raw, deadline=deadline)
+        published: dict[str, Any] = {}
+        if detail is not None:
+            published = _smartrecruiters_published(detail)
+            detail_sections = _smartrecruiters_sections(detail)
+            if detail_sections:
+                sections = detail_sections
+            posting_url = clean_text(detail.get("postingUrl"), limit=2_000)
+            detail_apply = clean_text(detail.get("applyUrl"), limit=2_000)
+            if _is_listing_url(self.provider, posting_url):
+                official_url = posting_url
+            if _is_listing_url(self.provider, detail_apply):
+                apply_url = detail_apply
+        description = _smartrecruiters_description(sections) or raw.get("description")
+        job = _common_job(self.provider, source, raw.get("id"), raw.get("name"), official_url,
+                           apply_url, description, location.get("city"),
                            location.get("country"), contract.get("label"), raw.get("releasedDate"),
                            company_name=company.get("name"))
+        return attach_source_material(job, self.provider, {
+            "id": raw.get("id"),
+            "name": raw.get("name"),
+            "requisitionId": raw.get("requisitionId"),
+            "postedDate": raw.get("postedDate"),
+            "releasedDate": raw.get("releasedDate"),
+            "location": location,
+            "typeOfEmployment": contract,
+            "department": raw.get("department"),
+            "company": company,
+            "applyUrl": raw.get("applyUrl"),
+            "ref": raw.get("ref"),
+            "jobAd.sections": sections,
+            **published,
+        })
+
+
+def _smartrecruiters_sections(raw: dict[str, Any]) -> dict[str, Any]:
+    """Return the published sections of a SmartRecruiters advertisement."""
+    job_ad = raw.get("jobAd")
+    if not isinstance(job_ad, dict):
+        return {}
+    sections = job_ad.get("sections")
+    return sections if isinstance(sections, dict) else {}
+
+
+def _smartrecruiters_published(detail: dict[str, Any]) -> dict[str, Any]:
+    """Return the fields a posting detail publishes under their own name."""
+    published: dict[str, Any] = {
+        "jobId": detail.get("jobId"),
+        "jobAdId": detail.get("jobAdId"),
+        "postingUrl": detail.get("postingUrl"),
+        "applyUrl": detail.get("applyUrl"),
+        "referralUrl": detail.get("referralUrl"),
+        "active": detail.get("active"),
+        "visibility": detail.get("visibility"),
+        "refNumber": detail.get("refNumber"),
+        "releasedDate": detail.get("releasedDate"),
+        "typeOfEmployment": detail.get("typeOfEmployment"),
+        "department": detail.get("department"),
+        "company": detail.get("company"),
+        "location": detail.get("location"),
+        "customField": detail.get("customField"),
+        "language": detail.get("language"),
+        "industry": detail.get("industry"),
+        "function": detail.get("function"),
+        "experienceLevel": detail.get("experienceLevel"),
+    }
+    return published
+
+
+def _is_listing_url(provider: str, url: Any) -> bool:
+    """Tell whether a URL points to a public posting page of the provider."""
+    text = clean_text(url, limit=2_000)
+    if not text:
+        return False
+    parsed = urllib.parse.urlsplit(text)
+    return (parsed.scheme == "https" and parsed.hostname in _LISTING_HOSTS[provider]
+            and not parsed.username and not parsed.password)
+
+
+def _smartrecruiters_description(sections: dict[str, Any]) -> str:
+    """Compose the description from the published sections, in published order.
+
+    The sections are the prerequisites of the advertisement; they are read as
+    published, never summarised or rewritten.  Each section keeps the name the
+    source publishes it under: the heading is what lets the requirements layer
+    tell a prerequisite section from a description of the company, without the
+    connector deciding anything about the offer.
+    """
+    parts: list[str] = []
+    for name, value in sections.items():
+        title, text = _smartrecruiters_section(name, value)
+        if text:
+            parts.append(f"{title}\n{text}")
+    return "\n\n".join(parts)
+
+
+def _smartrecruiters_section(name: str, value: Any) -> tuple[str, str]:
+    """Return the published title and the published text of one section.
+
+    The documented shape of a section is an object carrying a ``title`` and a
+    ``text``; a source that publishes the text directly is read as well.  The
+    title is the one the source publishes when it publishes one, so the
+    heading of the section is never invented by the connector.
+    """
+    if isinstance(value, dict):
+        title = clean_text(value.get("title"), limit=120) or _published_section_title(name)
+        text = value.get("text")
+        return title, (source_html_to_text(text) if isinstance(text, str) else "")
+    if isinstance(value, str):
+        return _published_section_title(name), source_html_to_text(value)
+    return _published_section_title(name), ""
+
+
+def _published_section_title(name: str) -> str:
+    """Return the name a section is published under, as a title.
+
+    The name is not renamed: ``companyDescription`` becomes ``Company
+    description`` and ``qualifications`` becomes ``Qualifications``.  A name
+    the source publishes in another language keeps its own words.
+    """
+    words = re.findall(r"[A-Z]+(?![a-z])|[A-Z][a-zÀ-ÖØ-öø-ÿ]*|[a-zÀ-ÖØ-öø-ÿ]+", name)
+    if not words:
+        return name
+    title = " ".join(word if index == 0 else word.lower() for index, word in enumerate(words))
+    return title[:1].upper() + title[1:]
 
     def _country_of_raw(self, raw: dict[str, Any]) -> tuple[Any, Any]:
         """SmartRecruiters publishes the country in ``location.country``."""
