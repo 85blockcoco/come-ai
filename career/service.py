@@ -96,6 +96,14 @@ from .cv_fit import (
     generate_diff,
     serialize_gap,
 )
+from .cv_review import ReviewEvent
+from .cv_review_store import (
+    append_event,
+    list_workspaces,
+    load_workspace,
+    read_events,
+    save_workspace,
+)
 from .cv_variants import ALL_VARIANTS
 from .evidence import EvidenceCenter, EvidenceItem, evidence_from_candidate_fact, evidence_from_fit_verdict
 from .evidence_store import SqliteEvidenceStore
@@ -287,6 +295,9 @@ class CareerService:
         self.export_dir = self.data_dir / "exports"
         self.ocr_dir = self.data_dir / "ocr"
         self.studio_dir = self.data_dir / "application_studio"
+        # The CV review workspace (SPEC-004) keeps its own private directory:
+        # one state file and one append-only history per application.
+        self.review_dir = self.data_dir / "cv_review"
         # Backups are intentionally separate from exports and source documents:
         # they contain a complete private snapshot of the local Career data.
         self.backups_dir = self.data_dir / "backups"
@@ -5744,6 +5755,244 @@ class CareerService:
             "export_allowed": True,
             "automatic_submission": False,
         }
+    # ------------------------------------------------------------------
+    # Evidence-backed CV review workspace (SPEC-004)
+    #
+    # The targeted generator writes files; the review workspace shows every
+    # adaptation, its local proof and its decision, and gates the DOCX
+    # export.  The proposal is rebuilt from the current profile and offer on
+    # every read, then the stored decisions are replayed on top of it, so a
+    # decision always applies to the exact wording the person read.
+    # ------------------------------------------------------------------
+
+    def _cv_review_variant(self, job_id: str, variant_id: Any):
+        """Resolve the reviewed CV variant: explicit, then latest, then advised."""
+
+        requested = clean_text(variant_id, limit=40)
+        if requested:
+            return self._variant_config(requested)
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT variant FROM application_drafts
+                WHERE job_id = ? AND variant != ''
+                ORDER BY created_at DESC, rowid DESC LIMIT 1
+                """,
+                (job_id,),
+            ).fetchone()
+        known = {variant.id for variant in ALL_VARIANTS}
+        if row is not None and str(row["variant"]) in known:
+            return self._variant_config(str(row["variant"]))
+        advised = clean_text(self.get_job_prep(job_id).get("recommended_variant"), limit=40)
+        return self._variant_config(advised if advised in known else "m_a")
+
+    def _cv_review_source_document(self) -> str:
+        """Name of the CV the current profile comes from, for traceability."""
+
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT original_name FROM profile_imports
+                WHERE source_kind = 'cv'
+                ORDER BY CASE status WHEN 'applied' THEN 0 ELSE 1 END,
+                         created_at DESC
+                LIMIT 1
+                """
+            ).fetchone()
+        return clean_text(row["original_name"], limit=200) if row is not None else ""
+
+    def _cv_review_workspace(
+        self, application_id: str, language: Any = "fr", variant_id: Any = ""
+    ):
+        """Build the review workspace of one application and replay decisions.
+
+        The proposal is rebuilt from the current offer and profile on every
+        read, then the decisions recorded for this exact variant are replayed
+        on top of it.  When the state file is missing or unreadable, the
+        decisions are rebuilt from the immutable history instead of being
+        silently lost.
+        """
+
+        from .cv_review import build_workspace, merge_decisions, replay_events
+
+        identifier = clean_text(application_id, limit=80)
+        application = self.get_application(identifier)
+        job_id = str(application["job_id"])
+        selected = self._cv_review_variant(job_id, variant_id)
+        profile = self.get_profile()
+        job = self.get_job(job_id)
+        prep = self.get_job_prep(job_id)
+        job.update(prep)
+        job["qualification"] = qualify_offer(job).to_dict()
+        cv_analysis = self._current_cv_analysis()
+        coverage = compute_coverage(job, cv_analysis, profile, selected)
+        gaps = generate_diff(coverage, cv_analysis, profile, selected)
+        coverage = replace(
+            coverage,
+            gaps=gaps,
+            recommended_variant=selected,
+            variant_rationale=(
+                f"Variante {selected.label} sélectionnée explicitement ; "
+                "couverture recalculée sur les preuves locales."
+            ),
+        )
+        fresh = build_workspace(
+            identifier,
+            job=job,
+            job_id=job_id,
+            variant=selected,
+            language=normalize_language(language),
+            profile=profile,
+            coverage=coverage,
+            created_at=utc_now(),
+            source_document=self._cv_review_source_document(),
+        )
+        # The immutable history is the source of truth: the decisions are
+        # replayed from it, and the state file is only a snapshot used when
+        # no history exists yet.  A state file that lags behind the history
+        # can therefore never hide a decision.
+        events = read_events(self.review_dir, identifier, selected.id)
+        if events:
+            return replay_events(fresh, events)
+        saved = load_workspace(self.review_dir, identifier, selected.id)
+        if saved is not None and saved.variant_id == selected.id:
+            return merge_decisions(fresh, saved)
+        return fresh, []
+
+    def get_cv_review_workspace(
+        self, application_id: str, language: Any = "fr", variant: Any = ""
+    ) -> dict[str, Any]:
+        """Return the complete review workspace of one application."""
+
+        from .cv_review import serialize_workspace
+
+        workspace, _invalidated = self._cv_review_workspace(application_id, language, variant)
+        return serialize_workspace(workspace)
+
+    def decide_cv_review_block(
+        self,
+        application_id: str,
+        block_id: str,
+        status: Any,
+        user_text: Any = "",
+        language: Any = "fr",
+        variant: Any = "",
+        reviewed_text: Any = "",
+    ) -> dict[str, Any]:
+        """Record one decision on one block and keep the history immutable.
+
+        The whole read-modify-write runs under the service lock, so two
+        simultaneous decisions cannot overwrite each other.  The event is
+        appended to the immutable history **before** the state snapshot is
+        written: if that write fails, the decision is still traceable and the
+        next read replays it from the history.
+        """
+
+        from .cv_review import apply_decision, export_warnings, find_block, serialize_workspace
+        from .cv_review import REVIEWED_TEXT_LIMIT
+
+        identifier = clean_text(application_id, limit=80)
+        target = clean_text(block_id, limit=120)
+        if not target:
+            raise UserFacingError("Le bloc à trancher n’est pas identifié.")
+        with self._lock:
+            workspace, _invalidated = self._cv_review_workspace(identifier, language, variant)
+            previous = find_block(workspace, target)
+            if previous is None:
+                raise UserFacingError("Ce bloc n’existe plus dans la revue de ce CV.")
+            seen = clean_text(reviewed_text, limit=REVIEWED_TEXT_LIMIT)
+            if seen and seen != previous.proposed_text:
+                raise UserFacingError(
+                    "Ce bloc a changé depuis la dernière lecture : relis la proposition avant de trancher."
+                )
+            decided_at = utc_now()
+            try:
+                updated = apply_decision(
+                    workspace,
+                    target,
+                    str(status or ""),
+                    user_text=str(user_text or ""),
+                    decided_at=decided_at,
+                )
+            except ValueError as error:
+                raise UserFacingError(str(error)) from error
+            try:
+                events = read_events(self.review_dir, identifier, workspace.variant_id)
+                append_event(
+                    self.review_dir,
+                    ReviewEvent(
+                        event_id=f"rev_{uuid.uuid4().hex}",
+                        application_id=identifier,
+                        block_id=target,
+                        from_status=previous.status,
+                        to_status=str(status or ""),
+                        user_text=clean_text(user_text, limit=4_000) if str(status or "") == "modified" else "",
+                        decided_at=decided_at,
+                        decided_by="user",
+                        sequence=len(events) + 1,
+                        variant_id=workspace.variant_id,
+                        proposed_text=previous.proposed_text,
+                    ),
+                )
+            except OSError as error:
+                raise UserFacingError("La décision n’a pas pu être enregistrée localement.") from error
+            warnings: list[str] = []
+            try:
+                save_workspace(self.review_dir, updated)
+            except OSError:
+                # The decision is in the immutable history: it stays effective
+                # even if the snapshot could not be written.
+                warnings.append(
+                    "L’instantané local de la revue n’a pas pu être écrit ; la décision reste tracée dans l’historique."
+                )
+        with self._lock, self._connection() as connection:
+            self._audit(connection, "application_cv_review_decided", "application", identifier)
+        return serialize_workspace(updated, warnings=list(export_warnings(updated)) + warnings)
+
+    def cv_review_history(
+        self, application_id: str, variant: Any = ""
+    ) -> list[dict[str, Any]]:
+        """Return the immutable decision history of one application."""
+
+        identifier = clean_text(application_id, limit=80)
+        application = self.get_application(identifier)
+        selected = self._cv_review_variant(str(application["job_id"]), variant)
+        return [event.to_dict() for event in read_events(self.review_dir, identifier, selected.id)]
+
+    def export_cv_review(
+        self, application_id: str, language: Any = "fr", variant: Any = ""
+    ) -> Path:
+        """Export the reviewed CV as a DOCX, or refuse when a block is missing."""
+
+        from .cv_review import can_export, render_workspace_markdown
+
+        workspace, _invalidated = self._cv_review_workspace(application_id, language, variant)
+        allowed, blockers = can_export(workspace)
+        if not allowed:
+            raise UserFacingError(
+                "Export bloqué tant que la revue n’est pas terminée : " + " ".join(blockers)
+            )
+        markdown = render_workspace_markdown(workspace)
+        title = clean_text(workspace.header.display_name, limit=160) or "CV revu"
+        safe_application = re.sub(r"[^A-Za-z0-9_-]+", "-", workspace.application_id)[:40] or "application"
+        target = (
+            self.export_dir
+            / "cv_review"
+            / f"cv-revu-{safe_application}-{uuid.uuid4().hex[:8]}.docx"
+        )
+        try:
+            write_docx(
+                markdown=markdown,
+                title=title,
+                language=workspace.language,
+                target=target,
+            )
+        except Exception as error:
+            target.unlink(missing_ok=True)
+            raise UserFacingError("Le CV revu n’a pas pu être généré localement.") from error
+        with self._lock, self._connection() as connection:
+            self._audit(connection, "application_cv_review_exported", "application", workspace.application_id)
+        return target
 
     @staticmethod
     def _dashboard_action(
@@ -6521,6 +6770,9 @@ class CareerService:
                     ).fetchall()
                 ],
                 "evidence": self._evidence_center.export_payload(),
+                # The CV review workspace is personal data too: it holds the
+                # wording of the CV and the decisions taken on it.
+                "cv_review": list_workspaces(self.review_dir),
                 "exported_at": utc_now(),
             }
         target.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -6592,6 +6844,14 @@ class CareerService:
         # suppression explicite du Career l'efface aussi, avec ses pièces
         # jointes et son historique de fusion.
         for path in self.evidence_attachments_dir.glob("*"):
+            try:
+                if path.is_file():
+                    path.unlink()
+            except OSError:
+                pass
+        # The review workspace holds the CV wording and the decisions taken on
+        # it: a reset of the Career space erases them too.
+        for path in self.review_dir.glob("*"):
             try:
                 if path.is_file():
                     path.unlink()

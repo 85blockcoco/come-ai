@@ -251,6 +251,21 @@ class ApplicationDossierEditPayload(BaseModel):
     checklist: str | None = Field(default=None, max_length=60_000)
 
 
+class CVReviewDecisionPayload(BaseModel):
+    """One decision taken on one reviewable block of the targeted CV.
+
+    ``reviewed_text`` is the wording that was displayed when the person
+    decided: the server refuses the decision if the proposal changed in
+    between, so a decision always applies to the text that was read.  It is
+    optional for compatibility, but the interface always sends it.
+    """
+
+    block_id: str = Field(min_length=1, max_length=120)
+    status: str = Field(pattern="^(pending|accepted|rejected|modified)$")
+    user_text: str = Field(default="", max_length=4_000)
+    reviewed_text: str = Field(default="", max_length=20_000)
+
+
 class JobSummaryPayload(BaseModel):
     mode: str = Field(default="local", max_length=12)
     consent_external: bool = False
@@ -1089,6 +1104,58 @@ def create_career_router(
     @router.post("/api/career/applications/{application_id}/dossier/export")
     async def export_application_dossier(application_id: str) -> Any:
         return await local(lambda: service.export_application_dossier(application_id))
+
+    # SPEC-004 : revue du CV ciblé. Chaque adaptation est visible avec sa
+    # preuve locale, l'export DOCX reste bloqué tant qu'un bloc critique
+    # n'est pas tranché. Aucune de ces routes n'envoie quoi que ce soit.
+    @router.get("/api/career/applications/{application_id}/cv-review")
+    async def cv_review_workspace(
+        application_id: str,
+        language: str = "fr",
+        variant: str = "",
+    ) -> Any:
+        return await local(
+            lambda: service.get_cv_review_workspace(application_id, language, variant)
+        )
+
+    @router.post("/api/career/applications/{application_id}/cv-review/decide")
+    async def decide_cv_review_block(
+        application_id: str,
+        payload: CVReviewDecisionPayload,
+        language: str = "fr",
+        variant: str = "",
+    ) -> Any:
+        return await local(
+            lambda: service.decide_cv_review_block(
+                application_id,
+                payload.block_id,
+                payload.status,
+                payload.user_text,
+                language,
+                variant,
+                payload.reviewed_text,
+            )
+        )
+
+    @router.get("/api/career/applications/{application_id}/cv-review/history")
+    async def cv_review_history(application_id: str, variant: str = "") -> Any:
+        return await local(lambda: {"history": service.cv_review_history(application_id, variant)})
+
+    @router.get("/api/career/applications/{application_id}/cv-review/export")
+    async def export_cv_review(
+        application_id: str,
+        language: str = "fr",
+        variant: str = "",
+    ) -> FileResponse:
+        path = await run_in_threadpool(
+            lambda: service.export_cv_review(application_id, language, variant)
+        )
+        return FileResponse(
+            path,
+            filename=path.name,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Cache-Control": "no-store"},
+        )
 
     @router.post("/api/career/applications", status_code=201)
     async def create_application(payload: ApplicationCreatePayload) -> Any:
