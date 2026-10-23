@@ -24,6 +24,17 @@ JOB_FAMILIES = (
     "Sales & Trading",
     "Corporate Finance",
     "Consulting",
+    # Généralisation sectorielle (23 oct) : le produit n'est plus réservé à la
+    # finance. Une offre dont la famille sort de cette liste est refusée à
+    # l'import, donc la liste doit couvrir les candidatures étudiantes réelles.
+    "Marketing / Communication",
+    "Design / Création",
+    "Mode / Stylisme",
+    "Commerce / Retail",
+    "Tech / Produit",
+    "Juridique",
+    "Santé",
+    "Autre",
 )
 
 PRIMARY_LOCATIONS = (
