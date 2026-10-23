@@ -1,0 +1,34 @@
+# CI Côme AI — Constitution exécutable (SPEC-014).
+#
+# La Constitution est un contrat de gouvernance : elle est validée à chaque
+# PR, et une violation critique bloque la fusion. Aucun secret, aucun service
+# distant : tout est local et hors ligne.
+name: Constitution
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate-constitution:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          pip install -r requirements-v3.txt
+      - name: Validate Constitution
+        run: |
+          python -m career.constitution validate --all
+      - name: Generate rule tests
+        run: |
+          python -m career.constitution test --generate-tests --output /tmp/test_constitution_generated.py
+          python -m pytest -q /tmp/test_constitution_generated.py
+      - name: Check Conformance
+        run: |
+          python -m career.constitution check --all-entities --fail-on-critical
