@@ -211,6 +211,7 @@ function labelForView(viewName) {
     applications: "Candidatures",
     interviews: "Coach d’entretien",
     profile: "Mon profil",
+    evidence: "Centre de preuves",
     settings: "Réglages",
   }[viewName] || "Career";
 }
@@ -249,7 +250,7 @@ function organiseViews() {
   }
 }
 
-const careerViews = new Set(["dashboard", "discover", "stagehunter", "shortlist", "studio", "applications", "interviews", "profile", "settings"]);
+const careerViews = new Set(["dashboard", "discover", "stagehunter", "shortlist", "studio", "applications", "interviews", "profile", "evidence", "settings"]);
 let internalHashChange = false;
 
 function refreshView(viewName) {
@@ -260,6 +261,7 @@ function refreshView(viewName) {
     studio: loadStudio,
     applications: loadApplications,
     interviews: loadCoach,
+    evidence: () => (typeof loadEvidenceCenter === "function" ? loadEvidenceCenter() : Promise.resolve()),
   };
   loaders[viewName]?.().catch((error) => setMessage(error.message, true));
 }
