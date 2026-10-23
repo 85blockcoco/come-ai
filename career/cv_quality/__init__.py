@@ -29,6 +29,15 @@ from .conditions_extractor import (
     extract_conditions_from_offer,
     summarize_conditions,
 )
+from .missions_extractor import (
+    MissionFact,
+    classify_mission_type,
+    detect_implied_skills,
+    detect_language as detect_mission_language,
+    extract_missions,
+    missions_as_dicts,
+    normalize_offer_text,
+)
 from .models import (
     CVAnalysisResult,
     Currency,
@@ -100,6 +109,14 @@ __all__ = [
     "extract_conditions",
     "extract_conditions_from_offer",
     "summarize_conditions",
+    # Mission extraction (SK-18)
+    "MissionFact",
+    "classify_mission_type",
+    "detect_implied_skills",
+    "detect_mission_language",
+    "extract_missions",
+    "missions_as_dicts",
+    "normalize_offer_text",
     # Status constants
     "STATUS_OK",
     "STATUS_INFO",

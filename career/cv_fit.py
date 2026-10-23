@@ -138,7 +138,14 @@ def classify_variant(
         family_match = variant.id in family_variants
         keyword_hits = sum(keyword.casefold() in requirements for keyword in variant.mandatory_keywords)
         theme_hits = sum(keyword.casefold() in experience for keyword in variant.mandatory_keywords)
-        provenance_match = any(variant.id in _text(value).casefold() for value in provenance.values())
+        # Seuls les faits scalaires cités participent à ce signal : une
+        # preuve textuelle volumineuse (liste de missions, SK-18) ne doit
+        # pas décaler le choix de variante par une simple mention de mot.
+        provenance_match = any(
+            variant.id in _text(value).casefold()
+            for value in provenance.values()
+            if isinstance(value, str)
+        )
         score = (
             (0.5 if family_match else 0.0)
             + min(0.4, keyword_hits * 0.1)
