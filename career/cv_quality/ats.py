@@ -81,7 +81,7 @@ DEFAULT_EXPECTED_SECTIONS: tuple[str, ...] = ("Expérience", "Formation", "Comp�
 
 # Section heading synonyms (FR / EN) — headings are matched on line start.
 SECTION_KEYWORDS: dict[str, tuple[str, ...]] = {
-    "expérience": (
+    "experience": (
         "experience", "experiences", "experience professionnelle", "experiences professionnelles",
         "parcours professionnel", "parcours", "emploi", "emplois", "employment",
         "work experience", "career", "carriere",
@@ -90,7 +90,7 @@ SECTION_KEYWORDS: dict[str, tuple[str, ...]] = {
         "formation", "formations", "etudes", "etudes superieures", "diplomes", "diplomes obtertus",
         "education", "academic", "scolarite", "cursus", "degrees",
     ),
-    "compétences": (
+    "competences": (
         "competences", "competences techniques", "competencesistiques", "savoir-faire",
         "savoir faire", "skills", "technical skills", "competencies", "expertise",
         "technologies", "stack", "outils",
