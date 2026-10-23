@@ -1,0 +1,395 @@
+{
+  "lang": "it",
+  "note": "Offerte sintetiche. Nessuna azienda reale, nessuna persona reale, nessuna rete.",
+  "cases": [
+    {
+      "id": "it-deadline-scadenza",
+      "text": "Scadenza: 15 novembre 2025",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Scadenza: 15 novembre 2025"
+        }
+      ],
+      "absent": [
+        "start",
+        "published",
+        "end"
+      ]
+    },
+    {
+      "id": "it-deadline-numeric",
+      "text": "Scadenza: 15/11/2025",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Scadenza: 15/11/2025"
+        }
+      ],
+      "absent": [
+        "start"
+      ]
+    },
+    {
+      "id": "it-start-inizio",
+      "text": "Inizio: gennaio 2027",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": 1,
+            "year": 2027
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Inizio: gennaio 2027"
+        }
+      ],
+      "absent": [
+        "deadline"
+      ]
+    },
+    {
+      "id": "it-start-month-without-year",
+      "text": "Inizio a gennaio",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": 1,
+            "year": null
+          },
+          "precision": "month",
+          "confidence": "inferred",
+          "quote": "Inizio a gennaio"
+        }
+      ],
+      "absent": [
+        "deadline"
+      ]
+    },
+    {
+      "id": "it-duration-exact",
+      "text": "Durata: 6 mesi",
+      "expected": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 6,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Durata: 6 mesi"
+        }
+      ],
+      "absent": [
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "it-duration-min",
+      "text": "Almeno 6 mesi",
+      "expected": [
+        {
+          "fact_type": "duration_min",
+          "value": {
+            "months_min": 6,
+            "months_max": null
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Almeno 6 mesi"
+        }
+      ],
+      "absent": [
+        "duration_max",
+        "duration_exact"
+      ]
+    },
+    {
+      "id": "it-duration-max",
+      "text": "Fino a 6 mesi",
+      "expected": [
+        {
+          "fact_type": "duration_max",
+          "value": {
+            "months_min": null,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Fino a 6 mesi"
+        }
+      ],
+      "absent": [
+        "duration_min",
+        "duration_exact"
+      ]
+    },
+    {
+      "id": "it-duration-range",
+      "text": "Da 3 a 6 mesi",
+      "expected": [
+        {
+          "fact_type": "duration_range",
+          "value": {
+            "months_min": 3,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Da 3 a 6 mesi"
+        }
+      ],
+      "absent": [
+        "duration_min",
+        "duration_max",
+        "duration_exact"
+      ]
+    },
+    {
+      "id": "it-prior-experience-is-not-a-duration",
+      "text": "Due anni di esperienza",
+      "expected": [],
+      "absent": [
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "it-published",
+      "text": "Pubblicato il 3 gennaio 2025",
+      "expected": [
+        {
+          "fact_type": "published",
+          "value": {
+            "day": 3,
+            "month": 1,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Pubblicato il 3 gennaio 2025"
+        }
+      ],
+      "absent": [
+        "start",
+        "deadline"
+      ]
+    },
+    {
+      "id": "it-ambiguous-numeric-date",
+      "text": "Scadenza: 01/02/2025",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": null,
+            "month": null,
+            "year": 2025
+          },
+          "precision": "unknown",
+          "confidence": "ambiguous",
+          "quote": "Scadenza: 01/02/2025",
+          "contradictions": [
+            "ambiguous_reading:2025-01-02",
+            "ambiguous_reading:2025-02-01"
+          ]
+        }
+      ],
+      "absent": [
+        "start"
+      ]
+    },
+    {
+      "id": "it-end-date",
+      "text": "Termine il 30 giugno 2027",
+      "expected": [
+        {
+          "fact_type": "end",
+          "value": {
+            "day": 30,
+            "month": 6,
+            "year": 2027
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Termine il 30 giugno 2027"
+        }
+      ],
+      "absent": [
+        "start",
+        "deadline"
+      ]
+    },
+    {
+      "id": "it-application-opening-is-not-a-start",
+      "text": "Le candidature sono aperte dal 15 gennaio 2027",
+      "expected": [],
+      "absent": [
+        "start",
+        "deadline",
+        "published"
+      ]
+    },
+    {
+      "id": "it-published-and-deadline-are-two-facts",
+      "text": "Pubblicato il 3 gennaio 2025. Scadenza: 15 novembre 2025.",
+      "expected": [
+        {
+          "fact_type": "published",
+          "value": {
+            "day": 3,
+            "month": 1,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Pubblicato il 3 gennaio 2025"
+        },
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Scadenza: 15 novembre 2025"
+        }
+      ],
+      "absent": [
+        "start",
+        "end"
+      ]
+    },
+    {
+      "id": "it-start-subito-has-no-calendar-date",
+      "text": "Inizio: immediatamente",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": null,
+            "year": null
+          },
+          "precision": "unknown",
+          "confidence": "ambiguous",
+          "quote": "Inizio: immediatamente"
+        }
+      ],
+      "absent": [
+        "deadline"
+      ]
+    },
+    {
+      "id": "it-start-comincia",
+      "text": "Comincia in gennaio",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": 1,
+            "year": null
+          },
+          "precision": "month",
+          "confidence": "inferred",
+          "quote": "Comincia in gennaio"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "published",
+        "end"
+      ]
+    },
+    {
+      "id": "it-end-termina-in",
+      "text": "Il contratto termina in dicembre 2027",
+      "expected": [
+        {
+          "fact_type": "end",
+          "value": {
+            "day": null,
+            "month": 12,
+            "year": 2027
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "termina in dicembre 2027"
+        }
+      ],
+      "absent": [
+        "start",
+        "deadline",
+        "published"
+      ]
+    },
+    {
+      "id": "it-start-ordinal-degree",
+      "text": "Inizio: 1° gennaio 2027",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 1,
+            "month": 1,
+            "year": 2027
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Inizio: 1° gennaio 2027"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "published"
+      ]
+    },
+    {
+      "id": "it-duration-dura",
+      "text": "Il tirocinio dura sei mesi",
+      "expected": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 6,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "dura sei mesi"
+        }
+      ],
+      "absent": [
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    }
+  ]
+}

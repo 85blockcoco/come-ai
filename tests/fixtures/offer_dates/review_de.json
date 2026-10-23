@@ -1,0 +1,446 @@
+{
+  "lang": "de",
+  "note": "Adversarial review corpus (round 3): real-world phrasings, including the negatives. No real company, no network.",
+  "cases": [
+    {
+      "id": "review-de-00",
+      "text": "Bewerbungsfrist: 15. November 2025.",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Bewerbungsfrist: 15. November 2025"
+        }
+      ],
+      "absent": [
+        "published",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-de-01",
+      "text": "Bewerbung bis 15. November 2025.",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Bewerbung bis 15. November 2025"
+        }
+      ],
+      "absent": [
+        "published",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-de-02",
+      "text": "Startdatum: 15. Januar 2027.",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 15,
+            "month": 1,
+            "year": 2027
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Startdatum: 15. Januar 2027"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-de-03",
+      "text": "Beginn am 1. März 2027.",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 1,
+            "month": 3,
+            "year": 2027
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Beginn am 1. März 2027"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-de-04",
+      "text": "Ende am 30. Juni 2027.",
+      "expected": [
+        {
+          "fact_type": "end",
+          "value": {
+            "day": 30,
+            "month": 6,
+            "year": 2027
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Ende am 30. Juni 2027"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-de-05",
+      "text": "Dauer: 6 Monate.",
+      "expected": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 6,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Dauer: 6 Monate"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "end",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-de-06",
+      "text": "Höchstens sechs Monate.",
+      "expected": [
+        {
+          "fact_type": "duration_max",
+          "value": {
+            "months_min": null,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Höchstens sechs Monate"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-de-07",
+      "text": "Mindestens sechs Monate.",
+      "expected": [
+        {
+          "fact_type": "duration_min",
+          "value": {
+            "months_min": 6,
+            "months_max": null
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Mindestens sechs Monate"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-de-08",
+      "text": "Drei bis sechs Monate.",
+      "expected": [
+        {
+          "fact_type": "duration_range",
+          "value": {
+            "months_min": 3,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Drei bis sechs Monate"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max"
+      ]
+    },
+    {
+      "id": "review-de-09",
+      "text": "Zwei Jahre Berufserfahrung.",
+      "expected": [],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-de-10",
+      "text": "Veröffentlicht am 3. Januar 2025.",
+      "expected": [
+        {
+          "fact_type": "published",
+          "value": {
+            "day": 3,
+            "month": 1,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Veröffentlicht am 3. Januar 2025"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-de-11",
+      "text": "Bewerbungsfrist: 15. November.",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": null
+          },
+          "precision": "day",
+          "confidence": "inferred",
+          "quote": "Bewerbungsfrist: 15. November"
+        }
+      ],
+      "absent": [
+        "published",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-de-13",
+      "text": "Start im Januar.",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": 1,
+            "year": null
+          },
+          "precision": "month",
+          "confidence": "inferred",
+          "quote": "Start im Januar"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-de-14",
+      "text": "Bis zu sechs Monate.",
+      "expected": [
+        {
+          "fact_type": "duration_max",
+          "value": {
+            "months_min": null,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Bis zu sechs Monate"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-de-18",
+      "text": "Veröffentlicht am 3. Januar 2025, Bewerbungsfrist 15. November 2025.",
+      "expected": [
+        {
+          "fact_type": "published",
+          "value": {
+            "day": 3,
+            "month": 1,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Veröffentlicht am 3. Januar 2025"
+        },
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Bewerbungsfrist 15. November 2025"
+        }
+      ],
+      "absent": [
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-de-19",
+      "text": "Der Vertrag endet im Dezember 2027.",
+      "expected": [
+        {
+          "fact_type": "end",
+          "value": {
+            "day": null,
+            "month": 12,
+            "year": 2027
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "endet im Dezember 2027"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-de-20",
+      "text": "Gehalt: 45.000 Euro pro Jahr. Referenz: 12345.",
+      "expected": [],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "review-de-21",
+      "text": "Gegründet 1984 von zwei Ingenieuren.",
+      "expected": [],
+      "absent": [
+        "published",
+        "deadline",
+        "start",
+        "end",
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    }
+  ]
+}

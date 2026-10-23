@@ -1,0 +1,500 @@
+{
+  "lang": "en",
+  "note": "Synthetic offers. No real company, no real person, no network.",
+  "cases": [
+    {
+      "id": "en-deadline-apply-by",
+      "text": "Apply by 15 November",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": null
+          },
+          "precision": "day",
+          "confidence": "inferred",
+          "quote": "Apply by 15 November"
+        }
+      ],
+      "absent": [
+        "start",
+        "published",
+        "end"
+      ]
+    },
+    {
+      "id": "en-deadline-apply-by-full-date",
+      "text": "Apply by 15 November 2025",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Apply by 15 November 2025"
+        }
+      ],
+      "absent": [
+        "start"
+      ]
+    },
+    {
+      "id": "en-start-month-without-year",
+      "text": "Starting January",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": 1,
+            "year": null
+          },
+          "precision": "month",
+          "confidence": "inferred",
+          "quote": "Starting January"
+        }
+      ],
+      "absent": [
+        "deadline"
+      ]
+    },
+    {
+      "id": "en-start-month-with-year",
+      "text": "Starting January 2027",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": 1,
+            "year": 2027
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Starting January 2027"
+        }
+      ],
+      "absent": [
+        "deadline"
+      ]
+    },
+    {
+      "id": "en-start-explicit-day",
+      "text": "Starting 1 January 2027",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 1,
+            "month": 1,
+            "year": 2027
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Starting 1 January 2027"
+        }
+      ],
+      "absent": [
+        "deadline"
+      ]
+    },
+    {
+      "id": "en-duration-max",
+      "text": "Up to six months",
+      "expected": [
+        {
+          "fact_type": "duration_max",
+          "value": {
+            "months_min": null,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Up to six months"
+        }
+      ],
+      "absent": [
+        "duration_min",
+        "duration_exact",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "en-duration-min",
+      "text": "At least six months",
+      "expected": [
+        {
+          "fact_type": "duration_min",
+          "value": {
+            "months_min": 6,
+            "months_max": null
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "At least six months"
+        }
+      ],
+      "absent": [
+        "duration_max",
+        "duration_exact",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "en-duration-range",
+      "text": "Three to six months",
+      "expected": [
+        {
+          "fact_type": "duration_range",
+          "value": {
+            "months_min": 3,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Three to six months"
+        }
+      ],
+      "absent": [
+        "duration_min",
+        "duration_max",
+        "duration_exact"
+      ]
+    },
+    {
+      "id": "en-prior-experience-is-not-a-duration",
+      "text": "Two years of prior experience",
+      "expected": [],
+      "absent": [
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "en-experience-of-months-is-not-a-duration",
+      "text": "You have 6 months of experience with Excel.",
+      "expected": [],
+      "absent": [
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "en-published-and-deadline-are-two-facts",
+      "text": "Posted on 3 January 2025. Apply by 15 November 2025.",
+      "expected": [
+        {
+          "fact_type": "published",
+          "value": {
+            "day": 3,
+            "month": 1,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Posted on 3 January 2025"
+        },
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Apply by 15 November 2025"
+        }
+      ],
+      "absent": [
+        "start",
+        "end"
+      ]
+    },
+    {
+      "id": "en-ambiguous-numeric-date",
+      "text": "Posted on 01/02/2025",
+      "expected": [
+        {
+          "fact_type": "published",
+          "value": {
+            "day": null,
+            "month": null,
+            "year": 2025
+          },
+          "precision": "unknown",
+          "confidence": "ambiguous",
+          "quote": "Posted on 01/02/2025",
+          "contradictions": [
+            "ambiguous_reading:2025-01-02",
+            "ambiguous_reading:2025-02-01"
+          ]
+        }
+      ],
+      "absent": [
+        "start",
+        "deadline"
+      ]
+    },
+    {
+      "id": "en-unambiguous-numeric-date",
+      "text": "Posted on 25/11/2025",
+      "expected": [
+        {
+          "fact_type": "published",
+          "value": {
+            "day": 25,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Posted on 25/11/2025"
+        }
+      ],
+      "absent": [
+        "start",
+        "deadline"
+      ]
+    },
+    {
+      "id": "en-iso-date",
+      "text": "Starting on 2027-01-15",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 15,
+            "month": 1,
+            "year": 2027
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Starting on 2027-01-15"
+        }
+      ],
+      "absent": [
+        "deadline"
+      ]
+    },
+    {
+      "id": "en-duration-exact",
+      "text": "The internship lasts 6 months",
+      "expected": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 6,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "lasts 6 months"
+        }
+      ],
+      "absent": [
+        "duration_min",
+        "duration_max"
+      ]
+    },
+    {
+      "id": "en-end-date",
+      "text": "Contract ends on 30 June 2027",
+      "expected": [
+        {
+          "fact_type": "end",
+          "value": {
+            "day": 30,
+            "month": 6,
+            "year": 2027
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Contract ends on 30 June 2027"
+        }
+      ],
+      "absent": [
+        "start",
+        "deadline"
+      ]
+    },
+    {
+      "id": "en-application-opening-is-not-a-start",
+      "text": "Applications open from 1 March 2027",
+      "expected": [],
+      "absent": [
+        "start",
+        "deadline",
+        "published"
+      ]
+    },
+    {
+      "id": "en-relative-delay-is-not-a-duration",
+      "text": "The process takes 6 months",
+      "expected": [],
+      "absent": [
+        "duration_exact",
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
+    },
+    {
+      "id": "en-month-range",
+      "text": "Jan-June 2027 internship in Stockholm",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": 1,
+            "year": 2027
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Jan-June 2027"
+        },
+        {
+          "fact_type": "end",
+          "value": {
+            "day": null,
+            "month": 6,
+            "year": 2027
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "Jan-June 2027"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "published"
+      ]
+    },
+    {
+      "id": "en-deadline-is-never-a-start",
+      "text": "Apply by 15 November 2025. Start date to be confirmed.",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Apply by 15 November 2025"
+        }
+      ],
+      "absent": [
+        "start"
+      ]
+    },
+    {
+      "id": "en-start-asap-has-no-calendar-date",
+      "text": "Starting ASAP",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": null,
+            "year": null
+          },
+          "precision": "unknown",
+          "confidence": "ambiguous",
+          "quote": "Starting ASAP"
+        }
+      ],
+      "absent": [
+        "deadline"
+      ]
+    },
+    {
+      "id": "en-end-ends-in",
+      "text": "The contract ends in December 2027",
+      "expected": [
+        {
+          "fact_type": "end",
+          "value": {
+            "day": null,
+            "month": 12,
+            "year": 2027
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "contract ends in December 2027"
+        }
+      ],
+      "absent": [
+        "start",
+        "deadline",
+        "published"
+      ]
+    },
+    {
+      "id": "en-start-and-end-in-one-sentence",
+      "text": "The role starts in March and ends in June 2027",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": 3,
+            "year": null
+          },
+          "precision": "month",
+          "confidence": "inferred",
+          "quote": "starts in March"
+        },
+        {
+          "fact_type": "end",
+          "value": {
+            "day": null,
+            "month": 6,
+            "year": 2027
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "ends in June 2027"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "published"
+      ]
+    },
+    {
+      "id": "en-duration-range-with-from-prefix",
+      "text": "Interns from 3 to 6 months are welcome",
+      "expected": [
+        {
+          "fact_type": "duration_range",
+          "value": {
+            "months_min": 3,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "from 3 to 6 months"
+        }
+      ],
+      "absent": [
+        "duration_min",
+        "duration_max",
+        "duration_exact"
+      ]
+    }
+  ]
+}
