@@ -1,0 +1,378 @@
+{
+  "note": "Cas synthétiques — aucune offre réelle, aucune entreprise réelle, aucune personne réelle, aucun réseau.",
+  "cases": [
+    {
+      "id": "experience-trois-ans-approuve-deux-ans",
+      "offer": {
+        "id": "off-exp-01",
+        "requirements": "3 ans d experience en finance",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "experience",
+            "value": "Analyste financier",
+            "quote": "Analyste financier, 2023-2025",
+            "months": 24
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "3 ans d experience en finance",
+        "category": "experience",
+        "modality": "mandatory",
+        "verdict": "unsupported"
+      }
+    },
+    {
+      "id": "experience-trois-ans-approuve-quatre-ans",
+      "offer": {
+        "id": "off-exp-02",
+        "requirements": "3 ans d experience en finance",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "experience",
+            "value": "Analyste financier",
+            "quote": "Analyste financier, 2021-2025",
+            "months": 48
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "3 ans d experience en finance",
+        "category": "experience",
+        "modality": "mandatory",
+        "verdict": "supported"
+      }
+    },
+    {
+      "id": "experience-domaine-couvert",
+      "offer": {
+        "id": "off-exp-03",
+        "requirements": "Experience en analyse financiere",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "experience",
+            "value": "Analyste financier",
+            "quote": "Analyste financier, 2023-2025",
+            "months": 24
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Experience en analyse financiere",
+        "category": "experience",
+        "modality": "mandatory",
+        "verdict": "supported"
+      }
+    },
+    {
+      "id": "experience-domaine-different",
+      "offer": {
+        "id": "off-exp-04",
+        "requirements": "3 ans d experience en finance",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "experience",
+            "value": "Comptable",
+            "quote": "Comptable, 2022-2025",
+            "months": 36
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "3 ans d experience en finance",
+        "category": "experience",
+        "modality": "mandatory",
+        "verdict": "to_verify",
+        "reason_contains": "domaine demandé"
+      }
+    },
+    {
+      "id": "mobilite-paris-profil-a-paris",
+      "offer": {
+        "id": "off-mob-01",
+        "requirements": "Mobilite sur Paris",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "mobilite",
+            "value": "Basé à Paris",
+            "quote": "Basé à Paris, quartier 15e"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Mobilite sur Paris",
+        "category": "mobilite",
+        "modality": "mandatory",
+        "verdict": "supported"
+      }
+    },
+    {
+      "id": "mobilite-relocation-profil-mobile",
+      "offer": {
+        "id": "off-mob-02",
+        "requirements": "Mobilite sur Paris",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "mobilite",
+            "value": "Pret a relocaliser",
+            "quote": "Prêt à relocaliser à Paris"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Mobilite sur Paris",
+        "category": "mobilite",
+        "modality": "mandatory",
+        "verdict": "supported"
+      }
+    },
+    {
+      "id": "mobilite-ville-differente",
+      "offer": {
+        "id": "off-mob-03",
+        "requirements": "Mobilite sur Paris",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "mobilite",
+            "value": "Basé à Marseille",
+            "quote": "Basé à Marseille"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Mobilite sur Paris",
+        "category": "mobilite",
+        "modality": "mandatory",
+        "verdict": "to_verify"
+      }
+    },
+    {
+      "id": "auth-travail-ue-profil-ue",
+      "offer": {
+        "id": "off-auth-01",
+        "requirements": "Autorisation de travail UE requise",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "auth_travail",
+            "value": "Autorisation de travail UE",
+            "quote": "Autorisation de travail UE valide"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Autorisation de travail UE requise",
+        "category": "auth_travail",
+        "modality": "mandatory",
+        "verdict": "supported"
+      }
+    },
+    {
+      "id": "auth-travail-ue-profil-sponsorship",
+      "offer": {
+        "id": "off-auth-02",
+        "requirements": "Full work authorization required",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "auth_travail",
+            "value": "Visa sponsorship required",
+            "quote": "Visa sponsorship required"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Full work authorization required",
+        "category": "auth_travail",
+        "modality": "mandatory",
+        "verdict": "contradicted"
+      }
+    },
+    {
+      "id": "auth-sponsorship-profil-sponsorship",
+      "offer": {
+        "id": "off-auth-03",
+        "requirements": "Visa sponsorship available",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "auth_travail",
+            "value": "Visa sponsorship required",
+            "quote": "Visa sponsorship required"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Visa sponsorship available",
+        "category": "auth_travail",
+        "modality": "mandatory",
+        "verdict": "supported"
+      }
+    },
+    {
+      "id": "auth-travail-absent-du-profil",
+      "offer": {
+        "id": "off-auth-04",
+        "requirements": "Autorisation de travail UE requise",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "tech",
+            "value": "Excel",
+            "quote": "Excel"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Autorisation de travail UE requise",
+        "category": "auth_travail",
+        "modality": "mandatory",
+        "verdict": "to_verify"
+      }
+    },
+    {
+      "id": "dispo-septembre-2026-profil-janvier-2026",
+      "offer": {
+        "id": "off-dispo-01",
+        "requirements": "Disponible a partir de septembre 2026",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "dispo",
+            "value": "2026-01-15",
+            "quote": "Disponible à partir du 15 janvier 2026"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Disponible a partir de septembre 2026",
+        "category": "dispo",
+        "modality": "mandatory",
+        "verdict": "supported"
+      }
+    },
+    {
+      "id": "dispo-septembre-2026-profil-janvier-2027",
+      "offer": {
+        "id": "off-dispo-02",
+        "requirements": "Disponible a partir de septembre 2026",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "dispo",
+            "value": "2027-01-15",
+            "quote": "Disponible à partir du 15 janvier 2027"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Disponible a partir de septembre 2026",
+        "category": "dispo",
+        "modality": "mandatory",
+        "verdict": "contradicted"
+      }
+    },
+    {
+      "id": "dispo-immediate-profil-immediate",
+      "offer": {
+        "id": "off-dispo-03",
+        "requirements": "Disponible immediatement",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "dispo",
+            "value": "Disponible immediatement",
+            "quote": "Disponible immédiatement"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Disponible immediatement",
+        "category": "dispo",
+        "modality": "mandatory",
+        "verdict": "supported"
+      }
+    },
+    {
+      "id": "dispo-immediate-profil-date",
+      "offer": {
+        "id": "off-dispo-04",
+        "requirements": "Disponible immediatement",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "dispo",
+            "value": "2027-01-15",
+            "quote": "Disponible à partir du 15 janvier 2027"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Disponible immediatement",
+        "category": "dispo",
+        "modality": "mandatory",
+        "verdict": "to_verify"
+      }
+    },
+    {
+      "id": "dispo-absente-du-profil",
+      "offer": {
+        "id": "off-dispo-05",
+        "requirements": "Disponible immediatement",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "tech",
+            "value": "Excel",
+            "quote": "Excel"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Disponible immediatement",
+        "category": "dispo",
+        "modality": "mandatory",
+        "verdict": "to_verify"
+      }
+    }
+  ]
+}
