@@ -1,0 +1,17 @@
+{
+  "status": "done",
+  "files_created": [
+    "career/stage_fit_kit.py",
+    "career/stage_fit_scorer.py",
+    "career/stage_fit_router.py",
+    "career_static/js/stage-fit-kit.js",
+    "tests/test_stage_fit_kit.py",
+    "docs/agent-reports/SPEC-024-STAGE_FIT_KIT.md"
+  ],
+  "files_modified": [
+    "career/service.py"
+  ],
+  "output": "SPEC-024 Stage Fit Kit livré : orchestrateur async resumable, scorecard avant/après, router /stagefit, intégration CareerService, 8 tests verts.",
+  "logs": "pytest -q tests/test_stage_fit_kit.py → 8 passed\nruff check career/stage_fit_kit.py career/stage_fit_scorer.py career/stage_fit_router.py career/service.py → All checks passed\ngit diff --check → clean",
+  "error": null
+}

@@ -304,26 +304,41 @@ class StageFitKitOrchestrator:
         resume_kit_id: str | None = None,
         force: bool = False,
     ) -> StageFitKit:
-        return asyncio.run(
-            self.arun_pipeline(
-                offer_id,
-                language=language,
-                constraints=constraints,
-                profile=profile,
-                job=job,
-                cv_variant_json=cv_variant_json,
-                letter_draft_id=letter_draft_id,
-                ats_before=ats_before,
-                ats_after=ats_after,
-                keyword_coverage_before=keyword_coverage_before,
-                keyword_coverage_after=keyword_coverage_after,
-                jury_summary=jury_summary,
-                evidence_audit=evidence_audit,
-                gaps_unresolved=gaps_unresolved,
-                resume_kit_id=resume_kit_id,
-                force=force,
-            )
+        coro = self.arun_pipeline(
+            offer_id,
+            language=language,
+            constraints=constraints,
+            profile=profile,
+            job=job,
+            cv_variant_json=cv_variant_json,
+            letter_draft_id=letter_draft_id,
+            ats_before=ats_before,
+            ats_after=ats_after,
+            keyword_coverage_before=keyword_coverage_before,
+            keyword_coverage_after=keyword_coverage_after,
+            jury_summary=jury_summary,
+            evidence_audit=evidence_audit,
+            gaps_unresolved=gaps_unresolved,
+            resume_kit_id=resume_kit_id,
+            force=force,
         )
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop is not None and loop.is_running():
+            import concurrent.futures
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(asyncio.run, coro)
+                return future.result()
+        if loop is not None:
+            return loop.run_until_complete(coro)
+        new_loop = asyncio.new_event_loop()
+        try:
+            return new_loop.run_until_complete(coro)
+        finally:
+            new_loop.close()
 
     async def arun_pipeline(
         self,
