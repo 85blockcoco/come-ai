@@ -22,7 +22,7 @@ from contextlib import contextmanager
 from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterator, Mapping
+from typing import Any, Callable, Iterator, Mapping
 
 from .daily_digest import (
     DAILY_DIGEST_SETTING,
@@ -107,6 +107,13 @@ from .cv_review_store import (
 from .cv_variants import ALL_VARIANTS
 from .evidence import EvidenceCenter, EvidenceItem, evidence_from_candidate_fact, evidence_from_fit_verdict
 from .evidence_store import SqliteEvidenceStore
+from .offer_quality import (
+    assess_offer,
+    deadline_hint_from_text,
+    is_refresh_due,
+    offer_facts,
+)
+from .offer_quality_store import OfferQualityStore, probe_source_status
 
 try:
     from consent_guard import ConsentGuard
@@ -296,6 +303,32 @@ def re_sub_filename(value: str) -> str:
     return compact[:60] or "candidature"
 
 
+class _OfferQualityCatalog:
+    """The read-only catalog of the collected offers (SPEC-006).
+
+    The assessment needs the other offers only to know whether the offer it
+    assesses is published somewhere else.  The rows are read without their
+    long text: the deduplication reads the identity of an offer, never its
+    description.
+    """
+
+    def __init__(self, jobs: list[dict[str, Any]]):
+        self._jobs = jobs
+        self._by_id = {str(job.get("id")): job for job in jobs if job.get("id")}
+
+    def offer(self, offer_id: str) -> dict[str, Any]:
+        job = self._by_id.get(str(offer_id))
+        if job is None:
+            raise UserFacingError("Cette offre Career n’existe pas.")
+        return job
+
+    def offers(self) -> list[dict[str, Any]]:
+        return list(self._jobs)
+
+    def duplicates_of(self, offer_id: str) -> list[dict[str, Any]]:
+        return [job for job in self._jobs if str(job.get("id")) != str(offer_id)]
+
+
 class CareerService:
     """Small local service with short SQLite connections and explicit rules."""
 
@@ -308,6 +341,7 @@ class CareerService:
         curated_sources: tuple[dict[str, Any], ...] | None = None,
         exploration_connectors: dict[str, Any] | None = None,
         daily_digest_ttl_seconds: int = DAILY_DIGEST_TTL_SECONDS,
+        offer_quality_probe: Callable[[str], int | None] | None = None,
     ):
         self.base_dir = base_dir.resolve()
         self.data_dir = self.base_dir / "career_data"
@@ -336,6 +370,11 @@ class CareerService:
         # parallel requests to the same public board.
         self.discovery_connector = discovery_connector or GreenhouseJobBoardConnector()
         self._curated_sources = curated_sources
+        # SPEC-006 : the freshness snapshots and their change history live
+        # beside the other private Career data.  The URL probe is the only
+        # network call of the module and it is never used implicitly.
+        self.offer_quality_store = OfferQualityStore(self.data_dir / "offer_quality.json")
+        self.offer_quality_probe = offer_quality_probe or probe_source_status
         self._exploration_connectors = (exploration_connectors if exploration_connectors is not None
                                         else default_exploration_connectors(self.discovery_connector))
         # Bounded in-memory cache, separate from personal boards and private
@@ -7125,6 +7164,124 @@ class CareerService:
             pass
         return target
 
+    # -- SPEC-006 : freshness, completeness and provenance of an offer ---
+
+    def _offer_quality_catalog(self) -> "_OfferQualityCatalog":
+        """Return the lightweight view of the offers used by the assessment."""
+
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, source_name, source_id, official_url, company, title, city, country,
+                       posted_date, deadline_date, start_date, end_date, duration_months,
+                       employment_type, requirements, source_status, last_verified_at, updated_at
+                FROM jobs
+                """
+            ).fetchall()
+        return _OfferQualityCatalog([dict(row) for row in rows])
+
+    def get_offer_quality(self, offer_id: str) -> dict[str, Any]:
+        """Return the quality verdict of one offer (SPEC-006).
+
+        The endpoint is read-only: it never writes a snapshot and never
+        performs a network request.  The changes it reports are the ones
+        observed since the last refresh.
+        """
+
+        job = self.get_job(offer_id)
+        catalog = self._offer_quality_catalog()
+        store = self.offer_quality_store
+        store.load()
+        previous = store.facts(offer_id)
+        snapshot = store.snapshot(offer_id) or {}
+        cached_freshness = snapshot.get("freshness") if isinstance(snapshot.get("freshness"), dict) else {}
+        quality = assess_offer(
+            job,
+            offer_id=offer_id,
+            previous=previous,
+            duplicates=catalog.duplicates_of(offer_id),
+            source_url_status=cached_freshness.get("source_url_status"),
+            verified_at=cached_freshness.get("last_verified_at"),
+            deadline_hint=deadline_hint_from_text(job),
+        )
+        return quality.to_dict()
+
+    def refresh_offer_quality(self, offer_ids: list[str], *, force: bool = False) -> dict[str, Any]:
+        """Re-assess the given offers and store what changed.
+
+        ``force`` asks for a real verification of the source URL: it is the
+        only path that performs a network request, and it stays explicit.
+        """
+
+        identifiers = [clean_text(offer_id, limit=120) for offer_id in offer_ids if clean_text(offer_id, limit=120)]
+        if not identifiers:
+            raise UserFacingError("Sélectionnez au moins une offre à rafraîchir.")
+        catalog = self._offer_quality_catalog()
+        store = self.offer_quality_store
+        store.load()
+        results: list[dict[str, Any]] = []
+        for offer_id in identifiers:
+            job = self.get_job(offer_id)
+            snapshot = store.snapshot(offer_id) or {}
+            cached_freshness = snapshot.get("freshness") if isinstance(snapshot.get("freshness"), dict) else {}
+            status: int | None = cached_freshness.get("source_url_status")
+            verified_at = cached_freshness.get("last_verified_at")
+            probed = False
+            if force and clean_text(job.get("official_url"), limit=2_000):
+                probed_status = self.offer_quality_probe(job["official_url"])
+                probed = probed_status is not None
+                if probed:
+                    status = int(probed_status)
+                    verified_at = utc_now()
+            quality = assess_offer(
+                job,
+                offer_id=offer_id,
+                previous=store.facts(offer_id),
+                duplicates=catalog.duplicates_of(offer_id),
+                source_url_status=status,
+                verified_at=verified_at,
+                deadline_hint=deadline_hint_from_text(job),
+            )
+            changes = [change.to_dict() for change in quality.freshness.changes_since_last_check]
+            store.record(
+                offer_id,
+                quality=quality.to_dict(),
+                facts=offer_facts(job),
+                changes=changes,
+                assessed_at=quality.assessed_at,
+            )
+            results.append(
+                {
+                    "offer_id": offer_id,
+                    "changed": bool(changes),
+                    "changes": changes,
+                    "verified_online": probed,
+                    "reverification_due": is_refresh_due(verified_at),
+                    "quality": quality.to_dict(),
+                }
+            )
+        store.save(utc_now())
+        return {
+            "refreshed_at": utc_now(),
+            "forced": bool(force),
+            "count": len(results),
+            "changed": sum(1 for item in results if item["changed"]),
+            "offers": results,
+        }
+
+    def offer_quality_history(self, offer_id: str) -> dict[str, Any]:
+        """Return the changes detected for one offer (SPEC-006)."""
+
+        identifier = clean_text(offer_id, limit=120)
+        store = self.offer_quality_store
+        store.load()
+        history = store.history(identifier)
+        return {
+            "offer_id": identifier,
+            "history": list(reversed(history)),
+            "count": len(history),
+        }
+
     def reset_personal_data(self, confirmation: str) -> None:
         if confirmation != DELETE_CONFIRMATION:
             raise UserFacingError("La phrase de confirmation de suppression est incorrecte.")
@@ -7179,6 +7336,11 @@ class CareerService:
                     path.unlink()
                 except OSError:
                     pass
+        # The freshness snapshots of SPEC-006 are private Career data too.
+        try:
+            self.offer_quality_store.path.unlink(missing_ok=True)
+        except OSError:
+            pass
         # Delete interrupted upload parts and any prior opaque source left by
         # an interrupted process. This directory is exclusively Career-owned.
         for pattern in (".profile-upload-*.part", "profile_*"):

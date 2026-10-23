@@ -15,6 +15,7 @@ from typing import Any
 
 from .cv_quality.conditions_extractor import extract_conditions_from_offer
 from .cv_quality.missions_extractor import extract_missions
+from .cv_quality.education_extractor import extract_education
 from .exploration import _SENIOR_TITLE, classify_internship
 from .models import (
     DEFAULT_GEO_EXCLUDED_COUNTRIES,
@@ -471,6 +472,14 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
         evidence["contract_type"] = FactEvidence("internship", f"{item['field']}_passage", item["quote"])
     elif contract_type == "unknown" and re.search(r"\bgraduate\b", _fold(title + " " + employment)):
         evidence["contract_type"] = FactEvidence("graduate role ambiguous", "title_or_contract_passage", title or employment)
+
+    # SK-19 : niveau d'études requis, extrait localement avec citation exacte.
+    # Exposition seule — n'entre dans aucun arbitrage target_status/reasons.
+    if description:
+        for fact in extract_education(description):
+            if fact.fact_type == "education_level_required" and fact.level_rank > 0:
+                evidence["education_required"] = FactEvidence(fact.level_rank, "description_passage", fact.quote)
+                break
 
     reasons: list[str] = []
     target_status = "to_verify"

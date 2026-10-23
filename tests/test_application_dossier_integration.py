@@ -89,7 +89,7 @@ def application(service: CareerService) -> dict:
 
 def test_schema_carries_the_dossier_table(service: CareerService) -> None:
     with sqlite3.connect(service.db_path) as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 9
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
         tables = {
             row[0]
             for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")

@@ -32,6 +32,7 @@ from .evidence_freshness_audit import (
 )
 from .evidence_freshness_store import FreshnessStore, FreshnessStoreError
 from .profile_import import MAX_PROFILE_IMPORT_BYTES
+from .interview_prep import bind_default_context as bind_interview_prep_context
 from .service import CareerService
 from .traceability_audit import (
     audit_report,
@@ -327,6 +328,24 @@ class InterviewAnswerPayload(BaseModel):
     answer: str = Field(min_length=3, max_length=6_000)
 
 
+class InterviewPrepGeneratePayload(BaseModel):
+    """One explicit action: prepare an interview for one stored offer."""
+
+    offer_id: str = Field(min_length=1, max_length=80)
+    profile_id: str = Field(default="user_profile", min_length=1, max_length=80)
+    mode: str = Field(default="standard", pattern="^(standard|finance)$")
+
+
+class InterviewPrepSimulatePayload(BaseModel):
+    session_id: str = Field(min_length=1, max_length=80)
+    question_id: str = Field(min_length=1, max_length=120)
+    user_answer: str = Field(min_length=3, max_length=6_000)
+
+
+class InterviewPrepExportPayload(BaseModel):
+    export_format: str = Field(default="md", pattern="^(md|pdf)$")
+
+
 class CVAnalyzePayload(BaseModel):
     """Request payload for CV structural analysis."""
     text: str = Field(min_length=1, max_length=200_000)
@@ -594,6 +613,11 @@ class _FreshnessGateway:
                 raise UserFacingError(str(error)) from error
 
         return call
+class OfferQualityRefreshPayload(BaseModel):
+    """Request payload of the controlled refresh of the offer quality."""
+
+    offer_ids: list[str] = Field(default_factory=list, max_length=50)
+    force: bool = False
 
 
 def create_career_router(
@@ -611,6 +635,9 @@ def create_career_router(
     router.on_shutdown.append(explorations.shutdown)
     researcher = web_researcher or WebResearcher(cache_dir=service.data_dir / "web_research")
     freshness_store = _FreshnessGateway(FreshnessStore(service.data_dir / "evidence_freshness"))
+    # SPEC-010 — bind the running service so that the preparation engine can
+    # resolve a stored offer and the local profile on its own.
+    bind_interview_prep_context(service.interview_prep_context())
 
     async def local(call: Any) -> Any:
         return to_jsonable(await run_in_threadpool(call))
@@ -641,6 +668,7 @@ def create_career_router(
             "discovery": capabilities["discovery"],
             "scoring": capabilities["scoring"],
             "interview_coach": capabilities["interview_coach"],
+            "interview_prep": capabilities["interview_prep"],
             "calendar_export": capabilities["calendar_export"],
             "stage_search": capabilities["stage_search"],
             "daily_digest": capabilities["daily_digest"],
@@ -1035,6 +1063,22 @@ def create_career_router(
     async def offer_intelligence(job_id: str) -> Any:
         """Same snapshot, same identifiers: this route is an alias, not a copy."""
         return await local(lambda: service.get_offer_intelligence(job_id))
+    @router.get("/api/career/offer-quality/{offer_id}")
+    async def offer_quality(offer_id: str) -> Any:
+        """Return the freshness, the completeness and the provenance of an offer."""
+        return await local(lambda: service.get_offer_quality(offer_id))
+
+    @router.get("/api/career/offer-quality/{offer_id}/history")
+    async def offer_quality_history(offer_id: str) -> Any:
+        """Return the changes detected for an offer since the last refresh."""
+        return await local(lambda: service.offer_quality_history(offer_id))
+
+    @router.post("/api/career/offer-quality/refresh")
+    async def refresh_offer_quality(payload: OfferQualityRefreshPayload) -> Any:
+        """Re-assess the selected offers and report what changed."""
+        return await local(
+            lambda: service.refresh_offer_quality(payload.offer_ids, force=payload.force)
+        )
 
     @router.get("/api/career/jobs/{job_id}/prep")
     async def job_prep(job_id: str) -> Any:
@@ -1554,6 +1598,72 @@ def create_career_router(
             return {**report, "markdown": render_report_markdown(report)}
 
         return await local(payload)
+
+    # SPEC-010 : préparation d'entretien ciblée.  Les routes littérales
+    # (/generate, /simulate) sont enregistrées avant la route paramétrée pour
+    # qu'un identifiant de session ne puisse jamais être lu comme un verbe.
+    @router.post("/api/career/interview-prep/generate", status_code=201)
+    async def create_interview_prep_session(payload: InterviewPrepGeneratePayload) -> Any:
+        return await local(
+            lambda: service.create_interview_prep_session(
+                payload.offer_id, payload.profile_id, payload.mode
+            )
+        )
+
+    @router.post("/api/career/interview-prep/simulate")
+    async def simulate_interview_prep(payload: InterviewPrepSimulatePayload) -> Any:
+        return await local(
+            lambda: service.simulate_interview_prep(
+                payload.session_id, payload.question_id, payload.user_answer
+            )
+        )
+
+    @router.get("/api/career/interview-prep")
+    async def list_interview_prep_sessions() -> Any:
+        return await local(lambda: {"sessions": service.list_interview_prep_sessions()})
+
+    @router.get("/api/career/interview-prep/{session_id}")
+    async def interview_prep_session(session_id: str) -> Any:
+        return await local(lambda: service.get_interview_prep_session(session_id))
+
+    @router.get("/api/career/interview-prep/{session_id}/history")
+    async def interview_prep_history(session_id: str) -> Any:
+        return await local(lambda: service.list_interview_prep_simulations(session_id))
+
+    @router.post("/api/career/interview-prep/{session_id}/export")
+    async def export_interview_prep(session_id: str, payload: InterviewPrepExportPayload) -> FileResponse:
+        path = await run_in_threadpool(
+            lambda: service.export_interview_prep(session_id, payload.export_format)
+        )
+        media_types = {
+            "md": "text/markdown; charset=utf-8",
+            "pdf": "application/pdf",
+        }
+        return FileResponse(
+            path,
+            filename=path.name,
+            media_type=media_types[payload.export_format],
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.get("/api/career/interview-prep/{session_id}/export/{export_format}")
+    async def download_interview_prep(session_id: str, export_format: str) -> FileResponse:
+        """Same local export as the POST route, reachable as a plain download link."""
+        if export_format not in {"md", "pdf"}:
+            raise UserFacingError("Format de préparation d’entretien non pris en charge.")
+        path = await run_in_threadpool(lambda: service.export_interview_prep(session_id, export_format))
+        media_type = "text/markdown; charset=utf-8" if export_format == "md" else "application/pdf"
+        return FileResponse(
+            path,
+            filename=path.name,
+            media_type=media_type,
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.delete("/api/career/interview-prep/{session_id}")
+    async def delete_interview_prep_session(session_id: str) -> dict[str, bool]:
+        await local(lambda: service.delete_interview_prep_session(session_id))
+        return {"deleted": True}
 
     @router.get("/api/career/export/{export_format}")
     async def export_applications(export_format: str) -> FileResponse:

@@ -1114,6 +1114,73 @@
             <div id="coach-history" class="coach-history"></div>
             <p id="coach-history-empty" class="empty-state compact-empty">Aucune séance sauvegardée. Commence par une question technique, fit, case ou liée à une offre.</p>
           </section>
+
+          <section id="interview-prep" class="panel interview-prep-panel" aria-labelledby="interview-prep-title">
+            <div class="panel-heading">
+              <div><p class="eyebrow">Préparation ciblée</p><h3 id="interview-prep-title">Assistant d’entretien</h3></div>
+              <span class="local-tag">Local · déterministe</span>
+            </div>
+            <p class="panel-help">À partir d’une offre et de ton profil local, ce module prépare des questions techniques, comportementales et d’écart, les questions à poser au recruteur et une fiche entreprise limitée à ce que l’offre dit. Le retour de simulation décrit ta réponse face à l’exercice : il ne prédit jamais un recrutement.</p>
+            <form id="interview-prep-form" class="form-stack">
+              <div class="form-row three-columns">
+                <label>Offre
+                  <select id="interview-prep-job"><option value="">Choisis une offre</option></select>
+                </label>
+                <label>Mode
+                  <select id="interview-prep-mode">
+                    <option value="standard">Standard</option>
+                    <option value="finance">Finance (8 banques de questions)</option>
+                  </select>
+                </label>
+                <label>Profil
+                  <input id="interview-prep-profile" value="user_profile" maxlength="80" readonly>
+                </label>
+              </div>
+              <button id="interview-prep-generate" class="primary-button" type="submit">Préparer mon entretien</button>
+            </form>
+
+            <section id="interview-prep-session" class="interview-prep-session" hidden aria-live="polite">
+              <div class="panel-heading compact-heading">
+                <div><p class="eyebrow">Préparation active</p><h4 id="interview-prep-session-title">Session</h4></div>
+                <div class="inline-actions">
+                  <button id="interview-prep-export-md" class="quiet-button" type="button">Exporter en Markdown</button>
+                  <button id="interview-prep-export-pdf" class="quiet-button" type="button">Exporter en PDF</button>
+                </div>
+              </div>
+
+              <div class="interview-prep-tabs" role="tablist" aria-label="Catégories de questions préparées">
+                <button class="interview-prep-tab active" type="button" role="tab" data-prep-tab="technical" aria-selected="true">Technique</button>
+                <button class="interview-prep-tab" type="button" role="tab" data-prep-tab="behavioral" aria-selected="false">Comportemental</button>
+                <button class="interview-prep-tab" type="button" role="tab" data-prep-tab="gap" aria-selected="false">Écart</button>
+                <button class="interview-prep-tab" type="button" role="tab" data-prep-tab="recruiter" aria-selected="false">Recruteur</button>
+                <button class="interview-prep-tab" type="button" role="tab" data-prep-tab="company" aria-selected="false">Entreprise</button>
+              </div>
+              <div id="interview-prep-panel-technical" class="interview-prep-tabpanel" role="tabpanel"></div>
+              <div id="interview-prep-panel-behavioral" class="interview-prep-tabpanel" role="tabpanel" hidden></div>
+              <div id="interview-prep-panel-gap" class="interview-prep-tabpanel" role="tabpanel" hidden></div>
+              <div id="interview-prep-panel-recruiter" class="interview-prep-tabpanel" role="tabpanel" hidden></div>
+              <div id="interview-prep-panel-company" class="interview-prep-tabpanel" role="tabpanel" hidden></div>
+
+              <section id="interview-prep-simulation" class="interview-prep-simulation" hidden>
+                <div class="panel-heading compact-heading">
+                  <div><p class="eyebrow">Simulation chronométrée</p><h4 id="interview-prep-simulation-question">Question</h4></div>
+                  <div class="interview-prep-timer" role="timer" aria-live="off">
+                    <span>Temps conseillé : <strong id="interview-prep-timer-limit">0:00</strong></span>
+                    <span>Temps écoulé : <strong id="interview-prep-timer">0:00</strong></span>
+                  </div>
+                </div>
+                <p id="interview-prep-timer-alert" class="interview-prep-timer-alert" role="alert" hidden></p>
+                <ul id="interview-prep-simulation-expected" class="interview-prep-expected"></ul>
+                <form id="interview-prep-simulation-form" class="form-stack">
+                  <label>Ta réponse<textarea id="interview-prep-answer" rows="8" maxlength="6000" placeholder="Réponds comme en entretien : situation, action, résultat chiffré…" required></textarea></label>
+                  <button id="interview-prep-simulate-submit" class="primary-button" type="submit">Obtenir un retour structuré</button>
+                </form>
+                <section id="interview-prep-feedback" class="coach-feedback" hidden></section>
+              </section>
+
+              <section id="interview-prep-history" class="interview-prep-history"></section>
+            </section>
+          </section>
         </section>
       </main>
 
@@ -1126,6 +1193,8 @@
     <script src="/career-static/js/application_dossier.js" defer></script>
     <script src="/career-static/js/evidence-freshness.js" defer></script>
     <script src="/career-static/js/traceability.js" defer></script>
+    <script src="/career-static/js/offer-quality.js" defer></script>
+    <script src="/career-static/js/interview-prep.js" defer></script>
     <script src="/career-static/career.js" defer></script>
     <script src="/career-static/js/daily-digest.js" defer></script>
     <script src="/career-static/js/profile-builder.js" defer></script>
