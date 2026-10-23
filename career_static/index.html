@@ -456,6 +456,7 @@
             <p class="fixed-period-note">Explore les sources publiques vérifiées sans ajouter d’entreprise. Les offres sont qualifiées selon les types de contrat et les mois que tu as sélectionnés ; les stages doivent respecter la durée minimale connue. Les informations manquantes restent « à vérifier ». Tes critères et ton profil restent sur ton Mac.</p>
             <div class="job-actions" role="group" aria-label="Mode de recherche de stages">
               <button id="stagehunter-explore" class="primary-button" type="button">Explorer les stages</button>
+              <button id="stagehunter-explore-cancel" class="secondary-button" type="button" hidden>Arrêter la recherche</button>
               <button id="stagehunter-my-companies" class="secondary-button" type="button">Mes entreprises</button>
             </div>
             <div id="stagehunter-progress" class="stagehunter-progress" aria-live="polite" hidden>
@@ -463,10 +464,10 @@
                 <strong id="stagehunter-progress-label">Préparation de la recherche…</strong>
                 <span id="stagehunter-progress-percent">0 %</span>
               </div>
-              <div id="stagehunter-progress-bar" class="stagehunter-progress-track" role="progressbar" aria-label="Progression estimée de la recherche" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div id="stagehunter-progress-bar" class="stagehunter-progress-track" role="progressbar" aria-label="Progression réelle de la recherche : étapes terminées côté serveur" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
                 <span class="stagehunter-progress-fill"></span>
               </div>
-              <p id="stagehunter-progress-detail">Progression estimée : les sources répondent à des vitesses différentes. Le nombre exact de sources sera affiché à la fin.</p>
+              <p id="stagehunter-progress-detail">La progression affichée vient du serveur : chaque étape annoncée est une étape réellement terminée.</p>
             </div>
             <p id="stagehunter-explore-status" class="fixed-period-note" aria-live="polite">Aucune entreprise à configurer pour explorer. Enregistre tes critères, puis lance la recherche.</p>
             <details id="stagehunter-explore-report" hidden>
@@ -733,6 +734,7 @@
       </footer>
     </div>
     <script src="/career-static/cv_plan.js" defer></script>
+    <script src="/career-static/js/exploration-progress.js" defer></script>
     <script src="/career-static/career.js" defer></script>
   </body>
 </html>

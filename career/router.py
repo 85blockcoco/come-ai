@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
+from .exploration_service import ExplorationService
 from .profile_import import MAX_PROFILE_IMPORT_BYTES
 from .service import CareerService
 from workspace_core import UserFacingError, to_jsonable
@@ -250,6 +251,10 @@ def create_career_router(
     if not CAREER_STATIC_DIR.is_dir():
         raise RuntimeError("Les fichiers Career Agent sont introuvables.")
     router = APIRouter()
+    # One exploration service per application: it owns the background runs and
+    # the cooperative cancellation between two sources.
+    explorations = ExplorationService(service)
+    router.on_shutdown.append(explorations.shutdown)
 
     async def local(call: Any) -> Any:
         return to_jsonable(await run_in_threadpool(call))
@@ -460,6 +465,36 @@ def create_career_router(
     @router.post("/api/career/stage-search/explore")
     async def explore_stages(payload: DiscoverySearchPayload) -> Any:
         return await local(lambda: service.explore_internships(force=payload.force))
+
+    # --- Exploration runs -------------------------------------------------
+    # The synchronous explorer above answers in one response.  These three
+    # routes expose a real, server-side run: every phase and every counter is
+    # incremented by a step that really finished, the state survives a page
+    # reload and the run can be stopped between two sources.
+
+    @router.get("/api/career/stage-search/explorations")
+    async def list_explorations() -> Any:
+        """The recent runs, so a reloaded page can resume the last one."""
+        return await local(lambda: {"runs": explorations.list_runs()})
+
+    @router.post("/api/career/stage-search/explorations", status_code=202)
+    async def start_exploration(payload: DiscoverySearchPayload) -> Any:
+        """Start one exploration and return its first real state."""
+        return await local(lambda: explorations.start(force=payload.force))
+
+    @router.get("/api/career/stage-search/explorations/{run_id}")
+    async def exploration_state(run_id: str) -> Any:
+        state = await local(lambda: explorations.state(run_id))
+        if state is None:
+            raise HTTPException(status_code=404, detail="Exploration introuvable.")
+        return state
+
+    @router.post("/api/career/stage-search/explorations/{run_id}/cancel")
+    async def cancel_exploration(run_id: str) -> Any:
+        state = await local(lambda: explorations.cancel(run_id))
+        if state is None:
+            raise HTTPException(status_code=404, detail="Exploration introuvable.")
+        return state
 
     @router.get("/api/career/discovery-sources")
     async def discovery_sources() -> Any:
