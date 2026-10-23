@@ -1,0 +1,24 @@
+[mh 14:09:48] opencode-go/gemini-4-argon-contributor: UNAVAIL (1.7s) [0m > build · gemini-4-argon-contributor [91m[1mError: [0mUpstream request f
+[mh 14:09:49] opencode-go/minimax-m3.1-flash: OK (2.6s) OK [0m > build · minimax-m3.1-flash 
+[mh 14:09:50] opencode-go/claude-haiku-5-5: OK (3.2s) OK [0m > build · claude-haiku-5-5 
+[mh 14:09:51] opencode-go/mimo-v2.6-flash: OK (4.9s) OK [0m > build · mimo-v2.6-flash 
+[mh 14:09:52] opencode-go/grok-4.7: OK (2.4s) OK [0m > build · grok-4.7 
+[mh 14:09:52] opencode-go/step-5-preview: OK (2.1s) OK [0m > build · step-5-preview 
+[mh 14:09:52] opencode-go/deepseek-v4.1-flash: UNAVAIL (1.0s) [0m > build · deepseek-v4.1-flash [91m[1mError: [0mUpstream request failed: 
+[mh 14:09:53] opencode-go/muse-spark-1.3-contributor: UNAVAIL (1.2s) [0m > build · muse-spark-1.3-contributor [91m[1mError: [0mUpstream request f
+[mh 14:09:54] opencode-go/glm-5.3-flash: OK (2.0s) OK [0m > build · glm-5.3-flash 
+[mh 14:09:55] opencode-go/qwen3.8-flash: OK (2.6s) OK [0m > build · qwen3.8-flash 
+[mh 14:09:56] opencode-go/gpt-6-luna: OK (7.5s) OK [0m > build · gpt-6-luna 
+[mh 14:09:58] opencode-go/glm-5.3: OK (3.3s) OK [0m > build · glm-5.3 
+[mh 14:09:59] opencode-go/kimi-k3: OK (2.9s) OK [0m > build · kimi-k3 
+[mh 14:10:01] opencode-go/qwen3.8-max: OK (5.5s) OK [0m > build · qwen3.8-max 
+[mh 14:10:01] google/gemini-3.1-flash-lite: OK (14.8s) OK [0m > build · gemini-3.1-flash-lite 
+[mh 14:10:01] opencode-go/longcat-2.0: OK (3.7s) OK [0m > build · longcat-2.0 
+[mh 14:10:02] opencode-go/kimi-k2.7-code: OK (3.1s) OK [0m > build · kimi-k2.7-code 
+[mh 14:10:22] opencode-go/deepseek-v4-pro: UNAVAIL (20.6s) [0m > build · deepseek-v4-pro [91m[1mError: [0mUpstream request failed: This
+[mh 14:10:22] opencode-go/qwen3.7-plus: OK (21.5s) OK [0m > build · qwen3.7-plus 
+[mh 14:10:23] opencode-go/mimo-v2.5-pro: UNAVAIL (20.9s) [0m > build · mimo-v2.5-pro [91m[1mError: [0mUpstream request failed: [400] 
+[mh 14:10:23] opencode-go/minimax-m3: OK (21.9s) OK [0m > build · minimax-m3 
+[mh 14:10:27] opencode-go/mimo-v2.5: OK (4.4s) OK [0m > build · mimo-v2.5 
+[mh 14:10:27] opencode-go/beam-free: SLOW (40.0s) timeout sans réponse
+[mh 14:10:32] opencode-go/hy4-preview: SLOW (40.0s) timeout sans réponse
