@@ -1,0 +1,16 @@
+{
+  "status": "done",
+  "files_created": [
+    "career/letter_generator.py",
+    "career/letter_structure.py",
+    "career/letter_tone.py",
+    "career/letter_triage.py",
+    "career/letter_router.py",
+    "career_static/js/letter-wizard.js",
+    "tests/test_letter_generator.py",
+    "docs/agent-reports/SPEC-022-COVER_LETTER.md"
+  ],
+  "output": "Module de lettres de motivation multi-brouillons (3 drafts + fusion), structure ≤4 paragraphes, faits sourcés, export DOCX, routeur FastAPI.",
+  "logs": "pytest -q tests/test_letter_generator.py → 9 passed\nruff check → All checks passed\ngit diff --check → clean",
+  "error": null
+}
