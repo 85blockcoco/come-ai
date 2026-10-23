@@ -457,6 +457,22 @@ function renderProfileImportDraft(profileImport) {
   [...new Set([...(profileImport.ocr_warnings || []), ...(profileImport.suggestions?.warnings || [])])].forEach((warning) => {
     elements.profileImportWarnings.append(make("p", warning, "profile-import-warning"));
   });
+  const cvQuality = profileImport.cv_quality;
+  if (cvQuality) {
+    const quality = make("section", "", "profile-import-quality");
+    quality.append(make("h4", "Diagnostic CV local"));
+    const summary = cvQuality.risk_count
+      ? `${cvQuality.risk_count} risque${cvQuality.risk_count > 1 ? "s" : ""} structurel${cvQuality.risk_count > 1 ? "s" : ""} prioritaire${cvQuality.risk_count > 1 ? "s" : ""}.`
+      : "Aucun risque structurel détecté automatiquement — une relecture humaine reste nécessaire.";
+    quality.append(make("p", summary, "profile-import-field-meta"));
+    if ((cvQuality.actions || []).length) {
+      const actions = make("ol", "", "profile-import-quality-actions");
+      cvQuality.actions.forEach((action) => actions.append(make("li", action.message)));
+      quality.append(actions);
+    }
+    quality.append(make("p", cvQuality.disclaimer || "", "profile-import-field-meta"));
+    elements.profileImportWarnings.append(quality);
+  }
   elements.profileImportApplyForm.replaceChildren();
   const values = profileImport.suggestions?.values || {};
   const evidence = profileImport.suggestions?.evidence || {};
@@ -2023,6 +2039,23 @@ function renderApplicationKit(kit, container) {
       draftDownloadLink(draft, "letter", "pdf"),
     );
     documents.append(downloads);
+    const targetedArtifacts = kit.artifacts || {};
+    if (Object.keys(targetedArtifacts).length) {
+      const artifactList = make("ul", "", "job-reasons variant-specific");
+      [
+        ["cv", "CV ciblé DOCX"],
+        ["cover_letter", "Lettre ciblée DOCX"],
+        ["prep_sheet", "Fiche de préparation"],
+      ].forEach(([key, label]) => {
+        if (targetedArtifacts[key]) {
+          artifactList.append(make("li", `${label} — ${targetedArtifacts[key]}`));
+        }
+      });
+      documents.append(
+        make("p", `Variante générée : ${kit.variant_label || kit.variant}`, "application-meta"),
+        artifactList,
+      );
+    }
   } else {
     documents.append(make("p", "Aucun dossier local n’est encore rattaché à ce suivi.", "application-meta"));
     const create = make("button", "Créer le dossier local (CV + lettre)", "secondary-button");
@@ -2076,6 +2109,12 @@ function renderApplicationKit(kit, container) {
   const checksList = make("ul", "", "job-reasons blocked-list");
   (kit.checks || []).forEach((line) => checksList.append(make("li", line)));
   warnings.append(checksList);
+  if (placeholderList.children.length) {
+    const profileAction = make("button", "Ajouter preuve au profil", "secondary-button");
+    profileAction.type = "button";
+    profileAction.addEventListener("click", () => showView("profile"));
+    warnings.append(profileAction);
+  }
   container.append(warnings);
 }
 
@@ -2101,11 +2140,11 @@ async function showKitInApplications(kit) {
   await loadApplications();
 }
 
-async function startApplicationKitFlow(jobId, language) {
+async function startApplicationKitFlow(jobId, language, variant = "") {
   try {
     const kit = await api("/api/career/application-kits", {
       method: "POST",
-      body: JSON.stringify({ job_id: jobId, language }),
+      body: JSON.stringify({ job_id: jobId, language, variant }),
     });
     setMessage("Kit de candidature prêt localement. L’envoi reste strictement manuel.");
     await showKitInApplications(kit);
@@ -2518,6 +2557,136 @@ function renderStageTerms(payload) {
   target.append(make("p", "Ces termes sont des repères locaux pour tes recherches manuelles sur les sites officiels : aucune requête n’est envoyée depuis ici.", "fixed-period-note"));
 }
 
+function formatStageDate(value) {
+  if (!value) return "À vérifier";
+  const text = String(value).trim();
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(text) ? `${text}T12:00:00Z` : text;
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) return text;
+  return parsed.toLocaleDateString("fr-FR", {day:"numeric", month:"short", year:"numeric", timeZone:"UTC"});
+}
+
+function stageContractLabel(value) {
+  const normalized = String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  return {
+    internship: "Stage", stage: "Stage", intern: "Stage",
+    fixed_term: "CDD", cdd: "CDD", fixed_term_contract: "CDD",
+    permanent: "CDI", cdi: "CDI", permanent_contract: "CDI",
+    vie: "VIE", v_i_e: "VIE",
+    apprenticeship: "Alternance — hors critères", alternance: "Alternance — hors critères",
+    ambiguous: "À vérifier", unknown: "À vérifier",
+  }[normalized] || (value ? String(value) : "À vérifier");
+}
+
+function stageOfferFactValue(job, qualification, key) {
+  const facts = qualification && Object.keys(qualification).length
+    ? qualification : (job.qualification_facts || {});
+  if (key === "contract") return stageContractLabel(facts.contract_type || job.employment_type);
+  if (key === "location") return [job.city || facts.city, job.country || facts.country].filter(Boolean).join(", ") || "À vérifier";
+  if (key === "publication") return formatStageDate(job.posted_date || facts.posted_date);
+  if (key === "start") {
+    if (job.start_date || facts.start_date) return formatStageDate(job.start_date || facts.start_date);
+    if (Number.isInteger(facts.start_month) && facts.start_month >= 1 && facts.start_month <= 12) {
+      const month = new Date(Date.UTC(2000, facts.start_month - 1, 1)).toLocaleDateString("fr-FR", {month:"long", timeZone:"UTC"});
+      return `${month} · année à vérifier`;
+    }
+    return "À vérifier";
+  }
+  if (key === "end") return formatStageDate(job.end_date || facts.end_date);
+  if (key === "duration") {
+    if (Number.isFinite(Number(job.duration_months)) && Number(job.duration_months) > 0) return `${Number(job.duration_months)} mois`;
+    const minimum = Number(facts.duration_min_months);
+    const maximum = Number(facts.duration_max_months);
+    if (Number.isFinite(minimum) && minimum > 0) {
+      return Number.isFinite(maximum) && maximum > 0 && maximum !== minimum
+        ? `${minimum} à ${maximum} mois` : `${minimum} mois`;
+    }
+    return "À vérifier";
+  }
+  if (key === "deadline") return formatStageDate(job.deadline_date);
+  if (key === "language") return job.languages_required || facts.language || "À vérifier";
+  return "À vérifier";
+}
+
+function stageRequirementSnippets(job) {
+  const source = [job.requirements, job.languages_required, job.eligibility_requirement]
+    .filter(Boolean).join("\n");
+  if (!source) return [];
+  return [...new Set(source.split(/\n+|[;•]+/).map((item) => item.trim()).filter(Boolean))].slice(0, 4);
+}
+
+function stageOfferOverview(job, qualification) {
+  const panel = make("section", "", "stage-offer-overview");
+  const factDefinitions = [
+    ["Contrat", "contract", "briefcase"], ["Localisation", "location", "pin"],
+    ["Publication", "publication", "calendar"], ["Début", "start", "play"],
+    ["Fin", "end", "finish"], ["Durée", "duration", "clock"],
+    ["Candidater avant", "deadline", "deadline"], ["Langue", "language", "language"],
+  ];
+  const grid = make("dl", "", "stage-offer-facts");
+  const missing = [];
+  factDefinitions.forEach(([label, key, icon]) => {
+    const value = stageOfferFactValue(job, qualification, key);
+    const fact = make("div", "", `stage-offer-fact${value === "À vérifier" ? " is-missing" : ""}`);
+    fact.dataset.icon = icon;
+    fact.append(make("dt", label), make("dd", value));
+    grid.append(fact);
+    if (value === "À vérifier" || value.includes("année à vérifier")) missing.push(label.toLowerCase());
+  });
+  panel.append(grid);
+
+  const trust = make("div", "", "stage-offer-trust");
+  if (job.official_url && job.source_name && job.source_name !== "manual") {
+    trust.append(chip("Source officielle liée", "good"));
+    trust.append(make("span", `${job.source_name} · vérifiée ${formatVerification(job.last_verified_at)}`));
+  } else if (job.official_url) {
+    trust.append(chip("Lien fourni · origine à vérifier", "warning"));
+  } else {
+    trust.append(chip("Lien officiel manquant", "warning"));
+  }
+  const knownCount = factDefinitions.length - missing.length;
+  trust.append(make("span", `${knownCount}/${factDefinitions.length} informations essentielles renseignées`));
+  panel.append(trust);
+
+  const requirements = stageRequirementSnippets(job);
+  if (requirements.length) {
+    const block = make("div", "", "stage-offer-requirements");
+    block.append(make("strong", "Prérequis repérés dans l’offre"));
+    const list = make("ul");
+    requirements.forEach((item) => list.append(make("li", item)));
+    block.append(list);
+    panel.append(block);
+  }
+  if (missing.length) {
+    panel.append(make("p", `Informations manquantes : ${missing.join(", ")}. Elles restent à vérifier et ne sont jamais inventées.`, "stage-offer-missing"));
+  }
+  return panel;
+}
+
+function renderStageResultSummary(matches) {
+  const target = $("#stagehunter-result-summary");
+  if (!target) return;
+  target.replaceChildren();
+  const counts = {conforming:0, to_verify:0, non_conforming:0, sourced:0};
+  matches.forEach((match) => {
+    const status = (match.stage_match || match.qualification || {}).qualification_status
+      || (match.qualification || {}).target_status || "to_verify";
+    counts[status] = (counts[status] || 0) + 1;
+    if (match.job?.official_url && match.job?.source_name && match.job.source_name !== "manual") counts.sourced += 1;
+  });
+  const items = [
+    [matches.length, "offres affichées", ""], [counts.conforming, "conformes", "good"],
+    [counts.to_verify, "à vérifier", "warning"], [counts.non_conforming, "non conformes", "danger"],
+    [counts.sourced, "avec source officielle liée", ""],
+  ];
+  items.forEach(([value, label, tone]) => {
+    const item = make("div", "", `stagehunter-summary-item${tone ? ` ${tone}` : ""}`);
+    item.append(make("strong", String(value)), make("span", label));
+    target.append(item);
+  });
+  target.hidden = matches.length === 0;
+}
+
 function stageMatchBlock(stageMatch) {
   const profileScoring = stageMatch._profileScoring || null;
   const block = make("section", "", "stage-match-block");
@@ -2606,6 +2775,7 @@ function renderStageMatches(payload) {
     return direction === "asc" ? stageMatchScore(a) - stageMatchScore(b) : stageMatchScore(b) - stageMatchScore(a);
   });
   renderStageMap(sorted);
+  renderStageResultSummary(sorted);
   empty.hidden = sorted.length > 0;
   sorted.forEach((match) => {
     const wrapper = make("div", "", "stagehunter-match");
@@ -2621,6 +2791,13 @@ function renderStageMatches(payload) {
       wrapper.append(stageMatchBlock(displayedMatch));
     }
     const card = jobCard(match.job, "discover", match.qualification);
+    card.classList.add("stagehunter-offer-card");
+    const chips = card.querySelector(".job-chips");
+    const qualificationFacts = {
+      ...(match.job?.qualification_facts || {}),
+      ...(match.qualification || {}),
+    };
+    chips?.after(stageOfferOverview(match.job || {}, qualificationFacts));
     const actions = card.querySelector(".job-actions");
     const prep = make("button", "Préparer cette candidature", "secondary-button");
     prep.type = "button";
@@ -2654,49 +2831,62 @@ async function loadStageDetail(jobId) {
   target?.classList.add("is-selected");
   reveal(container, "start");
   try {
+    const selectedMatch = state.stageMatches.find((match) => match.job?.id === jobId) || {};
     const prep = await api(`/api/career/jobs/${encodeURIComponent(jobId)}/prep`);
     container.replaceChildren();
-    const job = prep.job || {};
+    // The preparation endpoint deliberately exposes a bounded job subset.
+    // Merge it over the already-loaded local offer so the detail view keeps
+    // dates, location and qualification evidence without another fetch.
+    const job = {...(selectedMatch.job || {}), ...(prep.job || {})};
     try { container.focus({ preventScroll: true }); } catch (_) { /* focus non essentiel */ }
-    const fields = [
-      ["Entreprise", job.company],
-      ["Titre", job.title],
-      ["Lieu", [job.city, job.country].filter(Boolean).join(", ")],
-      ["Début annoncé", job.start_date || prep.qualification?.start_date || prep.qualification?.start_month],
-      ["Fin annoncée", job.end_date || prep.qualification?.end_date],
-      ["Durée", job.duration_months != null ? `${job.duration_months} mois` : (prep.qualification?.duration_min_months != null ? `${prep.qualification.duration_min_months} à ${prep.qualification.duration_max_months} mois` : "non précisée")],
-      ["Date de candidature", job.deadline_date],
-      ["Date de publication", job.posted_date],
-      ["Pertinence", prep.stage_match?.score],
-      ["Lien officiel", job.official_url],
-    ];
     container.id = container.id || "stagehunter-detail";
     container.setAttribute("tabindex", "-1");
-    fields.forEach(([label, value]) => {
-      if (value === null || value === undefined || value === "") return;
-      const row = make("div", "", "detail-row");
-      row.append(make("strong", `${label} : `));
-      if (label === "Lien officiel") {
-        const link = document.createElement("a");
-        link.href = value;
-        link.textContent = value;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
-        row.append(link);
-      } else {
-        row.append(document.createTextNode(String(value)));
-      }
-      container.append(row);
-    });
-    if ((prep.stage_match?.reasons || []).length) {
+    const hero = make("header", "", "stage-detail-hero");
+    const heading = make("div");
+    heading.append(make("p", job.company || "Entreprise à vérifier", "stage-detail-company"));
+    heading.append(make("h4", job.title || "Intitulé à vérifier"));
+    heading.append(make("p", [job.city, job.country].filter(Boolean).join(", ") || "Localisation à vérifier", "stage-detail-location"));
+    hero.append(heading);
+    if (job.official_url) {
+      const official = make("a", "Voir l’offre officielle ↗", "primary-button external-link");
+      official.href = job.official_url;
+      official.target = "_blank";
+      official.rel = "noopener noreferrer";
+      hero.append(official);
+    }
+    container.append(hero);
+    const qualification = {
+      ...(job.qualification_facts || {}),
+      ...(selectedMatch.qualification || {}),
+      ...(prep.qualification || {}),
+    };
+    container.append(stageOfferOverview(job, qualification));
+    const stageMatch = prep.stage_match || selectedMatch.stage_match || {};
+    if (Number.isFinite(stageMatch.score)) {
+      container.append(make("p", `Pertinence calculée localement : ${stageMatch.score}/100. Cette note aide au tri et ne prédit pas une embauche.`, "detail-score-callout"));
+    }
+    if ((stageMatch.reasons || []).length) {
+      container.append(make("p", "Pourquoi cette offre est classée ici", "scoring-title"));
       const list = make("ul", "", "detail-reasons");
-      prep.stage_match.reasons.slice(0, 5).forEach((reason) => list.append(make("li", reason)));
+      stageMatch.reasons.slice(0, 5).forEach((reason) => list.append(make("li", reason)));
       container.append(list);
+    }
+    if ((prep.requirements || []).length) {
+      container.append(make("p", "Compétences et prérequis cités dans l’annonce", "scoring-title"));
+      const requirements = make("ul", "", "detail-requirements");
+      prep.requirements.slice(0, 10).forEach((item) => {
+        const text = item?.text || String(item || "");
+        const source = item?.source ? ` · source : ${item.source}` : "";
+        requirements.append(make("li", `${text}${source}`));
+      });
+      container.append(requirements);
+    } else {
+      container.append(make("p", "Compétences et prérequis non structurés : relis l’annonce officielle avant de candidater.", "stage-offer-missing"));
     }
     // Résumé structuré (local déterministe) + IA optionnelle avec consentement.
     try {
       const summary = await api(`/api/career/jobs/${encodeURIComponent(jobId)}/summary`);
-      if (summary?.missions?.length) {
+      if (summary?.missions?.length && !(prep.requirements || []).length) {
         const title = make("p", "Missions / prérequis extraits", "scoring-title");
         container.append(title);
         const list = make("ul", "", "detail-reasons");
@@ -2756,6 +2946,57 @@ function renderStagePrepSelect() {
 }
 
 let stageHunterResultMode = "auto";
+let stageHunterProgressTimer = null;
+let stageHunterProgressStartedAt = 0;
+
+function updateStageHunterProgress(value, label, detail) {
+  const container = $("#stagehunter-progress");
+  const bar = $("#stagehunter-progress-bar");
+  const fill = bar?.querySelector(".stagehunter-progress-fill");
+  if (!container || !bar || !fill) return;
+  const bounded = Math.max(0, Math.min(100, Math.round(value)));
+  container.hidden = false;
+  bar.setAttribute("aria-valuenow", String(bounded));
+  fill.style.width = `${bounded}%`;
+  $("#stagehunter-progress-percent").textContent = `${bounded} %`;
+  if (label) $("#stagehunter-progress-label").textContent = label;
+  if (detail) $("#stagehunter-progress-detail").textContent = detail;
+}
+
+function startStageHunterProgress() {
+  if (stageHunterProgressTimer) clearInterval(stageHunterProgressTimer);
+  stageHunterProgressStartedAt = Date.now();
+  const container = $("#stagehunter-progress");
+  container?.classList.remove("is-complete", "is-error");
+  updateStageHunterProgress(6, "Préparation de la recherche…", "Progression estimée : les sources répondent à des vitesses différentes. Le nombre exact de sources sera affiché à la fin.");
+  stageHunterProgressTimer = setInterval(() => {
+    const elapsed = Math.max(0, Math.floor((Date.now() - stageHunterProgressStartedAt) / 1000));
+    const value = Math.min(92, 10 + Math.log2(elapsed + 1) * 18);
+    const label = elapsed < 4 ? "Connexion aux sources publiques…"
+      : elapsed < 12 ? "Lecture et normalisation des annonces…"
+      : elapsed < 25 ? "Qualification des contrats, dates et localisations…"
+      : "Classement local des offres pertinentes…";
+    updateStageHunterProgress(value, label, `En cours depuis ${elapsed} s · progression estimée. Les résultats exacts ne sont connus qu’à la fin.`);
+  }, 500);
+}
+
+function finishStageHunterProgress(success, result = null) {
+  if (stageHunterProgressTimer) clearInterval(stageHunterProgressTimer);
+  stageHunterProgressTimer = null;
+  const container = $("#stagehunter-progress");
+  if (!container) return;
+  const elapsed = Math.max(0, Math.round((Date.now() - stageHunterProgressStartedAt) / 1000));
+  container.classList.toggle("is-complete", success);
+  container.classList.toggle("is-error", !success);
+  if (success) {
+    const summary = result?.summary || {};
+    const attempted = Number.isFinite(summary.sources_attempted) ? summary.sources_attempted : "?";
+    const retained = Number.isFinite(summary.retained_count) ? summary.retained_count : "?";
+    updateStageHunterProgress(100, "Recherche terminée", `${attempted} sources consultées · ${retained} offres retenues · ${elapsed} s. Les détails et les éventuels échecs sont affichés ci-dessous.`);
+  } else {
+    updateStageHunterProgress(100, "Recherche interrompue", `La recherche a échoué après ${elapsed} s. Les offres déjà enregistrées sont intactes.`);
+  }
+}
 
 function renderStageExploration(payload) {
   const status = $("#stagehunter-explore-status");
@@ -2819,6 +3060,204 @@ function renderStageApplications() {
   state.applications.forEach((application) => target.append(applicationCard(application)));
 }
 
+function sprintReadinessLabel(value) {
+  return {
+    prepare_now: "Prête à préparer",
+    profile_to_complete: "Profil à compléter",
+    offer_to_verify: "Offre à vérifier",
+    candidate_to_verify: "Compatibilité candidat à vérifier",
+  }[value] || "À vérifier";
+}
+
+function renderApplicationSprint(payload) {
+  const target = $("#stagehunter-sprint");
+  if (!target) return;
+  target.replaceChildren();
+  target.hidden = false;
+  const stats = payload.stats || {};
+  const statsBlock = make("div", "", "sprint-stats");
+  [
+    [stats.selected || 0, "offres dans la file"],
+    [stats.prepare_now || 0, "prêtes à préparer"],
+    [stats.profile_to_complete || 0, "profils à renforcer"],
+    [stats.offer_to_verify || 0, "offres à vérifier"],
+    [stats.candidate_to_verify || 0, "compatibilités à vérifier"],
+  ].forEach(([value, label]) => {
+    const item = make("article", "", "sprint-stat");
+    item.append(make("strong", String(value)), make("span", label));
+    statsBlock.append(item);
+  });
+  target.append(statsBlock);
+
+  const grid = make("div", "", "sprint-grid");
+  const queue = make("div", "", "sprint-queue");
+  queue.append(make("h4", "Ordre de préparation conseillé"));
+  if (!(payload.queue || []).length) {
+    queue.append(make("p", "Aucune offre admissible dans les résultats actuels. Relance la recherche ou vérifie tes critères.", "empty-state"));
+  }
+  (payload.queue || []).forEach((item, index) => {
+    const card = make("article", "", `sprint-card ${item.readiness === "prepare_now" ? "is-ready" : "is-review"}`);
+    card.append(make("p", `#${index + 1} · ${item.company}`, "sprint-card-company"));
+    card.append(make("h4", item.title));
+    card.append(make("p", `${item.location} · langue ${item.language} · correspondance ${item.match_score}/100 · CV ${item.coverage_percent} %`, "sprint-card-meta"));
+    card.append(chip(sprintReadinessLabel(item.readiness), item.readiness === "prepare_now" ? "good" : "warning"));
+    if ((item.candidate_warnings || []).length) {
+      const warnings = make("ul", "", "blocked-list");
+      item.candidate_warnings.forEach((warning) => warnings.append(make("li", warning)));
+      card.append(warnings);
+    }
+    const actionsList = make("ul");
+    (item.next_actions || []).slice(0, 3).forEach((action) => actionsList.append(make("li", action)));
+    card.append(actionsList);
+    const actions = make("div", "", "job-actions");
+    if (item.official_url) {
+      const official = make("a", "Ouvrir la source officielle ↗", "secondary-button external-link");
+      official.href = item.official_url;
+      official.target = "_blank";
+      official.rel = "noopener noreferrer";
+      actions.append(official);
+    }
+    const prepare = make("button", "Préparer", "primary-button");
+    prepare.type = "button";
+    prepare.addEventListener("click", () => loadStagePrep(item.job_id));
+    const detail = make("button", "Voir le détail", "secondary-button");
+    detail.type = "button";
+    detail.addEventListener("click", () => loadStageDetail(item.job_id));
+    const kit = make("button", "Créer le kit local", "secondary-button");
+    kit.type = "button";
+    kit.title = "Prépare localement le CV et la lettre ; aucun dépôt n’est effectué.";
+    kit.addEventListener("click", () => {
+      const language = String(item.language || "").toLowerCase();
+      const languageCode = ["fr", "en", "it", "de"].find((code) => language === code || language.startsWith(`${code}-`));
+      if (!languageCode) {
+        setMessage("La langue de cette offre doit être confirmée avant de créer le kit.", true);
+        loadStagePrep(item.job_id);
+        return;
+      }
+      startApplicationKitFlow(item.job_id, languageCode, item.recommended_variant || "");
+    });
+    actions.append(prepare, kit, detail);
+    if (!item.tracking) {
+      const track = make("button", "Créer le suivi", "secondary-button");
+      track.type = "button";
+      track.addEventListener("click", async () => {
+        track.disabled = true;
+        try {
+          await api("/api/career/applications", {method: "POST", body: JSON.stringify({job_id: item.job_id})});
+          setMessage("Suivi local créé. Aucun envoi n’a été effectué.");
+          await Promise.all([loadApplications(), loadDashboard(), loadApplicationSprint()]);
+        } catch (error) {
+          setMessage(error.message, true);
+        } finally {
+          track.disabled = false;
+        }
+      });
+      actions.append(track);
+    } else {
+      actions.append(make("span", `Suivi : ${stageLabels[item.tracking.stage] || item.tracking.stage}`, "sprint-card-meta"));
+    }
+    card.append(actions);
+    queue.append(card);
+  });
+
+  const cv = make("aside", "", "sprint-cv");
+  const verification = payload.verification_summary || [];
+  if (verification.length) {
+    cv.append(make("h4", "Vérifications groupées"));
+    cv.append(make("p", "Confirme ces faits sur les pages officielles pour débloquer plusieurs dossiers à la fois.", "sprint-card-meta"));
+    const verificationList = make("ul");
+    verification.slice(0, 8).forEach((item) => verificationList.append(make("li", `${item.field} · ${item.offer_count} offre(s)`)));
+    cv.append(verificationList);
+  }
+  cv.append(make("h4", "Priorités CV à fort impact"));
+  const priorities = payload.cv_advice?.priorities || [];
+  if (!priorities.length) cv.append(make("p", "Aucun manque récurrent détecté sur cette file. Relis malgré tout chaque offre et chaque document.", "sprint-card-meta"));
+  priorities.slice(0, 8).forEach((priority) => {
+    const block = make("div", "", "sprint-priority");
+    block.append(make("strong", `${priority.keyword} · ${priority.offer_count} offre(s)`));
+    block.append(make("p", priority.advice));
+    cv.append(block);
+  });
+  const strengths = payload.cv_advice?.strengths || [];
+  if (strengths.length) {
+    cv.append(make("h4", "Preuves déjà présentes à remonter"));
+    const list = make("ul");
+    strengths.slice(0, 8).forEach((strength) => list.append(make("li", `${strength.keyword} · repéré dans ${strength.offer_count} correspondance(s)`)));
+    cv.append(list);
+  }
+  grid.append(queue, cv);
+  target.append(grid, make("p", payload.disclaimer || "Aucun envoi automatique.", "sprint-disclaimer"));
+  reveal(target, "start");
+}
+
+async function loadApplicationSprint() {
+  const target = $("#stagehunter-sprint");
+  if (!target) return;
+  target.hidden = false;
+  target.replaceChildren(make("p", "Construction locale de la file…"));
+  try {
+    renderApplicationSprint(await api("/api/career/application-sprint?limit=20"));
+  } catch (error) {
+    target.replaceChildren(make("p", error.message, "scoring-disclaimer"));
+  }
+}
+
+function renderApplicationPipeline(payload) {
+  const target = $("#stagehunter-pipeline");
+  if (!target) return;
+  target.replaceChildren();
+  target.hidden = false;
+  const pipeline = payload.pipeline || [];
+  if (!pipeline.length) {
+    target.append(make("p", "Aucune offre dans le pipeline.", "empty-state"));
+    return;
+  }
+  const list = make("div", "", "pipeline-list");
+  pipeline.forEach((item) => {
+    const row = make("article", "", "pipeline-row");
+    row.append(
+      make("h4", `${item.company} — ${item.title}`),
+      make(
+        "p",
+        `Stade : ${item.stage} · Variante : ${item.variant_label || "non sélectionnée"} · Score : ${item.match_score || 0}`,
+        "application-meta",
+      ),
+    );
+    const actions = make("div", "", "job-actions");
+    const prepare = make("button", "Préparer", "secondary-button");
+    prepare.type = "button";
+    prepare.addEventListener("click", () => loadStagePrep(item.job_id));
+    actions.append(prepare);
+    if (!item.tracking_stage) {
+      const track = make("button", "Créer le suivi", "primary-button");
+      track.type = "button";
+      track.addEventListener("click", async () => {
+        await api("/api/career/applications", {
+          method: "POST",
+          body: JSON.stringify({ job_id: item.job_id }),
+        });
+        await loadApplicationPipeline();
+      });
+      actions.append(track);
+    }
+    row.append(actions);
+    list.append(row);
+  });
+  target.append(list);
+}
+
+async function loadApplicationPipeline() {
+  const target = $("#stagehunter-pipeline");
+  if (!target) return;
+  target.hidden = false;
+  target.replaceChildren(make("p", "Chargement du pipeline…"));
+  try {
+    renderApplicationPipeline(await api("/api/career/application-pipeline"));
+  } catch (error) {
+    target.replaceChildren(make("p", error.message, "scoring-disclaimer"));
+  }
+}
+
 function renderStagePrepList(target, title, items, renderItem) {
   if (!items.length) return;
   const section = make("section", "", "stagehunter-prep-section");
@@ -2826,6 +3265,54 @@ function renderStagePrepList(target, title, items, renderItem) {
   const list = make("ul", "", "job-reasons");
   items.forEach((item) => list.append(renderItem(item)));
   section.append(list);
+  target.append(section);
+}
+
+function renderVariantFitAnalysis(target, prep) {
+  const coverage = prep.coverage || {};
+  const section = make("section", "", "stagehunter-prep-section variant-specific");
+  section.append(make("h4", "Variante CV recommandée"));
+  const recommendation = make(
+    "p",
+    prep.recommended_variant_label || "Variante à confirmer",
+    "application-meta",
+  );
+  recommendation.title = prep.variant_rationale || "Classification locale déterministe";
+  section.append(recommendation);
+  if (prep.variant_rationale) {
+    section.append(make("p", prep.variant_rationale, "scoring-disclaimer"));
+  }
+
+  const coverageList = make("ul", "", "job-reasons");
+  coverageList.append(
+    make(
+      "li",
+      `Couverture obligatoire : ${Number(coverage.mandatory_pct || 0).toFixed(1)} % (${coverage.mandatory_covered || 0}/${coverage.mandatory_total || 0})`,
+    ),
+    make(
+      "li",
+      `Couverture préférée : ${Number(coverage.preferred_pct || 0).toFixed(1)} % (${coverage.preferred_covered || 0}/${coverage.preferred_total || 0})`,
+    ),
+  );
+  section.append(coverageList);
+
+  const gaps = prep.gaps || [];
+  if (gaps.length) {
+    section.append(make("h5", "CV actuel → CV adapté"));
+    const list = make("ul", "", "job-reasons");
+    gaps.forEach((gap) => {
+      const citation = gap.provenance || {};
+      const source = citation.source || citation.filename || "aucune preuve disponible";
+      const quote = citation.quote ? ` — « ${citation.quote} »` : "";
+      list.append(
+        make(
+          "li",
+          `${gap.requirement} · ${gap.current_state} → ${gap.adapted_state} · Source : ${source}${quote}`,
+        ),
+      );
+    });
+    section.append(list);
+  }
   target.append(section);
 }
 
@@ -2856,6 +3343,7 @@ function renderStagePrep(prep) {
     prep.uncertainty.forEach((item) => warnings.append(make("li", item)));
     target.append(warnings);
   }
+  renderVariantFitAnalysis(target, prep);
   const cvCoverage = prep.cv_coverage || {};
   if ((typeof renderCvPlanSection === "function") && ((prep.cv_action_plan || []).length || Number.isFinite(cvCoverage.requirements_total))) {
     const planSection = renderCvPlanSection(target, prep, job);
@@ -2882,12 +3370,26 @@ function renderStagePrep(prep) {
   const kitLanguage = make("select", "", "kit-language-select");
   kitLanguage.setAttribute("aria-label", "Langue du kit de candidature");
   ["fr", "en", "it", "de"].forEach((code) => kitLanguage.append(new Option(draftLanguageLabels[code], code)));
+  const kitVariant = make("select", "", "kit-variant-select variant-specific");
+  kitVariant.setAttribute("aria-label", "Variante CV ciblée");
+  const variantCoverage = prep.variant_coverage || {};
+  [
+    ["m_a", "M&A / Investment Banking"],
+    ["markets", "Markets / Quant"],
+    ["corporate_finance", "Corporate Finance / FP&A"],
+  ].forEach(([id, label]) => {
+    const percentage = Number(variantCoverage[id]);
+    const comparison = Number.isFinite(percentage) ? ` — ${percentage.toFixed(1)} % obligatoire` : "";
+    kitVariant.append(new Option(`${label}${comparison}`, id));
+  });
+  kitVariant.value = prep.recommended_variant || "m_a";
+  kitVariant.title = prep.variant_rationale || "Sélection manuelle possible";
   const kit = make("button", "Préparer le kit de candidature", "primary-button");
   kit.type = "button";
   // Un clic = un kit pour CETTE offre. Aucune boucle de candidature : le
   // suivi et le brouillon local sont créés une fois puis réutilisés.
-  kit.addEventListener("click", () => startApplicationKitFlow(job.id, kitLanguage.value));
-  actions.append(kitLanguage, kit);
+  kit.addEventListener("click", () => startApplicationKitFlow(job.id, kitLanguage.value, kitVariant.value));
+  actions.append(kitLanguage, kitVariant, kit);
   target.append(actions);
 }
 
@@ -2990,8 +3492,10 @@ $("#stagehunter-explore")?.addEventListener("click", async () => {
   const button = $("#stagehunter-explore");
   button.disabled = true;
   button.textContent = "Exploration en cours…";
+  startStageHunterProgress();
   try {
     const result = await api("/api/career/stage-search/explore", {method:"POST", body:JSON.stringify({force:false})});
+    finishStageHunterProgress(true, result);
     stageHunterResultMode = "explore";
     renderStageExploration(result);
     renderExplorationMatches(result);
@@ -3001,6 +3505,7 @@ $("#stagehunter-explore")?.addEventListener("click", async () => {
     const succeeded = (result.summary?.sources_succeeded || 0) + (result.summary?.sources_cached || 0);
     setMessage(failed && !succeeded ? "Les sources n’ont pas pu être lues. Aucun résultat n’a été inventé ; consulte le rapport de recherche." : result.summary?.partial ? "Exploration partielle terminée. Consulte les sources et les limites avant de choisir une offre." : "Exploration terminée sur les sources du registre. Aucun dépôt de candidature n’a été effectué.", Boolean(failed && !succeeded));
   } catch (error) {
+    finishStageHunterProgress(false);
     setMessage(error.message, true);
     $("#stagehunter-explore-status").textContent = "L’exploration a échoué. Tes offres et candidatures déjà enregistrées sont conservées.";
   } finally {
@@ -3027,6 +3532,9 @@ $("#stagehunter-prep-submit")?.addEventListener("click", () => {
   }
   loadStagePrep(jobId);
 });
+
+$("#stagehunter-sprint-build")?.addEventListener("click", () => loadApplicationSprint());
+$("#stagehunter-pipeline-refresh")?.addEventListener("click", () => loadApplicationPipeline());
 
 document.querySelectorAll(".career-tab").forEach((tab) => tab.addEventListener("click", () => showView(tab.dataset.view)));
 

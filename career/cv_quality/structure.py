@@ -368,6 +368,51 @@ def detect_experiences(text: str, sections: list[SectionReading]) -> tuple[list[
     if current_entry is not None:
         _finalize_entry(current_entry, entry_start_offset, exp_section.start_offset, experiences, findings, text)
 
+    # Canva may expose all dates as a separate visual column. In that case the
+    # detected Experience section can contain only one description block even
+    # though the document has several positioned date anchors. Recover those
+    # anchors conservatively only when normal parsing has very low recall.
+    if len(experiences) < 4:
+        all_lines: list[tuple[int, str]] = []
+        running_offset = 0
+        for source_line in text.splitlines(keepends=True):
+            all_lines.append((running_offset, source_line.strip()))
+            running_offset += len(source_line)
+        dated = [
+            (index, offset, line)
+            for index, (offset, line) in enumerate(all_lines)
+            if date_pattern.search(line)
+        ]
+        if len(dated) >= 4:
+            recovered: list[ExperienceEntry] = []
+            for position, (line_index, offset, line) in enumerate(dated):
+                next_index = dated[position + 1][0] if position + 1 < len(dated) else min(len(all_lines), line_index + 6)
+                nearby = [
+                    candidate
+                    for _, candidate in all_lines[line_index + 1 : next_index]
+                    if candidate and not date_pattern.search(candidate)
+                ]
+                if len(nearby) < 2:
+                    nearby = [
+                        candidate
+                        for _, candidate in all_lines[max(0, line_index - 2) : line_index]
+                        if candidate and not date_pattern.search(candidate)
+                    ] + nearby
+                dates = date_pattern.findall(line)
+                description = "\n".join(nearby[2:] if len(nearby) > 2 else nearby)
+                recovered.append(
+                    ExperienceEntry(
+                        company=nearby[1] if len(nearby) > 1 else "À vérifier",
+                        role=nearby[0] if nearby else "À vérifier",
+                        start_date=dates[0] if dates else None,
+                        end_date=dates[1] if len(dates) > 1 else None,
+                        description=description,
+                        has_quantified_result=bool(QUANT_PATTERN.search(description)),
+                        source_offset=offset,
+                    )
+                )
+            experiences = recovered
+
     return experiences, findings
 
 

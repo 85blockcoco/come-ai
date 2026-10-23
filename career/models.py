@@ -6,6 +6,7 @@ import re
 import unicodedata
 import urllib.parse
 from datetime import date, datetime, timezone
+from enum import Enum
 from typing import Any
 
 from workspace_core import UserFacingError
@@ -161,6 +162,21 @@ GENERIC_APPLICATION_STAGES = {
     "interview",
     "offer_received",
 }
+
+
+class PipelineStage(str, Enum):
+    """Derived progress through the local offer-to-application workflow."""
+
+    DISCOVERED = "discovered"
+    QUALIFIED = "qualified"
+    SPRINT_QUEUED = "sprint_queued"
+    PREP_ANALYZED = "prep_analyzed"
+    VARIANT_SELECTED = "variant_selected"
+    KIT_GENERATED = "kit_generated"
+    TRACKING_CREATED = "tracking_created"
+
+    def __str__(self) -> str:
+        return self.value
 
 
 def utc_now() -> str:

@@ -438,6 +438,18 @@
             <p id="stagehunter-brief-note" class="fixed-period-note"></p>
           </section>
 
+          <section class="panel stagehunter-pipeline-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Cycle complet</p>
+                <h3>Offre → qualification → CV adapté → kit → suivi</h3>
+              </div>
+              <button id="stagehunter-pipeline-refresh" class="secondary-button" type="button">Actualiser</button>
+            </div>
+            <p class="fixed-period-note">Vue locale dérivée des données existantes. Aucun envoi automatique.</p>
+            <div id="stagehunter-pipeline" class="stagehunter-pipeline" aria-live="polite" hidden></div>
+          </section>
+
           <section class="panel">
             <p class="eyebrow">Étape B</p>
             <h3>Trouver des offres réelles</h3>
@@ -445,6 +457,16 @@
             <div class="job-actions" role="group" aria-label="Mode de recherche de stages">
               <button id="stagehunter-explore" class="primary-button" type="button">Explorer les stages</button>
               <button id="stagehunter-my-companies" class="secondary-button" type="button">Mes entreprises</button>
+            </div>
+            <div id="stagehunter-progress" class="stagehunter-progress" aria-live="polite" hidden>
+              <div class="stagehunter-progress-heading">
+                <strong id="stagehunter-progress-label">Préparation de la recherche…</strong>
+                <span id="stagehunter-progress-percent">0 %</span>
+              </div>
+              <div id="stagehunter-progress-bar" class="stagehunter-progress-track" role="progressbar" aria-label="Progression estimée de la recherche" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <span class="stagehunter-progress-fill"></span>
+              </div>
+              <p id="stagehunter-progress-detail">Progression estimée : les sources répondent à des vitesses différentes. Le nombre exact de sources sera affiché à la fin.</p>
             </div>
             <p id="stagehunter-explore-status" class="fixed-period-note" aria-live="polite">Aucune entreprise à configurer pour explorer. Enregistre tes critères, puis lance la recherche.</p>
             <details id="stagehunter-explore-report" hidden>
@@ -485,8 +507,21 @@
             </div>
             <div id="stagehunter-map" class="stagehunter-map"></div>
             <p id="stagehunter-matches-note" class="fixed-period-note"></p>
+            <div id="stagehunter-result-summary" class="stagehunter-result-summary" aria-live="polite"></div>
             <div id="stagehunter-matches" class="job-list"></div>
             <p id="stagehunter-matches-empty" class="empty-state">Aucune offre enregistrée pour l’instant. Passe à l’étape B pour en importer.</p>
+          </section>
+
+          <section class="panel stagehunter-sprint-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Candidatures express</p>
+                <h3>Transformer mes meilleures offres en plan d’action</h3>
+              </div>
+              <button id="stagehunter-sprint-build" class="primary-button" type="button">Construire ma liste express</button>
+            </div>
+            <p class="fixed-period-note">Priorisation et conseils CV calculés localement à partir de tes offres et de ton profil. Aucun envoi automatique : tu gardes la validation et le dépôt final.</p>
+            <div id="stagehunter-sprint" class="stagehunter-sprint" aria-live="polite" hidden></div>
           </section>
 
           <section class="panel">

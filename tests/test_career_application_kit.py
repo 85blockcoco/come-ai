@@ -444,8 +444,8 @@ def test_no_submission_or_email_route_exists() -> None:
     assert "mailto:" not in js_source, "aucun lien courriel latéral n'est fabriqué côté client"
 
 
-def test_application_events_schema_is_unchanged() -> None:
-    """Les textes du kit persistent via application_events, sans migration."""
+def test_application_events_schema_is_unchanged_and_drafts_store_variant() -> None:
+    """Les textes restent événementiels ; seule la variante enrichit le brouillon."""
     source = Path(__file__).resolve().parents[1].joinpath("career", "service.py").read_text(encoding="utf-8")
     applications_match = re.search(r"CREATE TABLE applications \((.*?)\);", source, flags=re.DOTALL)
     events_match = re.search(r"CREATE TABLE application_events \((.*?)\);", source, flags=re.DOTALL)
@@ -458,7 +458,7 @@ def test_application_events_schema_is_unchanged() -> None:
         ["id", "application_id", "job_id", "event_type", "detail", "created_at"]
     )
     assert sorted(re.findall(r"(\w+) TEXT", drafts_match.group(1))) == sorted(
-        ["id", "job_id", "language", "generation_mode", "provider", "cv_markdown", "letter_markdown",
+        ["id", "job_id", "language", "variant", "generation_mode", "provider", "cv_markdown", "letter_markdown",
          "checks_json", "quality_json", "profile_updated_at", "job_updated_at", "created_at"]
     )
 

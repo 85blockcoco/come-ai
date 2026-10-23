@@ -120,3 +120,20 @@ def decode_qualification_snapshot(row: dict[str, Any]) -> dict[str, Any]:
         "qualified_at": clean_text(row.get("qualification_updated_at"), limit=40),
         "snapshot_schema_version": row.get("qualification_schema_version"),
     }
+
+
+def snapshot_matches_current_source(job: dict[str, Any]) -> bool:
+    """Return whether a decoded snapshot still describes the current source.
+
+    The comparison deliberately excludes editable notes and derived ranking.
+    A source refresh changing its identity, URL or description invalidates the
+    old verification instead of silently carrying trust to different text.
+    """
+    snapshot = job.get("qualification_facts")
+    if not isinstance(snapshot, dict):
+        return False
+    expected = clean_text(snapshot.get("source_fingerprint"), limit=64)
+    if not expected:
+        return False
+    current = normalize_qualification_snapshot({}, job)["source_fingerprint"]
+    return expected == current
