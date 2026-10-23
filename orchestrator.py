@@ -118,25 +118,25 @@ def create_worktree(order_id: str, base_branch: str = "main") -> tuple[str, str]
     """Crée un worktree dédié pour le worker. Retourne (path, branch_name)."""
     branch = f"worker/{order_id}"
     worktree_path = ROOT.parent / f"AI-Excel-Agent-worker-{order_id}"
-    
+
     # Nettoyer si existe déjà
     if worktree_path.exists():
-        subprocess.run(["git", "worktree", "remove", "--force", str(worktree_path)], 
+        subprocess.run(["git", "worktree", "remove", "--force", str(worktree_path)],
                        cwd=ROOT, capture_output=True)
-    
+
     # Supprimer la branche si elle existe (force delete)
     subprocess.run(["git", "branch", "-D", branch], cwd=ROOT, capture_output=True, check=False)
-    
+
     # Créer la branche depuis main
     subprocess.run(["git", "branch", branch, "main"], cwd=ROOT, check=True)
     subprocess.run(["git", "worktree", "add", str(worktree_path), branch], cwd=ROOT, check=True)
-    
+
     log(f"Worktree créé: {worktree_path} (branche {branch})")
     return str(worktree_path), branch
 
 def remove_worktree(worktree_path: str, branch: str) -> None:
     """Nettoie le worktree et la branche."""
-    subprocess.run(["git", "worktree", "remove", "--force", worktree_path], 
+    subprocess.run(["git", "worktree", "remove", "--force", worktree_path],
                    cwd=ROOT, capture_output=True)
     subprocess.run(["git", "branch", "-D", branch], cwd=ROOT, capture_output=True)
     log(f"Worktree nettoyé: {worktree_path}")
@@ -145,11 +145,11 @@ def run_worker(worktree_path: str, prompt: str, order_id: str) -> dict:
     """Lance le worker (opencode run --auto) dans le worktree."""
     env = os.environ.copy()
     env["WORKER_ORDER_ID"] = order_id
-    
+
     # Écrire le prompt dans un fichier temporaire pour éviter les problèmes d'échappement
     prompt_file = Path(worktree_path) / "WORKER_PROMPT.md"
     prompt_file.write_text(prompt, encoding="utf-8")
-    
+
     # Pool DYNAMIQUE trié par santé/performance (model_health.py):
     # les modèles OK d'abord (score = 60/latence), les LIMIT/SLOW reviennent
     # quand leur cooldown adaptatif échu (base 90 min, ajustée sur le reset
@@ -253,13 +253,13 @@ def run_worker(worktree_path: str, prompt: str, order_id: str) -> dict:
 def process_mission(order_id: str, prompt: str) -> tuple[str, dict]:
     """Traite une mission complète. Retourne (order_id, result)."""
     log(f"=== DÉBUT MISSION {order_id} ===")
-    
+
     # Marquer immédiatement comme "processing" pour éviter le double traitement
     set_from_a_processing(order_id)
-    
+
     # 1. Créer worktree
     worktree_path, branch = create_worktree(order_id)
-    
+
     try:
         # 2. Écrire task.json pour le worker
         task = Task(
@@ -269,10 +269,10 @@ def process_mission(order_id: str, prompt: str) -> tuple[str, dict]:
             branch=branch
         )
         write_task(task)
-        
+
         # 3. Lancer worker
         result = run_worker(worktree_path, prompt, order_id)
-        
+
         # 4. Écrire to_A.json pour Agent A
         to_a = ToA(
             worker_result={
@@ -286,9 +286,9 @@ def process_mission(order_id: str, prompt: str) -> tuple[str, dict]:
             completed_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         )
         write_to_a(to_a)
-        
+
         log(f"Mission {order_id} terminée: {result.get('status')}")
-        
+
     finally:
         # Nettoyage SÉCURISÉ: on ne supprime JAMAIS le worktree d'office.  On vérifie
         # d'abord sur origin que la branche du worker a bien été poussée. Sinon on
@@ -308,13 +308,13 @@ def process_mission(order_id: str, prompt: str) -> tuple[str, dict]:
         # 6. Remettre from_A.json à waiting
         set_from_a_waiting()
         log(f"=== FIN MISSION {order_id} ===")
-    
+
     return order_id, result
 
 def main_loop():
     log(f"=== ORCHESTRATEUR PARALLÈLE DÉMARRÉ (max {MAX_PARALLEL_WORKERS} workers) ===")
     log(f"Surveillance de {FROM_A}")
-    
+
     # Initialiser from_A.json si absent
     with file_lock:
         if not FROM_A.exists():
@@ -325,11 +325,11 @@ def main_loop():
                 "verifications_done": [],
                 "prompt_for_worker": ""
             }, ensure_ascii=False, indent=1), encoding="utf-8")
-    
+
     # Pool de threads pour paralléliser les workers
     with ThreadPoolExecutor(max_workers=MAX_PARALLEL_WORKERS) as executor:
         futures = {}  # future -> order_id
-        
+
         while True:
             try:
                 log(f"🔄 Boucle principale: {len(futures)} futures actifs")
@@ -343,15 +343,15 @@ def main_loop():
                         except Exception as e:
                             log(f"ERREUR future {order_id}: {e}")
                         done_futures.append(future)
-                
+
                 # Nettoyer les futures terminés
                 for f in done_futures:
                     futures.pop(f, None)
-                
+
                 # 2. Soumettre de nouvelles missions si slots disponibles
                 slots_available = MAX_PARALLEL_WORKERS - len(futures)
                 log(f"🔧 Slots disponibles: {slots_available}, futures: {len(futures)}")
-                
+
                 if slots_available > 0:
                     with file_lock:
                         if FROM_A.exists():
@@ -361,23 +361,23 @@ def main_loop():
                                 if data.get("status") == "ready_for_worker" and data.get("order_id"):
                                     order_id = data["order_id"]
                                     log(f"✅ Condition remplie, soumission mission {order_id}")
-                                    
+
                                     # Marquer comme processing immédiatement
                                     write_from_a_status("processing", order_id)
                                     log("📝 Status mis à jour: processing")
-                                    
+
                                     # Soumettre au pool de threads
                                     future = executor.submit(process_mission, order_id, data.get("prompt_for_worker", ""))
                                     futures[future] = order_id
                                     log(f"🚀 Mission {order_id} soumise au pool ({len(futures)}/{MAX_PARALLEL_WORKERS} workers)")
                             except Exception as e:
                                 log(f"ERREUR lecture from_A.json: {e}")
-                
+
                 time.sleep(POLL_INTERVAL)
                 # Heartbeat log every 30 seconds
                 if int(time.time()) % 30 == 0:
                     log(f"💓 Heartbeat: {len(futures)}/{MAX_PARALLEL_WORKERS} workers actifs")
-                
+
             except KeyboardInterrupt:
                 log("Arrêt demandé")
                 break
