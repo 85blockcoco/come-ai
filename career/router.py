@@ -220,6 +220,23 @@ class InterviewAnswerPayload(BaseModel):
     answer: str = Field(min_length=3, max_length=6_000)
 
 
+class InterviewSimQuestionSetPayload(BaseModel):
+    job_id: str = Field(default="", max_length=80)
+    offer: dict[str, Any] = Field(default_factory=dict)
+    profile: dict[str, Any] = Field(default_factory=dict)
+    seed: int = Field(default=0)
+    count: int = Field(default=12, ge=1, le=100)
+    language: str = Field(default="fr", max_length=16)
+
+
+class InterviewSimWorksheetPayload(BaseModel):
+    question_id: str = Field(default="", max_length=120)
+    situation: str = Field(default="", max_length=8_000)
+    task: str = Field(default="", max_length=8_000)
+    action: str = Field(default="", max_length=8_000)
+    result: str = Field(default="", max_length=8_000)
+
+
 class CVAnalyzePayload(BaseModel):
     """Request payload for CV structural analysis."""
     text: str = Field(min_length=1, max_length=200_000)
@@ -742,6 +759,133 @@ def create_career_router(
     async def reset_data(payload: ResetPayload) -> dict[str, bool]:
         await local(lambda: service.reset_personal_data(payload.confirmation))
         return {"deleted": True}
+
+    # ------------------------------------------------------------------
+    # SPEC-027 — Interview simulator (STAR)
+    # ------------------------------------------------------------------
+    def _interview_sim_offer(payload: InterviewSimQuestionSetPayload) -> dict[str, Any]:
+        offer: dict[str, Any] = dict(payload.offer or {})
+        if payload.job_id:
+            job = service.get_job(payload.job_id)
+            if isinstance(job, dict):
+                for key, value in job.items():
+                    offer.setdefault(key, value)
+        return offer
+
+    async def _build_questions(payload: InterviewSimQuestionSetPayload) -> dict[str, Any]:
+        from career.interview_sim import build_question_set
+
+        offer = _interview_sim_offer(payload)
+        questions = build_question_set(
+            offer,
+            profile=payload.profile or None,
+            seed=payload.seed,
+            count=payload.count,
+            language=payload.language,
+        )
+        return {
+            "questions": [q.to_dict() if hasattr(q, "to_dict") else dict(q) for q in questions],
+            "count": len(questions),
+        }
+
+    @router.post("/api/career/interview-sim/question-sets")
+    async def interview_sim_question_sets(payload: InterviewSimQuestionSetPayload) -> Any:
+        return await local(lambda: _build_questions_sync(payload))
+
+    @router.post("/api/career/interview-sim/questions")
+    async def interview_sim_questions(payload: InterviewSimQuestionSetPayload) -> Any:
+        return await local(lambda: _build_questions_sync(payload))
+
+    @router.post("/api/career/interview-sim/question_set")
+    async def interview_sim_question_set(payload: InterviewSimQuestionSetPayload) -> Any:
+        return await local(lambda: _build_questions_sync(payload))
+
+    @router.post("/api/career/interview/questions")
+    async def interview_questions(payload: InterviewSimQuestionSetPayload) -> Any:
+        return await local(lambda: _build_questions_sync(payload))
+
+    @router.get("/api/career/interview-sim/questions")
+    async def interview_sim_questions_get(
+        job_id: str = Query(default="", max_length=80),
+        seed: int = 0,
+        count: int = Query(default=12, ge=1, le=100),
+        language: str = "fr",
+    ) -> Any:
+        payload = InterviewSimQuestionSetPayload(job_id=job_id, seed=seed, count=count, language=language)
+        return await local(lambda: _build_questions_sync(payload))
+
+    def _build_questions_sync(payload: InterviewSimQuestionSetPayload) -> dict[str, Any]:
+        from career.interview_sim import build_question_set
+
+        offer = _interview_sim_offer(payload)
+        questions = build_question_set(
+            offer,
+            profile=payload.profile or None,
+            seed=payload.seed,
+            count=payload.count,
+            language=payload.language,
+        )
+        return {
+            "questions": [q.to_dict() if hasattr(q, "to_dict") else dict(q) for q in questions],
+            "count": len(questions),
+        }
+
+    @router.post("/api/career/interview-sim/worksheets")
+    async def interview_sim_worksheet(payload: InterviewSimWorksheetPayload) -> Any:
+        from career.interview_sim import StarWorksheet, self_score
+
+        ws = StarWorksheet(
+            question_id=payload.question_id,
+            situation=payload.situation,
+            task=payload.task,
+            action=payload.action,
+            result=payload.result,
+        )
+        score = self_score(ws)
+        return await local(lambda: {
+            "worksheet": ws.to_dict(),
+            "score": float(score),
+            "self_score": float(score),
+            "details": dict(score) if hasattr(score, "items") else {},
+        })
+
+    @router.post("/api/career/interview-sim/self-score")
+    async def interview_sim_self_score(payload: InterviewSimWorksheetPayload) -> Any:
+        from career.interview_sim import StarWorksheet, self_score
+
+        ws = StarWorksheet(
+            question_id=payload.question_id,
+            situation=payload.situation,
+            task=payload.task,
+            action=payload.action,
+            result=payload.result,
+        )
+        score = self_score(ws)
+        return await local(lambda: {
+            "score": float(score),
+            "self_score": float(score),
+            "completeness": ws.completeness,
+            "details": dict(score) if hasattr(score, "items") else {},
+        })
+
+    @router.post("/api/career/interview-sim/score")
+    async def interview_sim_score(payload: InterviewSimWorksheetPayload) -> Any:
+        from career.interview_sim import StarWorksheet, self_score
+
+        ws = StarWorksheet(
+            question_id=payload.question_id,
+            situation=payload.situation,
+            task=payload.task,
+            action=payload.action,
+            result=payload.result,
+        )
+        score = self_score(ws)
+        return await local(lambda: {
+            "score": float(score),
+            "self_score": float(score),
+            "completeness": ws.completeness,
+            "details": dict(score) if hasattr(score, "items") else {},
+        })
 
     return router
 
