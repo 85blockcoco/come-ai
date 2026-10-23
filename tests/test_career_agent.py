@@ -171,7 +171,10 @@ def test_greenhouse_connector_is_fixed_host_bounded_and_sanitises_html(
                 "id": 42,
                 "title": "M&A Off-Cycle Intern",
                 "absolute_url": "https://boards.greenhouse.io/example/jobs/42",
-                "location": {"name": "Paris, France"},
+                # Published in the United Kingdom: connectors exclude France
+                # on the source side, so a French fixture never reaches the
+                # assertions below.
+                "location": {"name": "London, United Kingdom"},
                 "content": "<p>Analyse <strong>financière</strong></p><script>alert('x')</script><ul><li>Excel</li></ul>",
             }
         ]
@@ -183,8 +186,8 @@ def test_greenhouse_connector_is_fixed_host_bounded_and_sanitises_html(
 
     assert len(transport.endpoints) == 2
     assert all(endpoint == "https://boards-api.greenhouse.io/v1/boards/example/jobs?content=true" for endpoint, _ in transport.endpoints)
-    assert result.jobs[0]["city"] == "Paris"
-    assert result.jobs[0]["country"] == "France"
+    assert result.jobs[0]["city"] == "London"
+    assert result.jobs[0]["country"] == "United Kingdom"
     assert "alert" not in result.jobs[0]["description_original"]
     assert "<" not in result.jobs[0]["description_original"]
     assert "Analyse" in result.jobs[0]["description_original"]

@@ -99,8 +99,17 @@ from .interview import (
     select_question,
 )
 from .ocr import LocalVisionOCR, OCRResult
-from .discovery import DiscoveryPayload, GreenhouseBoard, GreenhouseJobBoardConnector, PublicSourceError, parse_greenhouse_board_token
+from .discovery import (
+    DiscoveryPayload,
+    GreenhouseBoard,
+    GreenhouseJobBoardConnector,
+    PublicSourceError,
+    callable_geo_kwargs,
+    connector_geo_kwargs,
+    parse_greenhouse_board_token,
+)
 from .connectors import default_exploration_connectors
+from .countries import DEFAULT_COUNTRIES_EXCLUDE
 from .exploration import (
     EXPLORATION_LAST_SETTING,
     EXPLORATION_MAX_RESULTS,
@@ -132,6 +141,22 @@ SCHEMA_VERSION = 8
 # schema migration, and it is exported with the rest of the local settings.
 STAGE_SEARCH_SETTING_KEY = "stage_search_brief"
 DISCOVERY_CACHE_SECONDS = 10 * 60
+
+
+def _geo_arguments(brief: dict[str, Any]) -> dict[str, list[str]]:
+    """The country lists a connector must apply, read from the brief.
+
+    The list is resolved once, here, so every connector receives the same
+    countries and no wording is interpreted twice.  France stays excluded
+    unless the person explicitly emptied the list.
+    """
+    excluded = brief.get("countries_exclude")
+    if not isinstance(excluded, list):
+        excluded = list(DEFAULT_COUNTRIES_EXCLUDE)
+    included = brief.get("countries_include")
+    if not isinstance(included, list):
+        included = []
+    return {"countries_exclude": list(excluded), "countries_include": list(included)}
 
 
 def _attach_qualification_presentation(match: dict[str, Any], qualification: dict[str, Any]) -> dict[str, Any]:
@@ -2574,7 +2599,13 @@ class CareerService:
                         # Future connectors receive their own source descriptor.
                         descriptor = GreenhouseBoard(source_id, company, parse_greenhouse_board_token(source.get("board_token"))) if provider == "greenhouse" else source
                         outcome["attempted"] = True
-                        result = connector.discover_internships(descriptor, selection_brief=brief, deadline=deadline)
+                        # The country filter is pushed to the connector: an
+                        # excluded country is dropped on the source side and
+                        # never reaches the local database.
+                        geo_kwargs = connector_geo_kwargs(connector, **_geo_arguments(brief))
+                        result = connector.discover_internships(
+                            descriptor, selection_brief=brief, deadline=deadline, **geo_kwargs
+                        )
                         if not isinstance(result, DiscoveryPayload) or not isinstance(result.jobs, tuple) or any(not isinstance(job, dict) for job in result.jobs):
                             raise PublicSourceError("Le connecteur n’a pas renvoyé un résultat d’exploration valide.", code="invalid_payload")
                         counts = (result.raw_count, result.evaluated_count, result.invalid_count,
@@ -2926,7 +2957,12 @@ class CareerService:
                     )
                     ranked_discovery = getattr(self.discovery_connector, "discover_ranked", None)
                     if callable(ranked_discovery):
-                        result = ranked_discovery(board, selection_brief=brief)
+                        # The country filter is pushed to the connector, so a
+                        # French posting never becomes a local record.
+                        geo_kwargs = callable_geo_kwargs(
+                            ranked_discovery, **_geo_arguments(brief)
+                        )
+                        result = ranked_discovery(board, selection_brief=brief, **geo_kwargs)
                     else:
                         # Retain the original injectable connector contract.
                         # Production Greenhouse always uses ranked discovery;

@@ -1,0 +1,26 @@
+{
+  "connector": "html",
+  "provider": "talent_com",
+  "href": "/job/{identifier}",
+  "note": "Talent.com publishes a location string inside the result card.",
+  "cases": [
+    {
+      "case_id": "talent_com_lyon_france",
+      "description": "Une offre Talent.com publiée à Lyon, France est filtrée à la source.",
+      "countries_exclude": ["FR"],
+      "cards": [
+        {"identifier": "tc-fr-1", "title": "Corporate Finance Intern", "company": "Synthetic Finance", "location": "Lyon, France"}
+      ],
+      "expect": {"kept_source_ids": [], "excluded_by_country": {"FR": 1}}
+    },
+    {
+      "case_id": "talent_com_madrid_spain",
+      "description": "Une offre Talent.com publiée à Madrid, Espagne est gardée.",
+      "countries_exclude": ["FR"],
+      "cards": [
+        {"identifier": "tc-es-1", "title": "Corporate Finance Intern", "company": "Synthetic Finance", "location": "Madrid, Spain"}
+      ],
+      "expect": {"kept_source_ids": ["tc-es-1"], "excluded_by_country": {}}
+    }
+  ]
+}

@@ -8,18 +8,26 @@ Note: APEC is primarily French-focused but has international listings for cadres
 
 from __future__ import annotations
 
-import re
+import functools
 import socket
+import ssl
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 from typing import Any, Callable, Iterator
 
 from ..discovery import DiscoveryPayload, PublicSourceError, source_html_to_text
+from ..countries import (
+    GeoFilter,
+    geo_filter,
+    resolve_hinted_country,
+    resolve_published_country,
+    split_location,
+)
 from ..models import clean_text, canonical_url
 from ..exploration import classify_internship, criteria_admit, ranking_key
 from ..offer_qualification import qualify_offer
@@ -36,6 +44,28 @@ _APEC_MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 _APEC_MAX_ROWS = 400
 
 
+@functools.lru_cache(maxsize=1)
+def _trusted_ssl_context() -> ssl.SSLContext:
+    """SSL context that trusts the certifi root bundle when it is installed.
+
+    macOS Python installers often leave the system keychain without the
+    Mozilla root bundle, which makes a plain default context reject every
+    public site with CERTIFICATE_VERIFY_FAILED.  ``certifi`` solves this
+    without weakening certificate verification; the stdlib context stays the
+    fallback when certifi is absent.  The same fallback already backs the
+    Greenhouse transport (``career/discovery.py``) and the public ATS
+    connectors (``career/connectors/public_ats.py``).
+    """
+    context = ssl.create_default_context()
+    try:
+        import certifi  # noqa: PLC0415 - optional, keep stdlib-only fallback
+
+        context = ssl.create_default_context(cafile=certifi.where())
+    except (ImportError, OSError):
+        pass
+    return context
+
+
 @dataclass
 class ApecHealth:
     last_ok: bool = False
@@ -47,6 +77,12 @@ class ApecHealth:
     stage_offers: int = 0
     conforming_offers: int = 0
     to_verify_offers: int = 0
+    # Source-side geographic filtering: raw rows read, rows dropped, and the
+    # country that caused each drop.
+    raw_count: int = 0
+    filtered_count: int = 0
+    excluded_count: int = 0
+    excluded_by_country: dict[str, int] = field(default_factory=dict)
 
 
 _HEALTH = ApecHealth()
@@ -135,7 +171,7 @@ def _default_fetch(url: str) -> str | None:
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=_APEC_TIMEOUT) as resp:
+        with urllib.request.urlopen(req, timeout=_APEC_TIMEOUT, context=_trusted_ssl_context()) as resp:
             body = resp.read(_APEC_MAX_RESPONSE_BYTES + 1)
             if len(body) > _APEC_MAX_RESPONSE_BYTES:
                 _HEALTH.last_error = "Response too large"
@@ -175,7 +211,7 @@ def _parse_location(location_text: str) -> tuple[str, str]:
     location_text = clean_text(location_text, limit=160)
     if not location_text:
         return "", ""
-    parts = [p.strip() for p in re.split(r"[,-]", location_text) if p.strip()]
+    parts = split_location(location_text)
     if len(parts) >= 2:
         city = parts[0]
         country = parts[-1]
@@ -183,29 +219,24 @@ def _parse_location(location_text: str) -> tuple[str, str]:
     return location_text, ""
 
 
-def _is_france_location(city: str, country: str) -> bool:
-    """Check if location is in France (to be excluded per R1)."""
-    france_indicators = {"france", "fr", "paris", "lyon", "marseille", "toulouse", "nice", "nantes",
-                         "strasbourg", "montpellier", "bordeaux", "lille", "rennes", "reims",
-                         "le havre", "saint-etienne", "toulon", "grenoble", "dijon", "angers",
-                         "villeurbanne", "nanterre", "creteil", "aubervilliers", "asnieres",
-                         "colombes", "courbevoie", "levallois-perret", "neuilly-sur-seine",
-                         "ile-de-france", "provence", "alsace", "aquitaine", "bretagne",
-                         "normandie", "occitanie", "pays de la loire", "hauts-de-france",
-                         "grand est", "nouvelle-aquitaine", "auvergne-rhone-alpes",
-                         "bourgogne-franche-comte", "centre-val de loire", "corse"}
-    city_norm = city.lower().strip()
-    country_norm = country.lower().strip()
-    if country_norm in {"france", "fr"}:
-        return True
-    for ind in france_indicators:
-        if ind == "fr":
-            continue
-        if ind in city_norm.split():
-            return True
-        if f"-{ind}" in city_norm or f"{ind}-" in city_norm:
-            return True
-    return False
+def _is_excluded_location(city: str, country: str, geo: GeoFilter, location_text: str = "") -> str:
+    """Canonical country of a location when it is rejected, else an empty string.
+
+    The country is normalized before the comparison, so ``"France"``,
+    ``"FR"``, ``"FRA"`` and ``"fr"`` are all the same country while
+    ``"Frankfurt"`` (Germany) is never mistaken for ``"FR"``.  A city alone
+    never designates a country: an unknown country is not a French offer.
+
+    A source that publishes the country alone (``"France"``, ``"Germany"``)
+    publishes a country: it is read on the country name, never guessed.  A
+    posting that names several countries is kept as soon as one of them is
+    allowed.
+    """
+    _ = city
+    _canonical, excluded = resolve_published_country(None, location_text or country, geo)
+    if excluded:
+        return excluded
+    return resolve_hinted_country(location_text or country, geo)
 
 
 def _is_finance_role(title: str, description: str) -> bool:
@@ -237,11 +268,13 @@ def _is_stage_role(title: str, description: str, contract_type: str) -> bool:
 
 
 def _iter_raw_offers(
+    geo: GeoFilter | None = None,
     query: str = "stage finance",
     fetch: Callable[[str], str | None] | None = None,
 ) -> Iterator[dict[str, Any]]:
     """Iterate over raw internship offers from APEC."""
     fetch_fn = fetch or _default_fetch
+    geo_filter_object = geo or GeoFilter()
     for page in range(1, _APEC_MAX_PAGES + 1):
         url = _build_search_url(query, page)
         html = fetch_fn(url)
@@ -263,26 +296,39 @@ def _iter_raw_offers(
 
         for raw in page_jobs:
             _HEALTH.raw_offers += 1
+            _HEALTH.raw_count += 1
 
             title = clean_text(raw.get("title", ""), limit=300)
             company = clean_text(raw.get("company", ""), limit=240)
             url_raw = clean_text(raw.get("url", ""), limit=2000)
             location_text = clean_text(raw.get("location", ""), limit=160)
             contract_type = clean_text(raw.get("contract_type", ""), limit=120)
-            description = source_html_to_text(raw.get("description", ""))
 
             if not title or not company or not url_raw:
+                _HEALTH.filtered_count += 1
                 continue
 
             try:
                 official_url = canonical_url(url_raw)
             except Exception:
+                _HEALTH.filtered_count += 1
                 continue
 
             city, country = _parse_location(location_text)
 
-            if _is_france_location(city, country):
+            # The excluded countries are dropped here, on the source side: the
+            # offer never becomes a local record and never consumes a slot.
+            # The check runs before the description is even parsed.
+            excluded_code = _is_excluded_location(city, country, geo_filter_object, location_text)
+            if excluded_code:
+                _HEALTH.excluded_by_country[excluded_code] = (
+                    _HEALTH.excluded_by_country.get(excluded_code, 0) + 1
+                )
+                _HEALTH.excluded_count += 1
+                _HEALTH.filtered_count += 1
                 continue
+
+            description = source_html_to_text(raw.get("description", ""))
 
             _HEALTH.valid_offers += 1
 
@@ -304,6 +350,10 @@ def _iter_raw_offers(
             if not job_id:
                 job_id = str(hash(official_url))[-12:]
 
+            canonical_country, _excluded = resolve_published_country(
+                None, location_text, geo_filter_object
+            )
+
             yield {
                 "company": company,
                 "title": title,
@@ -313,6 +363,7 @@ def _iter_raw_offers(
                 "apply_url": official_url,
                 "city": city,
                 "country": country,
+                "country_canonical": canonical_country,
                 "posted_date": "",
                 "deadline_date": "",
                 "start_date": "",
@@ -359,7 +410,9 @@ class ApecConnector:
         self._fetch = fetch
 
     def discover_internships(
-        self, source: dict[str, Any], *, selection_brief: dict[str, Any], deadline: float | None = None
+        self, source: dict[str, Any], *, selection_brief: dict[str, Any], deadline: float | None = None,
+        countries_exclude: list[str] | tuple[str, ...] | None = None,
+        countries_include: list[str] | tuple[str, ...] | None = None,
     ) -> DiscoveryPayload:
         if not isinstance(source, dict) or source.get("provider") != "apec":
             raise PublicSourceError("La source ne correspond pas au connecteur APEC.", code="invalid_source")
@@ -367,6 +420,7 @@ class ApecConnector:
             raise PublicSourceError("Une source officielle vérifiée est requise avant toute consultation.", code="unverified_source")
 
         brief = validate_brief(selection_brief) if selection_brief else default_brief()
+        geo = geo_filter(countries_exclude, countries_include, brief)
 
         _HEALTH.raw_offers = 0
         _HEALTH.valid_offers = 0
@@ -374,11 +428,15 @@ class ApecConnector:
         _HEALTH.stage_offers = 0
         _HEALTH.conforming_offers = 0
         _HEALTH.to_verify_offers = 0
+        _HEALTH.raw_count = 0
+        _HEALTH.filtered_count = 0
+        _HEALTH.excluded_count = 0
+        _HEALTH.excluded_by_country = {}
 
         raw_count = evaluated = invalid = confirmed = uncertain = excluded = relevant = filtered = 0
         ranked: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
 
-        for raw in _iter_raw_offers(fetch=self._fetch):
+        for raw in _iter_raw_offers(geo=geo, fetch=self._fetch):
             if deadline is not None and self.monotonic() >= deadline:
                 raise PublicSourceError("Le budget de recherche est atteint.", code="budget")
             raw_count += 1
@@ -433,6 +491,8 @@ class ApecConnector:
             excluded_count=excluded,
             relevant_count=relevant,
             filtered_criteria_count=filtered,
+            country_excluded_count=_HEALTH.excluded_count,
+            excluded_by_country=dict(_HEALTH.excluded_by_country),
         )
 
     def _normalise_one(self, source: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:
@@ -450,6 +510,10 @@ class ApecConnector:
             "stage_offers": _HEALTH.stage_offers,
             "conforming_offers": _HEALTH.conforming_offers,
             "to_verify_offers": _HEALTH.to_verify_offers,
+            "raw_count": _HEALTH.raw_count,
+            "filtered_count": _HEALTH.filtered_count,
+            "excluded_count": _HEALTH.excluded_count,
+            "excluded_by_country": dict(_HEALTH.excluded_by_country),
         }
 
 

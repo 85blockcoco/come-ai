@@ -1,0 +1,47 @@
+{
+  "status": "done",
+  "branch": "agent/spec-sk11-geo-filter-connectors",
+  "worker_branch": "worker/cvboost-32-1792629250",
+  "files_created": [
+    "career/countries.py",
+    "career/discovery.py",
+    "career/stage_search.py",
+    "career/service.py",
+    "career/connectors/public_ats.py",
+    "career/connectors/welcome_jungle.py",
+    "career/connectors/jobteaser.py",
+    "career/connectors/talent_com.py",
+    "career/connectors/apec.py",
+    "tests/fixtures/geo_filter/greenhouse.json",
+    "tests/fixtures/geo_filter/lever.json",
+    "tests/fixtures/geo_filter/ashby.json",
+    "tests/fixtures/geo_filter/smartrecruiters.json",
+    "tests/fixtures/geo_filter/welcome_jungle.json",
+    "tests/fixtures/geo_filter/jobteaser.json",
+    "tests/fixtures/geo_filter/talent_com.json",
+    "tests/fixtures/geo_filter/apec.json",
+    "tests/test_geo_filter_connectors.py",
+    "tests/test_geo_filter_connectors_live.py",
+    "docs/agent-reports/SPEC-SK11-GEO_FILTER_CONNECTORS.md",
+    "messages/result.json"
+  ],
+  "files_modified": [
+    "career/countries.py",
+    "career/discovery.py",
+    "career/stage_search.py",
+    "career/service.py",
+    "career/connectors/public_ats.py",
+    "career/connectors/welcome_jungle.py",
+    "career/connectors/jobteaser.py",
+    "career/connectors/talent_com.py",
+    "career/connectors/apec.py",
+    "tests/test_connectors_geo_filter.py"
+  ],
+  "files_removed": [
+    "career/geo.py",
+    "tests/fixtures/geo_filter/geo_filter_cases.json"
+  ],
+  "output": "Filtre pays poussé aux 8 connecteurs (countries_exclude + countries_include), filtrage avant la normalisation complète, métrique offers_filtered_geo avec détail par pays, service qui passe explicitement la liste de pays ; 3 défauts réels corrigés sur sources publiques (localisation « France » seule non lue, code d'État US lu comme Israël, service ne passant pas le paramètre). Livraison CVBOOST-11 consolidée sur main ET livraison parallèle de la mission fusionnée en une seule implémentation (vocabulaire d'indices de ville repris). 27 fixtures synthétiques, contrôle live borné, 1507 tests verts.",
+  "logs": "pytest -q → 1507 passed, 3 skipped (base main : 1424 verts, aucune régression)\npytest -q tests/test_geo_filter_connectors.py → 47 passed (matrice d'acceptation, 27 cas)\nCAREER_GEO_LIVE=1 pytest -q tests/test_geo_filter_connectors_live.py → 2 passed\nruff check . → All checks passed\nchecklist_codex.sh main|lint|secrets → TOUT VERT\ngit diff --check → propre\nMesures réelles (15 boards Greenhouse, 1380 offres lues) : 65 offres écartées par le pays (toutes FR), 129 conservées, 0 offre française dans le résultat.\nCommits : 14d1145 livraison parallèle (fusionnée), 09c6d8e consolidation CVBOOST-11 sur main, 171e6c7 corrections, 0d8bd35 rapport, 242b92a résultat, 1a2b5a7 indices de ville, ea39d0c fusion des deux livraisons.",
+  "error": null
+}
