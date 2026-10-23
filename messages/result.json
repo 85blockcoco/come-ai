@@ -7,7 +7,10 @@
     "tests/fixtures/interview_offers_synthetic.json",
     "docs/agent-reports/SPEC-027-interview_sim.md"
   ],
-  "output": "Module simulateur d'entretien STAR (questions déterministes, worksheets STAR, auto-score) + endpoints REST + tests.",
-  "logs": "pytest tests/test_interview_sim.py -> 12 passed; ruff check . -> All checks passed",
+  "files_modified": [
+    "tests/test_interview_sim.py"
+  ],
+  "output": "Module simulateur d'entretien STAR (questions déterministes, worksheets STAR, auto-score) + endpoints REST + tests ; ruff nettoyé.",
+  "logs": "pytest -q -> 1436 passed, 1 skipped\nruff check . -> All checks passed\ngit diff --check -> clean",
   "error": null
 }
