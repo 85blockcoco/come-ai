@@ -150,6 +150,7 @@ class AdminChecklist:
         ]
         return item
 
+    @property
     def completeness(self) -> "CompletenessResult":
         return completeness(self)
 
@@ -287,6 +288,9 @@ class CompletenessResult(dict):
 
     def __int__(self) -> int:
         return int(round(float(self.get("percent", 0.0))))
+
+    def __call__(self, *args: Any, **kwargs: Any) -> "CompletenessResult":
+        return self
 
 
 def completeness(checklist: AdminChecklist | Any) -> CompletenessResult:
