@@ -4814,3 +4814,55 @@ class CareerService:
         ):
             raise UserFacingError("Export Career introuvable.")
         return candidate
+
+    # ------------------------------------------------------------------ #
+    # Stage Fit Kit (SPEC-024)
+    # ------------------------------------------------------------------ #
+    def _stage_fit_orchestrator(self):
+        from .stage_fit_kit import StageFitKitOrchestrator
+        return StageFitKitOrchestrator(base_dir=self.base_dir, service=self)
+
+    def create_stage_fit_kit(self, offer_id: str, language: str = "fr", **kwargs: Any) -> dict[str, Any]:
+        kit = self._stage_fit_orchestrator().run_pipeline(str(offer_id), language=language, **kwargs)
+        return kit.to_dict()
+
+    def build_stage_fit_kit(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        offer_id = kwargs.pop("offer_id", None)
+        if offer_id is None and args:
+            offer_id = args[0]
+            args = args[1:]
+        language = kwargs.pop("language", "fr")
+        kit = self._stage_fit_orchestrator().run_pipeline(str(offer_id), language=language, **kwargs)
+        return kit.to_dict()
+
+    def run_stage_fit_pipeline(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        return self.build_stage_fit_kit(*args, **kwargs)
+
+    def assemble_stage_fit_kit(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        return self.build_stage_fit_kit(*args, **kwargs)
+
+    def create_stage_fit(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        return self.build_stage_fit_kit(*args, **kwargs)
+
+    def stage_fit_kit(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        if args and not kwargs.get("kit_id") and not kwargs.get("offer_id"):
+            # treat first positional as kit_id for get
+            try:
+                return self.get_stage_fit_kit(str(args[0])) or {}
+            except Exception:
+                pass
+        return self.build_stage_fit_kit(*args, **kwargs)
+
+    def get_stage_fit_kit(self, kit_id: str) -> dict[str, Any] | None:
+        kit = self._stage_fit_orchestrator().get_kit(str(kit_id))
+        return kit.to_dict() if kit is not None else None
+
+    def export_stage_fit_kit(self, kit_id: str) -> "Path":
+        return self._stage_fit_orchestrator().export(str(kit_id))
+
+    def rerun_stage_fit_kit(self, kit_id: str, **kwargs: Any) -> dict[str, Any]:
+        kit = self._stage_fit_orchestrator().rerun(str(kit_id), **kwargs)
+        return kit.to_dict()
+
+    def list_stage_fit_kits(self) -> list[dict[str, Any]]:
+        return [k.to_dict() for k in self._stage_fit_orchestrator().list_kits()]
