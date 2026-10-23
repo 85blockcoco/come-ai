@@ -196,7 +196,9 @@ def test_high_relevance_never_hides_missing_mandatory_offer_facts(tmp_path: Path
         duration_months=None,
         description_original="M&A internship with corporate finance responsibilities.",
     ))
-    service.update_stage_search({"domains": ["M&A"]})
+    # La personne cherche en France : elle l'autorise explicitement, ce parcours
+    # mesure donc la pertinence et non la règle géographique du classement.
+    service.update_stage_search({"domains": ["M&A"], "excluded_countries": []})
     item = next(entry for entry in service.list_stage_matches()["matches"] if entry["job"]["id"] == job["id"])
     match = item["stage_match"]
     assert match["score"] == 100
@@ -216,7 +218,7 @@ def test_non_conforming_offer_never_gets_a_positive_presentation_label(tmp_path:
         duration_months=4,
         description_original="M&A internship with corporate finance responsibilities.",
     ))
-    service.update_stage_search({"domains": ["M&A"]})
+    service.update_stage_search({"domains": ["M&A"], "excluded_countries": []})
     item = next(entry for entry in service.list_stage_matches()["matches"] if entry["job"]["id"] == job["id"])
     assert item["stage_match"]["score"] == 100
     assert item["stage_match"]["qualification_status"] == "non_conforming"
@@ -533,12 +535,16 @@ def test_full_http_journey_from_brief_to_offer_received(tmp_path: Path) -> None:
     service = CareerService(tmp_path)
     client = stage_hunter_client(service)
 
-    # Étape A : la personne décrit le stage qu'elle cherche.
+    # Étape A : la personne décrit le stage qu'elle cherche.  Elle vise
+    # explicitement Paris et autorise la France : ce parcours mesure la
+    # pertinence, pas la règle géographique du classement.
     put = client.put(
         "/api/career/stage-search",
         json={
             "domains": ["M&A"],
             "cities": ["Paris"],
+            "excluded_countries": [],
+            "excluded_cities": [],
             "start_date": "2027-01-01",
             "duration_months": 4,
             "languages": ["Anglais"],
