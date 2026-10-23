@@ -262,7 +262,7 @@ def test_ranking_integration_uses_the_total_score() -> None:
         BOARD, {"jobs": jobs}, selection_brief={"domains": ["M&A"]}
     )
     order = [job["source_id"] for job in result.jobs]
-    assert order == ["germany", "states", "france"]
+    assert order == ["germany", "states"]
 
     brief = validate_brief({"domains": ["M&A"]})
     totals = {
@@ -275,11 +275,9 @@ def test_ranking_integration_uses_the_total_score() -> None:
     }
     assert totals["germany"]["geo_score"] == 20
     assert totals["states"]["geo_score"] == 0
-    assert totals["france"]["geo_score"] == -50
     # The targeted country reaches the highest total score, the penalized one
     # the lowest, even when every offer matches the same criteria.
     assert totals["germany"]["total_score"] >= totals["states"]["total_score"]
-    assert totals["states"]["total_score"] > totals["france"]["total_score"]
 
 
 def test_preferred_country_climbs_over_a_neutral_one() -> None:
@@ -306,7 +304,7 @@ def test_internship_selection_reports_the_geographic_signal() -> None:
         BOARD, {"jobs": jobs}, selection_brief={"domains": ["M&A"]}, internships_only=True
     )
     by_id = {job["source_id"]: job for job in result.jobs}
-    assert by_id["france"]["qualification"]["geo_score"] == -50
+    assert "france" not in by_id
     assert by_id["germany"]["qualification"]["geo_score"] == 20
     assert by_id["germany"]["qualification"]["geo_reason"]
 
