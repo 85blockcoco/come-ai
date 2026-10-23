@@ -17,6 +17,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import zlib
 from typing import Any, Callable, Protocol
 
 from ..discovery import DiscoveryPayload, PublicSourceError, _location_parts, source_html_to_text
@@ -32,12 +33,17 @@ MAX_PAGES = 4
 PAGE_SIZE = 100
 MAX_ROWS = 400
 TIMEOUT_SECONDS = 8
+_CHUNK_BYTES = 64 * 1024
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
 _USER_AGENT = "Come-AI-Career/3.2 (local reader of published public job postings)"
 _LISTING_HOSTS = {
     "lever": frozenset({"jobs.lever.co", "jobs.eu.lever.co"}),
     "ashby": frozenset({"jobs.ashbyhq.com"}),
     "smartrecruiters": frozenset({"www.smartrecruiters.com", "careers.smartrecruiters.com", "api.smartrecruiters.com"}),
+    # Recruitee tenant boards live on a managed subdomain or on an employer's
+    # verified custom domain; the per-source allowance is derived from the
+    # verified registry record, never from a code constant.
+    "recruitee": frozenset({"recruitee.com"}),
 }
 
 
@@ -51,12 +57,44 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+def _gunzip_bounded(compressed: bytes) -> bytes:
+    """Decompress a gzip response body under the same transport size bound.
+
+    The wire read is already capped; this second cap applies to the expanded
+    body, so a small compressed payload cannot expand past the parsed budget.
+    A truncated, wrongly labelled or padded body is refused, never guessed.
+    """
+    decoded = bytearray()
+    stream = zlib.decompressobj(zlib.MAX_WBITS | 16)
+    try:
+        for offset in range(0, len(compressed), _CHUNK_BYTES):
+            decoded.extend(stream.decompress(compressed[offset:offset + _CHUNK_BYTES]))
+            if len(decoded) > MAX_RESPONSE_BYTES:
+                break
+    except zlib.error as error:
+        raise PublicSourceError("La source ATS n’a pas renvoyé un flux compressé lisible.",
+                                code="invalid_json") from error
+    if len(decoded) > MAX_RESPONSE_BYTES:
+        raise PublicSourceError("La réponse ATS dépasse la taille maximale autorisée.", code="oversize")
+    if not stream.eof or stream.unused_data:
+        raise PublicSourceError("La source ATS n’a pas renvoyé un JSON valide.", code="invalid_json")
+    return bytes(decoded)
+
+
 class UrllibPublicATSTransport:
-    """HTTPS JSON GET transport with fixed host allow-list and size/time bounds."""
+    """HTTPS JSON GET transport with fixed host allow-list and size/time bounds.
+
+    ``hosts`` pins a closed set of API hosts. ``host_suffixes`` allows a
+    provider's per-tenant subdomains (``{tenant}.recruitee.com``) without
+    opening unrelated TLDs: the suffix itself and its immediate subdomains
+    are allowed, nothing else, and HTTPS with credentials is still refused.
+    """
 
     HOSTS = frozenset({"api.lever.co", "api.eu.lever.co", "api.ashbyhq.com", "api.smartrecruiters.com"})
 
-    def __init__(self) -> None:
+    def __init__(self, hosts: frozenset[str] | None = None, host_suffixes: tuple[str, ...] = ()) -> None:
+        self._hosts = frozenset(hosts) if hosts is not None else self.HOSTS
+        self._host_suffixes = tuple(host_suffixes)
         context = ssl.create_default_context()
         try:
             import certifi  # noqa: PLC0415
@@ -65,16 +103,29 @@ class UrllibPublicATSTransport:
             pass
         self._opener = urllib.request.build_opener(_NoRedirect(), urllib.request.HTTPSHandler(context=context))
 
+    def _host_allowed(self, hostname: str) -> bool:
+        if hostname in self._hosts:
+            return True
+        return any(hostname == suffix or hostname.endswith("." + suffix) for suffix in self._host_suffixes)
+
     def get_json(self, endpoint: str, timeout_seconds: int) -> Any:
         parsed = urllib.parse.urlsplit(endpoint)
-        if parsed.scheme != "https" or parsed.hostname not in self.HOSTS or parsed.username or parsed.password:
+        if (parsed.scheme != "https" or not self._host_allowed(parsed.hostname or "")
+                or parsed.username or parsed.password):
             raise PublicSourceError("URL de connecteur public invalide.", code="invalid_source")
         request = urllib.request.Request(endpoint, method="GET", headers={
-            "Accept": "application/json", "User-Agent": _USER_AGENT,
+            "Accept": "application/json",
+            # Several public ATS CDNs stall long identity (uncompressed) responses
+            # to unknown clients; gzip keeps the same transmission budget well
+            # under the vendor timeouts. The decompressed body is capped again
+            # below, so the transport bound is unchanged.
+            "Accept-Encoding": "gzip",
+            "User-Agent": _USER_AGENT,
         })
         try:
             with self._opener.open(request, timeout=max(1, min(TIMEOUT_SECONDS, int(timeout_seconds)))) as response:
                 body = response.read(MAX_RESPONSE_BYTES + 1)
+                encoding = (response.headers.get("Content-Encoding") or "").strip().lower()
         except urllib.error.HTTPError as error:
             code = str(error.code)
             raise PublicSourceError(f"La source ATS a renvoyé une erreur ({code}).",
@@ -82,6 +133,8 @@ class UrllibPublicATSTransport:
         except (urllib.error.URLError, TimeoutError, socket.timeout) as error:
             raise PublicSourceError("La source ATS ne répond pas dans le délai prévu.",
                                     retryable=True, code="timeout") from error
+        if encoding in {"gzip", "x-gzip"}:
+            body = _gunzip_bounded(body)
         if len(body) > MAX_RESPONSE_BYTES:
             raise PublicSourceError("La réponse ATS dépasse la taille maximale autorisée.", code="oversize")
         try:
@@ -345,16 +398,131 @@ class SmartRecruitersConnector(PublicATSConnector):
                            company_name=company.get("name"))
 
 
+class UrllibRecruiteeTransport(UrllibPublicATSTransport):
+    """Recruitee tenants publish their feed on their own subdomain."""
+
+    def __init__(self) -> None:
+        super().__init__(hosts=frozenset(), host_suffixes=("recruitee.com",))
+
+
+class RecruiteeConnector(PublicATSConnector):
+    """Recruitee public offers feed (official docs:
+    https://support.recruitee.com/en/articles/1066286-show-jobs-on-your-own-website
+    — "The public API doesn't require any authentication").
+
+    The feed is a single vendor-managed resource: the vendor ignores paging
+    query parameters (measured 2026-10-20), so the connector performs exactly
+    one bounded read and reports the snapshot as-is. Job links stay on the
+    employer's verified careers domain (the registry ``public_url`` host) or
+    on the tenant's ``*.recruitee.com`` subdomain.
+    """
+
+    provider = "recruitee"
+    api_host_suffix = "recruitee.com"
+    enabled_by_default = False
+    documentation_url = "https://support.recruitee.com/en/articles/1066286-show-jobs-on-your-own-website"
+    doc_verified = True
+    listing_hosts = frozenset({"recruitee.com"})
+
+    _EMPLOYMENT_CODES = {
+        "internship": "Internship",
+        "fulltime_permanent": "Full-time permanent",
+        "fulltime_fixed_term": "Full-time fixed term",
+        "parttime_permanent": "Part-time permanent",
+        "parttime_fixed_term": "Part-time fixed term",
+        "freelance": "Freelance",
+    }
+
+    def __init__(self, **kwargs: Any) -> None:
+        kwargs["transport"] = kwargs.get("transport") or UrllibRecruiteeTransport()
+        super().__init__(**kwargs)
+
+    def _job_url(self, source: dict[str, Any], raw: dict[str, Any], token: str) -> str:
+        """Choose an admitted listing URL; never one on an unverified host."""
+        extra: set[str] = set()
+        public = clean_text(source.get("public_url"), limit=2_000)
+        public_host = urllib.parse.urlsplit(public).hostname
+        if public_host:
+            extra.add(public_host)
+        listed = clean_text(raw.get("careers_url"), limit=2_000)
+        parsed = urllib.parse.urlsplit(listed)
+        if (listed and parsed.scheme == "https" and parsed.hostname
+                and (parsed.hostname in extra or parsed.hostname.endswith(".recruitee.com"))):
+            return listed
+        slug = clean_text(raw.get("slug"), limit=300)
+        if slug:
+            managed = f"https://{urllib.parse.quote(token, safe='')}.{self.api_host_suffix}/o/{urllib.parse.quote(slug, safe='')}"
+            managed_host = urllib.parse.urlsplit(managed).hostname
+            if managed_host in extra or managed_host.endswith(".recruitee.com"):
+                return managed
+        raise ValueError("missing official URL")
+
+    def build_endpoint(self, source: dict[str, Any], *, offset: int = 0) -> str:
+        _ = offset
+        board = self._identifier(source, "board_token")
+        # The tenant feed URL is the vendor's documented public resource; no
+        # query parameter is added because the vendor ignores them.
+        return (f"https://{urllib.parse.quote(board, safe='')}."
+                f"{self.api_host_suffix}/api/offers/")
+
+    def _pages(self, source: dict[str, Any], *, deadline: float | None) -> list[Any]:
+        return [self._request(self.build_endpoint(source), deadline=deadline)]
+
+    def _raw_items(self, payload: Any) -> list[Any]:
+        if not isinstance(payload, dict) or not isinstance(payload.get("offers"), list):
+            raise PublicSourceError("Le flux Recruitee a un format inattendu.", code="invalid_payload")
+        return payload["offers"]
+
+    def parse(self, source: dict[str, Any], payload: Any) -> list[dict[str, Any]]:
+        return [self._normalise_one(source, item) for item in self._raw_items(payload)
+                if isinstance(item, dict) and item.get("status") in (None, "published")]
+
+    def _normalise_one(self, source: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:
+        token = self._identifier(source, "board_token")
+        locations = raw.get("locations") if isinstance(raw.get("locations"), list) else []
+        first_location = locations[0] if locations and isinstance(locations[0], dict) else {}
+        location = raw.get("location") or clean_text(first_location.get("name"), limit=160)
+        country = raw.get("country") or clean_text(first_location.get("country"), limit=120)
+        # Vendor timestamps are "YYYY-MM-DD HH:MM:SS UTC"; only the date part
+        # is a readable fact, and a malformed stamp stays unknown.
+        posted = ""
+        published = clean_text(raw.get("published_at"), limit=80)
+        if published:
+            try:
+                posted = datetime.fromisoformat(
+                    published.replace(" UTC", "").replace("Z", "+00:00").replace(" ", "T")
+                ).date().isoformat()
+            except ValueError:
+                posted = ""
+        employment = self._EMPLOYMENT_CODES.get(clean_text(raw.get("employment_type_code"), limit=80))
+        # One HTML blob (description + requirements) is normalized exactly once
+        # by the shared connector boundary, like the other adapters.
+        html = f"{clean_text(raw.get('description'), limit=60_000)}{clean_text(raw.get('requirements'), limit=60_000)}"
+        public_host = urllib.parse.urlsplit(clean_text(source.get("public_url"), limit=2_000)).hostname
+        return _common_job(self.provider, source, raw.get("id"), raw.get("title"),
+                           self._job_url(source, raw, token), clean_text(raw.get("careers_apply_url"), limit=2_000),
+                           html, location, country, employment, posted,
+                           extra_listing_hosts=frozenset({public_host}) if public_host else frozenset())
+
+
 def _common_job(provider: str, source: dict[str, Any], job_id: Any, title: Any, official_url: Any,
                 apply_url: Any, description: Any, location: Any, country: Any,
-                employment_type: Any, posted_date: Any, *, company_name: Any = None) -> dict[str, Any]:
+                employment_type: Any, posted_date: Any, *, company_name: Any = None,
+                extra_listing_hosts: frozenset[str] = frozenset()) -> dict[str, Any]:
     source_id = clean_text(job_id, limit=240)
     title_text = clean_text(title, limit=300)
     url = clean_text(official_url, limit=2_000)
     if not source_id or not title_text:
         raise ValueError("missing identity")
     parsed = urllib.parse.urlsplit(url)
-    if parsed.scheme != "https" or parsed.hostname not in _LISTING_HOSTS[provider] or parsed.username or parsed.password:
+    hostname = parsed.hostname or ""
+    # `extra_listing_hosts` only ever contains hosts derived from the verified
+    # source record itself (an employer's own listed careers domain), so a
+    # posting URL pointing to an unrelated host is still refused.
+    admitted = (hostname in _LISTING_HOSTS[provider]
+                or hostname in extra_listing_hosts
+                or (provider == "recruitee" and hostname.endswith(".recruitee.com")))
+    if parsed.scheme != "https" or not hostname or not admitted or parsed.username or parsed.password:
         raise ValueError("missing official URL")
     city, country_from_location = _location_parts(location, preserve_multi_locations=True)
     # Normalize remote markup once at the connector boundary so matching,

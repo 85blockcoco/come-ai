@@ -38,5 +38,31 @@
         "ref": "https://api.smartrecruiters.com/api-v1/companies/synthetic-board/postings/synthetic-sr-001"
       }
     ]
+  },
+  "recruitee": {
+    "offers": [
+      {
+        "id": 2783543,
+        "title": "Synthetic Finance Intern (stage)",
+        "status": "published",
+        "slug": "synthetic-finance-intern",
+        "location": "Amsterdam, Noord-Holland, Netherlands",
+        "country": "Netherlands",
+        "city": "Amsterdam",
+        "employment_type_code": "internship",
+        "published_at": "2026-10-01 09:00:00 UTC",
+        "careers_url": "https://careers.example.test/o/synthetic-finance-intern",
+        "careers_apply_url": "https://careers.example.test/o/synthetic-finance-intern/c/new",
+        "description": "<p>Synthetic internship description for finance.</p>",
+        "requirements": "<ul><li>Bachelor in Finance (synthetic).</li></ul>"
+      },
+      {
+        "id": 2781634,
+        "title": "Synthetic Product Lead",
+        "status": "archived",
+        "slug": "synthetic-product-lead",
+        "description": "<p>Synthetic permanent role.</p>"
+      }
+    ]
   }
 }
