@@ -97,6 +97,8 @@ from .cv_fit import (
     serialize_gap,
 )
 from .cv_variants import ALL_VARIANTS
+from .evidence import EvidenceCenter, EvidenceItem, evidence_from_candidate_fact, evidence_from_fit_verdict
+from .evidence_store import SqliteEvidenceStore
 
 try:
     from consent_guard import ConsentGuard
@@ -289,6 +291,12 @@ class CareerService:
         # they contain a complete private snapshot of the local Career data.
         self.backups_dir = self.data_dir / "backups"
         self.db_path = self.data_dir / "career.sqlite3"
+        # Le centre de preuves vit dans son propre répertoire privé : la base
+        # Career principale n'est jamais migrée pour ajouter des preuves.
+        self.evidence_dir = self.data_dir / "evidence"
+        self.evidence_attachments_dir = self.evidence_dir / "attachments"
+        self.evidence_uploads_dir = self.evidence_dir / "uploads"
+        self.evidence_db_path = self.evidence_dir / "evidence.sqlite3"
         self.ocr = ocr or LocalVisionOCR(self.ocr_dir)
         # The discovery lock is intentionally process-local: the local web
         # server has one process, and it prevents double-clicks from issuing
@@ -312,6 +320,13 @@ class CareerService:
         # SPEC-010 — the targeted interview preparation keeps its own private
         # file so that adding it never rewrites the main Career schema.
         self.interview_prep_store = InterviewPrepStore(self.data_dir)
+        # Une seule instance du centre de preuves par profil : c'est la
+        # source de vérité unique des preuves du candidat.
+        self._evidence_store = SqliteEvidenceStore(self.evidence_db_path)
+        self._evidence_center = EvidenceCenter(
+            self._evidence_store,
+            attachments_dir=self.evidence_attachments_dir,
+        )
         if ConsentGuard is not None:
             try:
                 self.consent_guard = ConsentGuard(self.data_dir / "consent")
@@ -327,6 +342,9 @@ class CareerService:
         self.ocr_dir.mkdir(parents=True, exist_ok=True)
         self.studio_dir.mkdir(parents=True, exist_ok=True)
         self.backups_dir.mkdir(parents=True, exist_ok=True)
+        self.evidence_dir.mkdir(parents=True, exist_ok=True)
+        self.evidence_attachments_dir.mkdir(parents=True, exist_ok=True)
+        self.evidence_uploads_dir.mkdir(parents=True, exist_ok=True)
         for path in (
             self.data_dir,
             self.documents_dir,
@@ -334,6 +352,9 @@ class CareerService:
             self.ocr_dir,
             self.studio_dir,
             self.backups_dir,
+            self.evidence_dir,
+            self.evidence_attachments_dir,
+            self.evidence_uploads_dir,
         ):
             try:
                 os.chmod(path, 0o700)
@@ -1106,6 +1127,11 @@ class CareerService:
     def profile_upload_temp_path(self) -> Path:
         """Return a private, opaque temporary location for one browser upload."""
         return self.documents_dir / f".profile-upload-{uuid.uuid4().hex}.part"
+
+    def evidence_upload_temp_path(self) -> Path:
+        """Return a private, opaque temporary location for one attachment upload."""
+        self.evidence_uploads_dir.mkdir(parents=True, exist_ok=True)
+        return self.evidence_uploads_dir / f".evidence-upload-{uuid.uuid4().hex}.part"
 
     @staticmethod
     def _safe_profile_source_name(raw_name: str | None, *, fallback: str) -> str:
@@ -6101,6 +6127,13 @@ class CareerService:
                 "network_on_page_load": False,
                 "invented_facts": False,
             },
+            "evidence_center": {
+                "enabled": True,
+                "local_only": True,
+                "auto_approval": False,
+                "network_calls": False,
+                "formats": ["json", "markdown"],
+            },
         }
 
     def export_deadline_calendar(self) -> Path:
@@ -6193,6 +6226,181 @@ class CareerService:
         sheet.freeze_panes = "A2"
         sheet.auto_filter.ref = sheet.dimensions
         workbook.save(target)
+
+    # ── Centre de preuves (SPEC-008) ───────────────────────────────────────
+    # Une seule instance par profil : le centre de preuves est la source de
+    # vérité unique des preuves du candidat. Il n'approuve rien tout seul.
+
+    def evidence_center(self) -> EvidenceCenter:
+        """Return the single evidence center of this profile."""
+        return self._evidence_center
+
+    def list_evidence(
+        self,
+        *,
+        query: str = "",
+        evidence_type: str = "",
+        confidence: str = "",
+        approved: bool | None = None,
+        blocked: bool | None = None,
+        expired: bool | None = None,
+        used: str = "",
+    ) -> list[dict[str, Any]]:
+        """Return the evidences matching the filters."""
+        items = self._evidence_center.list_evidence(
+            query=query,
+            evidence_type=evidence_type,
+            confidence=confidence,
+            approved=approved,
+            blocked=blocked,
+            expired=expired,
+            used=used,
+        )
+        return [item.to_dict() for item in items]
+
+    def add_evidence(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Register one evidence in the local center.
+
+        A proof is never born approved : the only decisions that change a
+        status are ``mark_evidence_approved`` and the import of a fact the
+        person already approved elsewhere (SK-10).
+        """
+        item = EvidenceItem(
+            id="",
+            claim=clean_text(payload.get("claim"), limit=400),
+            source_document=clean_text(payload.get("source_document"), limit=260),
+            source_location=clean_text(payload.get("source_location"), limit=260),
+            quote=clean_text(payload.get("quote"), limit=4_000),
+            evidence_type=clean_text(payload.get("evidence_type"), limit=40),
+            confidence=clean_text(payload.get("confidence"), limit=40),
+            approved=False,
+            created_at="",
+            updated_at="",
+            tags=[str(tag) for tag in (payload.get("tags") or [])],
+            expires_at=clean_text(payload.get("expires_at"), limit=32),
+        )
+        identifier = self._evidence_center.add_evidence(item)
+        return self.get_evidence(identifier)
+
+    def get_evidence(self, evidence_id: str) -> dict[str, Any]:
+        """Return one evidence, serialized for the local API."""
+        item = self._evidence_center.get_evidence(evidence_id)
+        if item is None:
+            raise UserFacingError("Cette preuve n’existe pas.")
+        return item.to_dict()
+
+    def update_evidence(self, evidence_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """Apply the editable fields of one evidence."""
+        self._evidence_center.update_evidence(evidence_id, payload or {})
+        return self.get_evidence(evidence_id)
+
+    def delete_evidence(self, evidence_id: str) -> bool:
+        """Remove one evidence from the local center."""
+        return self._evidence_center.delete_evidence(evidence_id)
+
+    def mark_evidence_approved(self, evidence_id: str, approved: bool) -> dict[str, Any]:
+        """Record the person's approval decision on one evidence."""
+        self._evidence_center.mark_approved(evidence_id, approved)
+        return self.get_evidence(evidence_id)
+
+    def set_evidence_blocked(self, evidence_id: str, blocked: bool) -> dict[str, Any]:
+        """Block (or unblock) the usage of one evidence."""
+        self._evidence_center.set_blocked(evidence_id, blocked)
+        return self.get_evidence(evidence_id)
+
+    def record_evidence_usage(self, evidence_id: str, target: str, context: str = "") -> dict[str, Any]:
+        """Record that an evidence was used in a CV or a cover letter."""
+        self._evidence_center.record_usage(evidence_id, target, context)
+        return self.get_evidence(evidence_id)
+
+    def attach_evidence_document(self, evidence_id: str, source_path: Path, original_name: str = "") -> dict[str, Any]:
+        """Attach a local document to one evidence (copied, never referenced)."""
+        self._evidence_center.attach_document(evidence_id, str(source_path), original_name)
+        return self.get_evidence(evidence_id)
+
+    def merge_evidence(self, evidence_ids: list[str], keep_id: str) -> dict[str, Any]:
+        """Merge duplicated proofs into one identifier, keeping every source."""
+        self._evidence_center.merge_evidence(evidence_ids, keep_id)
+        return self.get_evidence(keep_id)
+
+    def evidence_stats(self) -> dict[str, Any]:
+        """Return the counters of the center and the coverage of the profile."""
+        stats = self._evidence_center.get_usage_stats().to_dict()
+        profile = self.get_profile()
+        declared = [
+            entry.strip()
+            for entry in str(profile.get("skills") or "").replace("\n", ",").split(",")
+            if entry.strip()
+        ]
+        stats["profile_coverage"] = self._evidence_center.get_claim_coverage(declared)
+        stats["profile_claims"] = len(declared)
+        return stats
+
+    def ingest_candidate_facts(self, facts: list[dict[str, Any]]) -> dict[str, Any]:
+        """Import SK-10 candidate facts into the local evidence center.
+
+        The adapter reads the serialized contract of the candidate profile:
+        the center can be used before, with or after the SK-10 module lands.
+        A fact that is not a proof (a contact, a date) is skipped, never
+        transformed.  The import is **idempotent** : replaying it refreshes
+        the same proofs instead of creating duplicates.
+        """
+        added: list[str] = []
+        refreshed: list[str] = []
+        skipped = 0
+        for fact in facts or []:
+            item = evidence_from_candidate_fact(fact)
+            if item is None:
+                skipped += 1
+                continue
+            known = self._evidence_center.get_evidence(item.id) if item.id else None
+            try:
+                identifier = self._evidence_center.upsert_evidence(item)
+            except UserFacingError:
+                skipped += 1
+                continue
+            (refreshed if known is not None else added).append(identifier)
+        return {"added": added, "refreshed": refreshed, "skipped": skipped}
+
+    def ingest_fit_verdicts(self, verdicts: list[dict[str, Any]]) -> dict[str, Any]:
+        """Import SK-03 requirement-fit verdicts into the local center."""
+        added: list[str] = []
+        refreshed: list[str] = []
+        skipped = 0
+        for verdict in verdicts or []:
+            item = evidence_from_fit_verdict(verdict)
+            if item is None:
+                skipped += 1
+                continue
+            known = self._evidence_center.get_evidence(item.id) if item.id else None
+            try:
+                identifier = self._evidence_center.upsert_evidence(item)
+            except UserFacingError:
+                skipped += 1
+                continue
+            (refreshed if known is not None else added).append(identifier)
+        return {"added": added, "refreshed": refreshed, "skipped": skipped}
+
+    def export_evidence(self, export_format: str = "json") -> Path:
+        """Write the portable export of the center (JSON + readable document)."""
+        wanted = clean_text(export_format, limit=20).lower() or "json"
+        if wanted not in {"json", "markdown"}:
+            raise UserFacingError("Le format d’export doit être « json » ou « markdown ».")
+        created = datetime.now().strftime("%Y%m%d-%H%M%S")
+        stem = f"preuves_candidat_{created}_{uuid.uuid4().hex[:8]}"
+        json_path = self.export_dir / f"{stem}.json"
+        markdown_path = self.export_dir / f"{stem}.md"
+        json_path.write_text(
+            json.dumps(self._evidence_center.export_payload(), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        markdown_path.write_text(self._evidence_center.export_markdown(), encoding="utf-8")
+        for path in (json_path, markdown_path):
+            try:
+                os.chmod(path, 0o600)
+            except OSError:
+                pass
+        return markdown_path if wanted == "markdown" else json_path
 
     def export_personal_data(self) -> Path:
         created = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -6312,6 +6520,7 @@ class CareerService:
                         "SELECT * FROM career_audit_log ORDER BY created_at ASC"
                     ).fetchall()
                 ],
+                "evidence": self._evidence_center.export_payload(),
                 "exported_at": utc_now(),
             }
         target.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -6358,6 +6567,12 @@ class CareerService:
                 path.unlink()
             except OSError:
                 pass
+        for pattern in ("career_*", "preuves_candidat_*"):
+            for path in self.export_dir.glob(pattern):
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
         # Delete interrupted upload parts and any prior opaque source left by
         # an interrupted process. This directory is exclusively Career-owned.
         for pattern in (".profile-upload-*.part", "profile_*"):
@@ -6373,6 +6588,29 @@ class CareerService:
                     path.unlink()
             except OSError:
                 pass
+        # Le centre de preuves est une source de données à part entière : une
+        # suppression explicite du Career l'efface aussi, avec ses pièces
+        # jointes et son historique de fusion.
+        for path in self.evidence_attachments_dir.glob("*"):
+            try:
+                if path.is_file():
+                    path.unlink()
+            except OSError:
+                pass
+        for path in self.evidence_uploads_dir.glob("*"):
+            try:
+                if path.is_file():
+                    path.unlink()
+            except OSError:
+                pass
+        for path in (self.evidence_db_path, Path(f"{self.evidence_db_path}-wal"), Path(f"{self.evidence_db_path}-shm")):
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        # Le schéma est recréé immédiatement : le centre de preuves reste
+        # utilisable, il est simplement vide.
+        self._evidence_store.ensure_schema()
         # A reset is an explicit request to erase the Career space, so remove
         # the snapshots created by this application too.  Restrict the match
         # to our own naming convention: a person may keep another SQLite file
