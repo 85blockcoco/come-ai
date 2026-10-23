@@ -13,6 +13,7 @@ from dataclasses import asdict, dataclass
 from datetime import date
 from typing import Any
 
+from .cv_quality.conditions_extractor import extract_conditions_from_offer
 from .exploration import _SENIOR_TITLE, classify_internship
 from .models import (
     DEFAULT_GEO_EXCLUDED_COUNTRIES,
@@ -513,6 +514,16 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
         reasons.append("Type de contrat et mois sélectionnés satisfaits sur la source vérifiée.")
     elif target_status != "non_conforming":
         reasons.append("La source officielle ou le lien reste à vérifier.")
+
+    # Conditions de travail (SK-17) : elles sont *recopiées* dans la
+    # provenance, elles ne décident jamais de la conformité de l'offre.
+    conditions = extract_conditions_from_offer(offer)
+    if conditions:
+        evidence["conditions"] = FactEvidence(
+            value=[fact.to_dict() for fact in conditions],
+            source=f"source_field:{conditions[0].source_field}",
+            quote=" | ".join(fact.quote for fact in conditions[:3])[:300],
+        )
 
     return QualifiedOffer(
         contract_type=contract_type,

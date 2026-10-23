@@ -19,6 +19,16 @@ Usage:
 
 from __future__ import annotations
 
+from .conditions_extractor import (
+    CONDITION_GROUPS,
+    ConditionFact,
+    ConditionType,
+    Confidence,
+    detect_language,
+    extract_conditions,
+    extract_conditions_from_offer,
+    summarize_conditions,
+)
 from .models import (
     CVAnalysisResult,
     Currency,
@@ -81,6 +91,15 @@ __all__ = [
     "SalaryPeriodicity",
     "Currency",
     "extract_salary",
+    # Work conditions (SK-17)
+    "ConditionFact",
+    "ConditionType",
+    "Confidence",
+    "CONDITION_GROUPS",
+    "detect_language",
+    "extract_conditions",
+    "extract_conditions_from_offer",
+    "summarize_conditions",
     # Status constants
     "STATUS_OK",
     "STATUS_INFO",
