@@ -572,3 +572,17 @@ button, a, .career-tab { transition: background-color .16s ease, border-color .1
 .candidate-fact-actions { display: flex; flex-wrap: wrap; gap: 7px; }
 .candidate-fact-correction { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .candidate-fact-correction input { flex: 1 1 220px; min-height: 34px; padding: 5px 9px; border: 1px solid var(--border); border-radius: 8px; background: #fff; color: var(--ink); font-size: .82rem; }
+
+/* SK-11 — dossier de candidature vérifiable (local, aucun envoi automatique). */
+.application-dossier { margin-top: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); display: grid; gap: 12px; }
+.application-dossier[hidden] { display: none; }
+.application-dossier-section { display: grid; gap: 7px; padding-top: 8px; border-top: 1px dashed var(--border); }
+.application-dossier-verification { border-top: none; }
+.application-dossier-blocked { margin: 0; padding: 8px 10px; border: 1px solid #e6b3b3; border-radius: 8px; background: var(--danger-soft, #fdf1f1); color: var(--danger); font-size: .78rem; font-weight: 650; }
+.application-dossier-artifact { display: grid; gap: 6px; }
+.application-dossier-artifact summary { cursor: pointer; font-size: .78rem; font-weight: 650; }
+.application-dossier-body { max-height: 320px; overflow: auto; margin: 0; padding: 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-soft); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .74rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.dossier-claim { font-size: .76rem; line-height: 1.4; }
+.dossier-claim-unsupported { color: var(--danger); }
+.dossier-claim-to_verify { color: var(--warning); }
+ .dossier-claim-supported { color: var(--ink); }

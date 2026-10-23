@@ -80,6 +80,14 @@ from .application_dashboard import (
 )
 from .application_prep import prepare_application, summarize_offer
 from .application_sprint import MAX_SPRINT_CANDIDATES, MAX_SPRINT_ITEMS, build_application_sprint
+from .application_dossier import (
+    DossierVersion,
+    build_application_dossier as build_dossier,
+    dossier_from_dict,
+    export_dossier as export_application_dossier_files,
+    facts_from_profile,
+    with_artifacts,
+)
 from .cv_fit import (
     PipelineItem,
     classify_variant,
@@ -162,7 +170,7 @@ from .qualification_persistence import (
 )
 
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 # The Stage Hunter brief lives in career_settings as one JSON value: no
 # schema migration, and it is exported with the rest of the local settings.
 STAGE_SEARCH_SETTING_KEY = "stage_search_brief"
@@ -574,6 +582,21 @@ class CareerService:
                     );
                     CREATE INDEX candidate_facts_status_idx ON candidate_facts(status, created_at DESC);
                     CREATE INDEX candidate_facts_batch_idx ON candidate_facts(batch_id);
+
+                    CREATE TABLE application_dossiers (
+                        id TEXT PRIMARY KEY,
+                        application_id TEXT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+                        job_id TEXT NOT NULL,
+                        language TEXT NOT NULL,
+                        language_source TEXT NOT NULL DEFAULT 'offer',
+                        version INTEGER NOT NULL DEFAULT 1,
+                        dossier_json TEXT NOT NULL DEFAULT '{}',
+                        verification_json TEXT NOT NULL DEFAULT '{}',
+                        export_allowed INTEGER NOT NULL DEFAULT 0,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    );
+                    CREATE INDEX application_dossiers_application_idx ON application_dossiers(application_id, version DESC);
                     """
                 )
                 connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
@@ -680,6 +703,32 @@ class CareerService:
             version = 10
         if version == 10:
             self._migrate_to_v11(connection)
+            version = 11
+        if version == 11:
+            self._migrate_to_v12(connection)
+
+    @staticmethod
+    def _migrate_to_v12(connection: sqlite3.Connection) -> None:
+        """Add the verifiable application dossier (SK-11) without touching data."""
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS application_dossiers (
+                id TEXT PRIMARY KEY,
+                application_id TEXT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+                job_id TEXT NOT NULL,
+                language TEXT NOT NULL,
+                language_source TEXT NOT NULL DEFAULT 'offer',
+                version INTEGER NOT NULL DEFAULT 1,
+                dossier_json TEXT NOT NULL DEFAULT '{}',
+                verification_json TEXT NOT NULL DEFAULT '{}',
+                export_allowed INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS application_dossiers_application_idx
+                ON application_dossiers(application_id, version DESC);
+            """
+        )
 
     def _migrate_to_v2(self, connection: sqlite3.Connection) -> None:
         self._add_column_if_missing(connection, "candidate_profile", "contact_email", "TEXT NOT NULL DEFAULT ''")
@@ -5146,6 +5195,345 @@ class CareerService:
             )
             self._audit(connection, "application_kit_texts_updated", "application", identifier)
         return self.get_application_kit(identifier, str(draft_row["language"]) if draft_row else "fr")
+
+    # --------------------------------------------------- SK-11 verifiable dossier
+
+    def _dossier_profile_facts(self) -> list[dict[str, Any]]:
+        """Approved facts of the local profile, one per line of each section.
+
+        The local Career profile is written by the person, so every line is an
+        approved fact.  When the SK-10 candidate profile (facts approved with
+        their provenance) becomes available, it must be preferred here: this
+        method is the single integration point between the two.
+        """
+        profile = self.get_profile()
+        sections = (
+            ("education", "education"),
+            ("experience", "experience"),
+            ("skills", "skills"),
+            ("languages", "languages"),
+            ("projects", "projects"),
+            ("certifications", "certifications"),
+        )
+        facts: list[dict[str, Any]] = []
+        for field, category in sections:
+            value = clean_text(profile.get(field), limit=12_000)
+            for raw_line in value.splitlines():
+                text = clean_text(raw_line.strip(" \u2022-\t"), limit=1_000)
+                if not text:
+                    continue
+                # The identifier is derived from the content: reordering the
+                # profile lines never invalidates a proof, while editing or
+                # deleting a line does - which is exactly what must happen.
+                digest = hashlib.sha256(f"{category}|{text}".encode("utf-8")).hexdigest()[:12]
+                facts.append(
+                    {
+                        "fact_id": f"profile_{digest}",
+                        "value": text,
+                        "quote": text,
+                        "category": category,
+                        "status": "approved",
+                        "source": "profile",
+                    }
+                )
+        return facts
+
+    def _dossier_base_cv(self) -> str:
+        """The CV as the workspace knows it today — the "before" of the comparison."""
+        profile = self.get_profile()
+        parts: list[str] = []
+        for field in ("education", "experience", "skills", "languages"):
+            value = clean_text(profile.get(field), limit=12_000)
+            if value:
+                parts.append(f"## {field}\n{value}")
+        return "\n\n".join(parts)
+
+    @staticmethod
+    def _dossier_payload(dossier: Any) -> dict[str, Any]:
+        """The JSON-safe payload returned by the dossier endpoints."""
+        return {
+            "application_id": "",
+            "job_id": "",
+            "language": dossier.language,
+            "language_source": dossier.language_source,
+            "version": dossier.version,
+            "artifacts": [artifact.to_dict() for artifact in dossier.artifacts],
+            "recommendations": [item.to_dict() for item in dossier.recommendations],
+            "coverage": [item.to_dict() for item in dossier.coverage],
+            "diff": [item.to_dict() for item in dossier.diff],
+            "verification": dossier.verification.to_dict(),
+            "history": [entry.to_dict() for entry in dossier.history],
+            "export_allowed": dossier.export_allowed,
+            "automatic_submission": dossier.automatic_submission,
+            "disclaimer": (
+                "Dossier local et vérifiable : chaque affirmation factuelle cite un fait de profil approuvé. "
+                "Aucun envoi automatique ; la candidature est déposée par toi uniquement."
+            ),
+        }
+
+    def _store_application_dossier(
+        self,
+        application_id: str,
+        job_id: str,
+        dossier: Any,
+    ) -> dict[str, Any]:
+        """Persist one dossier version and return its payload."""
+        payload = self._dossier_payload(dossier)
+        payload["application_id"] = application_id
+        payload["job_id"] = job_id
+        now = utc_now()
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO application_dossiers
+                    (id, application_id, job_id, language, language_source, version,
+                     dossier_json, verification_json, export_allowed, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    f"dossier_{uuid.uuid4().hex}",
+                    application_id,
+                    job_id,
+                    dossier.language,
+                    dossier.language_source,
+                    int(dossier.version),
+                    json.dumps(dossier.to_dict(), ensure_ascii=False),
+                    json.dumps(dossier.verification.to_dict(), ensure_ascii=False),
+                    1 if dossier.export_allowed else 0,
+                    now,
+                    now,
+                ),
+            )
+            self._application_event(
+                connection,
+                application_id,
+                job_id,
+                "dossier_built",
+                json.dumps(
+                    {
+                        "version": int(dossier.version),
+                        "language": dossier.language,
+                        "language_source": dossier.language_source,
+                        "export_allowed": dossier.export_allowed,
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+            self._audit(connection, "application_dossier_built", "application", application_id)
+        return payload
+
+    def build_application_dossier(self, application_id: str, language: Any = None) -> dict[str, Any]:
+        """Build the verifiable application dossier for one tracked application.
+
+        The dossier is regenerated locally from the recorded offer and the
+        approved profile facts; it is never submitted anywhere.
+        """
+        identifier = clean_text(application_id, limit=80)
+        with self._lock, self._connection() as connection:
+            application = connection.execute(
+                "SELECT job_id FROM applications WHERE id = ?", (identifier,)
+            ).fetchone()
+            if not application:
+                raise UserFacingError("Cette candidature Career n\u2019existe pas.")
+            job_id = str(application["job_id"])
+            job_row = connection.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+            if not job_row:
+                raise UserFacingError("Cette offre Career n\u2019existe pas.")
+            previous = connection.execute(
+                """
+                SELECT version FROM application_dossiers
+                WHERE application_id = ? ORDER BY version DESC LIMIT 1
+                """,
+                (identifier,),
+            ).fetchone()
+            previous_row = connection.execute(
+                """
+                SELECT dossier_json FROM application_dossiers
+                WHERE application_id = ? ORDER BY version DESC LIMIT 1
+                """,
+                (identifier,),
+            ).fetchone()
+        offer = dict(job_row)
+        version = int(previous["version"]) + 1 if previous else 1
+        history: list[Any] = []
+        if previous_row:
+            try:
+                stored = json.loads(str(previous_row["dossier_json"]))
+            except json.JSONDecodeError:
+                stored = {}
+            history = list(dossier_from_dict(stored).history) if isinstance(stored, dict) else []
+        dossier = build_dossier(
+            offer,
+            self._dossier_profile_facts(),
+            language=language,
+            base_cv=self._dossier_base_cv(),
+            version=version,
+            generated_at=utc_now(),
+            history=history,
+        )
+        return self._store_application_dossier(identifier, job_id, dossier)
+
+    def get_application_dossier(self, application_id: str) -> dict[str, Any]:
+        """Read the latest stored dossier of one application (read-only)."""
+        identifier = clean_text(application_id, limit=80)
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM application_dossiers
+                WHERE application_id = ? ORDER BY version DESC LIMIT 1
+                """,
+                (identifier,),
+            ).fetchone()
+            versions = connection.execute(
+                """
+                SELECT version, language, language_source, export_allowed, created_at
+                FROM application_dossiers WHERE application_id = ? ORDER BY version DESC
+                """,
+                (identifier,),
+            ).fetchall()
+        if not row:
+            raise UserFacingError("Aucun dossier de candidature n\u2019a encore \u00e9t\u00e9 g\u00e9n\u00e9r\u00e9 pour cette candidature.")
+        try:
+            stored = json.loads(str(row["dossier_json"]))
+        except json.JSONDecodeError:
+            stored = {}
+        dossier = dossier_from_dict(stored)
+        payload = self._dossier_payload(dossier)
+        payload["application_id"] = identifier
+        payload["job_id"] = clean_text(row["job_id"], limit=120)
+        payload["versions"] = [dict(version) for version in versions]
+        payload["created_at"] = clean_text(row["created_at"], limit=40)
+        payload["updated_at"] = clean_text(row["updated_at"], limit=40)
+        return payload
+
+    def list_application_dossier_versions(self, application_id: str) -> list[dict[str, Any]]:
+        """The version history of one dossier, newest first."""
+        identifier = clean_text(application_id, limit=80)
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT version, language, language_source, export_allowed, created_at, updated_at
+                FROM application_dossiers WHERE application_id = ? ORDER BY version DESC
+                """,
+                (identifier,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def update_application_dossier(
+        self, application_id: str, edits: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Save edited dossier bodies and verify them again.
+
+        An affirmation the person wrote and cannot prove becomes
+        ``unsupported`` and blocks the final export.
+        """
+        identifier = clean_text(application_id, limit=80)
+        if not isinstance(edits, dict):
+            raise UserFacingError("Les modifications du dossier sont invalides.")
+        known = {
+            "cv_recommendations",
+            "adapted_cv",
+            "cover_letter",
+            "prep_sheet",
+            "interview_questions",
+            "checklist",
+        }
+        cleaned: dict[str, str] = {}
+        for key, value in edits.items():
+            if key not in known:
+                raise UserFacingError(f"Le livrable « {key} » n\u2019existe pas dans ce dossier.")
+            if not isinstance(value, str):
+                raise UserFacingError(f"Le livrable « {key} » doit contenir du texte.")
+            cleaned[key] = value[:400_000]
+        if not cleaned:
+            raise UserFacingError("Aucune modification \u00e0 enregistrer.")
+        current = self.get_application_dossier(identifier)
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT dossier_json FROM application_dossiers
+                WHERE application_id = ? ORDER BY version DESC LIMIT 1
+                """,
+                (identifier,),
+            ).fetchone()
+        if not row:
+            raise UserFacingError("Aucun dossier de candidature n\u2019existe pour cette candidature.")
+        try:
+            stored = json.loads(str(row["dossier_json"]))
+        except json.JSONDecodeError:
+            stored = {}
+        dossier = dossier_from_dict(stored)
+        # The edited bodies are verified against the **current** approved
+        # facts: a fact that was edited or removed from the profile stops
+        # proving the sentences that cited it.
+        current_facts = facts_from_profile(self._dossier_profile_facts())
+        updated = with_artifacts(dossier, cleaned, facts=current_facts)
+        updated = replace(
+            updated,
+            version=int(current.get("version", 1)) + 1,
+            history=dossier.history
+            + (
+                DossierVersion(
+                    version=int(current.get("version", 1)) + 1,
+                    language=updated.language,
+                    language_source=updated.language_source,
+                    supported_count=updated.verification.supported_count,
+                    unsupported_count=updated.verification.unsupported_count,
+                    to_verify_count=updated.verification.to_verify_count,
+                    generated_at=utc_now(),
+                    summary="Version \u00e9dit\u00e9e par la personne, v\u00e9rifi\u00e9e \u00e0 nouveau.",
+                ),
+            ),
+        )
+        return self._store_application_dossier(identifier, str(current.get("job_id", "")), updated)
+
+    def export_application_dossier(self, application_id: str) -> dict[str, Any]:
+        """Write the dossier to the local export folder.
+
+        The export is refused while an affirmation is not proved, and it never
+        submits anything: it only writes local files.
+        """
+        identifier = clean_text(application_id, limit=80)
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM application_dossiers
+                WHERE application_id = ? ORDER BY version DESC LIMIT 1
+                """,
+                (identifier,),
+            ).fetchone()
+        if not row:
+            raise UserFacingError("Aucun dossier de candidature n\u2019existe pour cette candidature.")
+        try:
+            stored = json.loads(str(row["dossier_json"]))
+        except json.JSONDecodeError:
+            stored = {}
+        dossier = dossier_from_dict(stored)
+        # The export is checked against the **current** approved facts: a fact
+        # edited or removed from the profile since the dossier was built stops
+        # proving the sentences that cited it, and the export is refused.
+        dossier = replace(
+            dossier,
+            facts=facts_from_profile(self._dossier_profile_facts()),
+        )
+        target = self.export_dir / f"dossier_{identifier}"
+        written = export_application_dossier_files(dossier, target)
+        with self._lock, self._connection() as connection:
+            self._application_event(
+                connection,
+                identifier,
+                clean_text(row["job_id"], limit=120),
+                "dossier_exported",
+                json.dumps({"version": int(row["version"])}, ensure_ascii=False),
+            )
+            self._audit(connection, "application_dossier_exported", "application", identifier)
+        return {
+            "application_id": identifier,
+            "version": int(row["version"]),
+            "files": written,
+            "export_allowed": True,
+            "automatic_submission": False,
+        }
 
     @staticmethod
     def _dashboard_action(

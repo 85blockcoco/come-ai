@@ -1149,6 +1149,16 @@ function applicationCard(application) {
   kitContainer.hidden = true;
   kitButton.addEventListener("click", () => openApplicationKit(application, kitContainer));
   actions.append(kitButton);
+  // SK-11 : le dossier vérifiable est une action distincte du kit — il applique
+  // le vérificateur de faits et refuse l'export tant qu'une affirmation n'est
+  // pas prouvée. Il reste entièrement local et n'envoie rien.
+  const dossierButton = make("button", "Ouvrir le dossier vérifiable", "secondary-button");
+  dossierButton.type = "button";
+  const dossierContainer = make("div", "", "application-dossier");
+  dossierContainer.dataset.applicationId = application.id;
+  dossierContainer.hidden = true;
+  dossierButton.addEventListener("click", () => openApplicationDossier(application, dossierContainer));
+  actions.append(dossierButton);
   const noteLabel = make("label", "Note de suivi (facultative)");
   const noteInput = document.createElement("input");
   noteInput.type = "text";
@@ -1205,6 +1215,7 @@ function applicationCard(application) {
     card.append(make("p", "L’approbation locale pour cette offre précise est requise avant de consigner une réception confirmée.", "application-meta"));
   }
   card.append(kitContainer);
+  card.append(dossierContainer);
   return card;
 }
 
