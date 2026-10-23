@@ -1,0 +1,136 @@
+{
+  "_comment": [
+    "Synthetic fixture: one answer of the public EURES job search API.",
+    "Nothing here was downloaded. The envelope reproduces the shape the API",
+    "publishes (result.items) so the connector can be exercised offline, and",
+    "every host uses the reserved '.test' domain.",
+    "The ten offers are published in the EU and outside France: the country",
+    "filter is read on the request itself (countryCodes), and a French offer",
+    "is exercised separately by the test that feeds a French answer."
+  ],
+  "result": {
+    "totalMatching": 128,
+    "items": [
+      {
+        "id": "eures-0001",
+        "title": "Finance Intern",
+        "employerName": "Example Bank GmbH",
+        "location": {"name": "Berlin", "countryCode": "DE", "countryName": "Germany"},
+        "contractType": "INTERNSHIP",
+        "description": "<p>Financial analysis and reporting internship in the group finance team.</p>",
+        "applicationUrl": "https://careers.example.test/jobs/eures-0001",
+        "publicationDate": 1760000000000,
+        "startDate": "2027-02-01",
+        "duration": 6
+      },
+      {
+        "id": "eures-0002",
+        "title": "Investment Banking Intern",
+        "employerName": "Example Capital Ltd",
+        "location": {"name": "London", "countryCode": "GB", "countryName": "United Kingdom"},
+        "contractType": "INTERNSHIP",
+        "description": "<p>Support the M&A and capital markets teams. This is a six-month internship.</p>",
+        "applicationUrl": "https://careers.example.test/jobs/eures-0002",
+        "publicationDate": 1760100000000,
+        "startDate": "2027-01-15",
+        "duration": 6
+      },
+      {
+        "id": "eures-0003",
+        "title": "Corporate Finance Intern",
+        "employerName": "Example Holding BV",
+        "location": {"name": "Amsterdam", "countryCode": "NL", "countryName": "Netherlands"},
+        "contractType": "INTERNSHIP",
+        "description": "<p>Corporate finance internship: valuation, modelling and reporting.</p>",
+        "applicationUrl": "https://careers.example.test/jobs/eures-0003",
+        "publicationDate": 1760200000000,
+        "startDate": "2027-03-01",
+        "duration": 6
+      },
+      {
+        "id": "eures-0004",
+        "title": "Controlling Intern",
+        "employerName": "Example Industrie AG",
+        "location": {"name": "Wien", "countryCode": "AT", "countryName": "Austria"},
+        "contractType": "INTERNSHIP",
+        "description": "<p>Controlling internship with a focus on cost analysis and reporting.</p>",
+        "applicationUrl": "https://careers.example.test/jobs/eures-0004",
+        "publicationDate": 1760300000000,
+        "startDate": "2027-02-01",
+        "duration": 5
+      },
+      {
+        "id": "eures-0005",
+        "title": "Audit Intern",
+        "employerName": "Example Audit SL",
+        "location": {"name": "Madrid", "countryCode": "ES", "countryName": "Spain"},
+        "contractType": "INTERNSHIP",
+        "description": "<p>Audit internship in the financial audit department.</p>",
+        "applicationUrl": "https://careers.example.test/jobs/eures-0005",
+        "publicationDate": 1760400000000,
+        "startDate": "2027-01-20",
+        "duration": 6
+      },
+      {
+        "id": "eures-0006",
+        "title": "Banking Intern",
+        "employerName": "Example Banca SpA",
+        "location": {"name": "Milano", "countryCode": "IT", "countryName": "Italy"},
+        "contractType": "INTERNSHIP",
+        "description": "<p>Corporate banking internship with a rotation on credit analysis.</p>",
+        "applicationUrl": "https://careers.example.test/jobs/eures-0006",
+        "publicationDate": 1760500000000,
+        "startDate": "2027-02-15",
+        "duration": 6
+      },
+      {
+        "id": "eures-0007",
+        "title": "Financial Analyst Intern",
+        "employerName": "Example Mercado SA",
+        "location": {"name": "Lisboa", "countryCode": "PT", "countryName": "Portugal"},
+        "contractType": "INTERNSHIP",
+        "description": "<p>Financial analysis internship: budgeting and business performance.</p>",
+        "applicationUrl": "https://careers.example.test/jobs/eures-0007",
+        "publicationDate": 1760600000000,
+        "startDate": "2027-03-01",
+        "duration": 4
+      },
+      {
+        "id": "eures-0008",
+        "title": "Treasury Intern",
+        "employerName": "Example Bank Polska",
+        "location": {"name": "Warszawa", "countryCode": "PL", "countryName": "Poland"},
+        "contractType": "INTERNSHIP",
+        "description": "<p>Treasury internship: cash flow, funding and counterparty follow-up.</p>",
+        "applicationUrl": "https://careers.example.test/jobs/eures-0008",
+        "publicationDate": 1760700000000,
+        "startDate": "2027-01-10",
+        "duration": 6
+      },
+      {
+        "id": "eures-0009",
+        "title": "Risk Management Intern",
+        "employerName": "Example Assurance NV",
+        "location": {"name": "Bruxelles", "countryCode": "BE", "countryName": "Belgium"},
+        "contractType": "INTERNSHIP",
+        "description": "<p>Risk management internship: control framework and reporting.</p>",
+        "applicationUrl": "https://careers.example.test/jobs/eures-0009",
+        "publicationDate": 1760800000000,
+        "startDate": "2027-02-01",
+        "duration": 6
+      },
+      {
+        "id": "eures-0010",
+        "title": "Asset Management Intern",
+        "employerName": "Example Funds Oy",
+        "location": {"name": "Helsinki", "countryCode": "FI", "countryName": "Finland"},
+        "contractType": "INTERNSHIP",
+        "description": "<p>Asset management internship: performance analysis and reporting.</p>",
+        "applicationUrl": "https://careers.example.test/jobs/eures-0010",
+        "publicationDate": 1760900000000,
+        "startDate": "2027-03-01",
+        "duration": 6
+      }
+    ]
+  }
+}
