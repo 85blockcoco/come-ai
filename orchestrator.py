@@ -24,7 +24,9 @@ RESULT_FILE = MESSAGES / "result.json"
 LOG_FILE = ROOT / "orchestrator.log"
 
 POLL_INTERVAL = 3  # secondes
-MAX_PARALLEL_WORKERS = 4
+# MAX_WORKERS permet de limiter la machine secondaire (ex: 2) sans toucher
+# au registre partagé. Absent = 4 (comportement historique).
+MAX_PARALLEL_WORKERS = int(os.environ.get("MAX_WORKERS", "4"))
 
 # Lock pour accès thread-safe aux fichiers partagés
 file_lock = threading.RLock()  # Reentrant lock pour éviter deadlock dans write_from_a_status
