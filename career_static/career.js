@@ -1686,6 +1686,9 @@ async function loadCoach() {
       if (active) await openCoachSession(active.id);
       else renderCoachSession(null);
     }
+    // SPEC-010 — l'assistant d'entretien ciblé partage le même rechargement.
+    if (typeof interviewPrepWire === "function") interviewPrepWire();
+    if (typeof loadInterviewPrep === "function") await loadInterviewPrep();
   } catch (error) { setMessage(error.message, true); }
 }
 

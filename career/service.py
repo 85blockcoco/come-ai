@@ -121,6 +121,17 @@ from .interview import (
     progress_summary,
     select_question,
 )
+from .interview_prep import (
+    PrepContext,
+    Preparation,
+    build_preparation,
+    render_markdown,
+    serialize_feedback,
+    serialize_question,
+    serialize_session,
+    simulate as simulate_interview_answer,
+)
+from .interview_store import InterviewPrepStore
 from .ocr import LocalVisionOCR, OCRResult
 from .discovery import DiscoveryPayload, GreenhouseBoard, GreenhouseJobBoardConnector, PublicSourceError, callable_geo_kwargs, parse_greenhouse_board_token
 from .connectors import default_exploration_connectors
@@ -298,6 +309,9 @@ class CareerService:
         self.daily_digest_ttl_seconds = normalize_ttl(daily_digest_ttl_seconds)
         self._ensure_storage()
         self._initialize()
+        # SPEC-010 — the targeted interview preparation keeps its own private
+        # file so that adding it never rewrites the main Career schema.
+        self.interview_prep_store = InterviewPrepStore(self.data_dir)
         if ConsentGuard is not None:
             try:
                 self.consent_guard = ConsentGuard(self.data_dir / "consent")
@@ -2318,6 +2332,172 @@ class CareerService:
             if result.rowcount != 1:
                 raise UserFacingError("Cette séance d’entretien n’existe pas.")
             self._audit(connection, "interview_session_deleted", "interview_session", identifier)
+
+    # -- SPEC-010 : préparation d'entretien ciblée -------------------------
+
+    def interview_prep_context(self) -> PrepContext:
+        """Expose the local offer/profile resolution used by the preparation."""
+        return PrepContext(
+            load_offer=self.get_job,
+            load_profile=lambda profile_id: self.get_profile(),
+        )
+
+    def _interview_prep_view(self, preparation: Preparation) -> dict[str, Any]:
+        payload = serialize_session(preparation.session)
+        records = preparation.questions
+        payload["technical_questions"] = [
+            serialize_question(records[question.id])
+            for question in preparation.session.technical_questions
+            if question.id in records
+        ]
+        payload["behavioral_questions"] = [
+            serialize_question(records[question.id])
+            for question in preparation.session.behavioral_questions
+            if question.id in records
+        ]
+        payload["gap_questions"] = [
+            serialize_question(records[question.id])
+            for question in preparation.session.gap_questions
+            if question.id in records
+        ]
+        payload["mode"] = preparation.mode
+        payload["offer"] = dict(preparation.offer)
+        payload["questions"] = [serialize_question(record) for record in records.values()]
+        payload["simulation_count"] = self.interview_prep_store.count_simulations(
+            preparation.session.session_id
+        )
+        payload["disclaimer"] = (
+            "Préparation d’entretien locale et déterministe : elle ne prédit aucune embauche, "
+            "n’invente aucun fait et ne contacte aucun service externe."
+        )
+        return payload
+
+    def create_interview_prep_session(
+        self,
+        offer_id: Any,
+        profile_id: Any = "user_profile",
+        mode: Any = "standard",
+    ) -> dict[str, Any]:
+        """Build one targeted preparation from a stored offer and the profile."""
+        identifier = clean_text(offer_id, limit=80)
+        if not identifier:
+            raise UserFacingError("Choisis une offre Career pour préparer l’entretien.")
+        job = self.get_job(identifier)
+        profile = self.get_profile()
+        preparation = build_preparation(
+            str(job.get("id") or identifier),
+            clean_text(profile_id, limit=80) or "user_profile",
+            clean_text(mode, limit=40) or "standard",
+            offer=job,
+            profile=profile,
+            intake=self.get_intake(),
+            session_id=f"interview_prep_{uuid.uuid4().hex}",
+            created_at=utc_now(),
+        )
+        self.interview_prep_store.save_session(
+            session_id=preparation.session.session_id,
+            offer_id=str(job.get("id") or identifier),
+            profile_id=preparation.session.profile_id,
+            mode=preparation.mode,
+            payload=preparation.to_payload(),
+            company=str(job.get("company") or ""),
+            title=str(job.get("title") or ""),
+        )
+        with self._lock, self._connection() as connection:
+            self._audit(
+                connection,
+                "interview_prep_created",
+                "interview_prep_session",
+                preparation.session.session_id,
+            )
+        return self._interview_prep_view(preparation)
+
+    def get_interview_prep_session(self, session_id: str) -> dict[str, Any]:
+        identifier = clean_text(session_id, limit=80)
+        payload = self.interview_prep_store.get_payload(identifier)
+        if payload is None:
+            raise UserFacingError("Cette préparation d’entretien n’existe pas.")
+        return self._interview_prep_view(Preparation.from_payload(payload))
+
+    def list_interview_prep_sessions(self, limit: int = 30) -> list[dict[str, Any]]:
+        return self.interview_prep_store.list_sessions(limit=limit)
+
+    def delete_interview_prep_session(self, session_id: str) -> None:
+        self.interview_prep_store.delete_session(session_id)
+
+    def simulate_interview_prep(self, session_id: str, question_id: Any, user_answer: Any) -> dict[str, Any]:
+        """Score one rehearsal answer against a prepared question."""
+        identifier = clean_text(session_id, limit=80)
+        payload = self.interview_prep_store.get_payload(identifier)
+        if payload is None:
+            raise UserFacingError("Cette préparation d’entretien n’existe pas.")
+        preparation = Preparation.from_payload(payload)
+        feedback = simulate_interview_answer(
+            preparation,
+            clean_text(question_id, limit=120),
+            clean_text(user_answer, limit=6_000),
+            profile=self.get_profile(),
+        )
+        serialized = serialize_feedback(feedback)
+        self.interview_prep_store.append_simulation(
+            session_id=identifier,
+            question_id=feedback.question_id,
+            score=feedback.score,
+            payload=serialized,
+        )
+        return serialized
+
+    def list_interview_prep_simulations(self, session_id: str) -> dict[str, Any]:
+        identifier = clean_text(session_id, limit=80)
+        if self.interview_prep_store.get_session(identifier) is None:
+            raise UserFacingError("Cette préparation d’entretien n’existe pas.")
+        return {
+            "session_id": identifier,
+            "simulations": self.interview_prep_store.list_simulations(identifier),
+        }
+
+    def export_interview_prep(self, session_id: str, export_format: str = "md") -> Path:
+        """Write the preparation as Markdown or PDF in the private export folder."""
+        normalized_format = clean_text(export_format, limit=8).lower() or "md"
+        if normalized_format not in {"md", "pdf"}:
+            raise UserFacingError(
+                "Format de préparation d’entretien non pris en charge. Choisis Markdown ou PDF."
+            )
+        identifier = clean_text(session_id, limit=80)
+        payload = self.interview_prep_store.get_payload(identifier)
+        if payload is None:
+            raise UserFacingError("Cette préparation d’entretien n’existe pas.")
+        preparation = Preparation.from_payload(payload)
+        markdown = render_markdown(
+            preparation,
+            self.interview_prep_store.list_simulations(identifier),
+        )
+        safe_company = re_sub_filename(str(preparation.offer.get("company") or "entretien"))
+        safe_title = re_sub_filename(str(preparation.offer.get("title") or "preparation"))
+        target = self.export_dir / (
+            f"entretien_{safe_company}_{safe_title}_{uuid.uuid4().hex[:8]}.{normalized_format}"
+        )
+        if normalized_format == "md":
+            target.write_text(markdown, encoding="utf-8")
+        else:
+            document_title = (
+                f"Préparation d'entretien — {preparation.offer.get('company') or 'Poste ciblé'} — "
+                f"{preparation.offer.get('title') or 'offre'}"
+            )
+            try:
+                write_pdf(markdown=markdown, title=document_title, language="fr", target=target)
+            except Exception as error:
+                target.unlink(missing_ok=True)
+                raise UserFacingError(
+                    "La fiche de préparation d’entretien n’a pas pu être générée localement."
+                ) from error
+        try:
+            os.chmod(target, 0o600)
+        except OSError:
+            pass
+        with self._lock, self._connection() as connection:
+            self._audit(connection, "interview_prep_exported", "export", target.name)
+        return target
 
     def _application_context(self, job_id: str, language: Any) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], str]:
         identifier = clean_text(job_id, limit=80)
@@ -5878,6 +6058,15 @@ class CareerService:
                 "provider_required": False,
                 "recruitment_probability": False,
             },
+            "interview_prep": {
+                "enabled": True,
+                "local_text_only": True,
+                "modes": ["standard", "finance"],
+                "finance_banks": 8,
+                "formats": ["md", "pdf"],
+                "provider_required": False,
+                "recruitment_probability": False,
+            },
             "discovery": {
                 "enabled": True,
                 "providers": ["greenhouse"],
@@ -6161,6 +6350,9 @@ class CareerService:
             connection.execute("DELETE FROM career_audit_log")
             self._seed_defaults(connection)
             self._audit(connection, "career_data_reset", "career", "all")
+        # The interview-preparation rehearsals live in their own private file.
+        # A reset is an explicit request to erase the whole Career space.
+        self.interview_prep_store.clear()
         for path in self.export_dir.glob("career_*"):
             try:
                 path.unlink()
