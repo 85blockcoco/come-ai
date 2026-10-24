@@ -23,7 +23,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from html.parser import HTMLParser
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from workspace_core import UserFacingError
 
@@ -38,6 +38,9 @@ from .scoring import classify_job_family
 from .stage_search import default_brief, score_brief_match, validate_brief
 from .exploration import classify_internship, criteria_admit
 from .offer_qualification import qualify_offer
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from .job_deduplication import DedupReport
 
 
 GREENHOUSE_HOST = "boards-api.greenhouse.io"
@@ -592,14 +595,18 @@ def discover_stage_offers(
     selection_brief: dict[str, Any] | None = None,
     countries_exclude: list[str] | tuple[str, ...] | None = None,
     deadline: float | None = None,
-) -> list[dict[str, Any]]:
-    """Read every configured source and return the offers they publish.
+) -> tuple[list[dict[str, Any]], "DedupReport"]:
+    """Read every configured source, deduplicate, and return merged offers.
 
     This is the single entry point of the internship explorer.  The excluded
     countries are forwarded to each connector, which applies them on its own
     side of the boundary: an excluded country is never materialised here and
     never reaches the local database.  ``countries_exclude`` defaults to
     France, the one country the person never wants.
+
+    Every connector returns its own offer records; the same offer published on
+    several boards becomes a single merged offer, keeping the trace of its
+    sources.
     """
     excluded = list(DEFAULT_COUNTRIES_EXCLUDE) if countries_exclude is None else list(countries_exclude)
     brief = validate_brief(selection_brief) if selection_brief is not None else default_brief()
@@ -622,4 +629,8 @@ def discover_stage_offers(
         )
         for job in getattr(payload, "jobs", ()):  # a connector returns a bounded tuple
             offers.append(job)
-    return offers
+    # Imported lazily: the deduplication module is only needed when several
+    # sources are merged, and it must not slow down the import of discovery.
+    from .job_deduplication import deduplicate_offers
+
+    return deduplicate_offers(offers)
