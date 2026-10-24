@@ -1,0 +1,13 @@
+{
+  "status": "done",
+  "files_created": [
+    "career/interview_sim.py",
+    "career/router.py",
+    "tests/test_interview_sim.py",
+    "tests/fixtures/interview_offers_synthetic.json",
+    "docs/agent-reports/SPEC-027-interview_sim.md"
+  ],
+  "output": "SPEC-027 simulateur d'entretien STAR livré : génération déterministe ≥12 questions / 4 kinds, worksheets STAR, self_score hybride, endpoints REST. Suite complète verte (1436 passed, 1 skipped), ruff propre, git diff --check propre.",
+  "logs": "pytest -q tests/test_interview_sim.py → 12 passed\npytest -q → 1436 passed, 1 skipped\nruff check . → All checks passed\ngit diff --check → CLEAN",
+  "error": null
+}

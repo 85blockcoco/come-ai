@@ -1,0 +1,38 @@
+[
+  {
+    "id": "IO-001",
+    "language": "fr",
+    "company": "Banque Synthétique",
+    "title": "Stage M&A",
+    "job_family": "M&A / Investment Banking",
+    "city": "London",
+    "country": "United Kingdom",
+    "requirements": "Advanced Excel required. Financial modeling required. Valuation required.",
+    "description_original": "Nous recherchons un stagiaire motivé pour l'équipe M&A. Analyse financière et présentation client.",
+    "languages_required": "English C1, French native"
+  },
+  {
+    "id": "IO-002",
+    "language": "en",
+    "company": "Quant Demo Ltd",
+    "title": "Quantitative Research Intern",
+    "job_family": "Markets / Quant",
+    "city": "New York",
+    "country": "United States",
+    "requirements": "Python required. Statistics required. Bloomberg required.",
+    "description_original": "Join the quant team to build models and analyze time series.",
+    "languages_required": "English native"
+  },
+  {
+    "id": "IO-003",
+    "language": "it",
+    "company": "Azienda Sintetica",
+    "title": "Stage Corporate Finance",
+    "job_family": "Corporate Finance / FP&A",
+    "city": "Milan",
+    "country": "Italy",
+    "requirements": "Excel required. Budgeting required. Reporting required.",
+    "description_original": "Supporto al team FP&A nella pianificazione e analisi.",
+    "languages_required": "Italian native, English B2"
+  }
+]
