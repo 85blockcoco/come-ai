@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+set -o pipefail
+
 # CÔME AI — CHECKLIST CODEX EXÉCUTABLE (script de validation)
 # Usage : ./checklist_codex.sh [main|memory|career|study-coach|all]
 # Défaut : all
