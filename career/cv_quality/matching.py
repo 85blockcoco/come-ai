@@ -24,12 +24,13 @@ from __future__ import annotations
 import itertools
 import re
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Iterable, Sequence
 
-from .models import CVAnalysisResult, MatchAction, MatchActionCode, MatchEvidence, MatchResult
+from .models import CVAnalysisResult, MatchAction, MatchEvidence, MatchResult
 from ..models import normalized_text
 from ..offer_requirements.extract import analyze_offer
+from .structure import SECTION_KEYWORDS
 
 # ──────────────────────────────────────────────────────────────────────
 # Normalisation — keeps a 1:1 map back to the original characters
@@ -99,6 +100,10 @@ STOP_WORDS = frozenset(
         "sa", "ses", "son", "sur", "the", "to", "tous", "toute", "toutes", "un",
         "une", "vos", "votre", "is", "are", "in", "of", "on", "for", "with",
         "will", "have", "has", "des", "candidat", "candidature", "profil",
+        "maitrise", "experience", "experiences", "technologies", "technology",
+        "techno", "stack", "outils", "tools", "outillage", "environnement",
+        "environment", "contexte", "context", "taches", "tasks", "missions",
+        "mission", "secteur", "domaine",
     }
 )
 
@@ -426,6 +431,17 @@ def _detect_language(text: str) -> tuple[str | None, str | None]:
     return language, level
 
 
+def _languages_in(text: str) -> list[str]:
+    """Return every language explicitly named in textual order."""
+    tokens = _tokens(text)
+    found: list[tuple[int, str]] = []
+    for name, keywords in LANGUAGES.items():
+        positions = [token[1] for token in tokens if token[0] in keywords]
+        if positions:
+            found.append((min(positions), name))
+    return [name for _, name in sorted(found)]
+
+
 def _detect_education_level(text: str) -> tuple[str | None, int]:
     """Return ``(level, rank)`` of the education level mentioned in a text."""
     tokens = _tokens(text)
@@ -433,6 +449,17 @@ def _detect_education_level(text: str) -> tuple[str | None, int]:
         if any(_keyword_present(keyword, tokens) for keyword in keywords):
             return name, rank
     return None, 0
+
+
+def _highest_education_level(text: str) -> tuple[str | None, int]:
+    """Return the highest education level explicitly present in a text."""
+    tokens = _tokens(text)
+    matches = [
+        (name, rank)
+        for name, keywords, rank in EDUCATION_LEVELS
+        if any(_keyword_present(keyword, tokens) for keyword in keywords)
+    ]
+    return max(matches, key=lambda item: item[1]) if matches else (None, 0)
 
 
 def _detect_contract_type(text: str) -> str | None:
@@ -452,7 +479,13 @@ def _is_negated(text: str) -> bool:
 
 def _is_quantified(text: str) -> bool:
     """True when the text carries a number with a unit."""
-    return bool(QUANTIFIED_EVIDENCE.search(text))
+    without_dates = re.sub(
+        r"\d{1,2}[/.]\d{1,2}[/.]\d{2,4}|\d{4}\s*[-–—/]\s*\d{2,4}|"
+        r"\d{1,2}\s*[-–—/]\s*\d{4}|\+\d[\d\s().-]{7,}\d|\b(?:19|20)\d{2}\b",
+        " ",
+        text,
+    )
+    return bool(QUANTIFIED_EVIDENCE.search(without_dates))
 
 
 def _asks_for_numbers(text: str) -> bool:
@@ -770,6 +803,59 @@ def _declared_contract(cv_text: str) -> tuple[str | None, set[str], tuple[int, i
 # Public API
 # ──────────────────────────────────────────────────────────────────────
 
+_SECTION_FIELDS = {
+    "Expérience": "experience",
+    "Formation": "education",
+    "Compétences": "skills",
+    "Langues": "languages",
+    "Projets": "projects",
+    "Certifications": "certifications",
+}
+_TITLE_WORDS = {
+    title: {
+        word
+        for alias in aliases
+        for word in _strip_accents(alias).split()
+    }
+    for title, aliases in SECTION_KEYWORDS.items()
+}
+_SINGLE_WORD_TITLES = {
+    _strip_accents(alias): title
+    for title, aliases in SECTION_KEYWORDS.items()
+    for alias in aliases
+    if " " not in alias
+}
+_LABEL_SEPARATORS = ":;|-–—·,("
+_WORD_PATTERN = re.compile(r"[^\W\d_]+", re.UNICODE)
+
+
+def _label_span(source: str, start: int, title: str) -> tuple[int, int]:
+    """Return only the section-label span, preserving inline content."""
+    line_end = source.find("\n", start)
+    if line_end == -1:
+        line_end = len(source)
+    vocabulary = _TITLE_WORDS.get(title, set())
+    label_end = start
+    position = start
+    first = True
+    while position < line_end:
+        match = _WORD_PATTERN.search(source, position, line_end)
+        if match is None:
+            break
+        if not first and any(char in _LABEL_SEPARATORS for char in source[label_end:match.start()]):
+            break
+        if _strip_accents(match.group()) not in vocabulary:
+            if first:
+                separators = [source.find(char, start, line_end) for char in _LABEL_SEPARATORS]
+                separators = [found for found in separators if found >= 0]
+                return start, min(separators) if separators else line_end
+            break
+        label_end = match.end()
+        position = match.end()
+        first = False
+    return start, max(start, label_end)
+
+
 def _section_header_spans(source: str, cv_result: CVAnalysisResult) -> list[tuple[int, int]]:
     """Return the spans of the CV section headers.
 
@@ -781,11 +867,28 @@ def _section_header_spans(source: str, cv_result: CVAnalysisResult) -> list[tupl
         start = getattr(section, "start_offset", -1)
         if start < 0 or start >= len(source):
             continue
-        end = source.find("\n", start)
-        if end == -1:
-            end = len(source)
-        spans.append((start, end))
+        spans.append(_label_span(source, start, section.title))
     return spans
+
+
+def _field_at(position: int, source: str, cv_result: CVAnalysisResult) -> str:
+    """Return the CV field containing an exact evidence offset."""
+    line_start = source.rfind("\n", 0, position) + 1
+    line_end = source.find("\n", line_start)
+    if line_end == -1:
+        line_end = len(source)
+    first_word = _WORD_PATTERN.search(source, line_start, line_end)
+    if first_word is not None:
+        title = _SINGLE_WORD_TITLES.get(_strip_accents(first_word.group()))
+        if title is not None:
+            return _SECTION_FIELDS.get(title, "document")
+    sections = list(getattr(cv_result, "sections", []) or [])
+    for index, section in enumerate(sections):
+        start = max(0, section.start_offset)
+        end = sections[index + 1].start_offset if index + 1 < len(sections) else len(source)
+        if start <= position < end:
+            return _SECTION_FIELDS.get(section.title, "document")
+    return "document"
 
 
 def match_cv_to_offer(
@@ -819,25 +922,25 @@ def match_cv_to_offer(
     ] if isinstance(offer.get("requirements"), list) else []
     offer_for_analysis = offer
     if structured_records:
-        offer_for_analysis = dict(offer)
-        offer_for_analysis["requirements"] = "\n".join(
-            str(item.get("text", "")) for item in structured_records
-        )
-    analysis = analyze_offer(offer_for_analysis)
-    requirements = list(analysis.get("requirements", []))
-    if structured_records:
-        metadata = {str(item.get("text", "")): item for item in structured_records}
-        for requirement in requirements:
-            record = metadata.get(requirement["text"])
-            if not record:
+        requirements = []
+        for record in structured_records:
+            text = str(record.get("text", "")).strip()
+            if not text:
                 continue
-            requirement["category"] = record.get("category", requirement.get("category", "other"))
-            if record.get("modality"):
-                requirement["modality"] = record["modality"]
-            elif record.get("mandatory") is True:
-                requirement["modality"] = "required"
-            elif record.get("mandatory") is False:
-                requirement["modality"] = "preferred"
+            modality = record.get("modality")
+            if not modality:
+                modality = "required" if record.get("mandatory") is True else "preferred"
+            requirements.append(
+                {
+                    "text": text,
+                    "category": record.get("category", "other"),
+                    "modality": modality,
+                    "negated": bool(record.get("negated", False)),
+                }
+            )
+    else:
+        analysis = analyze_offer(offer_for_analysis)
+        requirements = list(analysis.get("requirements", []))
 
     for missing in _unextracted_requirements(offer, [r["text"] for r in requirements]):
         warnings.append(
@@ -846,7 +949,7 @@ def match_cv_to_offer(
         )
 
     if not source.strip():
-        warnings.append("Texte du CV indisponible : aucune preuve ne peut être citée.")
+        warnings.append("Texte source du CV indisponible : aucune preuve ne peut être citée.")
         for requirement in requirements:
             actions.append(
                 MatchAction(
@@ -901,6 +1004,38 @@ def match_cv_to_offer(
             tokens=tokens,
             warnings=warnings,
         )
+        if action.cv_evidence_offset is not None:
+            field = _field_at(action.cv_evidence_offset, source, cv_result)
+            line_start, line_end = _line_bounds(source, action.cv_evidence_offset)
+            first_word = _WORD_PATTERN.search(source, line_start, line_end)
+            inline_title = (
+                _SINGLE_WORD_TITLES.get(_strip_accents(first_word.group()))
+                if first_word is not None
+                else None
+            )
+            if inline_title is not None:
+                text_start = line_start
+                while text_start < line_end and source[text_start].isspace():
+                    text_start += 1
+                text_end = line_end
+                while text_end > text_start and source[text_end - 1].isspace():
+                    text_end -= 1
+                evidence_text = source[text_start:text_end]
+                evidence = action.evidence
+                if evidence is not None:
+                    evidence = replace(evidence, text=evidence_text, offset=text_start)
+                action = replace(
+                    action,
+                    cv_evidence_text=evidence_text,
+                    cv_evidence_offset=text_start,
+                    evidence=evidence,
+                )
+            evidence = action.evidence
+            if evidence is not None:
+                evidence = replace(evidence, field=field)
+            action = replace(action, cv_evidence_field=field, evidence=evidence)
+        elif structured_records and action.code == "DO_NOT_ADD":
+            action = replace(action, confidence=1.0)
         actions.append(action)
         answered.append((action, requirement))
 
@@ -912,13 +1047,38 @@ def match_cv_to_offer(
         weighted_total += weight
         if action.code != "DO_NOT_ADD":
             weighted_matched += weight
-    overall_score = round(min(1.0, weighted_matched / weighted_total), 3) if weighted_total else 0.0
+    if structured_records:
+        overall_score = round(
+            sum(1 for action in actions if action.code != "DO_NOT_ADD") / len(actions), 4
+        ) if actions else 0.0
+    else:
+        overall_score = round(min(1.0, weighted_matched / weighted_total), 3) if weighted_total else 0.0
 
     missing_critical = [
         action.requirement_text
         for action, requirement in answered
         if action.code == "DO_NOT_ADD" and requirement.get("modality") == "required"
     ]
+
+    if structured_records:
+        if missing_critical:
+            warnings.append(
+                f"{len(missing_critical)} exigence(s) obligatoire(s) sans preuve dans le CV."
+            )
+        contract_text = " ".join(
+            str(offer.get(key, ""))
+            for key in ("contract_type", "employment_type", "description_original")
+        )
+        if _detect_contract_type(contract_text) == "alternance":
+            warnings.append("Alternance détectée — vérifie que ton brief exclut l'alternance.")
+        requested_education = str(offer.get("education_level") or "")
+        if requested_education:
+            required_name, required_rank = _detect_education_level(requested_education)
+            cv_name, cv_rank = _highest_education_level(source)
+            if required_name and cv_name and cv_rank < required_rank:
+                warnings.append(
+                    f"Niveau d'études requis ({required_name}) > CV ({cv_name})."
+                )
 
     return MatchResult(
         overall_score=overall_score,
@@ -972,6 +1132,33 @@ def _match_requirement(
 ) -> MatchAction:
     """Match one requirement against the CV and build its action."""
     # ── Language requirement ─────────────────────────────────────────
+    requested_languages = _languages_in(requirement_text)
+    if len(requested_languages) > 1:
+        present: list[tuple[str, tuple[str, int, int]]] = []
+        for language_name in requested_languages:
+            aliases = LANGUAGES[language_name]
+            occurrence = next((token for token in tokens if token[0] in aliases), None)
+            if occurrence is not None:
+                present.append((language_name, occurrence))
+        missing = [name for name in requested_languages if name not in {item[0] for item in present}]
+        if present:
+            evidence_token = present[0][1]
+            evidence_text = source[evidence_token[1]:evidence_token[2]]
+            if missing:
+                warnings.append(
+                    "Langue requise non prouvée dans le CV : « "
+                    + ", ".join(name.capitalize() for name in missing)
+                    + " »."
+                )
+                return MatchAction(
+                    code="REPHRASE",
+                    requirement_text=requirement_text,
+                    cv_evidence_text=evidence_text,
+                    cv_evidence_offset=evidence_token[1],
+                    reason="Le CV ne prouve qu'une partie des langues demandées.",
+                    confidence=0.7,
+                    evidence=MatchEvidence(text=evidence_text, offset=evidence_token[1], kind="language"),
+                )
     language, required_level = _detect_language(requirement_text)
     if language is not None and (category == "language" or required_level is not None):
         if not _is_program_requirement(requirement_text):
@@ -1065,6 +1252,17 @@ def _match_language(
 
     # The declared level is read on the same line, close to the language.
     line = _line_tokens(tokens, source, evidence_token[1])
+    line_start, line_end = _line_bounds(source, evidence_token[1])
+    clause_start = line_start
+    clause_end = line_end
+    for separator in ",;|/":
+        previous = source.rfind(separator, line_start, evidence_token[1])
+        following = source.find(separator, evidence_token[2], line_end)
+        if previous >= 0:
+            clause_start = max(clause_start, previous + 1)
+        if following >= 0:
+            clause_end = min(clause_end, following)
+    line = [token for token in line if clause_start <= token[1] and token[2] <= clause_end]
     line_words = [word for word, _, _ in line]
     position = line_words.index(evidence_token[0])
     neighbourhood = line_words[max(0, position - 2): position + 3]
@@ -1091,18 +1289,18 @@ def _match_language(
         evidence_end = max(evidence_end, level_token[2])
     evidence_text = source[evidence_start:evidence_end]
 
-    if required_level is None:
-        code: MatchActionCode = "HIGHLIGHT"
-        reason = f"Langue {language} déclarée dans le CV"
-        confidence = 0.9
-    elif declared_level is None:
+    if declared_level is None:
         code = "CONFIRM_LANGUAGE"
         reason = (
-            f"La langue {language} est présente mais le niveau exigé ({required_level}) "
+            f"La langue {language} est présente mais son niveau "
             "n'est pas précisé dans le CV : à confirmer"
         )
         confidence = 0.8
-        warnings.append(f"Niveau de langue {required_level} non précisé dans le CV.")
+        warnings.append(f"Niveau de langue {language} non précisé dans le CV.")
+    elif required_level is None:
+        code = "HIGHLIGHT"
+        reason = f"Langue {language} déclarée dans le CV"
+        confidence = 0.9
     else:
         required_rank = next(rank for name, _kw, rank in LANGUAGE_LEVELS if name == required_level)
         declared_rank = next(rank for name, _kw, rank in LANGUAGE_LEVELS if name == declared_level)
@@ -1295,6 +1493,20 @@ def _match_skill(
 ) -> MatchAction:
     """Match a skill requirement (concepts, families, homonyms)."""
     content = _content_tokens(requirement_text)
+    if {"gestion", "projet"} <= set(content):
+        synonym = _phrase_positions(("management", "projet"), tokens, source)
+        if synonym is not None:
+            span = _span(synonym)
+            evidence_text = source[span[0]:span[1]]
+            return MatchAction(
+                code="REPHRASE",
+                requirement_text=requirement_text,
+                cv_evidence_text=evidence_text,
+                cv_evidence_offset=span[0],
+                reason="Reformuler avec le vocabulaire de l'offre à partir de la preuve du CV.",
+                confidence=0.75,
+                evidence=MatchEvidence(text=evidence_text, offset=span[0], kind="skill"),
+            )
     if _is_program_requirement(requirement_text):
         # "Programme en anglais" describes a course, not a level: the words
         # naming a language prove nothing here.
@@ -1450,7 +1662,7 @@ def _skill_action(
             requirement_text=requirement_text,
             cv_evidence_text=evidence_text,
             cv_evidence_offset=offset,
-            reason="Preuve trouvée mais non chiffrée : quantifier le résultat",
+            reason="Preuve trouvée mais sans chiffre : quantifier le résultat avec une donnée vérifiable",
             confidence=0.8,
             evidence=MatchEvidence(text=evidence_text, offset=offset, kind="skill"),
         )
