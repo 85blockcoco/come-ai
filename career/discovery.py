@@ -523,6 +523,8 @@ class GreenhouseJobBoardConnector:
                         excluded_countries=brief.get("excluded_countries"),
                         excluded_cities=brief.get("excluded_cities"),
                         require_known_location=brief.get("require_known_location", False),
+                        preferred_countries=brief.get("preferred_countries"),
+                        geo_excluded_countries=brief.get("geo_excluded_countries"),
                     ).to_dict()
                     job["qualification"] = qualification
                     target = qualification["target_status"]
@@ -541,7 +543,11 @@ class GreenhouseJobBoardConnector:
                     relevant_count += 1
                 else:
                     relevant_count += 1
-                score = match["score"]
+                # The ranking uses the total score (relevance plus the
+                # geographic signal).  An offer published in a penalized
+                # country never leads the list, whatever its relevance.
+                total_score = match.get("total_score")
+                geo_score = int(match.get("geo_score") or 0)
                 # Source identities, not arrival order or generated database
                 # IDs, break ties. The content digest resolves conflicting
                 # duplicate identities without depending on feed ordering.
@@ -552,7 +558,11 @@ class GreenhouseJobBoardConnector:
                     (job.get("qualification") or {}).get("target_status"), 0
                 )
                 education_rank = (match.get("education_access") or {}).get("priority_rank", 2)
-                key = (status_rank, -(int(score) if score is not None else 0), education_rank, job_id, canonical, digest)
+                geo_rank = 1 if geo_score < 0 else 0
+                key = (geo_rank, status_rank,
+                       -(int(total_score) if total_score is not None else 0),
+                       -geo_score,
+                       education_rank, job_id, canonical, digest)
                 yield key, job
 
         # nsmallest retains only a 150-item heap (O(N log 150)), not a second
