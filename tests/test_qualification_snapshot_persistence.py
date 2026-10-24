@@ -86,6 +86,32 @@ def test_new_snapshot_schema_is_additive_and_versioned(tmp_path) -> None:
     } <= columns
 
 
+def test_v7_migration_creates_private_backup_and_preserves_jobs(tmp_path) -> None:
+    service = CareerService(tmp_path)
+    created = service.import_job(_payload())
+    with sqlite3.connect(service.db_path) as connection:
+        connection.execute("DROP TABLE job_qualification_snapshots")
+        connection.execute("PRAGMA user_version = 7")
+
+    migrated = CareerService(tmp_path)
+
+    with sqlite3.connect(migrated.db_path) as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
+        assert connection.execute(
+            "SELECT company FROM jobs WHERE id = ?", (created["id"],)
+        ).fetchone()[0] == "Synthetic Bank"
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+    assert "job_qualification_snapshots" in tables
+    backups = list(migrated.backups_dir.glob("career-before-v7-to-v8-*.sqlite3"))
+    assert len(backups) == 1
+    assert backups[0].stat().st_mode & 0o077 == 0
+
+
 def test_repeated_import_refreshes_snapshot_but_preserves_user_source_fields(tmp_path) -> None:
     service = CareerService(tmp_path)
     first = service.import_job(_payload())
