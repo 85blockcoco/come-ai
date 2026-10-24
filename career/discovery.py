@@ -36,7 +36,8 @@ from .countries import (
 )
 from .scoring import classify_job_family
 from .stage_search import default_brief, score_brief_match, validate_brief
-from .exploration import admit_offer
+from .exploration import admit_offer, classify_internship
+from .offer_qualification import qualify_offer
 from .source_fields import attach_source_material
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -565,15 +566,16 @@ class GreenhouseJobBoardConnector:
                     confirmed_count += int(target == "conforming")
                     uncertain_count += int(target == "to_verify")
                     excluded_count += int(target == "non_conforming")
-                    if verdict["status"] == "excluded":
+                    if target == "non_conforming":
                         continue
-                    if verdict["status"] != "admitted":
+                    if qualification["contract_type"] == "unknown" and not classification.get("evidence"):
                         filtered_criteria_count += 1
                         continue
-                    job = verdict["job"]
-                    score = verdict["match"]["score"]
-                    education_rank = (verdict["match"].get("education_access") or {}).get("priority_rank", 2)
+                    match = score_brief_match(brief, job)
+                    score = match["score"]
+                    education_rank = (match.get("education_access") or {}).get("priority_rank", 2)
                     status_rank = {"conforming": 0, "to_verify": 1}.get(target, 0)
+                    relevant_count += 1
                 else:
                     match = score_brief_match(brief, job)
                     score = match["score"]
