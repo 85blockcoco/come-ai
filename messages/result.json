@@ -1,16 +1,14 @@
 {
   "status": "done",
-  "files_created": [
+  "files_created": [],
+  "files_modified": [
     "career/interview_sim.py",
     "career/router.py",
     "tests/test_interview_sim.py",
     "tests/fixtures/interview_offers_synthetic.json",
     "docs/agent-reports/SPEC-027-interview_sim.md"
   ],
-  "files_modified": [
-    "tests/test_interview_sim.py"
-  ],
-  "output": "Module simulateur d'entretien STAR (questions déterministes, worksheets STAR, auto-score) + endpoints REST + tests ; ruff nettoyé.",
-  "logs": "pytest -q -> 1436 passed, 1 skipped\nruff check . -> All checks passed\ngit diff --check -> clean",
+  "output": "SPEC-027 simulateur d'entretien STAR validé : build_question_set() (≥12 questions, 4 kinds, seed), StarWorksheet, self_score(), endpoints REST via create_app() avec smoke test HTTP, 14 tests verts.",
+  "logs": "pytest -q tests/test_interview_sim.py -> 14 passed\npytest -q -> 1438 passed, 1 skipped\nruff check . -> All checks passed\ngit diff --check -> clean\ngit push origin HEAD:agent/spec-027-interview-sim -> c74575e..0085b06",
   "error": null
 }
