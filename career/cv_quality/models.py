@@ -99,11 +99,16 @@ class Provenance:
         filetype: One of "txt", "pdf", "docx".
         text_length: Total number of characters in the extracted text.
         page_count: Estimated page count (None if unknown).
+        source_text: Exact text that was analyzed, kept so that downstream
+            modules can quote it verbatim (CVBOOST-21 needs exact substring
+            provenance to prove that a CV really contains a skill).
+            ``None`` when the result was built without its source text.
     """
     filename: str | None
     filetype: str
     text_length: int
     page_count: int | None
+    source_text: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -199,3 +204,83 @@ class ATSCheckResult:
     pages_analyzed: int
     parse_errors: list[str]
     risk_interpretation: str = ""
+
+
+# ──────────────────────────────────────────────────────────────────────
+# CV ↔ Offer matching (CVBOOST-21)
+# ──────────────────────────────────────────────────────────────────────
+
+#: The exhaustive set of actions a matching can recommend.
+MatchActionCode = Literal[
+    "HIGHLIGHT",
+    "REPHRASE",
+    "DO_NOT_ADD",
+    "QUANTIFY",
+    "CONFIRM_LANGUAGE",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class MatchEvidence:
+    """A verbatim excerpt of the CV backing one offer requirement.
+
+    Attributes:
+        text: Verbatim excerpt — always an exact substring of the CV source.
+        offset: Character index of ``text`` inside the CV source text.
+        field: CV field the excerpt comes from ("skills", "experience",
+            "education", "languages", "projects", "certifications" or
+            "document" when the proof sits outside any detected section).
+        confidence: Deterministic 0.0-1.0 score of the match quality.
+        coverage: Share of the requirement the excerpt proves (1.0 when
+            every significant term of the requirement was found).
+    """
+    text: str
+    offset: int
+    field: str
+    confidence: float
+    coverage: float = 1.0
+
+
+@dataclass(frozen=True, slots=True)
+class MatchAction:
+    """One concrete action for exactly one offer requirement.
+
+    Attributes:
+        code: Action code (see :data:`MatchActionCode`).
+        requirement_text: Verbatim requirement text taken from the offer.
+        cv_evidence_text: Verbatim CV excerpt proving the requirement
+            (``None`` when nothing in the CV proves it).
+        cv_evidence_offset: Character index of ``cv_evidence_text`` in the CV.
+        cv_evidence_field: CV field the excerpt comes from (``None`` without
+            evidence).
+        reason: Human readable explanation of the action.
+        confidence: Deterministic 0.0-1.0 score of the recommendation.
+    """
+    code: MatchActionCode
+    requirement_text: str
+    cv_evidence_text: str | None
+    cv_evidence_offset: int | None
+    cv_evidence_field: str | None
+    reason: str
+    confidence: float
+
+
+@dataclass(frozen=True, slots=True)
+class MatchResult:
+    """Result of matching one CV against one offer.
+
+    Attributes:
+        overall_score: Match ratio between 0.0 and 1.0
+            (``matched_requirements / total_requirements``).
+        matched_requirements: Number of requirements backed by CV evidence.
+        total_requirements: Number of requirements taken into account.
+        actions: One action per requirement, in requirement order.
+        missing_critical: Mandatory requirements without any evidence.
+        warnings: Cross-cutting warnings (contract, education, languages).
+    """
+    overall_score: float
+    matched_requirements: int
+    total_requirements: int
+    actions: list[MatchAction]
+    missing_critical: list[str]
+    warnings: list[str]

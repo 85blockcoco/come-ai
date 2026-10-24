@@ -24,6 +24,10 @@ from .models import (
     DocumentInput,
     ExperienceEntry,
     Finding,
+    MatchAction,
+    MatchActionCode,
+    MatchEvidence,
+    MatchResult,
     Provenance,
     ReadabilityScore,
     SectionReading,
@@ -36,6 +40,7 @@ from .models import (
     ATSFinding,
     ATSRiskLevel,
 )
+from .matching import find_evidence_in_cv, match_cv_to_offer
 from .parser import extract_text_from_bytes, extract_text_from_file
 from .structure import analyze_cv
 from .ats import describe_risk, run_ats_check, run_ats_check_bytes, run_ats_check_file
@@ -43,6 +48,10 @@ from .ats import describe_risk, run_ats_check, run_ats_check_bytes, run_ats_chec
 __all__ = [
     # Main entry points
     "analyze_cv",
+    # CV ↔ Offer matching (CVBOOST-21)
+    "match_cv_to_offer",
+    "find_evidence_in_cv",
+    # ATS checks (Mission 04)
     "run_ats_check",
     "run_ats_check_bytes",
     "run_ats_check_file",
@@ -60,6 +69,11 @@ __all__ = [
     # ATS models
     "ATSFinding",
     "ATSRiskLevel",
+    # CV ↔ Offer matching models
+    "MatchAction",
+    "MatchActionCode",
+    "MatchEvidence",
+    "MatchResult",
     # Status constants
     "STATUS_OK",
     "STATUS_INFO",
