@@ -1,0 +1,307 @@
+{
+  "note": "Cas synthétiques — aucune offre réelle, aucune entreprise réelle, aucune personne réelle, aucun réseau.",
+  "cases": [
+    {
+      "id": "tech-python-obligatoire-approuvé",
+      "offer": {
+        "id": "off-tech-01",
+        "requirements": "Maitrise de Python",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "tech",
+            "value": "Python",
+            "quote": "Python — scripts d'automatisation"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Maitrise de Python",
+        "category": "tech",
+        "modality": "mandatory",
+        "verdict": "supported"
+      }
+    },
+    {
+      "id": "tech-python-absent-du-profil",
+      "offer": {
+        "id": "off-tech-02",
+        "requirements": "Maitrise de Python",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "tech",
+            "value": "Excel",
+            "quote": "Excel"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Maitrise de Python",
+        "category": "tech",
+        "modality": "mandatory",
+        "verdict": "to_verify",
+        "reason_contains": "à vérifier"
+      }
+    },
+    {
+      "id": "outils-excel-vba-partiellement-couvert",
+      "offer": {
+        "id": "off-tech-03",
+        "requirements": "Maitrise d Excel et VBA",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "outils",
+            "value": "Excel",
+            "quote": "Excel"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Maitrise d Excel et VBA",
+        "category": "outils",
+        "modality": "mandatory",
+        "verdict": "to_verify",
+        "reason_contains": "VBA"
+      }
+    },
+    {
+      "id": "outils-excel-obligatoire-approuvé",
+      "offer": {
+        "id": "off-tech-04",
+        "requirements": "Excel",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "outils",
+            "value": "Excel",
+            "quote": "Excel — reporting mensuel"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Excel",
+        "category": "outils",
+        "modality": "mandatory",
+        "verdict": "supported"
+      }
+    },
+    {
+      "id": "tech-sql-trois-ans-insuffisants",
+      "offer": {
+        "id": "off-tech-05",
+        "requirements": "3 ans d experience en SQL",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "tech",
+            "value": "SQL",
+            "quote": "SQL — 2 ans d'utilisation",
+            "months": 24
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "3 ans d experience en SQL",
+        "category": "tech",
+        "modality": "mandatory",
+        "verdict": "unsupported"
+      }
+    },
+    {
+      "id": "tech-machine-learning-approuvé",
+      "offer": {
+        "id": "off-tech-06",
+        "requirements": "Machine learning",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "tech",
+            "value": "Machine learning",
+            "quote": "Projets de machine learning"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Machine learning",
+        "category": "tech",
+        "modality": "mandatory",
+        "verdict": "supported"
+      }
+    },
+    {
+      "id": "tech-gestion-de-projet-approuvé",
+      "offer": {
+        "id": "off-tech-07",
+        "requirements": "Solides competences en gestion de projet",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "tech",
+            "value": "Gestion de projet",
+            "quote": "Gestion de projet — 3 ans"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Solides competences en gestion de projet",
+        "category": "tech",
+        "modality": "mandatory",
+        "verdict": "supported"
+      }
+    },
+    {
+      "id": "langues-anglais-courant-niveau-c1",
+      "offer": {
+        "id": "off-lang-01",
+        "requirements": "Anglais courant",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "langues",
+            "value": "Anglais C1",
+            "quote": "Anglais C1"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Anglais courant",
+        "category": "langues",
+        "modality": "mandatory",
+        "verdict": "supported"
+      }
+    },
+    {
+      "id": "langues-anglais-courant-niveau-b2-insuffisant",
+      "offer": {
+        "id": "off-lang-02",
+        "requirements": "Anglais courant",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "langues",
+            "value": "Anglais B2",
+            "quote": "Anglais B2"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Anglais courant",
+        "category": "langues",
+        "modality": "mandatory",
+        "verdict": "unsupported"
+      }
+    },
+    {
+      "id": "langues-anglais-courant-apprécié-non-bloquant",
+      "offer": {
+        "id": "off-lang-03",
+        "requirements": "Un plus : Anglais courant",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "langues",
+            "value": "Anglais B2",
+            "quote": "Anglais B2"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Un plus : Anglais courant",
+        "category": "langues",
+        "modality": "preferred",
+        "verdict": "to_verify"
+      }
+    },
+    {
+      "id": "langues-italien-absent-du-profil",
+      "offer": {
+        "id": "off-lang-04",
+        "requirements": "Italien",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "langues",
+            "value": "Anglais C1",
+            "quote": "Anglais C1"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Italien",
+        "category": "langues",
+        "modality": "mandatory",
+        "verdict": "to_verify"
+      }
+    },
+    {
+      "id": "langues-allemand-b2-conforme",
+      "offer": {
+        "id": "off-lang-05",
+        "requirements": "Allemand B2",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "langues",
+            "value": "Allemand B2",
+            "quote": "Allemand B2 — échange clients"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Allemand B2",
+        "category": "langues",
+        "modality": "mandatory",
+        "verdict": "supported"
+      }
+    },
+    {
+      "id": "langues-anglais-sans-niveau-exigence",
+      "offer": {
+        "id": "off-lang-06",
+        "requirements": "Anglais",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "langues",
+            "value": "Anglais",
+            "quote": "Anglais"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Anglais",
+        "category": "langues",
+        "modality": "mandatory",
+        "verdict": "supported"
+      }
+    }
+  ]
+}
