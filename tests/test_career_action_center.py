@@ -70,3 +70,49 @@ def test_generated_kit_and_interview_receive_higher_priority_actions() -> None:
     }
     assert payload["automatic_submission"] is False
     assert "jamais" in payload["disclaimer"]
+
+
+def test_focus_plan_fills_a_bounded_work_session_without_auto_submission() -> None:
+    payload = build_application_action_center(
+        [
+            _item(
+                job_id="interview",
+                tracking_stage="interview",
+                application_id="app-interview",
+                readiness="prepare_now",
+            ),
+            _item(
+                job_id="manual",
+                tracking_stage="approved_for_manual_submission",
+                application_id="app-manual",
+                readiness="prepare_now",
+            ),
+            _item(job_id="verify"),
+            _item(job_id="analyse", readiness="prepare_now"),
+        ]
+    )
+
+    focus = payload["focus_plan"]
+    assert focus["budget_minutes"] == 60
+    assert focus["planned_minutes"] <= 60
+    assert [item["job_id"] for item in focus["items"]] == [
+        "interview",
+        "manual",
+        "verify",
+    ]
+    assert focus["deferred_count"] == 1
+    assert focus["automatic_submission"] is False
+    assert all(item["estimated_minutes"] > 0 for item in focus["items"])
+
+
+def test_focus_plan_ignores_closed_and_passive_monitoring_rows() -> None:
+    payload = build_application_action_center(
+        [
+            _item(job_id="closed", tracking_stage="rejected", application_id="app-closed"),
+            _item(job_id="waiting", tracking_stage="submitted", application_id="app-waiting"),
+        ]
+    )
+
+    assert payload["focus_plan"]["items"] == []
+    assert payload["focus_plan"]["planned_minutes"] == 0
+    assert payload["focus_plan"]["deferred_count"] == 0

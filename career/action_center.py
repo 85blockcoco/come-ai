@@ -24,6 +24,21 @@ STAGE_PRESENTATION: dict[str, tuple[str, int]] = {
 
 _CLOSED_TRACKING = frozenset({"rejected", "refused", "withdrawn"})
 _SUBMITTED_TRACKING = frozenset({"submitted", "submitted_confirmed"})
+_PASSIVE_ACTIONS = frozenset({"closed", "monitor_response"})
+_ACTION_EFFORT_MINUTES: dict[str, int] = {
+    "prepare_interview": 25,
+    "review_offer": 20,
+    "review_response": 10,
+    "confirm_receipt": 10,
+    "manual_submit": 10,
+    "final_review": 15,
+    "review_kit": 20,
+    "create_kit": 30,
+    "verify_offer": 20,
+    "complete_profile": 25,
+    "analyze_offer": 25,
+}
+_DEFAULT_FOCUS_BUDGET_MINUTES = 60
 
 
 def _action(
@@ -171,6 +186,48 @@ def project_pipeline_item(raw: dict[str, Any]) -> dict[str, Any]:
     return item
 
 
+def _build_focus_plan(
+    projected: list[dict[str, Any]],
+    *,
+    budget_minutes: int = _DEFAULT_FOCUS_BUDGET_MINUTES,
+) -> dict[str, Any]:
+    """Select a bounded, deterministic sequence of active local actions."""
+
+    bounded_budget = max(15, min(240, int(budget_minutes)))
+    selected: list[dict[str, Any]] = []
+    planned_minutes = 0
+    active_count = 0
+    for item in projected:
+        action_code = clean_text(item.get("next_action_code"), limit=80)
+        if action_code in _PASSIVE_ACTIONS:
+            continue
+        active_count += 1
+        effort = _ACTION_EFFORT_MINUTES.get(action_code, 20)
+        if planned_minutes + effort > bounded_budget:
+            continue
+        selected.append(
+            {
+                "job_id": item.get("job_id"),
+                "company": item.get("company"),
+                "title": item.get("title"),
+                "action_code": action_code,
+                "action_label": item.get("next_action_label"),
+                "estimated_minutes": effort,
+                "official_url": item.get("official_url"),
+            }
+        )
+        planned_minutes += effort
+
+    return {
+        "budget_minutes": bounded_budget,
+        "planned_minutes": planned_minutes,
+        "remaining_minutes": bounded_budget - planned_minutes,
+        "items": selected,
+        "deferred_count": max(0, active_count - len(selected)),
+        "automatic_submission": False,
+    }
+
+
 def build_application_action_center(items: list[dict[str, Any]]) -> dict[str, Any]:
     """Project, sort and summarize pipeline rows without side effects."""
 
@@ -186,9 +243,10 @@ def build_application_action_center(items: list[dict[str, Any]]) -> dict[str, An
     action_codes = {item["next_action_code"] for item in projected}
     return {
         "pipeline": projected,
+        "focus_plan": _build_focus_plan(projected),
         "summary": {
             "total": len(projected),
-            "actions_now": sum(item["next_action_code"] not in {"closed", "monitor_response"} for item in projected),
+            "actions_now": sum(item["next_action_code"] not in _PASSIVE_ACTIONS for item in projected),
             "facts_to_verify": sum(item["next_action_code"] == "verify_offer" for item in projected),
             "kits_ready": sum(bool(item["kit_ready"]) for item in projected),
             "tracked": sum(bool(item["tracking_exists"]) for item in projected),

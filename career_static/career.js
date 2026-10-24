@@ -3225,6 +3225,39 @@ function renderApplicationPipeline(payload) {
     summaryGrid.append(card);
   });
   target.append(summaryGrid);
+  const focus = payload.focus_plan || {};
+  const focusItems = focus.items || [];
+  const focusPanel = make("section", "", "pipeline-focus");
+  focusPanel.append(
+    make("h4", `Plan de travail local · ${focus.budget_minutes || 60} min`),
+    make(
+      "p",
+      focusItems.length
+        ? `${focus.planned_minutes || 0} min planifiées · ${focus.deferred_count || 0} action(s) reportée(s)`
+        : "Aucune action active à planifier pour le moment.",
+      "application-meta",
+    ),
+  );
+  if (focusItems.length) {
+    const focusList = make("ol", "", "pipeline-focus-list");
+    focusItems.forEach((item) => {
+      const entry = make("li", "", "pipeline-focus-item");
+      entry.append(
+        make("strong", `${item.action_label} · ${item.estimated_minutes} min`),
+        make("span", `${item.company || "Entreprise inconnue"} — ${item.title || "Sans titre"}`),
+      );
+      const open = make("button", "Ouvrir", "secondary-button");
+      open.type = "button";
+      open.addEventListener("click", () => {
+        if (item.action_code === "prepare_interview") showView("interviews");
+        else loadStagePrep(item.job_id);
+      });
+      entry.append(open);
+      focusList.append(entry);
+    });
+    focusPanel.append(focusList);
+  }
+  target.append(focusPanel);
   const list = make("div", "", "pipeline-list");
   pipeline.forEach((item) => {
     const row = make("article", "", "pipeline-row");
