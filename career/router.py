@@ -275,6 +275,7 @@ def create_career_router(
             "interview_coach": capabilities["interview_coach"],
             "calendar_export": capabilities["calendar_export"],
             "stage_search": capabilities["stage_search"],
+            "followup_engine": {"enabled": True},
         }
 
     @router.post("/api/career/cv/analyze")
@@ -665,6 +666,32 @@ def create_career_router(
                 query=query,
             )
         )
+
+    @router.get("/api/career/followups")
+    async def followups(today: str = Query(default="", max_length=32)) -> Any:
+        return await local(lambda: service.followup_plan(today=today or None))
+
+    @router.get("/api/career/followup-plan")
+    async def followup_plan_get(today: str = Query(default="", max_length=32)) -> Any:
+        return await local(lambda: service.followup_plan(today=today or None))
+
+    @router.get("/api/career/followups/plan")
+    async def followups_plan_get(today: str = Query(default="", max_length=32)) -> Any:
+        return await local(lambda: service.followup_plan(today=today or None))
+
+    @router.post("/api/career/followups/plan")
+    async def followups_plan_post(payload: dict[str, Any] | None = None) -> Any:
+        today = ""
+        if isinstance(payload, dict):
+            today = str(payload.get("today") or payload.get("date") or payload.get("as_of") or "")
+        return await local(lambda: service.followup_plan(today=today or None))
+
+    @router.post("/api/career/followup-plan")
+    async def followup_plan_post(payload: dict[str, Any] | None = None) -> Any:
+        today = ""
+        if isinstance(payload, dict):
+            today = str(payload.get("today") or payload.get("date") or payload.get("as_of") or "")
+        return await local(lambda: service.followup_plan(today=today or None))
 
     @router.get("/api/career/applications/{application_id}")
     async def application(application_id: str) -> Any:

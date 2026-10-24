@@ -1,0 +1,14 @@
+{
+  "status": "done",
+  "files_created": [
+    "career/followup_engine.py",
+    "career/router.py",
+    "career/service.py",
+    "tests/test_followup_engine.py",
+    "tests/fixtures/followups_synthetic.json",
+    "docs/agent-reports/SPEC-029-followup_engine.md"
+  ],
+  "output": "Module followup_engine complet (FollowupPolicy, plan_today, spam_guard), endpoints REST, tests verts.",
+  "logs": "pytest -q -> 1437 passed, 1 skipped\nruff check . -> All checks passed\ngit diff --check -> clean",
+  "error": null
+}

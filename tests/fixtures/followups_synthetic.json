@@ -1,0 +1,68 @@
+{
+  "applications": [
+    {
+      "application_id": "app-no-response",
+      "job_id": "job-1",
+      "stage": "submitted",
+      "receipt_status": "unknown",
+      "deadline_date": "2026-12-15",
+      "updated_at": "2026-10-01T09:00:00+00:00",
+      "events": [
+        {"event_type": "stage_updated", "detail": "submitted", "created_at": "2026-10-01T09:00:00+00:00"}
+      ]
+    },
+    {
+      "application_id": "app-recent",
+      "job_id": "job-2",
+      "stage": "submitted",
+      "receipt_status": "unknown",
+      "deadline_date": "2026-12-15",
+      "updated_at": "2026-10-18T09:00:00+00:00",
+      "events": [
+        {"event_type": "stage_updated", "detail": "submitted", "created_at": "2026-10-18T09:00:00+00:00"}
+      ]
+    },
+    {
+      "application_id": "app-viewed",
+      "job_id": "job-3",
+      "stage": "submitted",
+      "receipt_status": "viewed",
+      "deadline_date": "2026-12-15",
+      "updated_at": "2026-10-10T09:00:00+00:00",
+      "events": [
+        {"event_type": "stage_updated", "detail": "submitted", "created_at": "2026-10-10T09:00:00+00:00"},
+        {"event_type": "receipt_viewed", "detail": "opened", "created_at": "2026-10-12T09:00:00+00:00"}
+      ]
+    },
+    {
+      "application_id": "app-deadline",
+      "job_id": "job-4",
+      "stage": "to_prepare",
+      "receipt_status": "not_submitted",
+      "deadline_date": "2026-10-24",
+      "updated_at": "2026-10-15T09:00:00+00:00",
+      "events": []
+    },
+    {
+      "application_id": "app-closed",
+      "job_id": "job-5",
+      "stage": "rejected",
+      "receipt_status": "not_submitted",
+      "deadline_date": "2026-12-15",
+      "updated_at": "2026-10-01T09:00:00+00:00",
+      "events": []
+    },
+    {
+      "application_id": "app-spam",
+      "job_id": "job-6",
+      "stage": "submitted",
+      "receipt_status": "unknown",
+      "deadline_date": "2026-12-15",
+      "updated_at": "2026-10-01T09:00:00+00:00",
+      "events": [
+        {"event_type": "stage_updated", "detail": "submitted", "created_at": "2026-10-01T09:00:00+00:00"},
+        {"event_type": "followup", "detail": "relance", "created_at": "2026-10-19T09:00:00+00:00"}
+      ]
+    }
+  ]
+}

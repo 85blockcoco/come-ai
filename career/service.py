@@ -3594,6 +3594,51 @@ class CareerService:
             records.append(record)
         return records
 
+    def followup_plan(self, *, today: Any = None, policy: Any = None) -> dict[str, Any]:
+        """SPEC-029 : plan de relances pour une journée (données locales)."""
+        from career.followup_engine import FollowupPolicy, plan_today
+
+        if policy is None:
+            policy = FollowupPolicy()
+        applications = self.list_applications()
+        events_by_application: dict[str, list[dict[str, Any]]] = {}
+        for app in applications:
+            aid = str(app.get("id") or app.get("application_id") or "")
+            if not aid:
+                continue
+            try:
+                full = self.get_application(aid)
+                events_by_application[aid] = list(full.get("events") or [])
+            except Exception:
+                events_by_application[aid] = []
+        plan = plan_today(
+            applications,
+            events_by_application=events_by_application,
+            policy=policy,
+            today=today,
+        )
+        return {
+            "date": plan.date,
+            "actions": [
+                {
+                    "application_id": action.application_id,
+                    "due_date": action.due_date,
+                    "reason": action.reason,
+                    "channel": action.channel,
+                }
+                for action in plan.actions
+            ],
+            "blocked_reasons": dict(plan.blocked_reasons),
+        }
+
+    def plan_followups(self, **kwargs: Any) -> dict[str, Any]:
+        return self.followup_plan(**kwargs)
+
+    def followup_engine_plan(self, **kwargs: Any) -> dict[str, Any]:
+        return self.followup_plan(**kwargs)
+
+    def get_followup_plan(self, **kwargs: Any) -> dict[str, Any]:
+        return self.followup_plan(**kwargs)
     def application_dashboard(
         self,
         *,
