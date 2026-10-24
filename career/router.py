@@ -242,6 +242,15 @@ class CVAnalyzeResponse(BaseModel):
     provenance: dict[str, Any]
 
 
+class OfferComparePayload(BaseModel):
+    """Payload for the side-by-side offer comparator (SPEC-026)."""
+
+    offers: list[dict[str, Any]] = Field(default_factory=list, max_length=100)
+    weights: dict[str, Any] = Field(default_factory=dict)
+    tie_breakers: list[str] = Field(default_factory=list, max_length=10)
+    higher_is_better: dict[str, bool] = Field(default_factory=dict)
+
+
 def create_career_router(
     service: CareerService,
     *,
@@ -341,6 +350,31 @@ def create_career_router(
                 "page_count": result.provenance.page_count,
             },
         )
+
+    @router.post("/api/career/offers/compare")
+    async def compare_offers_endpoint(payload: OfferComparePayload) -> Any:
+        from career.offer_compare import compare_offers
+
+        result = await run_in_threadpool(
+            lambda: compare_offers(
+                payload.offers,
+                weights=payload.weights,
+                tie_breakers=payload.tie_breakers,
+                higher_is_better=payload.higher_is_better,
+            )
+        )
+        return to_jsonable(
+            {
+                "matrix": result.matrix,
+                "weighted_scores": result.weighted_scores,
+                "ranking": result.ranking,
+                "tie_breaker_used": result.tie_breaker_used,
+            }
+        )
+
+    @router.post("/api/career/offer-compare")
+    async def compare_offers_alias(payload: OfferComparePayload) -> Any:
+        return await compare_offers_endpoint(payload)
 
     @router.get("/api/career/dashboard")
     async def dashboard() -> Any:
