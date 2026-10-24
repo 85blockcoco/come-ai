@@ -177,7 +177,7 @@ def _ingest_history(item: Any, by_app: dict[str, list[Any]], global_events: list
             by_app.setdefault(app_id, []).append(item)
         else:
             # Could be a container with an "events"/"followups" list.
-            for container_key in ("events", "followups", "history", "items", "actions"):
+            for container_key in ("events", "followups", "history", "items", "actions", "followup_dates"):
                 value = item.get(container_key)
                 if isinstance(value, list):
                     for sub in value:
@@ -216,7 +216,7 @@ def _normalize_history(history: Any, events: Any = None, events_by_application: 
                         by_app.setdefault(aid, []).append(value)
                 return
             # known containers
-            for key in ("applications", "events", "followups", "history", "items", "actions", "data", "results"):
+            for key in ("applications", "events", "followups", "history", "items", "actions", "data", "results", "followup_dates"):
                 value = container.get(key)
                 if value is not None:
                     _ingest_history(value, by_app, global_events)
@@ -252,7 +252,7 @@ def _normalize_history(history: Any, events: Any = None, events_by_application: 
     elif events is not None:
         global_events.append(events)
 
-    for key in ("history", "events", "followups", "application_events", "followup_history", "items"):
+    for key in ("history", "events", "followups", "application_events", "followup_history", "followup_dates", "items"):
         value = kwargs.get(key)
         if value is None:
             continue
