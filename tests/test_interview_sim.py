@@ -103,3 +103,83 @@ def test_all_kinds_in_first_twelve_even_after_shuffle() -> None:
     for seed in range(5):
         qs = build_question_set(offer, seed=seed, count=12)
         assert {q.kind for q in qs} == {"behavior", "technical", "motivation", "company"}
+
+def test_http_smoke(tmp_path) -> None:
+    from fastapi.testclient import TestClient
+
+    from career.service import CareerService
+    from come_ai_web import create_app
+
+    service = CareerService(tmp_path, curated_sources=())
+    app = create_app(base_dir=tmp_path, career_override=service)
+    with TestClient(app) as client:
+        payload = {
+            "offer": {
+                "id": "IO-001",
+                "title": "Stage M&A",
+                "company": "Banque Synthétique",
+                "requirements": "Excel required. Valuation required.",
+            },
+            "seed": 42,
+            "count": 12,
+        }
+        resp = client.post("/api/career/interview-sim/question-sets", json=payload)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["count"] >= 12
+        assert len(data["questions"]) >= 12
+        kinds = {q["kind"] for q in data["questions"]}
+        assert kinds == {"behavior", "technical", "motivation", "company"}
+
+        # aliases
+        for path in (
+            "/api/career/interview-sim/questions",
+            "/api/career/interview-sim/question_set",
+            "/api/career/interview/questions",
+        ):
+            r = client.post(path, json=payload)
+            assert r.status_code == 200, path
+
+        get_resp = client.get(
+            "/api/career/interview-sim/questions",
+            params={"seed": 1, "count": 12},
+        )
+        assert get_resp.status_code == 200
+        assert get_resp.json()["count"] >= 12
+
+        ws_payload = {
+            "question_id": "q1",
+            "situation": "I led a team project.",
+            "task": "Deliver analysis.",
+            "action": "Built model.",
+            "result": "Saved 20% time.",
+        }
+        ws_resp = client.post("/api/career/interview-sim/worksheets", json=ws_payload)
+        assert ws_resp.status_code == 200
+        assert "worksheet" in ws_resp.json()
+        assert "score" in ws_resp.json()
+
+        ss_resp = client.post("/api/career/interview-sim/self-score", json=ws_payload)
+        assert ss_resp.status_code == 200
+        assert 0 <= ss_resp.json()["score"] <= 1
+
+        sc_resp = client.post("/api/career/interview-sim/score", json=ws_payload)
+        assert sc_resp.status_code == 200
+        assert 0 <= sc_resp.json()["score"] <= 1
+
+
+def test_empty_offer_http_does_not_crash(tmp_path) -> None:
+    from fastapi.testclient import TestClient
+
+    from career.service import CareerService
+    from come_ai_web import create_app
+
+    service = CareerService(tmp_path, curated_sources=())
+    app = create_app(base_dir=tmp_path, career_override=service)
+    with TestClient(app) as client:
+        resp = client.post(
+            "/api/career/interview-sim/question-sets",
+            json={"offer": {}, "seed": 0, "count": 12},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["count"] >= 12

@@ -772,7 +772,7 @@ def create_career_router(
                     offer.setdefault(key, value)
         return offer
 
-    async def _build_questions(payload: InterviewSimQuestionSetPayload) -> dict[str, Any]:
+    def _build_questions_sync(payload: InterviewSimQuestionSetPayload) -> dict[str, Any]:
         from career.interview_sim import build_question_set
 
         offer = _interview_sim_offer(payload)
@@ -813,22 +813,6 @@ def create_career_router(
     ) -> Any:
         payload = InterviewSimQuestionSetPayload(job_id=job_id, seed=seed, count=count, language=language)
         return await local(lambda: _build_questions_sync(payload))
-
-    def _build_questions_sync(payload: InterviewSimQuestionSetPayload) -> dict[str, Any]:
-        from career.interview_sim import build_question_set
-
-        offer = _interview_sim_offer(payload)
-        questions = build_question_set(
-            offer,
-            profile=payload.profile or None,
-            seed=payload.seed,
-            count=payload.count,
-            language=payload.language,
-        )
-        return {
-            "questions": [q.to_dict() if hasattr(q, "to_dict") else dict(q) for q in questions],
-            "count": len(questions),
-        }
 
     @router.post("/api/career/interview-sim/worksheets")
     async def interview_sim_worksheet(payload: InterviewSimWorksheetPayload) -> Any:
