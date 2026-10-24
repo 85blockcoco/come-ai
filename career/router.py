@@ -437,6 +437,41 @@ def create_career_router(
     async def stage_search_matches() -> Any:
         return await local(service.list_stage_matches)
 
+    @router.get("/api/career/stage-admin-docs")
+    async def stage_admin_docs(country: str = Query(default="FR"), statuses: str = Query(default="")) -> Any:
+        parsed_statuses = {}
+        if statuses:
+            for pair in statuses.split(","):
+                if "=" in pair:
+                    key, value = pair.split("=", 1)
+                    parsed_statuses[key.strip()] = value.strip()
+        return await local(lambda: service.get_stage_admin_docs(country=country, statuses=parsed_statuses or None))
+
+    @router.get("/api/career/stage-admin-docs/{country}")
+    async def stage_admin_docs_country(country: str, statuses: str = Query(default="")) -> Any:
+        parsed_statuses = {}
+        if statuses:
+            for pair in statuses.split(","):
+                if "=" in pair:
+                    key, value = pair.split("=", 1)
+                    parsed_statuses[key.strip()] = value.strip()
+        return await local(lambda: service.get_stage_admin_docs(country=country, statuses=parsed_statuses or None))
+
+    @router.get("/api/career/admin-docs")
+    async def admin_docs(country: str = Query(default="FR")) -> Any:
+        return await local(lambda: service.get_stage_admin_docs(country=country))
+
+    @router.get("/api/career/admin-docs/{country}")
+    async def admin_docs_country(country: str) -> Any:
+        return await local(lambda: service.get_stage_admin_docs(country=country))
+
+    @router.post("/api/career/stage-admin-docs")
+    async def stage_admin_docs_update(payload: dict[str, Any]) -> Any:
+        country = payload.get("country", "FR") if isinstance(payload, dict) else "FR"
+        statuses = payload.get("statuses") if isinstance(payload, dict) else None
+        proof_refs = payload.get("proof_refs") if isinstance(payload, dict) else None
+        return await local(lambda: service.update_stage_admin_docs(country=country, statuses=statuses, proof_refs=proof_refs))
+
     @router.get("/api/career/application-sprint")
     async def application_sprint(limit: int = Query(default=12, ge=1, le=30)) -> Any:
         """Build a local preparation queue; this route never submits anything."""

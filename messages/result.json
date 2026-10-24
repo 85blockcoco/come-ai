@@ -1,0 +1,14 @@
+{
+  "status": "done",
+  "files_created": [
+    "career/stage_admin_docs.py",
+    "career/service.py",
+    "career/router.py",
+    "tests/test_stage_admin_docs.py",
+    "tests/fixtures/admin_docs_synthetic.json",
+    "docs/agent-reports/SPEC-028-stage_admin_docs.md"
+  ],
+  "output": "SPEC-028 livré : checklist administrative par pays (FR + connecteurs internationaux), dataclasses AdminItem/AdminChecklist, completeness(), routes REST, 20 tests.",
+  "logs": "pytest -q tests/test_stage_admin_docs.py → 20 passed\npytest -q → 1444 passed, 1 skipped\nruff check . → All checks passed\ngit diff --check → CLEAN",
+  "error": null
+}

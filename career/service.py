@@ -1973,6 +1973,19 @@ class CareerService:
             self._audit(connection, "stage_search_updated", "preferences", "stage_search")
         return self.get_stage_search()
 
+    def get_stage_admin_docs(self, country: Any = "FR", statuses: Any = None) -> dict[str, Any]:
+        """Return a deterministic administrative-document checklist for a country."""
+        from .stage_admin_docs import build_checklist
+
+        checklist = build_checklist(country, statuses=statuses)
+        return checklist.to_dict()
+
+    def update_stage_admin_docs(self, country: Any = "FR", statuses: Any = None, proof_refs: Any = None) -> dict[str, Any]:
+        from .stage_admin_docs import build_checklist
+
+        checklist = build_checklist(country, statuses=statuses, proof_refs=proof_refs)
+        return checklist.to_dict()
+
     def list_stage_matches(self) -> dict[str, Any]:
         """Rank every stored offer against the brief, with the reason for each score."""
         payload = self.get_stage_search()

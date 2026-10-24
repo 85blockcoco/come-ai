@@ -1,0 +1,16 @@
+{
+  "country": "FR",
+  "statuses": {
+    "convention": "ok",
+    "identity": "ok",
+    "enrollment": "in_progress",
+    "insurance": "missing",
+    "health_insurance": "ok"
+  },
+  "proof_refs": {
+    "convention": ["convention_signed.pdf"],
+    "identity": ["passport.pdf"]
+  },
+  "adversarial_unknown_country": "ZZ",
+  "adversarial_bad_status": "done"
+}
