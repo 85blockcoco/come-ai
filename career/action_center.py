@@ -30,6 +30,7 @@ _ACTION_EFFORT_MINUTES: dict[str, int] = {
     "review_offer": 20,
     "review_response": 10,
     "confirm_receipt": 10,
+    "locate_official_source": 15,
     "manual_submit": 10,
     "final_review": 15,
     "review_kit": 20,
@@ -60,6 +61,7 @@ def project_pipeline_item(raw: dict[str, Any]) -> dict[str, Any]:
     stage_label, progress = STAGE_PRESENTATION.get(stage, ("État à vérifier", 0))
     kit_ready = bool(item.get("kit_generated_at"))
     tracking_exists = bool(item.get("application_id") or tracking)
+    can_open_official_source = bool(clean_text(item.get("official_url"), limit=2_000))
     blockers: list[str] = []
 
     if readiness == "offer_to_verify":
@@ -117,6 +119,14 @@ def project_pipeline_item(raw: dict[str, Any]) -> dict[str, Any]:
             70,
         )
         progress = max(progress, 90)
+    elif tracking in {"approved_for_manual_submission", "ready_to_apply"} and not can_open_official_source:
+        blockers.append("Le lien vers la source officielle manque ; aucun dépôt manuel ne doit commencer sans destination vérifiée.")
+        selected = _action(
+            "locate_official_source",
+            "Retrouver la source officielle",
+            "Confirme l’annonce sur le portail officiel avant toute relecture finale ou dépôt manuel.",
+            5,
+        )
     elif tracking == "approved_for_manual_submission":
         selected = _action(
             "manual_submit",
@@ -181,6 +191,7 @@ def project_pipeline_item(raw: dict[str, Any]) -> dict[str, Any]:
             "blockers": blockers,
             "tracking_exists": tracking_exists,
             "kit_ready": kit_ready,
+            "can_open_official_source": can_open_official_source,
         }
     )
     return item

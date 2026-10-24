@@ -116,3 +116,27 @@ def test_focus_plan_ignores_closed_and_passive_monitoring_rows() -> None:
     assert payload["focus_plan"]["items"] == []
     assert payload["focus_plan"]["planned_minutes"] == 0
     assert payload["focus_plan"]["deferred_count"] == 0
+
+
+def test_manual_submission_requires_an_official_destination() -> None:
+    unsafe = project_pipeline_item(
+        _item(
+            tracking_stage="approved_for_manual_submission",
+            application_id="app-1",
+            official_url="",
+            readiness="prepare_now",
+        )
+    )
+    safe = project_pipeline_item(
+        _item(
+            tracking_stage="approved_for_manual_submission",
+            application_id="app-2",
+            readiness="prepare_now",
+        )
+    )
+
+    assert unsafe["next_action_code"] == "locate_official_source"
+    assert "source officielle" in unsafe["blockers"][0]
+    assert unsafe["can_open_official_source"] is False
+    assert safe["next_action_code"] == "manual_submit"
+    assert safe["can_open_official_source"] is True
