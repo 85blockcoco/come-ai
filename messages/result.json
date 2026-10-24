@@ -1,0 +1,14 @@
+{
+  "status": "done",
+  "files_created": [
+    "career/offline_mode.py",
+    "career/service.py",
+    "career/router.py",
+    "tests/test_offline_mode.py",
+    "tests/fixtures/offline_synthetic.json",
+    "docs/agent-reports/SPEC-032-offline_mode.md"
+  ],
+  "output": "SPEC-032 mode hors-ligne & cache local livré : OfflineCache, freshness_policy, serve_or_cache, endpoints REST, tests et rapport.",
+  "logs": "pytest -q tests/test_offline_mode.py -> 24 passed\nruff check . -> All checks passed\ngit diff --check -> CLEAN",
+  "error": null
+}

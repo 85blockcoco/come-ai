@@ -82,6 +82,13 @@ class NotePayload(BaseModel):
     note: str = Field(default="", max_length=4_000)
 
 
+class OfflineCachePayload(BaseModel):
+    key: str = Field(min_length=1, max_length=512)
+    payload: dict[str, Any] = Field(default_factory=dict)
+    max_age_hours: int = Field(default=24, ge=1, le=100_000)
+    fetched_at: str | None = None
+
+
 class StageSearchPayload(BaseModel):
     """The person's own internship-search brief; every field is optional so no
     preference is presumed before they fill it in."""
@@ -742,6 +749,35 @@ def create_career_router(
     async def reset_data(payload: ResetPayload) -> dict[str, bool]:
         await local(lambda: service.reset_personal_data(payload.confirmation))
         return {"deleted": True}
+
+    # --- Offline cache / mode hors-ligne ---------------------------------
+
+    @router.get("/api/career/offline/status")
+    async def offline_status() -> Any:
+        return await local(service.get_offline_cache_status)
+
+    @router.get("/api/career/offline/cache/{key}")
+    async def get_offline_cache(key: str) -> Any:
+        entry = await local(lambda: service.get_offline_cache_entry(key))
+        if entry is None:
+            raise HTTPException(status_code=404, detail="Entrée de cache introuvable.")
+        return entry
+
+    @router.post("/api/career/offline/cache")
+    async def put_offline_cache(payload: OfflineCachePayload) -> Any:
+        return await local(
+            lambda: service.put_offline_cache_entry(
+                payload.key,
+                payload.payload,
+                max_age_hours=payload.max_age_hours,
+                fetched_at=payload.fetched_at,
+            )
+        )
+
+    @router.delete("/api/career/offline/cache/{key}")
+    async def delete_offline_cache(key: str) -> dict[str, bool]:
+        deleted = await local(lambda: service.delete_offline_cache_entry(key))
+        return {"deleted": bool(deleted)}
 
     return router
 

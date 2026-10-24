@@ -120,6 +120,7 @@ from .profile_import import (
     parse_profile_text,
 )
 from .profile_readiness import assess_profile_readiness
+from .offline_mode import OfflineCache, OfflineDecision, serve_or_cache
 from .qualification_persistence import (
     decode_qualification_snapshot,
     normalize_qualification_snapshot,
@@ -250,6 +251,7 @@ class CareerService:
         self._discovery_lock = threading.Lock()
         self._lock = threading.RLock()
         self._ensure_storage()
+        self.offline_cache = OfflineCache(self.data_dir / "offline_cache")
         self._initialize()
         if ConsentGuard is not None:
             try:
@@ -4531,6 +4533,73 @@ class CareerService:
                 "invented_facts": False,
             },
         }
+
+    def get_offline_cache_status(self) -> dict[str, Any]:
+        """Local cache status for the offline banner."""
+        cache = getattr(self, "offline_cache", None)
+        if cache is None:
+            return {"enabled": False, "entries": 0, "cache_dir": None}
+        try:
+            return {
+                "enabled": True,
+                "entries": len(cache),
+                "keys": cache.list_keys(),
+                "cache_dir": str(cache.cache_dir),
+            }
+        except Exception:
+            return {"enabled": True, "entries": 0, "cache_dir": str(getattr(cache, "cache_dir", ""))}
+
+    def get_offline_cache_entry(self, key: str) -> dict[str, Any] | None:
+        cache = getattr(self, "offline_cache", None)
+        if cache is None:
+            return None
+        entry = cache.get(key)
+        if entry is None:
+            return None
+        return entry.to_dict()
+
+    def put_offline_cache_entry(
+        self,
+        key: str,
+        payload: dict[str, Any],
+        *,
+        max_age_hours: int = 24,
+        fetched_at: str | None = None,
+    ) -> dict[str, Any]:
+        cache = getattr(self, "offline_cache", None)
+        if cache is None:
+            self.offline_cache = OfflineCache(self.data_dir / "offline_cache")
+            cache = self.offline_cache
+        entry = cache.put(key, payload, max_age_hours=max_age_hours, fetched_at=fetched_at)
+        return entry.to_dict()
+
+    def delete_offline_cache_entry(self, key: str) -> bool:
+        cache = getattr(self, "offline_cache", None)
+        if cache is None:
+            return False
+        return bool(cache.delete(key))
+
+    def serve_offline_cache(
+        self,
+        key: str,
+        fetcher: Any = None,
+        *,
+        max_age_hours: int = 24,
+        offline: bool = False,
+        degraded_fields: list[str] | None = None,
+    ) -> tuple[Any, OfflineDecision]:
+        cache = getattr(self, "offline_cache", None)
+        if cache is None:
+            self.offline_cache = OfflineCache(self.data_dir / "offline_cache")
+            cache = self.offline_cache
+        return serve_or_cache(
+            cache,
+            key,
+            fetcher,
+            max_age_hours=max_age_hours,
+            offline=offline,
+            degraded_fields=degraded_fields,
+        )
 
     def export_deadline_calendar(self) -> Path:
         """Write a private, inert ``.ics`` file for actionable deadlines.

@@ -1,0 +1,27 @@
+{
+  "offers": [
+    {
+      "id": "offer-demo-1",
+      "company": "Banque de Demo",
+      "title": "Stagiaire M&A",
+      "city": "Paris",
+      "country": "France",
+      "source_status": "open"
+    }
+  ],
+  "checklists": [
+    {
+      "application_id": "app-demo-1",
+      "items": [
+        {"key": "cv", "label": "CV", "done": true},
+        {"key": "lettre", "label": "Lettre", "done": false}
+      ]
+    }
+  ],
+  "dossiers": [
+    {
+      "application_id": "app-demo-1",
+      "drafts": ["cv", "cover_letter"]
+    }
+  ]
+}
