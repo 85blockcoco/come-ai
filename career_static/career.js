@@ -3202,6 +3202,11 @@ async function loadApplicationSprint() {
   }
 }
 
+function openPipelineFocusItem(item) {
+  if (item.action_code === "prepare_interview") showView("interviews");
+  else loadStagePrep(item.job_id);
+}
+
 function renderApplicationPipeline(payload) {
   const target = $("#stagehunter-pipeline");
   if (!target) return;
@@ -3230,8 +3235,9 @@ function renderApplicationPipeline(payload) {
   const focus = payload.focus_plan || {};
   const focusItems = focus.items || [];
   const focusPanel = make("section", "", "pipeline-focus");
+  const focusHeading = make("div", "", "pipeline-focus-heading");
   focusPanel.append(
-    make("h4", `Plan de travail local · ${focus.budget_minutes || 60} min`),
+    focusHeading,
     make(
       "p",
       focusItems.length
@@ -3240,6 +3246,13 @@ function renderApplicationPipeline(payload) {
       "application-meta",
     ),
   );
+  focusHeading.append(make("h4", `Plan de travail local · ${focus.budget_minutes || 60} min`));
+  if (focusItems.length) {
+    const start = make("button", "Commencer ma session", "primary-button");
+    start.type = "button";
+    start.addEventListener("click", () => openPipelineFocusItem(focusItems[0]));
+    focusHeading.append(start);
+  }
   if (focusItems.length) {
     const focusList = make("ol", "", "pipeline-focus-list");
     focusItems.forEach((item) => {
@@ -3250,10 +3263,7 @@ function renderApplicationPipeline(payload) {
       );
       const open = make("button", "Ouvrir", "secondary-button");
       open.type = "button";
-      open.addEventListener("click", () => {
-        if (item.action_code === "prepare_interview") showView("interviews");
-        else loadStagePrep(item.job_id);
-      });
+      open.addEventListener("click", () => openPipelineFocusItem(item));
       entry.append(open);
       focusList.append(entry);
     });

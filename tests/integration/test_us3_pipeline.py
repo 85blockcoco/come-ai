@@ -85,3 +85,5 @@ def test_pipeline_frontend_contract_exists() -> None:
     assert "estimated_minutes" in js
     assert "deadline_status" in js
     assert "échéances proches" in js
+    assert "Commencer ma session" in js
+    assert "openPipelineFocusItem" in js
