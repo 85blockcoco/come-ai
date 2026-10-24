@@ -21,7 +21,7 @@ from contextlib import contextmanager
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, Mapping
 
 from .models import (
     AVAILABILITY_STATES,
@@ -111,6 +111,12 @@ from .exploration import (
     ranking_key,
 )
 from .offer_qualification import qualify_offer
+from .offer_intelligence import (
+    align_display_requirements,
+    build_snapshot,
+    snapshot_summary,
+)
+from . import offer_intelligence_store
 from .scoring import classify_job_family, score_job
 from workspace_core import UserFacingError, extract_text, safe_error
 from .profile_import import (
@@ -151,6 +157,20 @@ def _attach_qualification_presentation(match: dict[str, Any], qualification: dic
         else:
             match["label"] = "Informations obligatoires à vérifier"
     return match
+
+
+def _requirement_ids_of(job: dict[str, Any]) -> list[str]:
+    """Return the requirement identifiers of the current snapshot of an offer.
+
+    The explorer, the detailed view, the matching panel and the preparation
+    panel all read this list: a requirement keeps one identifier everywhere.
+    """
+    summary = job.get("offer_intelligence_summary")
+    if not isinstance(summary, dict):
+        return []
+    return [str(item) for item in summary.get("requirement_ids") or []]
+
+
 DELETE_CONFIRMATION = "SUPPRIMER MES DONNÉES CAREER"
 PROFILE_EDITABLE_FIELDS = (
     "display_name",
@@ -524,6 +544,9 @@ class CareerService:
                 "TEXT NOT NULL DEFAULT ''",
             )
             self._seed_defaults(connection)
+            # The versioned offer-intelligence snapshot lives beside the offers,
+            # never as a new column on the offers themselves.
+            offer_intelligence_store.ensure_schema(connection)
         try:
             os.chmod(self.db_path, 0o600)
         except OSError:
@@ -1558,11 +1581,17 @@ class CareerService:
             profile = self._row_dict(connection.execute("SELECT * FROM candidate_profile WHERE id = 1").fetchone())
             intake_row = connection.execute("SELECT * FROM career_intake WHERE id = 1").fetchone()
             job_row = connection.execute("SELECT * FROM jobs WHERE id = ?", (identifier,)).fetchone()
+            snapshot = offer_intelligence_store.load_snapshot(connection, identifier)
         if not job_row:
             raise UserFacingError("Cette offre Career n’existe pas.")
         if not intake_row:
             raise UserFacingError("Le mini-entretien Career local est indisponible.")
-        return profile, self._serialize_intake_row(intake_row), dict(job_row), normalized_language
+        job = dict(job_row)
+        if snapshot:
+            # The CV and the cover letter quote the same canonical
+            # requirements as every other screen of the workspace.
+            job["offer_intelligence"] = snapshot
+        return profile, self._serialize_intake_row(intake_row), job, normalized_language
 
     def create_application_draft(
         self,
@@ -1992,7 +2021,14 @@ class CareerService:
                     require_known_location=brief.get("require_known_location", True),
                 ).to_dict()
                 _attach_qualification_presentation(stage_match, qualification)
-                matches.append({"job": job, "stage_match": stage_match, "qualification": qualification})
+                matches.append({
+                    "job": job,
+                    "stage_match": stage_match,
+                    "qualification": qualification,
+                    # The matching panel points at the very same requirement
+                    # identifiers as the explorer and the detailed view.
+                    "requirement_ids": _requirement_ids_of(job),
+                })
             # Break ties by source identity, never a random database ID or
             # import/update time: the same postings have the same ordering
             # after a board reorders its feed or the application restarts.
@@ -2021,6 +2057,7 @@ class CareerService:
                     require_known_location=brief.get("require_known_location", True),
                 ).to_dict()
                 matches.append({"job": job, "stage_match": None, "qualification": qualification,
+                                "requirement_ids": _requirement_ids_of(job),
                                 "education_access": score_brief_match(brief, job)["education_access"]})
         payload["matches"] = matches
         return payload
@@ -2064,7 +2101,12 @@ class CareerService:
         job = self.get_job(job_id)
         context = self._scoring_context()
         profile = context.get("profile") or {}
-        analysis = prepare_application(profile, context.get("intake") or {}, job)
+        analysis = prepare_application(
+            profile,
+            context.get("intake") or {},
+            job,
+            intelligence=job.get("offer_intelligence"),
+        )
         cv_analysis = self._current_cv_analysis()
         qualification = qualify_offer(job).to_dict()
         fit_job = {
@@ -2114,12 +2156,38 @@ class CareerService:
                     "mandatory_pct": coverage.mandatory_pct,
                     "preferred_pct": coverage.preferred_pct,
                 },
-                "gaps": [serialize_gap(gap) for gap in gaps],
+                "gaps": self._gaps_with_requirement_ids(gaps, job),
                 "automatic_submission": False,
             }
         )
         self._prep_cache.add(job_id)
         return analysis
+
+    @staticmethod
+    def _gaps_with_requirement_ids(
+        gaps: list[Any], job: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        """Attach the canonical requirement identifier to every CV gap.
+
+        The gap keeps its own wording; the identifier is the one of the
+        versioned snapshot, so the matching panel points at the very same
+        requirement as the explorer, the detailed view, the cover letter and
+        the application checklist.  A gap without a canonical counterpart
+        simply has no identifier: none is ever invented.
+        """
+        payload = [serialize_gap(gap) for gap in gaps]
+        snapshot = job.get("offer_intelligence")
+        if not isinstance(snapshot, Mapping):
+            return payload
+        aligned = align_display_requirements(
+            [{"text": str(item.get("requirement") or "")} for item in payload],
+            snapshot,
+        )
+        for gap, entry in zip(payload, aligned):
+            identifier = entry.get("requirement_id")
+            if identifier:
+                gap["requirement_id"] = identifier
+        return payload
 
     def get_application_sprint(self, *, limit: int = 12) -> dict[str, Any]:
         """Prioritise a bounded batch for local preparation, without sending.
@@ -3158,6 +3226,40 @@ class CareerService:
             snapshot | {"job_id": job_id, "updated_at": utc_now()},
         )
 
+    @staticmethod
+    def _offer_intelligence_qualification(job: dict[str, Any]) -> dict[str, Any]:
+        """Return the source-attributed qualification of one offer.
+
+        The criteria of the person (contract types, excluded countries, minimum
+        duration) are deliberately neutral here: the snapshot describes the
+        offer, not the match between the offer and a brief.
+        """
+        try:
+            return qualify_offer(job).to_dict()
+        except (TypeError, ValueError):
+            return {}
+
+    @classmethod
+    def _store_offer_intelligence(
+        cls,
+        connection: sqlite3.Connection,
+        job: dict[str, Any],
+        *,
+        now: str,
+    ) -> dict[str, Any]:
+        """Derive and version the intelligence snapshot of one offer.
+
+        An unchanged source keeps its version and its identifiers; a changed
+        source creates a new version and retires the previous one, which stays
+        in the history but is never presented as the current analysis.
+        """
+        snapshot = build_snapshot(
+            job,
+            cls._offer_intelligence_qualification(job),
+            clock=lambda: now,
+        )
+        return offer_intelligence_store.store_snapshot(connection, snapshot, now=now)
+
     def import_job(self, payload: dict[str, Any], *, availability: dict[str, Any] | None = None,
                    preserve_unknown_source_fields: bool = False) -> dict[str, Any]:
         current_availability = availability or self._current_availability_values()
@@ -3217,6 +3319,7 @@ class CareerService:
                 self._audit(connection, "job_refreshed_without_duplicate", "job", job_id)
                 if qualification is not None:
                     self._store_qualification_snapshot(connection, job_id, qualification, payload)
+                self._store_offer_intelligence(connection, {**job, "id": job_id}, now=now)
                 created = False
             else:
                 job_id = f"job_{uuid.uuid4().hex}"
@@ -3242,6 +3345,7 @@ class CareerService:
                 self._audit(connection, f"job_imported_{audit_source}", "job", job_id)
                 if qualification is not None:
                     self._store_qualification_snapshot(connection, job_id, qualification, payload)
+                self._store_offer_intelligence(connection, {**job, "id": job_id}, now=now)
                 created = True
         result = self.get_job(job_id)
         result["created"] = created
@@ -3339,9 +3443,52 @@ class CareerService:
                 """,
                 (job_id,),
             ).fetchone()
-        if not row:
-            raise UserFacingError("Cette offre Career n’existe pas.")
-        return self._serialize_job(row, self._scoring_context())
+            if not row:
+                raise UserFacingError("Cette offre Career n’existe pas.")
+            result = self._serialize_job(row, self._scoring_context())
+            self._attach_offer_intelligence(connection, result, full=True)
+        return result
+
+    @staticmethod
+    def _attach_offer_intelligence(
+        connection: sqlite3.Connection,
+        result: dict[str, Any],
+        *,
+        full: bool = False,
+    ) -> None:
+        """Attach the current intelligence snapshot of one offer.
+
+        The explorer only receives the compact summary: it points at the very
+        same identifiers as the detailed view, it never recomputes them.
+        """
+        job_id = str(result.get("id") or "")
+        current = offer_intelligence_store.load_current(connection, job_id)
+        if current is None:
+            result["offer_intelligence"] = None
+            result["offer_intelligence_summary"] = None
+            result["offer_intelligence_version"] = None
+            result["offer_intelligence_current"] = False
+            return
+        result["offer_intelligence_summary"] = snapshot_summary(current["snapshot"])
+        result["offer_intelligence_version"] = current["version"]
+        result["offer_intelligence_current"] = True
+        if full:
+            result["offer_intelligence"] = current["snapshot"]
+        else:
+            result["offer_intelligence"] = None
+
+    def get_offer_intelligence(self, job_id: str) -> dict[str, Any]:
+        """Return the current intelligence snapshot of one offer, with its history."""
+        job = self.get_job(job_id)
+        with self._lock, self._connection() as connection:
+            history = offer_intelligence_store.load_history(connection, job_id)
+        return {
+            "job_id": job_id,
+            "snapshot": job.get("offer_intelligence"),
+            "summary": job.get("offer_intelligence_summary"),
+            "version": job.get("offer_intelligence_version"),
+            "history": history,
+        }
 
     def list_jobs(
         self,
@@ -3396,8 +3543,32 @@ class CareerService:
         """
         with self._lock, self._connection() as connection:
             rows = connection.execute(statement, params).fetchall()
+            summaries: dict[str, dict[str, Any]] = {}
+            versions: dict[str, int] = {}
+            for item in connection.execute(
+                "SELECT job_id, version, summary_json FROM job_offer_intelligence_snapshots "
+                "WHERE is_current = 1"
+            ).fetchall():
+                identifier = str(item["job_id"])
+                versions[identifier] = int(item["version"] or 0)
+                try:
+                    payload = json.loads(item["summary_json"] or "{}")
+                except (TypeError, ValueError):
+                    payload = {}
+                summaries[identifier] = payload if isinstance(payload, dict) else {}
         context = self._scoring_context()
         jobs = [self._serialize_job(row, context) for row in rows]
+        for job in jobs:
+            # The explorer shows the identifiers of the current snapshot: it
+            # never recomputes a requirement on its own.  The summary is the
+            # very same document as the one of the detailed view: only the
+            # version travels beside it, never inside it.
+            identifier = str(job.get("id") or "")
+            summary = summaries.get(identifier)
+            job["offer_intelligence_summary"] = summary
+            job["offer_intelligence"] = None
+            job["offer_intelligence_current"] = identifier in versions
+            job["offer_intelligence_version"] = versions.get(identifier)
         source_rank = {"open": 0, "unknown": 1, "closed": 2}
         jobs.sort(
             key=lambda job: (
@@ -3662,6 +3833,11 @@ class CareerService:
                     continue
                 job_row = connection.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
                 jobs_by_id[job_id] = dict(job_row) if job_row else {}
+            # The checklist reads the very same snapshot as the other screens.
+            for job_id in list(jobs_by_id):
+                snapshot = offer_intelligence_store.load_snapshot(connection, job_id)
+                if snapshot:
+                    jobs_by_id[job_id]["offer_intelligence"] = snapshot
         context = self._scoring_context()
         return build_dashboard_payload(
             [dict(row) for row in application_rows],
@@ -3879,11 +4055,23 @@ class CareerService:
 
         This reuses the deterministic preparation fact-checker: a requirement
         is "non trouvé dans ton profil" until the profile itself proves it.
-        The kit never claims it is satisfied.
+        The kit never claims it is satisfied.  Each line keeps the canonical
+        identifier of the requirement, the one every other screen uses.
         """
         prep = prepare_application(profile or {}, intake or {}, job)
+        intelligence = prep.get("offer_intelligence")
+        intelligence = intelligence if isinstance(intelligence, dict) else {}
+        by_id = intelligence.get("requirements_by_id")
+        by_id = by_id if isinstance(by_id, dict) else {}
+        by_text = {
+            str(record.get("text") or ""): str(identifier)
+            for identifier, record in by_id.items()
+            if isinstance(record, dict)
+        }
         return [
             {
+                "requirement_id": clean_text(item.get("requirement_id"), limit=80)
+                or by_text.get(clean_text(item.get("requirement"), limit=300), ""),
                 "requirement": clean_text(item.get("requirement"), limit=300),
                 "note": clean_text(item.get("note"), limit=300),
             }
@@ -4071,6 +4259,9 @@ class CareerService:
                 """,
                 (identifier,),
             ).fetchall()
+            # The letter and the fact-checker of the kit read the same snapshot
+            # as the explorer, the detailed view and the preparation panel.
+            snapshot = offer_intelligence_store.load_snapshot(connection, job_id)
         kit_language = normalize_language(str(draft_row["language"])) if draft_row else normalized_language
         job = {
             "id": job_id,
@@ -4082,8 +4273,12 @@ class CareerService:
             "reference": clean_text(application["source_id"], limit=200),
             "deadline_date": clean_text(application["deadline_date"], limit=32),
         }
+        kit_job = dict(job_row) if job_row else dict(job)
+        if snapshot:
+            kit_job["offer_intelligence"] = snapshot
+            job["offer_intelligence_summary"] = snapshot_summary(snapshot)
         intake = self._serialize_intake_row(intake_row) if intake_row else {"answers": {}}
-        kit_texts = build_kit_texts(profile, intake, job, kit_language)
+        kit_texts = build_kit_texts(profile, intake, kit_job, kit_language)
         # Each saved edit is an event row storing a partial JSON delta; they
         # replay in order so the possible last save wins per field only.
         edits: dict[str, str] = {}
@@ -4091,7 +4286,7 @@ class CareerService:
             edits.update(self._kit_content_edits(str(row["detail"])))
         kit_texts.update(edits)
         draft = self._serialize_application_draft(draft_row, include_content=True) if draft_row else None
-        unverified = self._kit_unverified_requirements(profile, intake, dict(job_row) if job_row else job)
+        unverified = self._kit_unverified_requirements(profile, intake, kit_job)
         return {
             "application": {
                 "id": identifier,
