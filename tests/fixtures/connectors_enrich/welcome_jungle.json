@@ -1,0 +1,26 @@
+{
+  "label": "synthetic Welcome to the Jungle cards; shaped after the public search markup, not copied from a live page",
+  "provider": "welcome_jungle",
+  "cards": [
+    {
+      "title": "Synthetic Corporate Finance Intern",
+      "company": "Synthetic Advisory",
+      "location": "London, United Kingdom",
+      "contract_type": "Internship",
+      "url": "https://www.welcometothejungle.com/fr/companies/synthetic-advisory/jobs/corporate-finance-intern-london",
+      "description": "<p>Join our Corporate Finance team for a six-month placement. Bachelor's degree in Finance required.</p>",
+      "attributes": {"data-posted-at": "2026-10-02T09:00:00Z"},
+      "time": "2026-10-02T09:00:00Z"
+    },
+    {
+      "title": "Synthetic Contradicting Intern",
+      "company": "Synthetic Advisory",
+      "location": "London, United Kingdom",
+      "contract_type": "Internship",
+      "url": "https://www.welcometothejungle.com/fr/companies/synthetic-advisory/jobs/contradicting-intern-london",
+      "description": "<p>This is a permanent position (CDI), not a stage. The board publishes it as an internship.</p>",
+      "attributes": {"data-posted-at": "2026-10-03T09:00:00Z"},
+      "time": "2026-10-03T09:00:00Z"
+    }
+  ]
+}

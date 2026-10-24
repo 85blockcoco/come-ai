@@ -1,0 +1,46 @@
+{
+  "label": "synthetic Lever payload; shaped after the public postings API, not copied from a live board",
+  "provider": "lever",
+  "postings": [
+    {
+      "id": "744a5381-0720-469b-a49d-c57b889e4db0",
+      "text": "Synthetic Finance Intern",
+      "createdAt": 1791900863876,
+      "hostedUrl": "https://jobs.lever.co/syntheticboard/744a5381-0720-469b-a49d-c57b889e4db0",
+      "applyUrl": "https://jobs.lever.co/syntheticboard/744a5381-0720-469b-a49d-c57b889e4db0/apply",
+      "country": "GB",
+      "workplaceType": "hybrid",
+      "categories": {
+        "commitment": "Internship",
+        "department": "Corporate Finance",
+        "location": "London",
+        "team": "Synthetic Advisory",
+        "allLocations": ["London"]
+      },
+      "lists": [{"text": "Requirements", "content": "<ul><li>Bachelor's degree in Finance</li></ul>"}],
+      "descriptionPlain": "Synthetic internship description for finance.\n\nRequirements: Bachelor's degree in Finance, Excel mastery. This is a six-month placement starting on 2 March 2027.",
+      "openingPlain": "Synthetic internship description for finance.",
+      "additionalPlain": "Synthetic additional section published by the board."
+    },
+    {
+      "id": "744a5381-0720-469b-a49d-c57b889e4db1",
+      "text": "Synthetic Contradicting Intern",
+      "createdAt": 1791900863877,
+      "hostedUrl": "https://jobs.lever.co/syntheticboard/744a5381-0720-469b-a49d-c57b889e4db1",
+      "applyUrl": "https://jobs.lever.co/syntheticboard/744a5381-0720-469b-a49d-c57b889e4db1/apply",
+      "country": "GB",
+      "workplaceType": "hybrid",
+      "categories": {
+        "commitment": "Internship",
+        "department": "Corporate Finance",
+        "location": "London",
+        "team": "Synthetic Advisory",
+        "allLocations": ["London"]
+      },
+      "lists": [],
+      "descriptionPlain": "This is a permanent position (CDI), not an internship. The board publishes it as an internship.",
+      "openingPlain": "This is a permanent position (CDI), not an internship.",
+      "additionalPlain": ""
+    }
+  ]
+}

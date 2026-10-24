@@ -1,0 +1,55 @@
+{
+  "label": "synthetic Ashby payload; shaped after the public job board API, not copied from a live board",
+  "provider": "ashby",
+  "payload": {
+    "apiVersion": "1",
+    "jobs": [
+      {
+        "id": "f1d8efcf-9755-4f23-9311-cfcb4e68b874",
+        "title": "Synthetic Finance Intern",
+        "publishedAt": "2026-10-16T14:26:30.060+00:00",
+        "employmentType": "Internship",
+        "workplaceType": "Hybrid",
+        "isRemote": false,
+        "isListed": true,
+        "department": "Corporate Finance",
+        "team": "Synthetic Bank",
+        "location": "London",
+        "secondaryLocations": [{"country": "United Kingdom", "city": "Manchester"}],
+        "address": {
+          "postalAddress": {
+            "addressLocality": "London",
+            "addressRegion": "London",
+            "addressCountry": "United Kingdom"
+          }
+        },
+        "jobUrl": "https://jobs.ashbyhq.com/syntheticboard/f1d8efcf-9755-4f23-9311-cfcb4e68b874",
+        "applyUrl": "https://jobs.ashbyhq.com/syntheticboard/f1d8efcf-9755-4f23-9311-cfcb4e68b874/application",
+        "descriptionPlain": "Synthetic internship description for finance.\n\nRequirements: Bachelor's degree in Finance. This is a six-month placement."
+      },
+      {
+        "id": "f1d8efcf-9755-4f23-9311-cfcb4e68b875",
+        "title": "Synthetic Contradicting Intern",
+        "publishedAt": "2026-10-17T14:26:30.060+00:00",
+        "employmentType": "Internship",
+        "workplaceType": "Hybrid",
+        "isRemote": false,
+        "isListed": true,
+        "department": "Corporate Finance",
+        "team": "Synthetic Bank",
+        "location": "London",
+        "secondaryLocations": [],
+        "address": {
+          "postalAddress": {
+            "addressLocality": "London",
+            "addressRegion": "London",
+            "addressCountry": "United Kingdom"
+          }
+        },
+        "jobUrl": "https://jobs.ashbyhq.com/syntheticboard/f1d8efcf-9755-4f23-9311-cfcb4e68b875",
+        "applyUrl": "https://jobs.ashbyhq.com/syntheticboard/f1d8efcf-9755-4f23-9311-cfcb4e68b875/application",
+        "descriptionPlain": "This is a permanent position (CDI), not an internship. The board publishes it as an internship."
+      }
+    ]
+  }
+}

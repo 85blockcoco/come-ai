@@ -1,0 +1,26 @@
+{
+  "label": "synthetic JobTeaser cards; shaped after the public search markup, not copied from a live page",
+  "provider": "jobteaser",
+  "cards": [
+    {
+      "title": "Synthetic Investment Banking Intern",
+      "company": "Synthetic Bank",
+      "location": "London, United Kingdom",
+      "contract_type": "Internship",
+      "url": "https://www.jobteaser.com/en/jobs/investment-banking-intern-london",
+      "description": "<p>Work on M&amp;A transactions during a six-month internship. Bachelor's degree in Finance required.</p>",
+      "attributes": {"data-posted-at": "2026-10-04T09:00:00Z"},
+      "time": "2026-10-04T09:00:00Z"
+    },
+    {
+      "title": "Synthetic Contradicting Intern",
+      "company": "Synthetic Bank",
+      "location": "London, United Kingdom",
+      "contract_type": "Internship",
+      "url": "https://www.jobteaser.com/en/jobs/contradicting-intern-london",
+      "description": "<p>This is a permanent position (CDI), not an internship. The board publishes it as an internship.</p>",
+      "attributes": {"data-posted-at": "2026-10-05T09:00:00Z"},
+      "time": "2026-10-05T09:00:00Z"
+    }
+  ]
+}

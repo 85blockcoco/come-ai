@@ -1,0 +1,52 @@
+{
+  "label": "synthetic Greenhouse payload; shaped after the public job board API, not copied from a live board",
+  "provider": "greenhouse",
+  "jobs": [
+    {
+      "id": 7537505003,
+      "requisition_id": "SR-3086",
+      "internal_job_id": 5682366003,
+      "title": "Synthetic Finance Intern",
+      "company_name": "Synthetic Partners",
+      "first_published": "2026-10-08T06:02:11-04:00",
+      "updated_at": "2026-10-19T11:45:02-04:00",
+      "application_deadline": "2026-11-30T23:59:59Z",
+      "language": "en",
+      "location": {"name": "London, United Kingdom"},
+      "offices": [
+        {"id": 4020309003, "name": "London", "location": "London", "child_ids": [], "parent_id": 4020308003}
+      ],
+      "departments": [
+        {"id": 4063331003, "name": "Corporate Finance", "child_ids": [], "parent_id": 4028873003}
+      ],
+      "education": "education_optional",
+      "absolute_url": "https://job-boards.greenhouse.io/syntheticpartners/jobs/7537505003",
+      "metadata": [
+        {"id": 5039773003, "name": "Employment Type", "value": "Internship", "value_type": "single_select"},
+        {"id": 6007030003, "name": "Offer Job Title", "value": "Finance Intern", "value_type": "short_text"},
+        {"id": 39612168003, "name": "Synthetic Job Rank", "value": null, "value_type": "single_select"}
+      ],
+      "content": "<p>Join our Corporate Finance team for a six-month placement.</p><ul><li>Bachelor&#39;s degree in Finance or Economics</li><li>Excel and PowerPoint</li></ul><p>Start date: 2 March 2027. Duration: 6 months.</p>"
+    },
+    {
+      "id": 7537505004,
+      "requisition_id": "SR-3087",
+      "internal_job_id": 5682366004,
+      "title": "Synthetic Contradicting Intern",
+      "company_name": "Synthetic Partners",
+      "first_published": "2026-10-09T06:02:11-04:00",
+      "updated_at": "2026-10-19T11:45:02-04:00",
+      "application_deadline": null,
+      "language": "en",
+      "location": {"name": "London, United Kingdom"},
+      "offices": [],
+      "departments": [],
+      "education": "education_optional",
+      "absolute_url": "https://job-boards.greenhouse.io/syntheticpartners/jobs/7537505004",
+      "metadata": [
+        {"id": 5039773003, "name": "Employment Type", "value": "Internship", "value_type": "single_select"}
+      ],
+      "content": "<p>This is a permanent position (CDI), not an internship. The board publishes it as an internship.</p>"
+    }
+  ]
+}
