@@ -4530,7 +4530,26 @@ class CareerService:
                 "local_only": True,
                 "invented_facts": False,
             },
+            "faq_mining": {
+                "enabled": True,
+                "ai_required": False,
+                "local_only": True,
+                "deterministic": True,
+            },
         }
+
+    def mine_sector_faq(self, offers: Any = None, profile: Any = None, *, sector: Any = None, **kwargs: Any) -> list[dict[str, Any]]:
+        """Mine a deterministic sector FAQ from offers (defaults to stored jobs)."""
+        if offers is None:
+            offers = self.list_jobs()
+        if profile is None:
+            profile = self.get_profile()
+        from .faq_mining import mine_sector_faq as _mine
+
+        faqs = _mine(offers, profile=profile, sector=sector, **kwargs)
+        if not isinstance(faqs, list):
+            faqs = [faqs]
+        return [faq.to_dict() if hasattr(faq, "to_dict") else faq for faq in faqs]
 
     def export_deadline_calendar(self) -> Path:
         """Write a private, inert ``.ics`` file for actionable deadlines.
