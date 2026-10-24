@@ -236,6 +236,12 @@ class CVAnalyzeResponse(BaseModel):
     provenance: dict[str, Any]
 
 
+class SectorFaqPayload(BaseModel):
+    offers: list[dict[str, Any]] = Field(default_factory=list)
+    profile: dict[str, Any] = Field(default_factory=dict)
+    sector: str = Field(default="", max_length=160)
+
+
 def create_career_router(
     service: CareerService,
     *,
@@ -275,6 +281,7 @@ def create_career_router(
             "interview_coach": capabilities["interview_coach"],
             "calendar_export": capabilities["calendar_export"],
             "stage_search": capabilities["stage_search"],
+            "faq_mining": capabilities.get("faq_mining", {"enabled": True}),
         }
 
     @router.post("/api/career/cv/analyze")
@@ -716,6 +723,20 @@ def create_career_router(
     async def delete_interview_session(session_id: str) -> dict[str, bool]:
         await local(lambda: service.delete_interview_session(session_id))
         return {"deleted": True}
+
+    @router.post("/api/career/faq-mine")
+    async def mine_sector_faq_endpoint(payload: SectorFaqPayload) -> Any:
+        return await local(
+            lambda: service.mine_sector_faq(
+                payload.offers,
+                profile=payload.profile or None,
+                sector=payload.sector or None,
+            )
+        )
+
+    @router.get("/api/career/faq-mine")
+    async def mine_sector_faq_from_jobs() -> Any:
+        return await local(lambda: service.mine_sector_faq())
 
     @router.get("/api/career/export/{export_format}")
     async def export_applications(export_format: str) -> FileResponse:

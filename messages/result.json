@@ -1,0 +1,14 @@
+{
+  "status": "done",
+  "files_created": [
+    "career/faq_mining.py",
+    "career/router.py",
+    "career/service.py",
+    "tests/test_faq_mining.py",
+    "tests/fixtures/faq_offers_synthetic.json",
+    "docs/agent-reports/SPEC-031-faq_mining.md"
+  ],
+  "output": "Module de minage FAQ sectorielle livré (clustering déterministe, fréquences, questions probables, réponses profil), endpoints REST et tests verts.",
+  "logs": "pytest -q → 1436 passed, 1 skipped\npytest -q tests/test_faq_mining.py → 12 passed\nruff check . → All checks passed\ngit diff --check → CLEAN",
+  "error": null
+}

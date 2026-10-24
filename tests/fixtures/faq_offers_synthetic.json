@@ -1,0 +1,46 @@
+[
+  {
+    "id": "faq-01",
+    "title": "M&A Analyst Intern",
+    "job_family": "M&A / Investment Banking",
+    "sector": "M&A / Investment Banking",
+    "company": "Bank A",
+    "requirements": "Financial modeling, valuation, Excel, PowerPoint, data analysis",
+    "description_original": "Six months internship. Financial modeling and valuation of companies. Excel advanced. Team work and communication.",
+    "role_level": "Master 2",
+    "languages_required": "English, French"
+  },
+  {
+    "id": "faq-02",
+    "title": "M&A Intern",
+    "job_family": "M&A / Investment Banking",
+    "sector": "M&A / Investment Banking",
+    "company": "Bank B",
+    "requirements": "Valuation, M&A processes, financial statements, Excel",
+    "description_original": "Internship in M&A. Valuation models, financial statements analysis. Excel and PowerPoint required.",
+    "role_level": "Master 1",
+    "languages_required": "English"
+  },
+  {
+    "id": "faq-03",
+    "title": "Markets Intern",
+    "job_family": "Sales & Trading",
+    "sector": "Sales & Trading",
+    "company": "Bank C",
+    "requirements": "Markets, trading, risk, Excel, programming Python",
+    "description_original": "Sales and trading internship. Markets analysis, risk management, trading simulations. Python and Excel.",
+    "role_level": "Master 2",
+    "languages_required": "English"
+  },
+  {
+    "id": "faq-04",
+    "title": "Corporate Finance Intern",
+    "job_family": "Corporate Finance",
+    "sector": "Corporate Finance",
+    "company": "Corp D",
+    "requirements": "Corporate finance, budgeting, forecasting, Excel",
+    "description_original": "Corporate finance internship. Budgeting, forecasting, financial reporting. Excel required.",
+    "role_level": "Master 1",
+    "languages_required": "French"
+  }
+]
