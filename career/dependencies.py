@@ -299,6 +299,25 @@ class DependencyGraph:
     version: int = 0
     updated_at: str = ""
 
+    def touch(self) -> None:
+        self.version = max(1, int(self.version))
+        self.updated_at = utc_now()
+
+    def get_node(self, node_id: str) -> DependencyNode | None:
+        return self.nodes.get(node_id)
+
+    def successors(self, node_id: str) -> list[str]:
+        return sorted({e.target_id for e in self.edges if e.source_id == node_id})
+
+    def predecessors(self, node_id: str) -> list[str]:
+        return sorted({e.source_id for e in self.edges if e.target_id == node_id})
+
+    def incoming_edges(self, node_id: str) -> list[DependencyEdge]:
+        return [e for e in self.edges if e.target_id == node_id]
+
+    def outgoing_edges(self, node_id: str) -> list[DependencyEdge]:
+        return [e for e in self.edges if e.source_id == node_id]
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "nodes": {key: self.nodes[key].to_dict() for key in sorted(self.nodes)},
@@ -1572,3 +1591,22 @@ def graph_from_json(payload: Any) -> DependencyGraph:
 
 def graph_to_json(graph: DependencyGraph, *, indent: int | None = None) -> str:
     return json.dumps(graph.to_dict(), ensure_ascii=False, sort_keys=True, indent=indent)
+
+# Compatibility aliases used by the HTTP integration layer.
+def simulate_scenario(graph: DependencyGraph, changes: Any, **kwargs: Any) -> list[ImpactAnalysis]:
+    items = changes if isinstance(changes, list) else [changes]
+    results = []
+    for change in items:
+        if isinstance(change, dict):
+            source = change.get('source_node_id') or change.get('source') or change.get('node_id')
+            kind = change.get('change_type') or change.get('type') or 'update'
+            details = change.get('change_details') or change.get('details') or {}
+        else:
+            source = getattr(change, 'source_node_id', '') or getattr(change, 'source', '')
+            kind = getattr(change, 'change_type', 'update')
+            details = getattr(change, 'change_details', {}) or {}
+        results.append(analyze_impact(graph, source, kind, details, **kwargs))
+    return results
+
+def fragility(graph: DependencyGraph) -> list[str]:
+    return [item.get('node_id', '') for item in critical_nodes(graph)]

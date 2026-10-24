@@ -251,7 +251,7 @@ function organiseViews() {
   }
 }
 
-const careerViews = new Set(["dashboard", "discover", "stagehunter", "shortlist", "studio", "applications", "interviews", "profile", "evidence", "settings", "traceability"]);
+const careerViews = new Set(["dashboard", "discover", "stagehunter", "shortlist", "studio", "applications", "interviews", "profile", "evidence", "settings", "traceability", "constitution", "dependencies"]);
 let internalHashChange = false;
 
 function refreshView(viewName) {
@@ -266,6 +266,8 @@ function refreshView(viewName) {
     // SPEC-011 — le registre de traçabilité est un module autonome : Career
     // ne fait que lui demander de se rafraîchir.
     traceability: () => window.CareerTraceability?.refresh(),
+    constitution: async () => { if (window.ComeConstitution?.init) await window.ComeConstitution.init(); },
+    dependencies: () => (window.CareerDependencies?.refresh ? window.CareerDependencies.refresh() : Promise.resolve()),
   };
   loaders[viewName]?.().catch((error) => setMessage(error.message, true));
 }

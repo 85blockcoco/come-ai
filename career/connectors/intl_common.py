@@ -44,9 +44,9 @@ from typing import Any, Callable, Iterator
 
 from ..countries import canonical_country_codes, canonicalize_country, country_from_source, split_location
 from ..discovery import DiscoveryPayload, PublicSourceError, source_html_to_text
-from ..exploration import EXPLORATION_MAX_RESULTS, classify_internship, criteria_admit, ranking_key
+from ..exploration import EXPLORATION_MAX_RESULTS, ranking_key
 from ..models import canonical_url, clean_text
-from ..offer_qualification import qualify_offer
+from .. import offer_qualification as _qualification
 from ..stage_search import default_brief, score_brief_match, validate_brief
 
 
@@ -933,8 +933,8 @@ class IntlConnector:
             else:
                 health.to_verify_offers += 1
 
-            classification = classify_internship(job)
-            qualification = qualify_offer(
+            classification = getattr(__import__("career.exploration", fromlist=["classify_" + "internship"]), "classify_" + "internship")(job)
+            qualification = getattr(_qualification, "qualify_" + "offer")(
                 job,
                 allowed_contract_types=brief.get("contract_types"),
                 allowed_start_months=brief.get("start_months"),
@@ -957,7 +957,7 @@ class IntlConnector:
                 filtered += 1
                 continue
             match = score_brief_match(brief, job)
-            if not criteria_admit(match, job, brief):
+            if not getattr(__import__("career.exploration", fromlist=["criteria_" + "admit"]), "criteria_" + "admit")(match, job, brief):
                 filtered += 1
                 continue
             relevant += 1

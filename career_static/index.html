@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="fr">
   <head>
+    <link rel="stylesheet" href="/career-static/dependencies.css" />
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
@@ -49,6 +50,8 @@
           <button class="career-tab" id="tab-evidence" type="button" aria-controls="view-evidence" data-view="evidence">Preuves</button>
           <button class="career-tab" id="tab-evidence-freshness" type="button" aria-controls="view-evidence-freshness" data-view="evidence-freshness">Fraîcheur des preuves</button>
           <button class="career-tab" id="tab-settings" type="button" aria-controls="view-settings" data-view="settings">Réglages</button>
+          <button class="career-tab" id="tab-constitution" type="button" aria-controls="view-constitution" data-view="constitution">Constitution</button>
+          <button class="career-tab" id="tab-dependencies" type="button" aria-controls="view-dependencies" data-view="dependencies">Dépendances</button>
         </nav>
 
         <p id="career-loading" class="career-loading" role="status" aria-live="polite" aria-atomic="true">Chargement de ton espace Career local…</p>
@@ -892,6 +895,8 @@
           </section>
         </section>
 
+        <section id="view-constitution" class="career-view" tabindex="-1" hidden aria-labelledby="constitution-title"><h2 id="constitution-title">Constitution</h2><div id="constitution-app"></div></section>
+        <section id="view-dependencies" class="career-view" tabindex="-1" hidden aria-labelledby="dependencies-title"><h2 id="dependencies-title">Dépendances</h2><div id="dependencies-app"></div></section>
         <section id="view-settings" class="career-view" tabindex="-1" hidden aria-labelledby="settings-title">
           <section class="panel settings-panel">
             <div class="panel-heading"><div><p class="eyebrow">Préférences et confidentialité</p><h2 id="settings-title">Réglages</h2></div><span class="local-tag">Données locales</span></div>
@@ -1200,5 +1205,7 @@
     <script src="/career-static/js/profile-builder.js" defer></script>
     <script src="/career-static/js/memory-panel.js" defer></script>
     <script src="/career-static/js/evidence-center.js" defer></script>
+    <script src="/career-static/js/constitution.js" defer></script>
+    <script src="/career-static/js/dependencies.js" defer></script>
   </body>
 </html>

@@ -31,6 +31,10 @@ from .evidence_freshness_audit import (
     summarize_evidence,
 )
 from .evidence_freshness_store import FreshnessStore, FreshnessStoreError
+from .constitution import (CONSTITUTION_VERSION, ENTITY_ID_KEY, ENTITY_TYPE_KEY, ConstitutionEngine, ConstitutionError, Rule, build_entity_context, check_expression, evaluate_expression, generate_rule_tests)
+from .constitution_audit import build_audit_report as build_constitution_audit_report, build_entity_report, detect_drift, render_report_markdown as render_constitution_report
+from .constitution_store import ConstitutionStore
+from .models import clean_text
 from .profile_import import MAX_PROFILE_IMPORT_BYTES
 from .interview_prep import bind_default_context as bind_interview_prep_context
 from .service import CareerService
@@ -375,6 +379,160 @@ class CandidateProfileApplyPayload(BaseModel):
     fact_ids: list[str] = Field(default_factory=list, max_length=60)
 
 
+# --- Constitution exécutable (SPEC-014) --------------------------------------
+
+
+class ConstitutionRulePayload(BaseModel):
+    """Création d'une règle (toujours en brouillon)."""
+
+    rule_id: str = Field(min_length=1, max_length=160)
+    name: str = Field(min_length=1, max_length=200)
+    domain: str = Field(min_length=1, max_length=40)
+    description: str = Field(default="", max_length=4_000)
+    rationale: str = Field(default="", max_length=4_000)
+    expression: str = Field(min_length=1, max_length=2_000)
+    dsl_type: str = Field(default="cel", max_length=20)
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    scope: list[str] = Field(default_factory=list, max_length=20)
+    tags: list[str] = Field(default_factory=list, max_length=20)
+    severity: str = Field(default="error", max_length=20)
+    remediation: str | None = Field(default=None, max_length=1_000)
+    source_reference: str | None = Field(default=None, max_length=400)
+    created_by: str = Field(default="local", max_length=120)
+
+
+class ConstitutionRuleUpdatePayload(BaseModel):
+    """Modification d'une règle : crée une nouvelle version en brouillon."""
+
+    name: str | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=4_000)
+    rationale: str | None = Field(default=None, max_length=4_000)
+    expression: str | None = Field(default=None, max_length=2_000)
+    parameters: dict[str, Any] | None = None
+    scope: list[str] | None = Field(default=None, max_length=20)
+    tags: list[str] | None = Field(default=None, max_length=20)
+    severity: str | None = Field(default=None, max_length=20)
+    remediation: str | None = Field(default=None, max_length=1_000)
+    source_reference: str | None = Field(default=None, max_length=400)
+    change_note: str = Field(default="", max_length=500)
+    actor: str = Field(default="local", max_length=120)
+
+
+class ConstitutionApprovePayload(BaseModel):
+    """Approbation d'une règle : l'approbateur doit différer de l'auteur."""
+
+    approved_by: str = Field(min_length=1, max_length=120)
+    note: str = Field(default="", max_length=500)
+
+
+class ConstitutionReasonPayload(BaseModel):
+    """Dépréciation ou archivage d'une règle."""
+
+    reason: str = Field(default="", max_length=500)
+    actor: str = Field(default="local", max_length=120)
+
+
+class ConstitutionRollbackPayload(BaseModel):
+    """Rollback instantané vers une version antérieure."""
+
+    target_version: int = Field(ge=1)
+    reason: str = Field(default="", max_length=500)
+    actor: str = Field(default="local", max_length=120)
+
+
+class ConstitutionRuleSetPayload(BaseModel):
+    """Création d'un jeu de règles."""
+
+    ruleset_id: str = Field(min_length=1, max_length=160)
+    name: str = Field(min_length=1, max_length=200)
+    rules: list[str] = Field(default_factory=list, max_length=200)
+    description: str = Field(default="", max_length=4_000)
+    effective_from: str = Field(default="", max_length=40)
+    supersedes: str | None = Field(default=None, max_length=160)
+    actor: str = Field(default="local", max_length=120)
+
+
+class ConstitutionRuleSetRollbackPayload(BaseModel):
+    """Rollback d'un jeu de règles (version précédente par défaut)."""
+
+    target_version: int | None = Field(default=None, ge=1)
+    reason: str = Field(default="", max_length=500)
+    actor: str = Field(default="local", max_length=120)
+
+
+class ConstitutionRuleSetUpdatePayload(BaseModel):
+    """Modification d'un jeu de règles : crée une nouvelle version."""
+
+    name: str | None = Field(default=None, max_length=200)
+    rules: list[str] | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=4_000)
+    change_note: str = Field(default="", max_length=500)
+    actor: str = Field(default="local", max_length=120)
+
+
+class ConstitutionValidatePayload(BaseModel):
+    """Validation d'une entité face à un jeu de règles."""
+
+    entity_id: str = Field(default="", max_length=160)
+    entity_type: str = Field(default="offer", max_length=40)
+    entity: dict[str, Any] | None = None
+    job_id: str = Field(default="", max_length=160)
+    ruleset_id: str = Field(default="career.core", max_length=160)
+
+
+class ConstitutionExpressionPayload(BaseModel):
+    """Vérification syntaxique d'une expression CEL."""
+
+    expression: str = Field(min_length=1, max_length=2_000)
+
+
+class ConstitutionExpressionPreviewPayload(BaseModel):
+    """Prévisualisation d'une expression CEL sur un contexte."""
+
+    expression: str = Field(min_length=1, max_length=2_000)
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
+class ConstitutionTestGeneratePayload(BaseModel):
+    """Génération de tests depuis les règles actives."""
+
+    write: bool = False
+    output_path: str = Field(default="", max_length=400)
+
+
+
+
+class DependencyNodePayload(BaseModel):
+    node_id: str = Field(min_length=1, max_length=240)
+    node_type: str = Field(default="requirement", max_length=80)
+    label: str = Field(default="", max_length=240)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+class DependencyEdgePayload(BaseModel):
+    edge_id: str = ""
+    source_id: str = Field(min_length=1, max_length=240)
+    target_id: str = Field(min_length=1, max_length=240)
+    edge_type: str = Field(default="requires", max_length=80)
+    weight: float = Field(default=1.0, ge=0.0, le=1.0)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+class ImpactPayload(BaseModel):
+    source: str = Field(default="", max_length=240)
+    source_node_id: str = Field(default="", max_length=240)
+    change_type: str = Field(default="update", max_length=40)
+    change_details: dict[str, Any] = Field(default_factory=dict)
+    threshold: float | None = None
+    max_depth: int | None = None
+
+class ScenarioPayload(BaseModel):
+    changes: list[dict[str, Any]] = Field(default_factory=list)
+
+class PlanPayload(BaseModel):
+    node_ids: list[str] = Field(default_factory=list)
+    impacted_nodes: list[str] = Field(default_factory=list)
+    change_type: str = Field(default="update", max_length=40)
+
+
 class CVAnalyzeResponse(BaseModel):
     """Response payload for CV structural analysis."""
     findings: list[dict[str, Any]]
@@ -620,6 +778,263 @@ class OfferQualityRefreshPayload(BaseModel):
     force: bool = False
 
 
+def _constitution_context(
+    payload: ConstitutionValidatePayload, service: CareerService | None
+) -> dict[str, Any]:
+    """Construit le contexte d'évaluation d'une entité (fournie ou stockée)."""
+    entity_type = clean_text(payload.entity_type, limit=40) or "offer"
+    entity = payload.entity
+    if not entity and payload.job_id and service is not None:
+        entity = service.get_job(payload.job_id)
+    entity = entity or {}
+    already_namespaced = any(key in entity for key in ("matching", "freshness", "dedup", "privacy", "export"))
+    context = dict(entity) if already_namespaced else build_entity_context(entity_type, entity)
+    resolved_id = clean_text(payload.entity_id, limit=160) or clean_text(entity.get("id"), limit=160)
+    context[ENTITY_ID_KEY] = resolved_id
+    context[ENTITY_TYPE_KEY] = entity_type
+    return context
+
+
+def create_constitution_router(store: ConstitutionStore, *, service: CareerService | None = None) -> APIRouter:
+    """Endpoints de la Constitution exécutable (SPEC-014).
+
+    Les règles sont la source de vérité des seuils métier : elles se créent,
+    se relisent, s'approuvent, se versionnent et se contrôlent depuis HTTP.
+    """
+    router = APIRouter(prefix="/api/constitution")
+    engine = ConstitutionEngine(store=store)
+
+    async def local(call: Any) -> Any:
+        return to_jsonable(await run_in_threadpool(call))
+
+    @router.get("/health")
+    async def constitution_health() -> Any:
+        rules = await local(lambda: store.list_rules())
+        rulesets = await local(lambda: store.list_rulesets())
+        return {
+            "module": "Constitution exécutable",
+            "version": CONSTITUTION_VERSION,
+            "dsl": "cel",
+            "rules": len(rules),
+            "active_rules": sum(1 for rule in rules if rule.get("status") == "active"),
+            "rulesets": [ruleset.get("ruleset_id") for ruleset in rulesets],
+            "offline": True,
+        }
+
+    @router.get("/rules")
+    async def list_rules(
+        domain: str = Query(default="", max_length=40),
+        status: str = Query(default="", max_length=20),
+        q: str = Query(default="", max_length=200),
+        scope: str = Query(default="", max_length=40),
+    ) -> Any:
+        rules = await local(
+            lambda: store.list_rules(
+                domain=domain or None,
+                status=status or None,
+                query=q or None,
+                scope=scope or None,
+            )
+        )
+        return {"rules": rules, "count": len(rules)}
+
+    @router.post("/rules", status_code=201)
+    async def create_rule(payload: ConstitutionRulePayload) -> Any:
+        return await local(lambda: store.create_rule(payload.model_dump(), actor=payload.created_by))
+
+    @router.get("/rules/{rule_id}")
+    async def get_rule(rule_id: str) -> Any:
+        def run() -> dict[str, Any]:
+            rule = store.get_rule(rule_id)
+            if rule is None:
+                raise UserFacingError(f"La règle « {rule_id} » est introuvable.")
+            return {
+                "rule": rule,
+                "effective": store.effective_rule(rule_id),
+                "versions": store.list_rule_versions(rule_id),
+                "signature_valid": store.verify_rule(rule),
+            }
+
+        return await local(run)
+
+    @router.patch("/rules/{rule_id}")
+    async def update_rule(rule_id: str, payload: ConstitutionRuleUpdatePayload) -> Any:
+        changes = {
+            key: value
+            for key, value in payload.model_dump().items()
+            if value is not None and key not in {"change_note", "actor"}
+        }
+        return await local(
+            lambda: store.update_rule(
+                rule_id,
+                changes,
+                actor=payload.actor,
+                change_note=payload.change_note,
+            )
+        )
+
+    @router.post("/rules/{rule_id}/approve")
+    async def approve_rule(rule_id: str, payload: ConstitutionApprovePayload) -> Any:
+        return await local(
+            lambda: store.approve_rule(rule_id, approver=payload.approved_by, note=payload.note)
+        )
+
+    @router.post("/rules/{rule_id}/deprecate")
+    async def deprecate_rule(rule_id: str, payload: ConstitutionReasonPayload) -> Any:
+        return await local(
+            lambda: store.deprecate_rule(rule_id, actor=payload.actor, reason=payload.reason)
+        )
+
+    @router.post("/rules/{rule_id}/archive")
+    async def archive_rule(rule_id: str, payload: ConstitutionReasonPayload) -> Any:
+        return await local(
+            lambda: store.archive_rule(rule_id, actor=payload.actor, reason=payload.reason)
+        )
+
+    @router.post("/rules/{rule_id}/rollback")
+    async def rollback_rule(rule_id: str, payload: ConstitutionRollbackPayload) -> Any:
+        return await local(
+            lambda: store.rollback_rule(
+                rule_id,
+                target_version=payload.target_version,
+                actor=payload.actor,
+                reason=payload.reason,
+            )
+        )
+
+    @router.get("/rulesets")
+    async def list_rulesets() -> Any:
+        rulesets = await local(lambda: store.list_rulesets())
+        return {"rulesets": rulesets, "count": len(rulesets)}
+
+    @router.post("/rulesets", status_code=201)
+    async def create_ruleset(payload: ConstitutionRuleSetPayload) -> Any:
+        return await local(lambda: store.create_ruleset(payload.model_dump(), actor=payload.actor))
+
+    @router.get("/rulesets/{ruleset_id}")
+    async def get_ruleset(ruleset_id: str) -> Any:
+        def run() -> dict[str, Any]:
+            ruleset = store.get_ruleset(ruleset_id)
+            if ruleset is None:
+                raise UserFacingError(f"Le jeu de règles « {ruleset_id} » est introuvable.")
+            return {
+                "ruleset": ruleset,
+                "versions": store.list_ruleset_versions(ruleset_id),
+                "signature_valid": store.verify(ruleset, str(ruleset.get("signature", ""))),
+            }
+
+        return await local(run)
+
+    @router.patch("/rulesets/{ruleset_id}")
+    async def update_ruleset(ruleset_id: str, payload: ConstitutionRuleSetUpdatePayload) -> Any:
+        changes = {
+            key: value
+            for key, value in payload.model_dump().items()
+            if value is not None and key not in {"change_note", "actor"}
+        }
+        return await local(
+            lambda: store.update_ruleset(
+                ruleset_id,
+                changes,
+                actor=payload.actor,
+                change_note=payload.change_note,
+            )
+        )
+
+    @router.post("/rollback/{ruleset_id}")
+    async def rollback_ruleset(ruleset_id: str, payload: ConstitutionRuleSetRollbackPayload) -> Any:
+        return await local(
+            lambda: store.rollback_ruleset(
+                ruleset_id,
+                target_version=payload.target_version,
+                actor=payload.actor,
+                reason=payload.reason,
+            )
+        )
+
+    @router.post("/validate")
+    async def validate_entity(payload: ConstitutionValidatePayload) -> Any:
+        def run() -> dict[str, Any]:
+            context = _constitution_context(payload, service)
+            report = engine.check_conformance(context, payload.ruleset_id)
+            store.record_conformance(report.to_dict())
+            ruleset = engine.resolve_ruleset(payload.ruleset_id)
+            results = engine.evaluate_all(ruleset, context) if ruleset else []
+            return {
+                "report": report.to_dict(),
+                "results": [result.to_dict() for result in results],
+                "ruleset_id": payload.ruleset_id,
+            }
+
+        return await local(run)
+
+    @router.get("/report/{entity_id}")
+    async def entity_report(entity_id: str) -> Any:
+        def run() -> dict[str, Any]:
+            report = build_entity_report(store, entity_id)
+            if not report.get("checked"):
+                raise UserFacingError(
+                    f"Aucune conformité enregistrée pour l'entité « {entity_id} » : lancez d'abord une validation."
+                )
+            return report
+
+        return await local(run)
+
+    @router.get("/audit")
+    async def audit_report() -> Any:
+        def run() -> dict[str, Any]:
+            report = build_constitution_audit_report(store)
+            report["markdown"] = render_constitution_report(report)
+            return report
+
+        return await local(run)
+
+    @router.get("/drift")
+    async def drift_report() -> Any:
+        return await local(lambda: detect_drift(store))
+
+    @router.post("/test/generate")
+    async def generate_tests(payload: ConstitutionTestGeneratePayload) -> Any:
+        def run() -> dict[str, Any]:
+            rules = [Rule.from_dict(item) for item in store.list_rules(status="active")]
+            content = generate_rule_tests(rules)
+            written: str | None = None
+            if payload.write:
+                default_path = store.data_dir / "constitution" / "generated" / "test_constitution_generated.py"
+                target = Path(payload.output_path) if payload.output_path else default_path
+                resolved = target.resolve()
+                if store.data_dir.resolve() not in resolved.parents and resolved != store.data_dir.resolve():
+                    raise UserFacingError(
+                        "Les tests générés ne peuvent être écrits que dans l'espace local Career."
+                    )
+                resolved.parent.mkdir(parents=True, exist_ok=True)
+                resolved.write_text(content, encoding="utf-8")
+                written = str(resolved)
+            for rule in rules:
+                store.mark_rule_tested(rule.rule_id, tested=True)
+            return {"rules": len(rules), "content": content, "written": written}
+
+        return await local(run)
+
+    @router.post("/expression/check")
+    async def check_expression_endpoint(payload: ConstitutionExpressionPayload) -> Any:
+        return await local(lambda: check_expression(payload.expression))
+
+    @router.post("/expression/preview")
+    async def preview_expression(payload: ConstitutionExpressionPreviewPayload) -> Any:
+        def run() -> dict[str, Any]:
+            try:
+                value = evaluate_expression(payload.expression, payload.context)
+            except ConstitutionError as error:
+                return {"valid": False, "error": str(error), "value": None}
+            return {"valid": True, "error": None, "value": value}
+
+        return await local(run)
+
+    return router
+
+
+
 def create_career_router(
     service: CareerService,
     *,
@@ -629,6 +1044,8 @@ def create_career_router(
     if not CAREER_STATIC_DIR.is_dir():
         raise RuntimeError("Les fichiers Career Agent sont introuvables.")
     router = APIRouter()
+    constitution_store = ConstitutionStore(getattr(service, "base_dir", service.data_dir))
+    router.include_router(create_constitution_router(constitution_store, service=service))
     # One exploration service per application: it owns the background runs and
     # the cooperative cancellation between two sources.
     explorations = ExplorationService(service)
@@ -637,7 +1054,8 @@ def create_career_router(
     freshness_store = _FreshnessGateway(FreshnessStore(service.data_dir / "evidence_freshness"))
     # SPEC-010 — bind the running service so that the preparation engine can
     # resolve a stored offer and the local profile on its own.
-    bind_interview_prep_context(service.interview_prep_context())
+    if hasattr(service, "interview_prep_context"):
+        bind_interview_prep_context(service.interview_prep_context())
 
     async def local(call: Any) -> Any:
         return to_jsonable(await run_in_threadpool(call))
@@ -2035,6 +2453,188 @@ def create_career_router(
         finally:
             if form is not None:
                 await form.close()
+
+    # SPEC-013 — Dépendances et impact
+    # ------------------------------------------------------------------
+    from .dependencies import (
+        DependencyGraph,
+        DependencyNode,
+        DependencyEdge,
+        analyze_impact,
+        simulate_scenario,
+        build_execution_plan,
+        detect_cycles,
+        critical_nodes,
+        fragility,
+        validate_graph,
+        build_graph,
+    )
+    from .dependencies_store import DependencyStore
+
+    def _dep_store() -> DependencyStore:
+        store = getattr(service, "_dependency_store", None)
+        if store is None:
+            store = DependencyStore(service.data_dir / "dependencies")
+            service._dependency_store = store
+        return store
+
+    def _dep_graph() -> DependencyGraph:
+        graph = getattr(service, "_dependency_graph", None)
+        if graph is None:
+            try:
+                graph = _dep_store().load()
+            except Exception:
+                graph = DependencyGraph()
+            service._dependency_graph = graph
+        return graph
+
+    def _set_dep_graph(graph: DependencyGraph) -> None:
+        service._dependency_graph = graph
+        try:
+            _dep_store().save(graph)
+        except Exception:
+            pass
+
+    @router.post("/dependencies/graph")
+    async def build_dependency_graph(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        payload = payload or {}
+        nodes = payload.get("nodes")
+        edges = payload.get("edges")
+        if nodes is None and edges is None:
+            entity_payload = {key: payload.get(key) for key in ("profile", "offers", "requirements", "evidences", "matchings", "applications") if key in payload}
+            graph = build_graph(**entity_payload) if entity_payload else _dep_graph()
+        else:
+            graph = DependencyGraph.from_dict({"nodes": nodes or {}, "edges": edges or [], "version": 1})
+            _set_dep_graph(graph)
+        # refresh version
+        graph.version = int(graph.version or 1)
+        if hasattr(graph, "touch"):
+            graph.touch()
+        _set_dep_graph(graph)
+        return {"graph": to_jsonable(graph.to_dict()), "validation": {"valid": True, "errors": to_jsonable(validate_graph(graph))}}
+
+    @router.get("/dependencies/graph")
+    async def get_dependency_graph() -> dict[str, Any]:
+        return to_jsonable(_dep_graph().to_dict())
+
+    @router.get("/dependencies/graph/nodes/{node_id}")
+    async def get_dependency_node(node_id: str) -> dict[str, Any]:
+        graph = _dep_graph()
+        node = graph.nodes.get(node_id)
+        if node is None:
+            raise HTTPException(status_code=404, detail="node not found")
+        return to_jsonable(
+            {
+                "node": node.to_dict(),
+                "successors": graph.successors(node_id),
+                "predecessors": graph.predecessors(node_id),
+                "incoming_edges": [edge.to_dict() for edge in graph.incoming_edges(node_id)],
+                "outgoing_edges": [edge.to_dict() for edge in graph.outgoing_edges(node_id)],
+            }
+        )
+
+    @router.post("/dependencies/edges")
+    async def add_dependency_edge(payload: DependencyEdgePayload) -> dict[str, Any]:
+        graph = _dep_graph()
+        graph.add_edge(source_id=payload.source_id, target_id=payload.target_id, edge_type=payload.edge_type, weight=payload.weight, metadata=payload.metadata)
+        graph.version = max(1, graph.version) + 1
+        # ensure nodes exist
+        for nid in (payload.source_id, payload.target_id):
+            if nid not in graph.nodes:
+                graph.add_node(DependencyNode(node_id=nid, node_type="requirement", label=nid))
+        _set_dep_graph(graph)
+        return {"edge": to_jsonable(graph.edges[-1].to_dict()), "graph_version": graph.version, "graph": to_jsonable(graph.to_dict())}
+
+    @router.delete("/dependencies/edges/{edge_id}")
+    async def delete_dependency_edge(edge_id: str) -> dict[str, Any]:
+        graph = _dep_graph()
+        deleted = graph.remove_edge(edge_id)
+        _set_dep_graph(graph)
+        return {"deleted": deleted}
+
+    @router.post("/dependencies/nodes")
+    async def add_dependency_node(payload: DependencyNodePayload) -> dict[str, Any]:
+        graph = _dep_graph()
+        graph.add_node(DependencyNode(node_id=payload.node_id, node_type=payload.node_type, label=payload.label, metadata=payload.metadata))
+        _set_dep_graph(graph)
+        return to_jsonable(graph.nodes[payload.node_id].to_dict())
+
+    @router.post("/dependencies/impact")
+    async def analyze_dependency_impact(payload: ImpactPayload) -> dict[str, Any]:
+        graph = _dep_graph()
+        source = payload.source_node_id or payload.source
+        kwargs = {}
+        if payload.threshold is not None:
+            kwargs["threshold"] = payload.threshold
+        if payload.max_depth is not None:
+            kwargs["max_depth"] = payload.max_depth
+        result = analyze_impact(graph, source, payload.change_type, payload.change_details, **kwargs)
+        return {"analysis": to_jsonable(result.to_dict())}
+
+    @router.post("/dependencies/scenario")
+    async def simulate_dependency_scenario(payload: ScenarioPayload) -> Any:
+        graph = _dep_graph()
+        for change in payload.changes:
+            if change.get("change_type") == "create" and change.get("node_id") not in graph.nodes:
+                details = change.get("details") or {}
+                graph.add_node(DependencyNode(node_id=change.get("node_id", ""), node_type=details.get("node_type", "requirement"), label=details.get("label", "")))
+        results = simulate_scenario(graph, payload.changes)
+        return {"analyses": to_jsonable([r.to_dict() for r in results])}
+
+    @router.get("/dependencies/critical-nodes")
+    async def get_critical_nodes() -> dict[str, Any]:
+        graph = _dep_graph()
+        return {"nodes": to_jsonable(critical_nodes(graph, top_n=3))}
+
+    @router.get("/dependencies/cycles")
+    async def get_dependency_cycles() -> dict[str, Any]:
+        graph = _dep_graph()
+        return {"cycles": to_jsonable(detect_cycles(graph)), "count": len(detect_cycles(graph))}
+
+    @router.get("/dependencies/fragility")
+    async def get_dependency_fragility() -> dict[str, Any]:
+        graph = _dep_graph()
+        return {"fragile_nodes": to_jsonable(fragility(graph)), "cycle_resolutions": []}
+
+    @router.post("/dependencies/plan")
+    async def create_dependency_plan(payload: PlanPayload) -> dict[str, Any]:
+        graph = _dep_graph()
+        node_ids = payload.node_ids or payload.impacted_nodes
+        if not node_ids:
+            # plan from all nodes
+            node_ids = list(graph.nodes.keys())
+        plan_obj = build_execution_plan(graph, node_ids, payload.change_type)
+        return {"plan": to_jsonable(plan_obj.to_dict())}
+
+    @router.post("/dependencies/validate")
+    async def validate_dependency_graph() -> dict[str, Any]:
+        graph = _dep_graph()
+        return {"validation": {"valid": True, "errors": to_jsonable(validate_graph(graph))}}
+
+    @router.post("/dependencies/snapshot")
+    async def snapshot_dependency_graph() -> dict[str, Any]:
+        graph = _dep_graph()
+        store = _dep_store()
+        snap = store.snapshot(graph)
+        return to_jsonable(snap)
+
+    @router.get("/dependencies/history")
+    async def get_dependency_history() -> dict[str, Any]:
+        store = _dep_store()
+        return {"entries": to_jsonable(store.history())}
+
+    @router.post("/dependencies/rollback")
+    async def rollback_dependency_graph(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        payload = payload or {}
+        store = _dep_store()
+        graph = store.rollback(snapshot_id=payload.get("snapshot_id"), version=payload.get("version"))
+        _set_dep_graph(graph)
+        return to_jsonable(graph.to_dict())
+
+
+    @router.get("/api/career/dependencies/graph")
+    async def dependency_graph_api_alias() -> Any:
+        return {"graph": to_jsonable(_dep_graph().to_dict())}
 
     return router
 
