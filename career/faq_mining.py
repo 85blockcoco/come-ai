@@ -112,6 +112,9 @@ class _SectorFaqList(list):
     def profile_answers(self) -> dict[str, list[str]]:
         return self[0].profile_answers if self else {}
 
+    def to_dict(self) -> list[dict[str, Any]]:
+        return [item.to_dict() for item in self]
+
 
 def _normalize_text(value: Any) -> str:
     text = str(value or "")
@@ -144,9 +147,15 @@ def _as_offers(value: Any) -> list[dict[str, Any]]:
         if offer_keys & set(value.keys()):
             return [value]
         return []
-    if isinstance(value, (list, tuple, set)):
-        return [item for item in value if isinstance(item, dict)]
-    return []
+    if isinstance(value, str) or isinstance(value, (bytes, bytearray)):
+        return []
+    if isinstance(value, dict):
+        return []  # already handled above
+    try:
+        iterator = iter(value)
+    except TypeError:
+        return []
+    return [item for item in iterator if isinstance(item, dict)]
 
 
 def _sector_of(offer: dict[str, Any]) -> str:
@@ -374,12 +383,12 @@ def mine_sector_faq(*args: Any, **kwargs: Any) -> Any:
         offers = []
     offers = _as_offers(offers)
     if sector_filter:
-        offers = [o for o in offers if _sector_of(o) == str(sector_filter)]
+        offers = [o for o in offers if _sector_of(o) == str(sector_filter).strip()]
 
     clusters = cluster_intents(offers, profile=profile)
     # Apply sector filter on clusters
     if sector_filter:
-        clusters = {k: v for k, v in clusters.items() if k == str(sector_filter)}
+        clusters = {k: v for k, v in clusters.items() if k == str(sector_filter).strip()}
 
     faqs: list[SectorFaq] = []
     for sector, sector_offers in clusters.items():
@@ -397,7 +406,7 @@ def mine_sector_faq(*args: Any, **kwargs: Any) -> Any:
 
     if not faqs:
         # Fallback: empty FAQ for the filtered sector or "Général"
-        name = str(sector_filter) if sector_filter else "Général"
+        name = str(sector_filter).strip() if sector_filter else "Général"
         faqs.append(SectorFaq(sector=name))
 
     if len(faqs) == 1 and sector_filter is not None:
