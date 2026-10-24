@@ -871,6 +871,57 @@ def create_career_router(
             "details": dict(score) if hasattr(score, "items") else {},
         })
 
+    # Aliases (underscore / singular variants) for compatibility with callers.
+    @router.post("/api/career/interview_sim/question_sets")
+    async def interview_sim_question_sets_us(payload: InterviewSimQuestionSetPayload) -> Any:
+        return await local(lambda: _build_questions_sync(payload))
+
+    @router.post("/api/career/interview_sim/questions")
+    async def interview_sim_questions_us(payload: InterviewSimQuestionSetPayload) -> Any:
+        return await local(lambda: _build_questions_sync(payload))
+
+    @router.post("/api/career/interview/question-set")
+    async def interview_question_set(payload: InterviewSimQuestionSetPayload) -> Any:
+        return await local(lambda: _build_questions_sync(payload))
+
+    @router.post("/api/career/interview_sim/worksheets")
+    async def interview_sim_worksheets_us(payload: InterviewSimWorksheetPayload) -> Any:
+        from career.interview_sim import StarWorksheet, self_score
+
+        ws = StarWorksheet(
+            question_id=payload.question_id,
+            situation=payload.situation,
+            task=payload.task,
+            action=payload.action,
+            result=payload.result,
+        )
+        score = self_score(ws)
+        return await local(lambda: {
+            "worksheet": ws.to_dict(),
+            "score": float(score),
+            "self_score": float(score),
+            "details": dict(score) if hasattr(score, "items") else {},
+        })
+
+    @router.post("/api/career/interview_sim/self_score")
+    async def interview_sim_self_score_us(payload: InterviewSimWorksheetPayload) -> Any:
+        from career.interview_sim import StarWorksheet, self_score
+
+        ws = StarWorksheet(
+            question_id=payload.question_id,
+            situation=payload.situation,
+            task=payload.task,
+            action=payload.action,
+            result=payload.result,
+        )
+        score = self_score(ws)
+        return await local(lambda: {
+            "score": float(score),
+            "self_score": float(score),
+            "completeness": ws.completeness,
+            "details": dict(score) if hasattr(score, "items") else {},
+        })
+
     return router
 
 

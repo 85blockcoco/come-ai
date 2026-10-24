@@ -165,6 +165,10 @@ class SelfScoreResult(float):
     def __new__(cls, value: float, details: dict[str, Any]) -> "SelfScoreResult":
         obj = super().__new__(cls, value)
         obj._details = dict(details)
+        obj.score = float(value)
+        obj.completeness = float(details.get("completeness", value))
+        obj.question_id = str(details.get("question_id", "") or "")
+        obj.details = dict(details)
         return obj
 
     def __getitem__(self, key: Any) -> Any:
