@@ -16,6 +16,7 @@ def test_pipeline_endpoint_tracks_full_local_cycle(tmp_path: Path) -> None:
             "official_url": "https://careers.example.test/pipeline",
             "job_family": "Markets / Quant",
             "requirements": "Python and statistics required.",
+            "deadline_date": "2027-01-15",
             "source_status": "open",
         }
     )
@@ -38,6 +39,7 @@ def test_pipeline_endpoint_tracks_full_local_cycle(tmp_path: Path) -> None:
     assert item["next_action_code"] == "review_kit"
     assert item["progress_percent"] == 85
     assert item["kit_ready"] is True
+    assert item["deadline_date"] == "2027-01-15"
     assert payload["focus_plan"]["budget_minutes"] == 60
     assert payload["focus_plan"]["automatic_submission"] is False
     assert payload["focus_plan"]["items"][0]["job_id"] == job["id"]
@@ -81,3 +83,5 @@ def test_pipeline_frontend_contract_exists() -> None:
     assert "Plan de travail local" in js
     assert "focus_plan" in js
     assert "estimated_minutes" in js
+    assert "deadline_status" in js
+    assert "échéances proches" in js

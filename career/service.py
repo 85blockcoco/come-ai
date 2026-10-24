@@ -2325,6 +2325,10 @@ class CareerService:
                     jobs_by_id.get(item.job_id, {}).get("official_url"),
                     limit=2_000,
                 ),
+                "deadline_date": clean_text(
+                    jobs_by_id.get(item.job_id, {}).get("deadline_date"),
+                    limit=32,
+                ),
             }
             for item in items
         ]

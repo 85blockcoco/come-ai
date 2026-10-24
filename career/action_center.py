@@ -7,6 +7,7 @@ human-readable next action per offer.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from .models import clean_text
@@ -24,7 +25,20 @@ STAGE_PRESENTATION: dict[str, tuple[str, int]] = {
 
 _CLOSED_TRACKING = frozenset({"rejected", "refused", "withdrawn"})
 _SUBMITTED_TRACKING = frozenset({"submitted", "submitted_confirmed"})
-_PASSIVE_ACTIONS = frozenset({"closed", "monitor_response"})
+_PASSIVE_ACTIONS = frozenset({"closed", "deadline_passed", "monitor_response"})
+_POST_SUBMISSION_TRACKING = frozenset(
+    {
+        "submitted",
+        "submitted_confirmed",
+        "receipt_unknown",
+        "response_received",
+        "interview",
+        "offer_received",
+        "rejected",
+        "refused",
+        "withdrawn",
+    }
+)
 _ACTION_EFFORT_MINUTES: dict[str, int] = {
     "prepare_interview": 25,
     "review_offer": 20,
@@ -51,7 +65,11 @@ def _action(
     return code, label, detail, priority
 
 
-def project_pipeline_item(raw: dict[str, Any]) -> dict[str, Any]:
+def project_pipeline_item(
+    raw: dict[str, Any],
+    *,
+    today: date | None = None,
+) -> dict[str, Any]:
     """Add a single honest next action to one serialized pipeline item."""
 
     item = dict(raw)
@@ -62,6 +80,22 @@ def project_pipeline_item(raw: dict[str, Any]) -> dict[str, Any]:
     kit_ready = bool(item.get("kit_generated_at"))
     tracking_exists = bool(item.get("application_id") or tracking)
     can_open_official_source = bool(clean_text(item.get("official_url"), limit=2_000))
+    deadline_date = clean_text(item.get("deadline_date"), limit=32)
+    deadline_status = "unknown"
+    days_until_deadline: int | None = None
+    if deadline_date:
+        try:
+            parsed_deadline = date.fromisoformat(deadline_date[:10])
+        except ValueError:
+            parsed_deadline = None
+        if parsed_deadline is not None:
+            days_until_deadline = (parsed_deadline - (today or date.today())).days
+            if days_until_deadline < 0:
+                deadline_status = "passed"
+            elif days_until_deadline <= 3:
+                deadline_status = "urgent"
+            else:
+                deadline_status = "upcoming"
     blockers: list[str] = []
 
     if readiness == "offer_to_verify":
@@ -180,6 +214,18 @@ def project_pipeline_item(raw: dict[str, Any]) -> dict[str, Any]:
         )
 
     code, label, detail, priority = selected
+    if deadline_status == "passed" and tracking not in _POST_SUBMISSION_TRACKING:
+        blockers.append(
+            "La date limite connue est dépassée ; vérifie manuellement si l’annonce accepte encore des candidatures."
+        )
+        code, label, detail, priority = _action(
+            "deadline_passed",
+            "Échéance dépassée",
+            "Ne prépare aucun dépôt avant d’avoir confirmé que l’offre est toujours ouverte.",
+            95,
+        )
+    elif deadline_status == "urgent" and code not in _PASSIVE_ACTIONS:
+        priority = min(priority, 1)
     item.update(
         {
             "stage_label": stage_label,
@@ -192,6 +238,9 @@ def project_pipeline_item(raw: dict[str, Any]) -> dict[str, Any]:
             "tracking_exists": tracking_exists,
             "kit_ready": kit_ready,
             "can_open_official_source": can_open_official_source,
+            "deadline_date": deadline_date,
+            "deadline_status": deadline_status,
+            "days_until_deadline": days_until_deadline,
         }
     )
     return item
@@ -239,10 +288,14 @@ def _build_focus_plan(
     }
 
 
-def build_application_action_center(items: list[dict[str, Any]]) -> dict[str, Any]:
+def build_application_action_center(
+    items: list[dict[str, Any]],
+    *,
+    today: date | None = None,
+) -> dict[str, Any]:
     """Project, sort and summarize pipeline rows without side effects."""
 
-    projected = [project_pipeline_item(item) for item in items]
+    projected = [project_pipeline_item(item, today=today) for item in items]
     projected.sort(
         key=lambda item: (
             int(item["action_priority"]),
@@ -262,6 +315,8 @@ def build_application_action_center(items: list[dict[str, Any]]) -> dict[str, An
             "kits_ready": sum(bool(item["kit_ready"]) for item in projected),
             "tracked": sum(bool(item["tracking_exists"]) for item in projected),
             "interviews": sum(item["next_action_code"] == "prepare_interview" for item in projected),
+            "urgent_deadlines": sum(item["deadline_status"] == "urgent" for item in projected),
+            "passed_deadlines": sum(item["deadline_status"] == "passed" for item in projected),
         },
         "available_actions": sorted(action_codes),
         "automatic_submission": False,

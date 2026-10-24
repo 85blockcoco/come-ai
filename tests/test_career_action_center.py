@@ -1,5 +1,7 @@
 """Deterministic, local next actions for the Career application pipeline."""
 
+from datetime import date
+
 from career.action_center import build_application_action_center, project_pipeline_item
 
 
@@ -67,6 +69,8 @@ def test_generated_kit_and_interview_receive_higher_priority_actions() -> None:
         "kits_ready": 2,
         "tracked": 2,
         "interviews": 1,
+        "urgent_deadlines": 0,
+        "passed_deadlines": 0,
     }
     assert payload["automatic_submission"] is False
     assert "jamais" in payload["disclaimer"]
@@ -140,3 +144,62 @@ def test_manual_submission_requires_an_official_destination() -> None:
     assert unsafe["can_open_official_source"] is False
     assert safe["next_action_code"] == "manual_submit"
     assert safe["can_open_official_source"] is True
+
+
+def test_upcoming_deadline_moves_an_active_dossier_into_the_focus_plan() -> None:
+    payload = build_application_action_center(
+        [
+            _item(job_id="normal", readiness="prepare_now", match_score=95),
+            _item(
+                job_id="urgent",
+                readiness="offer_to_verify",
+                match_score=40,
+                deadline_date="2026-10-26",
+            ),
+        ],
+        today=date(2026, 10, 24),
+    )
+
+    urgent = next(item for item in payload["pipeline"] if item["job_id"] == "urgent")
+    assert urgent["days_until_deadline"] == 2
+    assert urgent["deadline_status"] == "urgent"
+    assert urgent["action_priority"] == 1
+    assert payload["pipeline"][0]["job_id"] == "urgent"
+    assert payload["focus_plan"]["items"][0]["job_id"] == "urgent"
+    assert payload["summary"]["urgent_deadlines"] == 1
+
+
+def test_expired_unsubmitted_offer_is_blocked_but_unknown_deadline_stays_unknown() -> None:
+    expired = project_pipeline_item(
+        _item(
+            tracking_stage="ready_to_apply",
+            application_id="app-expired",
+            deadline_date="2026-10-20",
+        ),
+        today=date(2026, 10, 24),
+    )
+    unknown = project_pipeline_item(
+        _item(deadline_date=""),
+        today=date(2026, 10, 24),
+    )
+
+    assert expired["next_action_code"] == "deadline_passed"
+    assert expired["deadline_status"] == "passed"
+    assert expired["days_until_deadline"] == -4
+    assert "dépassée" in expired["blockers"][-1]
+    assert unknown["deadline_status"] == "unknown"
+    assert unknown["days_until_deadline"] is None
+
+
+def test_deadline_does_not_reopen_a_manually_submitted_application() -> None:
+    submitted = project_pipeline_item(
+        _item(
+            tracking_stage="submitted",
+            application_id="app-submitted",
+            deadline_date="2026-10-20",
+        ),
+        today=date(2026, 10, 24),
+    )
+
+    assert submitted["next_action_code"] == "monitor_response"
+    assert submitted["deadline_status"] == "passed"

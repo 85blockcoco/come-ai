@@ -3219,6 +3219,8 @@ function renderApplicationPipeline(payload) {
     [summary.facts_to_verify || 0, "offres à vérifier"],
     [summary.kits_ready || 0, "kits locaux prêts"],
     [summary.interviews || 0, "entretiens à préparer"],
+    [summary.urgent_deadlines || 0, "échéances proches"],
+    [summary.passed_deadlines || 0, "échéances dépassées"],
   ].forEach(([value, label]) => {
     const card = make("article", "", "pipeline-summary-card");
     card.append(make("strong", String(value)), make("span", label));
@@ -3262,6 +3264,16 @@ function renderApplicationPipeline(payload) {
   pipeline.forEach((item) => {
     const row = make("article", "", "pipeline-row");
     row.dataset.actionCode = item.next_action_code || "unknown";
+    let deadlineLabel = "Échéance : à vérifier";
+    if (item.deadline_status === "urgent") {
+      deadlineLabel = item.days_until_deadline === 0
+        ? "Échéance : aujourd’hui"
+        : `Échéance : dans ${item.days_until_deadline} jour(s)`;
+    } else if (item.deadline_status === "passed") {
+      deadlineLabel = "Échéance connue dépassée";
+    } else if (item.deadline_status === "upcoming" && item.deadline_date) {
+      deadlineLabel = `Échéance : ${item.deadline_date}`;
+    }
     row.append(
       make("h4", `${item.company} — ${item.title}`),
       make(
@@ -3269,6 +3281,7 @@ function renderApplicationPipeline(payload) {
         `${item.stage_label || item.stage} · Variante : ${item.variant_label || "à choisir"} · Correspondance : ${item.match_score || 0}/100`,
         "application-meta",
       ),
+      make("p", deadlineLabel, `pipeline-deadline is-${item.deadline_status || "unknown"}`),
     );
     const progress = make("div", "", "pipeline-progress");
     progress.setAttribute("role", "progressbar");

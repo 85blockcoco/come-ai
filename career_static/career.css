@@ -422,6 +422,9 @@ footer { margin: 18px 3px 0; color: var(--muted); font-size: .72rem; line-height
 .pipeline-list { display: grid; gap: 10px; }
 .pipeline-row { display: grid; gap: 8px; padding: 13px; border: 1px solid #d8e8df; border-radius: 12px; background: #fff; }
 .pipeline-row h4 { margin: 0; font-size: .9rem; }
+.pipeline-deadline { width: fit-content; margin: 0; padding: 3px 7px; border-radius: 999px; color: var(--muted); background: #edf3f0; font-size: .66rem; font-weight: 750; }
+.pipeline-deadline.is-urgent { color: #7f4300; background: var(--warning-soft); }
+.pipeline-deadline.is-passed { color: #8d2932; background: #fbecef; }
 .pipeline-progress { height: 7px; overflow: hidden; border-radius: 999px; background: #e6eeea; }
 .pipeline-progress-fill { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--accent), #8ac8a7); transition: width .2s ease; }
 .pipeline-next-action { padding: 9px 11px; border-left: 3px solid var(--accent); border-radius: 6px; background: #f3faf6; }
