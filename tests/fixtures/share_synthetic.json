@@ -1,0 +1,18 @@
+{
+  "offer_id": "offer-synthetic-42",
+  "application_id": "application-synthetic-7",
+  "title": "Stage M&A synthétique",
+  "company": "Banque Fictive",
+  "city": "Paris",
+  "country": "France",
+  "display_name": "Candidat Synthétique",
+  "skills": "Excel, Python",
+  "contact_email": "prive@example.test",
+  "contact_phone": "+33 6 00 00 00 00",
+  "notes": "Note privée",
+  "extracted_text": "Texte CV complet",
+  "files": {
+    "cv.md": "# CV synthétique",
+    "letter.md": "# Lettre synthétique"
+  }
+}

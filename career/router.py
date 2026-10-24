@@ -14,6 +14,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
 from .profile_import import MAX_PROFILE_IMPORT_BYTES
+from .share_export import build_bundle, redact
 from .service import CareerService
 from workspace_core import UserFacingError, to_jsonable
 
@@ -737,6 +738,34 @@ def create_career_router(
     async def export_personal_data() -> FileResponse:
         path = await run_in_threadpool(service.export_personal_data)
         return FileResponse(path, filename=path.name, media_type="application/json")
+
+    @router.post("/api/career/share/redact")
+    async def share_redact(payload: dict[str, Any]) -> Any:
+        def run() -> dict[str, Any]:
+            view = redact(payload)
+            return {"fields": dict(view), "redacted": list(view.redacted)}
+
+        return await local(run)
+
+    @router.post("/api/career/share/bundle")
+    async def share_bundle(payload: dict[str, Any] | None = None) -> Any:
+        data = payload or {}
+        bundle = await run_in_threadpool(lambda: build_bundle(data))
+        import base64
+
+        return {
+            "manifest": bundle.manifest,
+            "files": {
+                path: base64.b64encode(content).decode("ascii")
+                for path, content in bundle.files.items()
+            },
+            "zip_base64": bundle.to_base64(),
+        }
+
+    @router.get("/api/career/share/bundle")
+    async def share_bundle_get() -> Any:
+        bundle = await run_in_threadpool(lambda: build_bundle({}))
+        return {"manifest": bundle.manifest, "file_count": len(bundle.files)}
 
     @router.delete("/api/career/data")
     async def reset_data(payload: ResetPayload) -> dict[str, bool]:
