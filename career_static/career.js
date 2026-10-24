@@ -3322,10 +3322,12 @@ function renderApplicationPipeline(payload) {
       official.rel = "noopener noreferrer";
       actions.append(official);
     }
-    const prepare = make("button", "Préparer", "secondary-button");
-    prepare.type = "button";
-    prepare.addEventListener("click", () => loadStagePrep(item.job_id));
-    actions.append(prepare);
+    if (item.next_action_code !== "deadline_passed") {
+      const prepare = make("button", "Préparer", "secondary-button");
+      prepare.type = "button";
+      prepare.addEventListener("click", () => loadStagePrep(item.job_id));
+      actions.append(prepare);
+    }
     if (item.next_action_code === "prepare_interview") {
       const interview = make("button", "Ouvrir le coach", "primary-button");
       interview.type = "button";

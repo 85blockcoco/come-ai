@@ -87,3 +87,4 @@ def test_pipeline_frontend_contract_exists() -> None:
     assert "échéances proches" in js
     assert "Commencer ma session" in js
     assert "openPipelineFocusItem" in js
+    assert 'item.next_action_code !== "deadline_passed"' in js
