@@ -3212,38 +3212,93 @@ function renderApplicationPipeline(payload) {
     target.append(make("p", "Aucune offre dans le pipeline.", "empty-state"));
     return;
   }
+  const summary = payload.summary || {};
+  const summaryGrid = make("div", "", "pipeline-summary");
+  [
+    [summary.actions_now || 0, "actions à faire"],
+    [summary.facts_to_verify || 0, "offres à vérifier"],
+    [summary.kits_ready || 0, "kits locaux prêts"],
+    [summary.interviews || 0, "entretiens à préparer"],
+  ].forEach(([value, label]) => {
+    const card = make("article", "", "pipeline-summary-card");
+    card.append(make("strong", String(value)), make("span", label));
+    summaryGrid.append(card);
+  });
+  target.append(summaryGrid);
   const list = make("div", "", "pipeline-list");
   pipeline.forEach((item) => {
     const row = make("article", "", "pipeline-row");
+    row.dataset.actionCode = item.next_action_code || "unknown";
     row.append(
       make("h4", `${item.company} — ${item.title}`),
       make(
         "p",
-        `Stade : ${item.stage} · Variante : ${item.variant_label || "non sélectionnée"} · Score : ${item.match_score || 0}`,
+        `${item.stage_label || item.stage} · Variante : ${item.variant_label || "à choisir"} · Correspondance : ${item.match_score || 0}/100`,
         "application-meta",
       ),
     );
+    const progress = make("div", "", "pipeline-progress");
+    progress.setAttribute("role", "progressbar");
+    progress.setAttribute("aria-label", `Progression du dossier ${item.company}`);
+    progress.setAttribute("aria-valuemin", "0");
+    progress.setAttribute("aria-valuemax", "100");
+    progress.setAttribute("aria-valuenow", String(item.progress_percent || 0));
+    const progressFill = make("span", "", "pipeline-progress-fill");
+    progressFill.style.width = `${Math.max(0, Math.min(100, item.progress_percent || 0))}%`;
+    progress.append(progressFill);
+    row.append(progress);
+    const next = make("section", "", "pipeline-next-action");
+    next.append(
+      make("strong", `Prochaine action : ${item.next_action_label || "À déterminer"}`),
+      make("p", item.next_action_detail || "Relis les informations disponibles.", "application-meta"),
+    );
+    row.append(next);
+    if ((item.blockers || []).length) {
+      const blockers = make("ul", "", "blocked-list pipeline-blockers");
+      item.blockers.forEach((blocker) => blockers.append(make("li", blocker)));
+      row.append(blockers);
+    }
     const actions = make("div", "", "job-actions");
+    if (item.official_url) {
+      const official = make("a", "Source officielle ↗", "secondary-button external-link");
+      official.href = item.official_url;
+      official.target = "_blank";
+      official.rel = "noopener noreferrer";
+      actions.append(official);
+    }
     const prepare = make("button", "Préparer", "secondary-button");
     prepare.type = "button";
     prepare.addEventListener("click", () => loadStagePrep(item.job_id));
     actions.append(prepare);
-    if (!item.tracking_stage) {
+    if (item.next_action_code === "prepare_interview") {
+      const interview = make("button", "Ouvrir le coach", "primary-button");
+      interview.type = "button";
+      interview.addEventListener("click", () => showView("interviews"));
+      actions.append(interview);
+    } else if (item.tracking_exists) {
+      const tracking = make("button", item.kit_ready ? "Voir le kit et le suivi" : "Voir le suivi", "primary-button");
+      tracking.type = "button";
+      tracking.addEventListener("click", () => showView("applications"));
+      actions.append(tracking);
+    } else {
       const track = make("button", "Créer le suivi", "primary-button");
       track.type = "button";
       track.addEventListener("click", async () => {
-        await api("/api/career/applications", {
-          method: "POST",
-          body: JSON.stringify({ job_id: item.job_id }),
-        });
-        await loadApplicationPipeline();
+        try {
+          await api("/api/career/applications", {
+            method: "POST",
+            body: JSON.stringify({ job_id: item.job_id }),
+          });
+          setMessage("Suivi local créé. Aucun dossier n’a été envoyé.");
+          await loadApplicationPipeline();
+        } catch (error) { setMessage(error.message, true); }
       });
       actions.append(track);
     }
     row.append(actions);
     list.append(row);
   });
-  target.append(list);
+  target.append(list, make("p", payload.disclaimer || "Aucun envoi automatique.", "scoring-disclaimer"));
 }
 
 async function loadApplicationPipeline() {

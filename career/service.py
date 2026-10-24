@@ -63,6 +63,7 @@ from .application_dashboard import (
     RECEIPT_FILTER_VALUES,
     build_dashboard_payload,
 )
+from .action_center import build_application_action_center
 from .application_prep import prepare_application, summarize_offer
 from .application_sprint import MAX_SPRINT_CANDIDATES, MAX_SPRINT_ITEMS, build_application_sprint
 from .cv_fit import (
@@ -2245,6 +2246,7 @@ class CareerService:
         sprint_by_job = {item["job_id"]: item for item in sprint_queue}
         draft_by_job = {str(item.get("job_id")): item for item in drafts}
         app_by_job = {str(item.get("job_id")): item for item in applications}
+        jobs_by_id = {str(item.get("id")): item for item in jobs}
         job_context = {
             str(job["id"]): {
                 "qualification_facts_json": "1"
@@ -2304,24 +2306,29 @@ class CareerService:
                 item.company.casefold(),
             )
         )
-        return {
-            "pipeline": [
-                {
-                    "job_id": item.job_id,
-                    "company": item.company,
-                    "title": item.title,
-                    "stage": item.stage.value,
-                    "variant": item.variant.id if item.variant else None,
-                    "variant_label": item.variant_label,
-                    "kit_generated_at": item.kit_generated_at,
-                    "tracking_stage": item.tracking_stage,
-                    "readiness": item.readiness,
-                    "match_score": item.match_score,
-                }
-                for item in items
-            ],
-            "automatic_submission": False,
-        }
+        serialized = [
+            {
+                "job_id": item.job_id,
+                "company": item.company,
+                "title": item.title,
+                "stage": item.stage.value,
+                "variant": item.variant.id if item.variant else None,
+                "variant_label": item.variant_label,
+                "kit_generated_at": item.kit_generated_at,
+                "tracking_stage": item.tracking_stage,
+                "readiness": item.readiness,
+                "match_score": item.match_score,
+                "application_id": clean_text(
+                    app_by_job.get(item.job_id, {}).get("id"), limit=80
+                ) or None,
+                "official_url": clean_text(
+                    jobs_by_id.get(item.job_id, {}).get("official_url"),
+                    limit=2_000,
+                ),
+            }
+            for item in items
+        ]
+        return build_application_action_center(serialized)
 
     def get_job_summary(
         self,

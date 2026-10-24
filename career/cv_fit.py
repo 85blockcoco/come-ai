@@ -357,9 +357,14 @@ def derive_pipeline_stage(job_id: str, context: Any) -> PipelineStage:
     selected = context.get("selected_variant") or {}
     sprint = context.get("sprint_queue") or []
     jobs = context.get("jobs") or {}
-    if any(_text(item.get("job_id")) == job_id for item in applications):
+    has_application = any(_text(item.get("job_id")) == job_id for item in applications)
+    has_draft = any(_text(item.get("job_id")) == job_id for item in drafts)
+    # A tracker can be created before any document exists.  It is useful state,
+    # but it must not claim that the preparation cycle is complete.  The final
+    # stage therefore requires both persisted pieces of evidence.
+    if has_application and has_draft:
         return PipelineStage.TRACKING_CREATED
-    if any(_text(item.get("job_id")) == job_id for item in drafts):
+    if has_draft:
         return PipelineStage.KIT_GENERATED
     if job_id in prep_cache and selected.get(job_id):
         return PipelineStage.VARIANT_SELECTED

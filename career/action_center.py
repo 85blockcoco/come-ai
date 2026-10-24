@@ -1,0 +1,203 @@
+"""Truthful next-action projection for the local Career pipeline.
+
+This module does not write state, call a model, refresh a source or submit an
+application.  It turns already persisted workflow evidence into one bounded,
+human-readable next action per offer.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from .models import clean_text
+
+
+STAGE_PRESENTATION: dict[str, tuple[str, int]] = {
+    "discovered": ("Offre découverte", 10),
+    "qualified": ("Offre qualifiée", 25),
+    "sprint_queued": ("Dans la liste express", 35),
+    "prep_analyzed": ("Analyse CV terminée", 50),
+    "variant_selected": ("Variante CV choisie", 60),
+    "kit_generated": ("Kit local généré", 75),
+    "tracking_created": ("Kit et suivi créés", 85),
+}
+
+_CLOSED_TRACKING = frozenset({"rejected", "refused", "withdrawn"})
+_SUBMITTED_TRACKING = frozenset({"submitted", "submitted_confirmed"})
+
+
+def _action(
+    code: str,
+    label: str,
+    detail: str,
+    priority: int,
+) -> tuple[str, str, str, int]:
+    return code, label, detail, priority
+
+
+def project_pipeline_item(raw: dict[str, Any]) -> dict[str, Any]:
+    """Add a single honest next action to one serialized pipeline item."""
+
+    item = dict(raw)
+    stage = clean_text(item.get("stage"), limit=40) or "discovered"
+    tracking = clean_text(item.get("tracking_stage"), limit=80)
+    readiness = clean_text(item.get("readiness"), limit=80)
+    stage_label, progress = STAGE_PRESENTATION.get(stage, ("État à vérifier", 0))
+    kit_ready = bool(item.get("kit_generated_at"))
+    tracking_exists = bool(item.get("application_id") or tracking)
+    blockers: list[str] = []
+
+    if readiness == "offer_to_verify":
+        blockers.append("Des faits de l’offre restent à vérifier sur la source officielle.")
+    elif readiness == "candidate_to_verify":
+        blockers.append("L’éligibilité du profil doit être confirmée avant de préparer le dossier.")
+    elif readiness == "profile_to_complete":
+        blockers.append("Le profil approuvé ne contient pas encore toutes les preuves nécessaires.")
+
+    if tracking in _CLOSED_TRACKING:
+        selected = _action(
+            "closed",
+            "Aucune action urgente",
+            "Cette candidature est clôturée localement ; son historique reste consultable.",
+            90,
+        )
+        progress = 100
+    elif tracking == "interview":
+        selected = _action(
+            "prepare_interview",
+            "Préparer l’entretien",
+            "Relis l’offre, prépare tes preuves et lance une séance d’entraînement locale.",
+            0,
+        )
+        progress = max(progress, 95)
+    elif tracking == "offer_received":
+        selected = _action(
+            "review_offer",
+            "Examiner la proposition",
+            "Compare les conditions et conserve ta décision dans le suivi local.",
+            5,
+        )
+        progress = 100
+    elif tracking == "response_received":
+        selected = _action(
+            "review_response",
+            "Traiter la réponse reçue",
+            "Mets à jour le statut et prépare l’étape suivante sans réponse automatique.",
+            10,
+        )
+        progress = max(progress, 90)
+    elif tracking == "receipt_unknown":
+        selected = _action(
+            "confirm_receipt",
+            "Vérifier la réception",
+            "Contrôle manuellement le portail ou l’accusé de réception avant toute relance.",
+            15,
+        )
+        progress = max(progress, 85)
+    elif tracking in _SUBMITTED_TRACKING:
+        selected = _action(
+            "monitor_response",
+            "Suivre la réponse",
+            "La candidature a été déclarée envoyée manuellement ; surveille les réponses et les échéances.",
+            70,
+        )
+        progress = max(progress, 90)
+    elif tracking == "approved_for_manual_submission":
+        selected = _action(
+            "manual_submit",
+            "Déposer manuellement",
+            "Le dossier a été approuvé localement. Ouvre la source officielle et effectue toi-même le dépôt.",
+            5,
+        )
+        progress = max(progress, 90)
+    elif tracking == "ready_to_apply":
+        selected = _action(
+            "final_review",
+            "Faire la relecture finale",
+            "Vérifie les faits, les PDF et la langue avant d’autoriser un dépôt manuel.",
+            20,
+        )
+        progress = max(progress, 80)
+    elif kit_ready:
+        selected = _action(
+            "review_kit",
+            "Relire le kit local",
+            "Vérifie le CV, la lettre, les marqueurs ouverts et la fiche de préparation.",
+            30,
+        )
+    elif stage in {"prep_analyzed", "variant_selected"} or tracking_exists:
+        selected = _action(
+            "create_kit",
+            "Créer le kit ciblé",
+            "Confirme la variante et la langue, puis génère localement le CV et la lettre.",
+            40,
+        )
+    elif readiness in {"offer_to_verify", "candidate_to_verify"}:
+        selected = _action(
+            "verify_offer",
+            "Vérifier l’offre",
+            "Confirme les faits manquants sur la page officielle avant de personnaliser le dossier.",
+            50,
+        )
+    elif readiness == "profile_to_complete":
+        selected = _action(
+            "complete_profile",
+            "Compléter les preuves du profil",
+            "Ajoute uniquement des faits vérifiables, puis relance l’analyse de correspondance.",
+            45,
+        )
+    else:
+        selected = _action(
+            "analyze_offer",
+            "Analyser l’offre et le CV",
+            "Ouvre la préparation pour comparer les exigences au profil approuvé.",
+            60,
+        )
+
+    code, label, detail, priority = selected
+    item.update(
+        {
+            "stage_label": stage_label,
+            "progress_percent": progress,
+            "next_action_code": code,
+            "next_action_label": label,
+            "next_action_detail": detail,
+            "action_priority": priority,
+            "blockers": blockers,
+            "tracking_exists": tracking_exists,
+            "kit_ready": kit_ready,
+        }
+    )
+    return item
+
+
+def build_application_action_center(items: list[dict[str, Any]]) -> dict[str, Any]:
+    """Project, sort and summarize pipeline rows without side effects."""
+
+    projected = [project_pipeline_item(item) for item in items]
+    projected.sort(
+        key=lambda item: (
+            int(item["action_priority"]),
+            -int(item.get("match_score") or 0),
+            clean_text(item.get("company"), limit=240).casefold(),
+            clean_text(item.get("title"), limit=300).casefold(),
+        )
+    )
+    action_codes = {item["next_action_code"] for item in projected}
+    return {
+        "pipeline": projected,
+        "summary": {
+            "total": len(projected),
+            "actions_now": sum(item["next_action_code"] not in {"closed", "monitor_response"} for item in projected),
+            "facts_to_verify": sum(item["next_action_code"] == "verify_offer" for item in projected),
+            "kits_ready": sum(bool(item["kit_ready"]) for item in projected),
+            "tracked": sum(bool(item["tracking_exists"]) for item in projected),
+            "interviews": sum(item["next_action_code"] == "prepare_interview" for item in projected),
+        },
+        "available_actions": sorted(action_codes),
+        "automatic_submission": False,
+        "disclaimer": (
+            "Ce centre organise uniquement des actions locales et manuelles. "
+            "Côme AI ne dépose jamais de candidature, n’envoie jamais d’e-mail et ne transforme jamais une inconnue en fait."
+        ),
+    }

@@ -25,3 +25,16 @@ def test_pipeline_stage_priority_is_deterministic() -> None:
     assert derive_pipeline_stage("job-1", context) is PipelineStage.QUALIFIED
     context["jobs"]["job-1"]["qualification_facts_json"] = ""
     assert derive_pipeline_stage("job-1", context) is PipelineStage.DISCOVERED
+
+
+def test_tracking_created_before_a_kit_does_not_claim_the_cycle_is_complete() -> None:
+    context = {
+        "jobs": {"job-1": {"qualification_facts_json": "1"}},
+        "sprint_queue": [{"job_id": "job-1"}],
+        "prep_cache": set(),
+        "selected_variant": {},
+        "application_drafts": [],
+        "applications": [{"job_id": "job-1", "stage": "to_review"}],
+    }
+
+    assert derive_pipeline_stage("job-1", context) is PipelineStage.SPRINT_QUEUED
