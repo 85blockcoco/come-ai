@@ -45,6 +45,7 @@ _ACTION_EFFORT_MINUTES: dict[str, int] = {
     "review_response": 10,
     "confirm_receipt": 10,
     "locate_official_source": 15,
+    "verify_official_source": 15,
     "manual_submit": 10,
     "final_review": 15,
     "review_kit": 20,
@@ -80,6 +81,14 @@ def project_pipeline_item(
     kit_ready = bool(item.get("kit_generated_at"))
     tracking_exists = bool(item.get("application_id") or tracking)
     can_open_official_source = bool(clean_text(item.get("official_url"), limit=2_000))
+    source_verified = bool(item.get("source_verified"))
+    source_trust_status = (
+        "missing"
+        if not can_open_official_source
+        else "verified"
+        if source_verified
+        else "to_verify"
+    )
     deadline_date = clean_text(item.get("deadline_date"), limit=32)
     deadline_status = "unknown"
     days_until_deadline: int | None = None
@@ -161,6 +170,16 @@ def project_pipeline_item(
             "Confirme l’annonce sur le portail officiel avant toute relecture finale ou dépôt manuel.",
             5,
         )
+    elif tracking in {"approved_for_manual_submission", "ready_to_apply"} and not source_verified:
+        blockers.append(
+            "Un lien est présent, mais sa provenance officielle n’est pas encore vérifiée."
+        )
+        selected = _action(
+            "verify_official_source",
+            "Vérifier la source officielle",
+            "Confirme le domaine et l’annonce d’origine avant toute relecture finale ou dépôt manuel.",
+            5,
+        )
     elif tracking == "approved_for_manual_submission":
         selected = _action(
             "manual_submit",
@@ -238,6 +257,7 @@ def project_pipeline_item(
             "tracking_exists": tracking_exists,
             "kit_ready": kit_ready,
             "can_open_official_source": can_open_official_source,
+            "source_trust_status": source_trust_status,
             "deadline_date": deadline_date,
             "deadline_status": deadline_status,
             "days_until_deadline": days_until_deadline,
@@ -317,6 +337,7 @@ def build_application_action_center(
             "interviews": sum(item["next_action_code"] == "prepare_interview" for item in projected),
             "urgent_deadlines": sum(item["deadline_status"] == "urgent" for item in projected),
             "passed_deadlines": sum(item["deadline_status"] == "passed" for item in projected),
+            "sources_to_verify": sum(item["source_trust_status"] != "verified" for item in projected),
         },
         "available_actions": sorted(action_codes),
         "automatic_submission": False,

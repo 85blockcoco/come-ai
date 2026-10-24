@@ -2325,6 +2325,9 @@ class CareerService:
                     jobs_by_id.get(item.job_id, {}).get("official_url"),
                     limit=2_000,
                 ),
+                "source_verified": bool(
+                    jobs_by_id.get(item.job_id, {}).get("source_verified")
+                ),
                 "deadline_date": clean_text(
                     jobs_by_id.get(item.job_id, {}).get("deadline_date"),
                     limit=32,

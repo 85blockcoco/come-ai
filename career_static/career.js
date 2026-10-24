@@ -3226,6 +3226,7 @@ function renderApplicationPipeline(payload) {
     [summary.interviews || 0, "entretiens à préparer"],
     [summary.urgent_deadlines || 0, "échéances proches"],
     [summary.passed_deadlines || 0, "échéances dépassées"],
+    [summary.sources_to_verify || 0, "sources à vérifier"],
   ].forEach(([value, label]) => {
     const card = make("article", "", "pipeline-summary-card");
     card.append(make("strong", String(value)), make("span", label));
@@ -3284,6 +3285,11 @@ function renderApplicationPipeline(payload) {
     } else if (item.deadline_status === "upcoming" && item.deadline_date) {
       deadlineLabel = `Échéance : ${item.deadline_date}`;
     }
+    const sourceTrustLabel = item.source_trust_status === "verified"
+      ? "Source officiellement vérifiée"
+      : item.source_trust_status === "missing"
+        ? "Source officielle manquante"
+        : "Origine du lien à vérifier";
     row.append(
       make("h4", `${item.company} — ${item.title}`),
       make(
@@ -3292,6 +3298,7 @@ function renderApplicationPipeline(payload) {
         "application-meta",
       ),
       make("p", deadlineLabel, `pipeline-deadline is-${item.deadline_status || "unknown"}`),
+      make("p", sourceTrustLabel, `pipeline-source-trust is-${item.source_trust_status || "missing"}`),
     );
     const progress = make("div", "", "pipeline-progress");
     progress.setAttribute("role", "progressbar");
