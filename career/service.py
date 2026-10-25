@@ -64,6 +64,16 @@ from .application_dashboard import (
     build_dashboard_payload,
 )
 from .application_prep import prepare_application, summarize_offer
+from .followup_engine import (
+    CHANNELS as FOLLOWUP_CHANNELS,
+    DEFAULT_POLICY as FOLLOWUP_POLICY,
+    FOLLOWUP_EVENT_TYPE,
+    REASONS as FOLLOWUP_REASONS,
+    application_view,
+    followup_reason,
+    plan_today as build_followup_plan,
+    spam_guard,
+)
 from .application_sprint import MAX_SPRINT_CANDIDATES, MAX_SPRINT_ITEMS, build_application_sprint
 from .cv_fit import (
     PipelineItem,
@@ -3663,13 +3673,14 @@ class CareerService:
                 job_row = connection.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
                 jobs_by_id[job_id] = dict(job_row) if job_row else {}
         context = self._scoring_context()
-        return build_dashboard_payload(
+        today = date.today()
+        payload = build_dashboard_payload(
             [dict(row) for row in application_rows],
             events_by_application,
             jobs_by_id,
             context.get("profile") or {},
             context.get("intake") or {},
-            today=date.today(),
+            today=today,
             now_iso=utc_now(),
             total_applications=total_applications,
             stage=normalized_stage,
@@ -3678,6 +3689,160 @@ class CareerService:
             deadline=normalized_deadline,
             query=query,
         )
+        # SPEC-029 : le cockpit expose le plan chronologique du jour sans
+        # dupliquer les requêtes déjà faites pour le tableau de bord.
+        payload["followup_plan"] = build_followup_plan(
+            [
+                application_view(
+                    dict(row), events_by_application.get(str(row["application_id"]), [])
+                )
+                for row in application_rows
+            ],
+            today=today,
+            policy=FOLLOWUP_POLICY,
+        ).to_dict()
+        return payload
+
+    def followup_plan(self, *, today: date | None = None) -> dict[str, Any]:
+        """SPEC-029 — plan de relances du jour, calculé depuis le journal local.
+
+        Réutilise les candidatures et les événements existants : aucune
+        migration, aucun envoi, aucun réseau.  Les dates d'envoi et les
+        relances déjà consignées sont relues dans ``application_events``.
+        """
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT a.id AS application_id, a.job_id, a.stage, a.receipt_status,
+                       a.approval_granted, a.created_at AS application_created_at,
+                       a.updated_at AS application_updated_at,
+                       j.deadline_date, j.source_status
+                FROM applications a JOIN jobs j ON a.job_id = j.id
+                ORDER BY a.updated_at DESC, a.id ASC
+                LIMIT ?
+                """,
+                (FOLLOWUP_POLICY.max_applications,),
+            ).fetchall()
+            application_ids = [str(row["application_id"]) for row in rows]
+            events_by_application: dict[str, list[dict[str, Any]]] = {}
+            if application_ids:
+                placeholders = ", ".join("?" for _ in application_ids)
+                event_rows = connection.execute(
+                    f"""
+                    SELECT application_id, event_type, detail, created_at
+                    FROM application_events
+                    WHERE application_id IN ({placeholders})
+                    ORDER BY created_at ASC
+                    """,
+                    application_ids,
+                ).fetchall()
+                for event_row in event_rows:
+                    events_by_application.setdefault(
+                        str(event_row["application_id"]), []
+                    ).append(dict(event_row))
+        plan = build_followup_plan(
+            [
+                application_view(
+                    dict(row), events_by_application.get(str(row["application_id"]), [])
+                )
+                for row in rows
+            ],
+            today=today,
+            policy=FOLLOWUP_POLICY,
+        )
+        return plan.to_dict()
+
+    @staticmethod
+    def _followup_block_message(guard: Any) -> str:
+        messages = {
+            "closed": "Cette candidature est close : aucune relance n’est proposée.",
+            "responded": "Une réponse a déjà été reçue : aucune relance n’est nécessaire.",
+            "offer_closed": "L’offre associée est indiquée fermée : aucune relance n’est proposée.",
+            "not_sent": "Enregistre d’abord l’envoi manuel de cette candidature avant de planifier une relance.",
+            "missing_sent_date": "La date d’envoi est inconnue : enregistre-la avant de planifier une relance.",
+            "invalid_sent_date": "La date d’envoi enregistrée est incohérente.",
+            "invalid_channel": "Ce canal de relance est inconnu.",
+            "max_followups_reached": "Le nombre maximal de relances est atteint pour cette candidature.",
+        }
+        if guard.reason in {"not_due", "min_interval_not_elapsed"}:
+            return (
+                "Une relance trop rapprochée est refusée : la première relance est "
+                f"possible à J+{FOLLOWUP_POLICY.first_followup_days}, puis jamais moins de "
+                f"{FOLLOWUP_POLICY.min_interval_days} jours entre deux relances. "
+                f"Prochaine date possible : {guard.next_allowed_date}."
+            )
+        return messages.get(guard.reason, "Cette relance n’est pas autorisée par la politique locale.")
+
+    def record_followup(
+        self,
+        application_id: str,
+        *,
+        on_date: str = "",
+        channel: str = "",
+        reason: str = "",
+    ) -> dict[str, Any]:
+        """Consigne une relance effectuée **manuellement**, sans rien envoyer.
+
+        L'événement ``followup_recorded`` porte la date, le canal et la raison
+        en JSON : le schéma existant suffit, et le garde-fou anti-sur-relance
+        peut relire cet historique au prochain calcul.
+        """
+        target_date = parse_date(on_date, "La date de relance") or date.today()
+        normalized_channel = (
+            clean_text(channel, limit=40).lower() or FOLLOWUP_POLICY.default_channel
+        )
+        if normalized_channel not in FOLLOWUP_CHANNELS:
+            raise UserFacingError("Ce canal de relance est inconnu.")
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT a.id AS application_id, a.job_id, a.stage, a.receipt_status,
+                       a.approval_granted, a.created_at AS application_created_at,
+                       a.updated_at AS application_updated_at,
+                       j.deadline_date, j.source_status
+                FROM applications a JOIN jobs j ON a.job_id = j.id
+                WHERE a.id = ?
+                """,
+                (application_id,),
+            ).fetchone()
+            if not row:
+                raise UserFacingError("Cette candidature Career n’existe pas.")
+            event_rows = connection.execute(
+                """
+                SELECT event_type, detail, created_at
+                FROM application_events
+                WHERE application_id = ?
+                ORDER BY created_at ASC
+                """,
+                (application_id,),
+            ).fetchall()
+            view = application_view(dict(row), [dict(event) for event in event_rows])
+            view["channel"] = normalized_channel
+            guard = spam_guard(view, on_date=target_date, policy=FOLLOWUP_POLICY)
+            if not guard.allowed:
+                raise UserFacingError(self._followup_block_message(guard))
+            normalized_reason = clean_text(reason, limit=60)
+            if normalized_reason not in FOLLOWUP_REASONS:
+                normalized_reason = followup_reason(
+                    view, on_date=target_date, policy=FOLLOWUP_POLICY
+                )
+            detail = json.dumps(
+                {
+                    "date": target_date.isoformat(),
+                    "channel": normalized_channel,
+                    "reason": normalized_reason,
+                },
+                ensure_ascii=False,
+            )
+            self._application_event(
+                connection,
+                application_id,
+                str(row["job_id"]),
+                FOLLOWUP_EVENT_TYPE,
+                detail,
+            )
+            self._audit(connection, "application_followup_recorded", "application", application_id)
+        return self.get_application(application_id)
 
     def set_application_checklist(self, application_id: str, checked: list[str]) -> dict[str, Any]:
         """Enregistre l'état local de la checklist dans le journal existant.

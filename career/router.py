@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import os
+from datetime import date as Date
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse
@@ -138,6 +139,14 @@ class ApplicationChecklistPayload(BaseModel):
     """Cinq cases locales seulement ; rien n'est transitionné ni envoyé."""
 
     checked: list[str] = Field(default_factory=list, max_length=10)
+
+
+class FollowupRecordPayload(BaseModel):
+    """Une relance effectuée manuellement, consignée localement seulement."""
+
+    date: str = Field(default="", max_length=32)
+    channel: Literal["email", "portal", "in_person"] = "portal"
+    reason: str = Field(default="", max_length=60)
 
 
 class ResetPayload(BaseModel):
@@ -669,6 +678,34 @@ def create_career_router(
                 action_required=action_filter,
                 deadline=deadline,
                 query=query,
+            )
+        )
+
+    @router.get("/api/career/followups/plan")
+    async def followups_plan(date: str = Query(default="", max_length=32)) -> Any:
+        """SPEC-029 — plan local du jour : relances dues et blocages nommés."""
+        parsed_date: Date | None = None
+        if date:
+            try:
+                parsed_date = Date.fromisoformat(date)
+            except ValueError as error:
+                raise HTTPException(
+                    status_code=422,
+                    detail="La date du plan doit être au format AAAA-MM-JJ.",
+                ) from error
+        return await local(lambda: service.followup_plan(today=parsed_date))
+
+    @router.post("/api/career/followups/{application_id}/record", status_code=201)
+    async def record_followup(
+        application_id: str, payload: FollowupRecordPayload
+    ) -> Any:
+        """Consigne une relance manuelle ; aucun e-mail n'est envoyé."""
+        return await local(
+            lambda: service.record_followup(
+                application_id,
+                on_date=payload.date,
+                channel=payload.channel,
+                reason=payload.reason,
             )
         )
 

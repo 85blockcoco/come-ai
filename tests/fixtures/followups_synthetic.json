@@ -1,0 +1,138 @@
+{
+  "_meta": {
+    "synthetic": true,
+    "purpose": "SPEC-029 — fixtures de relances chronologiques, aucune donnée réelle",
+    "generated_for": "tests/test_followup_engine.py",
+    "today": "2026-10-20"
+  },
+  "applications": [
+    {
+      "application_id": "app_due_j7",
+      "stage": "submitted",
+      "channel": "email",
+      "sent_on": "2026-10-13",
+      "viewed_on": "",
+      "deadline_date": "",
+      "availability_status": "open",
+      "followups": []
+    },
+    {
+      "application_id": "app_not_due",
+      "stage": "submitted",
+      "channel": "portal",
+      "sent_on": "2026-10-16",
+      "viewed_on": "",
+      "deadline_date": "",
+      "availability_status": "open",
+      "followups": []
+    },
+    {
+      "application_id": "app_viewed_no_reply",
+      "stage": "submitted",
+      "channel": "portal",
+      "sent_on": "2026-10-05",
+      "viewed_on": "2026-10-12",
+      "deadline_date": "",
+      "availability_status": "open",
+      "followups": []
+    },
+    {
+      "application_id": "app_deadline_soon",
+      "stage": "submitted_confirmed",
+      "channel": "email",
+      "sent_on": "2026-10-02",
+      "viewed_on": "",
+      "deadline_date": "2026-10-23",
+      "availability_status": "open",
+      "followups": [
+        {"date": "2026-10-10", "channel": "email", "reason": "no_response_j7"}
+      ]
+    },
+    {
+      "application_id": "app_interval_blocked",
+      "stage": "submitted",
+      "channel": "email",
+      "sent_on": "2026-10-01",
+      "viewed_on": "",
+      "deadline_date": "",
+      "availability_status": "open",
+      "followups": [
+        {"date": "2026-10-17", "channel": "email", "reason": "no_response_j7"}
+      ]
+    },
+    {
+      "application_id": "app_max_reached",
+      "stage": "submitted",
+      "channel": "portal",
+      "sent_on": "2026-09-01",
+      "viewed_on": "",
+      "deadline_date": "",
+      "availability_status": "open",
+      "followups": [
+        {"date": "2026-09-10", "channel": "portal", "reason": "no_response_j7"},
+        {"date": "2026-09-18", "channel": "portal", "reason": "no_response_j7"},
+        {"date": "2026-09-26", "channel": "portal", "reason": "no_response_j7"}
+      ]
+    },
+    {
+      "application_id": "app_closed",
+      "stage": "rejected",
+      "channel": "email",
+      "sent_on": "2026-09-01",
+      "viewed_on": "",
+      "deadline_date": "",
+      "availability_status": "open",
+      "followups": []
+    },
+    {
+      "application_id": "app_responded",
+      "stage": "interview",
+      "channel": "email",
+      "sent_on": "2026-09-01",
+      "viewed_on": "",
+      "deadline_date": "",
+      "availability_status": "open",
+      "followups": []
+    },
+    {
+      "application_id": "app_not_sent",
+      "stage": "to_prepare",
+      "channel": "portal",
+      "sent_on": "",
+      "viewed_on": "",
+      "deadline_date": "",
+      "availability_status": "open",
+      "followups": []
+    },
+    {
+      "application_id": "app_missing_sent_date",
+      "stage": "submitted",
+      "channel": "portal",
+      "sent_on": "",
+      "viewed_on": "",
+      "deadline_date": "",
+      "availability_status": "open",
+      "followups": []
+    },
+    {
+      "application_id": "app_offer_closed",
+      "stage": "submitted",
+      "channel": "portal",
+      "sent_on": "2026-10-01",
+      "viewed_on": "",
+      "deadline_date": "",
+      "availability_status": "closed",
+      "followups": []
+    },
+    {
+      "application_id": "app_bad_channel",
+      "stage": "submitted",
+      "channel": "pigeon_voyageur",
+      "sent_on": "2026-10-01",
+      "viewed_on": "",
+      "deadline_date": "",
+      "availability_status": "open",
+      "followups": []
+    }
+  ]
+}
