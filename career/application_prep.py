@@ -312,7 +312,10 @@ def _canonical_requirements(intelligence: Mapping[str, Any] | None) -> list[dict
             continue
         identifier = clean_text(record.get("id"), limit=80)
         text = clean_text(record.get("text"), limit=MAX_TEXT_LENGTH)
+        source_field = clean_text(record.get("source_field"), limit=80)
         if not identifier or not text:
+            continue
+        if source_field == "role_level":
             continue
         if _is_unknown_sentinel(text):
             continue

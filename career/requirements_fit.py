@@ -1704,6 +1704,20 @@ def analyze_fit(
 
     fits: list[RequirementFit] = []
     for record in analysis.get("requirements", []):
+        if not isinstance(record, Mapping):
+            continue
+        text = clean_text(record.get("text"), limit=400)
+        normalized = normalized_text(text).strip(" .:;-")
+        if normalized in {
+            "unknown", "inconnu", "inconnue", "not specified", "unspecified",
+            "not provided", "non precise", "non renseigne", "non renseignee",
+        }:
+            continue
+        # The target level of a posting describes the role. It is not a claim
+        # that the applicant must already have held that role, so it cannot
+        # create an experience requirement in the CV-fit panel.
+        if clean_text(record.get("source_field"), limit=40) == "role_level":
+            continue
         fits.append(_fit_one(record, facts))
 
     supported = sum(1 for fit in fits if fit.verdict == "supported")

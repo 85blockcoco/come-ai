@@ -35,6 +35,10 @@ def test_unknown_sentinels_never_become_requirements_or_profile_evidence() -> No
         {"eligibility": "unknown", "skills": "unknown"},
         {},
         {"requirements": "unknown", "eligibility_requirement": "unknown"},
+        intelligence={"requirements": [
+            {"id": "req-unknown", "text": "unknown", "source_field": "eligibility_requirement"},
+            {"id": "req-level", "text": "Internship", "source_field": "role_level"},
+        ]},
     )
     assert result["requirements"] == []
     assert result["matched_elements"] == []

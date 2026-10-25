@@ -53,6 +53,22 @@ def deny_network(monkeypatch):
             monkeypatch.setattr(socket.socket, name, blocked)
 
 
+def test_unknown_sentinels_and_role_level_are_not_applicant_requirements():
+    offer = {
+        "requirements": [
+            {"id": "unknown", "text": "unknown", "source_field": "eligibility_requirement",
+             "modality": "required", "category": "other"},
+            {"id": "level", "text": "Internship", "source_field": "role_level",
+             "modality": "required", "category": "experience"},
+        ]
+    }
+    profile = {"facts": [{"value": "unknown Internship", "status": "approved", "category": "experience"}]}
+    result = analyze_fit(offer, profile)
+    assert result.fits == []
+    assert result.supported_count == result.to_verify_count == 0
+    assert result.missing_critical == []
+
+
 def _fit_for(case: dict, *, requirement_text: str | None = None):
     result = analyze_fit(case["offer"], case["profile"])
     expected_text = requirement_text or case["expected"]["requirement_text"]
