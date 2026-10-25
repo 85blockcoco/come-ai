@@ -1,0 +1,98 @@
+{
+  "label": "Synthetic administrative-document checklist fixtures (SPEC-028); not real personal data, not a legal reference",
+  "fixture_version": 1,
+  "countries": {
+    "France": {
+      "statuses": {
+        "convention": "ok",
+        "school_certificate": "ok",
+        "civil_id": "ok",
+        "insurance": "in_progress",
+        "bank_details": "missing",
+        "photo": "not_applicable"
+      },
+      "proof_refs": {
+        "convention": ["syn-convention-001"],
+        "school_certificate": ["syn-scolarite-001"],
+        "civil_id": ["syn-piece-identite-001"]
+      },
+      "expected_percent": 66.67,
+      "expected_required_percent": 60.0,
+      "expected_blocking": ["insurance", "bank_details"]
+    },
+    "United Kingdom": {
+      "statuses": {
+        "passport": "ok",
+        "visa": "in_progress",
+        "cas_letter": "ok",
+        "proof_of_funds": "missing",
+        "ihs": "not_applicable",
+        "convention": "ok",
+        "accommodation": "missing",
+        "insurance": "ok"
+      },
+      "proof_refs": {
+        "passport": ["syn-passeport-uk-001"],
+        "convention": ["syn-convention-uk-001"],
+        "insurance": ["syn-assurance-uk-001"]
+      },
+      "expected_percent": 62.5,
+      "expected_required_percent": 66.67,
+      "expected_blocking": ["visa", "proof_of_funds"]
+    },
+    "Germany": {
+      "statuses": {
+        "passport": "ok",
+        "visa": "missing",
+        "enrollment": "ok",
+        "convention": "in_progress",
+        "health_insurance": "ok",
+        "blocked_account": "not_applicable",
+        "registration": "missing",
+        "civil_id": "ok"
+      },
+      "proof_refs": {
+        "civil_id": ["syn-passeport-piece-de-001"],
+        "health_insurance": ["syn-assurance-sante-de-001"]
+      },
+      "expected_percent": 62.5,
+      "expected_required_percent": 66.67,
+      "expected_blocking": ["visa", "convention"]
+    },
+    "Netherlands": {
+      "statuses": {
+        "passport": "ok",
+        "visa": "ok",
+        "enrollment": "ok",
+        "convention": "ok",
+        "health_insurance": "in_progress",
+        "proof_of_funds": "missing",
+        "bsn": "missing",
+        "insurance": "ok"
+      },
+      "proof_refs": {
+        "convention": ["syn-convention-nl-001"]
+      },
+      "expected_percent": 62.5,
+      "expected_required_percent": 83.33,
+      "expected_blocking": ["health_insurance"]
+    },
+    "Belgium": {
+      "statuses": {
+        "passport": "ok",
+        "visa": "not_applicable",
+        "convention": "in_progress",
+        "school_certificate": "ok",
+        "insurance": "ok",
+        "proof_of_funds": "missing",
+        "residence_permit": "missing"
+      },
+      "proof_refs": {
+        "passport": ["syn-piece-identite-be-001"]
+      },
+      "expected_percent": 57.14,
+      "expected_required_percent": 75.0,
+      "expected_blocking": ["convention"]
+    }
+  }
+}
