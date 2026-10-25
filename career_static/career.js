@@ -3594,13 +3594,22 @@ async function loadStageHunter() {
   renderStageTerms(payload);
   const exploration = await api("/api/career/stage-search/explore");
   renderStageExploration(exploration);
-  if (stageHunterResultMode === "auto") stageHunterResultMode = (exploration.outcomes || []).length ? "explore" : "saved";
+  if (exploration.criteria_changed) {
+    // Old exploration results no longer match the saved criteria. Keep the
+    // user's already-saved offers visible instead of opening an empty, stale
+    // result list and making them recover it manually.
+    stageHunterResultMode = "saved";
+  } else if (stageHunterResultMode === "auto") {
+    stageHunterResultMode = (exploration.outcomes || []).length ? "explore" : "saved";
+  }
   if (stageHunterResultMode === "explore") {
     renderExplorationMatches({...exploration, configured:payload.configured});
   } else {
     const matches = await api("/api/career/stage-search/matches");
     renderStageMatches(matches);
-    $("#stagehunter-result-mode").textContent = "Mes offres enregistrées — tous les types de contrats, avec classement et avertissements. Aucune offre suivie n’a été supprimée.";
+    $("#stagehunter-result-mode").textContent = exploration.criteria_changed
+      ? "Tes critères ont changé : l’ancienne exploration est périmée et doit être relancée. Voici tes offres enregistrées; aucune offre suivie n’a été supprimée."
+      : "Mes offres enregistrées — tous les types de contrats, avec classement et avertissements. Aucune offre suivie n’a été supprimée.";
     $("#stagehunter-matches-empty").textContent = "Aucune offre enregistrée. Clique sur Explorer les stages pour chercher sans configurer d’entreprise.";
   }
   renderStagePrepSelect();

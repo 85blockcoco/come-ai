@@ -151,3 +151,52 @@ assert.match(elements["#stagehunter-progress-detail"].textContent, /57 offres qu
     completed = subprocess.run([_node(), "-e", script], capture_output=True, text=True, timeout=8)
     assert completed.returncode == 0, completed.stderr
 
+
+def test_stale_exploration_returns_user_to_saved_offers_with_refresh_notice() -> None:
+    source = SCRIPT.read_text(encoding="utf-8")
+    function = source.split("async function loadStageHunter() {", 1)[1].split(
+        '\n$("#stagehunter-brief-form")', 1
+    )[0]
+    script = r'''
+const assert = require("assert");
+let stageHunterResultMode = "auto";
+const state = {applications:[]};
+const calls = [];
+const status = {textContent:""};
+const elements = {"#stagehunter-result-mode":status,"#stagehunter-matches-empty":{textContent:""}};
+const $ = selector => elements[selector] || null;
+const savedOffers = {offers:[{id:"synthetic-saved-offer"}]};
+const api = async path => {
+  calls.push(path);
+  if (path === "/api/career/stage-search") return {configured:true};
+  if (path === "/api/career/stage-search/explore") return {
+    outcomes:[{source:"old-run"}], criteria_changed:true, requires_refresh:true, matches:[]
+  };
+  if (path === "/api/career/stage-search/matches") return savedOffers;
+  if (path === "/api/career/applications") return {applications:[]};
+  if (path === "/api/career/application-pipeline") return {pipeline:[]};
+  throw new Error("Unexpected API " + path);
+};
+let renderedSaved = null, renderedStale = false;
+const renderStageBrief = () => {};
+const renderStageTerms = () => {};
+const renderStageExploration = () => {};
+const renderExplorationMatches = () => {renderedStale=true;};
+const renderStageMatches = value => {renderedSaved=value;};
+const renderStagePrepSelect = () => {};
+const renderStageApplications = () => {};
+const loadApplicationPipeline = async () => {};
+LOAD_STAGE_HUNTER
+(async () => {
+  await loadStageHunter();
+  assert.strictEqual(stageHunterResultMode,"saved");
+  assert.strictEqual(renderedSaved,savedOffers);
+  assert.strictEqual(renderedStale,false,"stale matches must never be presented as current");
+  assert.match(status.textContent,/périmée.*relancée/i);
+  assert.ok(calls.includes("/api/career/stage-search/matches"));
+})().catch(error => {console.error(error);process.exitCode=1;});
+'''.replace("LOAD_STAGE_HUNTER", "async function loadStageHunter() {" + function)
+    # Execute the shipped function with controlled synthetic API/UI boundaries.
+    completed = subprocess.run([_node(), "-e", script], capture_output=True, text=True, timeout=8)
+    assert completed.returncode == 0, completed.stderr
+
