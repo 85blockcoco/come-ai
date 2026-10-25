@@ -43,6 +43,7 @@ import unicodedata
 import urllib.parse
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
+from functools import lru_cache
 from typing import Any, Callable, Mapping, Sequence
 
 #: A job record is the plain dictionary produced by the connectors.
@@ -105,6 +106,7 @@ USER_SIDE_FIELDS: frozenset[str] = USER_SCORE_FIELDS | USER_STATE_FIELDS
 # Text helpers
 # ---------------------------------------------------------------------------
 
+@lru_cache(maxsize=2_048)
 def _strip_accents(text: str) -> str:
     """Remove diacritics without changing the rest of the string."""
     return "".join(
@@ -1025,6 +1027,7 @@ MANUAL_SOURCES = frozenset({"", "manual", "import manuel", "import", "unknown"})
 EMPLOYER_SOURCES = frozenset({"employer_sites", "employer_official", "employer", "careers_page"})
 
 
+@lru_cache(maxsize=256)
 def _source_key(source_name: str) -> str:
     """Return the comparable key of a source name."""
     lowered = _clean_text(source_name, 80).lower()
@@ -1392,7 +1395,11 @@ def _match_records(
 
     # 6. Identifiers and links: they prove the two records describe the
     #    same posting.  A contradiction on the city or on the dates stays
-    #    visible in the group, it does not refuse the merge.
+    #    visible in the group, it does not refuse the merge.  The clustering
+    #    pre-pass separately avoids collapsing two different IDs on one board.
+    # Distinct identifiers from the same board are distinct postings.  A
+    # board often publishes several editions of the same internship title;
+    # title/company/location similarity alone must not collapse them.
     proofs: list[str] = []
     if shared_external_id or shared_source_id:
         proofs.append(REASON_EXTERNAL_ID)
@@ -1607,6 +1614,13 @@ def _cluster_records(
                     records[right].city, records[right].country,
                 ):
                     continue
+                if (
+                    records[left].source_name
+                    and _source_key(records[left].source_name) == _source_key(records[right].source_name)
+                    and records[left].source_id and records[right].source_id
+                    and records[left].source_id != records[right].source_id
+                ):
+                    continue
                 merge(left, right, "identical_title")
         for left, right in _candidate_pairs(indexes, records):
             if union.find(left) == union.find(right):
@@ -1782,19 +1796,13 @@ def _build_groups(
             if name and name not in merged_from:
                 merged_from.append(name)
         cluster_reasons: list[str] = []
+        # ``merge`` records the reason at the moment a pair joins the union.
+        # Re-evaluating every pair here was quadratic inside each cluster and
+        # could produce a different audit under expensive similarity hooks.
         for index in indexes:
             for reason in reasons.get(index, []):
                 if reason not in cluster_reasons:
                     cluster_reasons.append(reason)
-        for left_index in indexes:
-            for right_index in indexes:
-                if left_index >= right_index:
-                    continue
-                decision = _match_records(records[left_index], records[right_index], text_similarity)
-                if decision["matches"]:
-                    for reason in decision["reasons"]:
-                        if reason not in cluster_reasons:
-                            cluster_reasons.append(reason)
         groups.append({
             "dedup_id": _dedup_id(best),
             "merged": len(members) > 1,

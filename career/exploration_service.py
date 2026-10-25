@@ -56,6 +56,8 @@ from .exploration_run import (
 from .models import canonical_url, clean_text, utc_now
 from .offer_dates import extract_offer_dates
 from .offer_qualification import qualify_offer
+from .job_deduplication import deduplicate_jobs
+from .source_trust import check_trust
 from .stage_search import score_brief_match
 
 
@@ -724,7 +726,7 @@ class ExplorationService:
             "official_url": url,
             "source_name": clean_text(offer.get("source_name"), limit=120)
             or clean_text(source.get("provider"), limit=120),
-            "source_id": clean_text(offer.get("source_id"), limit=240),
+            "source_id": clean_text(offer.get("source_id") or offer.get("external_id") or offer.get("id"), limit=240),
             "job_family": clean_text(offer.get("job_family"), limit=160),
             "city": clean_text(offer.get("city"), limit=160),
             "country": clean_text(offer.get("country"), limit=120),
@@ -791,16 +793,54 @@ class ExplorationService:
 
     @staticmethod
     def _deduplicate(candidates: list[_Candidate]) -> list[_Candidate]:
-        """One record per canonical official URL; the best ranked one wins."""
-        unique: dict[str, _Candidate] = {}
-        for candidate in candidates:
-            key = canonical_url(candidate.job.get("official_url")) if candidate.job.get("official_url") else ""
-            if not key:
-                key = f"no-url:{candidate.job.get('company')}:{candidate.job.get('title')}"
-            current = unique.get(key)
-            if current is None or candidate.key < current.key:
-                unique[key] = candidate
-        return list(unique.values())
+        """Deduplicate offers while retaining bounded source evidence."""
+        if not candidates:
+            return []
+        records: list[dict[str, Any]] = []
+        for index, candidate in enumerate(candidates):
+            job = dict(candidate.job)
+            trust = check_trust(
+                clean_text(job.get("official_url"), limit=2_000),
+                employer_hint=clean_text(job.get("company"), limit=200),
+            )
+            job.update({
+                "_candidate_index": index,
+                # A board id identifies the connector, not an individual job;
+                # only the posting's own identifier is valid dedup evidence.
+                "source_id": job.get("source_id", ""),
+                "source_trust": trust.status,
+                "last_verified_at": candidate.verified_at,
+            })
+            records.append(job)
+
+        kept: list[_Candidate] = []
+        for group in deduplicate_jobs(records):
+            best = group["best"]
+            representative = candidates[int(best["_candidate_index"])]
+            provenances = [
+                {
+                    "source_name": item.get("source_name", ""),
+                    "source_id": item.get("source_id", ""),
+                    "official_url": item.get("official_url", ""),
+                    "trust": item.get("trust", "missing"),
+                    "is_representative": bool(item.get("is_representative")),
+                }
+                for item in group["provenances"][:25]
+            ]
+            representative.qualification["source_provenance"] = provenances
+            representative.qualification["source_conflicts"] = {
+                clean_text(field_name, limit=80): {
+                    clean_text(source_id, limit=160): clean_text(value, limit=300)
+                    for source_id, value in list(values.items())[:10]
+                }
+                for field_name, values in list(group["conflicts"].items())[:20]
+                if isinstance(values, dict)
+            }
+            representative.qualification["dedup_reasons"] = [
+                clean_text(reason, limit=200) for reason in group["match_reasons"][:20]
+            ]
+            kept.append(representative)
+        return kept
 
     def _persist_offers(
         self,

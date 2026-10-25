@@ -27,6 +27,11 @@ def _payload(*, month: int = 1, quote: str = "starting January 2027") -> dict:
             "duration_max_months": 6,
             "verification_status": "verified",
             "target_status": "conforming",
+            "source_provenance": [
+                {"source_name": "greenhouse", "source_id": "synthetic-1", "official_url": "https://boards.greenhouse.io/synthetic-bank/jobs/synthetic-1", "trust": "verified", "is_representative": True},
+                {"source_name": "employer", "source_id": "synthetic-2", "official_url": "https://careers.synthetic-bank.test/jobs/1", "trust": "unverified", "is_representative": False},
+            ],
+            "source_conflicts": {"city": {"greenhouse": "London", "employer": "Remote"}},
             "missing_fields": ["jour de début vérifiable"],
             "reasons": ["Stage confirmé sur la source vérifiée."],
             "provenance": {
@@ -67,6 +72,8 @@ def test_import_does_not_mutate_payload_or_invent_exact_dates(tmp_path) -> None:
     assert facts["duration_min_months"] == 6
     assert facts["contract_type"] == "internship"
     assert facts["provenance"]["start_month"]["quote"] == "starting January 2027"
+    assert len(facts["source_provenance"]) == 2
+    assert facts["source_conflicts"]["city"]["employer"] == "Remote"
 
 
 def test_new_snapshot_schema_is_additive_and_versioned(tmp_path) -> None:

@@ -597,14 +597,24 @@ def test_five_hundred_offers_are_deduplicated_quickly():
 def test_discover_stage_offers_deduplicates_the_multi_source_collection():
     from career.discovery import discover_stage_offers
 
-    offers, report = discover_stage_offers([
+    class Connector:
+        def __init__(self, job):
+            self.job = job
+
+        def discover_internships(self, source, **kwargs):
+            return type("Payload", (), {"jobs": (self.job,)})()
+
+    jobs = [
         ats("greenhouse", id="1", url="https://job-boards.greenhouse.io/acme/jobs/1",
             company="Acme", title="M&A Intern", city="Paris"),
         ats("lever", id="2", url="https://jobs.lever.co/acme/2",
             company="Acme", title="M&A Intern", city="Paris"),
         ats("apec", id="3", url="https://www.apec.fr/candidature/3",
             company="Acme", title="Consulting Intern", city="Paris"),
-    ])
+    ]
+    connectors = {provider: Connector(job) for provider, job in zip(("greenhouse", "lever", "apec"), jobs)}
+    sources = [{"provider": provider, "board_token": "acme"} for provider in connectors]
+    offers, report = discover_stage_offers(connectors, sources)
     assert len(offers) == 2
     assert report.merged_count == 1
     assert report.clusters[0]["sources"] == ["greenhouse", "lever"]

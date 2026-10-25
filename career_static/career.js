@@ -928,6 +928,8 @@ function jobCard(job, mode = "discover", qualification = null) {
 
   const details = make("div", "", "job-details");
   const temporalFacts = qualification?.temporal_facts || job.qualification_facts?.temporal_facts || [];
+  const sourceFacts = qualification || job.qualification_facts || {};
+  const sourceProvenance = sourceFacts.source_provenance || [];
   if (job.deadline_date) details.append(make("p", `Date limite : ${job.deadline_date}`));
   if (job.start_date || job.end_date || job.duration_months) {
     details.append(make("p", `Période annoncée : ${[job.start_date, job.end_date].filter(Boolean).join(" → ") || "dates non précisées"}${job.duration_months ? ` · ${job.duration_months} mois` : ""}`));
@@ -962,6 +964,18 @@ function jobCard(job, mode = "discover", qualification = null) {
     if (Array.isArray(fact.contradictions) && fact.contradictions.length) {
       details.append(make("p", `Contradiction temporelle à vérifier pour ${label}.`, "job-temporal-warning"));
     }
+  });
+  if (sourceProvenance.length) {
+    const primary = sourceProvenance.find((item) => item.is_representative);
+    details.append(make("p", `${sourceProvenance.length} source${sourceProvenance.length > 1 ? "s" : ""} rapprochée${sourceProvenance.length > 1 ? "s" : ""}${primary ? ` · source retenue : ${primary.source_name || "source officielle"} (${primary.trust || "à vérifier"})` : ""}.`));
+    sourceProvenance.filter((item) => !item.is_representative).slice(0, 4).forEach((item) => {
+      details.append(make("p", `Autre provenance : ${item.source_name || "source"} · confiance ${item.trust || "à vérifier"}${item.official_url ? ` · ${item.official_url}` : ""}`));
+    });
+  }
+  const sourceConflicts = sourceFacts.source_conflicts || {};
+  Object.entries(sourceConflicts).slice(0, 5).forEach(([field, values]) => {
+    const summary = Object.entries(values || {}).map(([source, value]) => `${source}: ${value}`).join(" ; ");
+    if (summary) details.append(make("p", `Sources en désaccord sur ${field} : ${summary}`, "job-temporal-warning"));
   });
   if (job.official_url) {
     details.append(make("p", `Origine du lien : ${job.official_source_trust_label || "Source liée, non vérifiée"}`));

@@ -452,7 +452,7 @@ def test_no_french_offer_survives_six_hundred_synthetic_offers():
 def test_discover_stage_offers_excludes_france_by_default():
     fetch = FixtureFetch(html_cards(mixed_jobs(2, location=FRANCE), "/emploi/{identifier}"))
     connector = ApecConnector(clock=lambda: "2026-10-20T01:00:00Z", fetch=fetch)
-    offers = discover_stage_offers({"apec": connector}, [source("apec")])
+    offers, report = discover_stage_offers({"apec": connector}, [source("apec")])
     assert offers == []
     assert ApecConnector.health_check()["excluded_by_country"] == {"FR": 2}
 
@@ -478,7 +478,7 @@ def test_discover_stage_offers_forwards_the_default_exclusion_list():
 def test_discover_stage_offers_can_bring_france_back():
     fetch = FixtureFetch(html_cards(mixed_jobs(1, location=FRANCE), "/emploi/{identifier}"))
     connector = ApecConnector(clock=lambda: "2026-10-20T01:00:00Z", fetch=fetch)
-    offers = discover_stage_offers({"apec": connector}, [source("apec")], countries_exclude=[])
+    offers, report = discover_stage_offers({"apec": connector}, [source("apec")], countries_exclude=[])
     assert len(offers) == 1
 
 
