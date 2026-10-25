@@ -1241,6 +1241,38 @@ def test_career_routes_are_local_and_do_not_break_v3(tmp_path: Path) -> None:
     assert client.request("DELETE", "/api/career/data", json={"confirmation": DELETE_CONFIRMATION}).json() == {"deleted": True}
 
 
+def test_http_job_import_derives_neutral_facts_without_trusting_client_verification(tmp_path: Path) -> None:
+    client = TestClient(create_app(tmp_path, agent_override=FakeAgent()))
+    payload = manual_job(
+        source_name="greenhouse",
+        source_id="synthetic-jan-2027",
+        official_url="https://careers.example.test/jobs/synthetic-jan-2027",
+        job_family="M&A / Investment Banking",
+        city="London",
+        country="United Kingdom",
+        start_date="",
+        end_date="",
+        duration_months=6,
+        employment_type="Internship",
+        description_original="Synthetic finance internship. Starting January 2027 for six months.",
+    )
+    # This endpoint must ignore caller supplied derived trust and recompute it.
+    payload["qualification"] = {"verification_status": "verified", "target_status": "conforming"}
+
+    response = client.post("/api/career/jobs/import", json=payload)
+
+    assert response.status_code == 201
+    job = response.json()
+    facts = job["qualification_facts"]
+    assert facts["start_month"] == 1
+    assert facts["duration_min_months"] == 6
+    assert facts["provenance"]["start_month"]["quote"] == "Starting January 2027"
+    assert not job["start_date"]  # a month-only statement never becomes a day
+    assert job["qualification_snapshot_current"] is True
+    assert facts["verification_status"] != "verified"
+    assert job["source_verified"] is False
+
+
 def test_discovery_routes_use_an_injected_offline_connector_and_keep_exports_private(tmp_path: Path) -> None:
     connector = FakeDiscoveryConnector([_greenhouse_payload(greenhouse_job())])
     career = CareerService(tmp_path, discovery_connector=connector)  # type: ignore[arg-type]

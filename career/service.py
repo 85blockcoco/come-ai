@@ -3215,7 +3215,30 @@ class CareerService:
                     job | {"id": job_id, "updated_at": now, "last_verified_at": now},
                 )
                 self._audit(connection, "job_refreshed_without_duplicate", "job", job_id)
-                if qualification is not None:
+                store_qualification = qualification is not None
+                if store_qualification:
+                    saved_snapshot = connection.execute(
+                        "SELECT facts_json, source_fingerprint FROM job_qualification_snapshots WHERE job_id = ?",
+                        (job_id,),
+                    ).fetchone()
+                    if saved_snapshot is not None:
+                        try:
+                            saved_facts = json.loads(saved_snapshot["facts_json"] or "{}")
+                        except (TypeError, ValueError, json.JSONDecodeError):
+                            saved_facts = {}
+                        incoming_fingerprint = normalize_qualification_snapshot({}, payload)["source_fingerprint"]
+                        if (
+                            isinstance(saved_facts, dict)
+                            and saved_facts.get("verification_status") == "verified"
+                            and qualification.get("verification_status") != "verified"
+                            and saved_snapshot["source_fingerprint"] == incoming_fingerprint
+                        ):
+                            # A same-text manual/API refresh cannot downgrade
+                            # an official qualification. Changed source text
+                            # gets a new, unverified snapshot and fails the
+                            # current-source fingerprint check as expected.
+                            store_qualification = False
+                if store_qualification:
                     self._store_qualification_snapshot(connection, job_id, qualification, payload)
                 created = False
             else:

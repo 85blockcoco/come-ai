@@ -209,3 +209,33 @@ def test_manual_claim_does_not_create_persisted_source_verification(tmp_path) ->
     stored = service.import_job(payload)
     assert stored["qualification_snapshot_current"] is False
     assert stored["source_verified"] is False
+
+
+def test_unverified_same_source_refresh_does_not_downgrade_verified_snapshot(tmp_path) -> None:
+    service = CareerService(tmp_path)
+    trusted = _payload()
+    trusted.update(
+        source_name="greenhouse",
+        source_id="synthetic-verified",
+        official_url="https://example.test/jobs/synthetic-verified",
+        source_verified=True,
+        start_date="2027-01-05",
+        duration_months=6,
+        employment_type="Internship",
+        language="English",
+        country="United Kingdom",
+        city="London",
+    )
+    trusted["qualification"] = qualify_offer(trusted).to_dict()
+    saved = service.import_job(trusted)
+    assert saved["source_verified"] is True
+
+    unverified = dict(trusted)
+    unverified.pop("source_verified")
+    unverified["qualification"] = qualify_offer(unverified).to_dict()
+    refreshed = service.import_job(unverified)
+
+    assert refreshed["id"] == saved["id"]
+    assert refreshed["qualification_snapshot_current"] is True
+    assert refreshed["source_verified"] is True
+    assert refreshed["qualification_facts"]["verification_status"] == "verified"

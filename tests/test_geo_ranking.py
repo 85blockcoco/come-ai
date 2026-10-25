@@ -259,7 +259,7 @@ def test_ranking_integration_uses_the_total_score() -> None:
         raw_job("states", title="M&A Intern", location="New York, United States"),
     ]
     result = GreenhouseJobBoardConnector._normalise(
-        BOARD, {"jobs": jobs}, selection_brief={"domains": ["M&A"]}
+        BOARD, {"jobs": jobs}, selection_brief={"domains": ["M&A"]}, countries_exclude=[]
     )
     order = [job["source_id"] for job in result.jobs]
     assert order == ["germany", "states", "france"]
@@ -303,7 +303,8 @@ def test_internship_selection_reports_the_geographic_signal() -> None:
                 content="<p>Stage en fusion-acquisition de six mois à partir de janvier 2027.</p>"),
     ]
     result = GreenhouseJobBoardConnector._normalise(
-        BOARD, {"jobs": jobs}, selection_brief={"domains": ["M&A"]}, internships_only=True
+        BOARD, {"jobs": jobs}, selection_brief={"domains": ["M&A"], "countries_exclude": []},
+        countries_exclude=[], internships_only=True
     )
     by_id = {job["source_id"]: job for job in result.jobs}
     assert by_id["france"]["qualification"]["geo_score"] == -50
