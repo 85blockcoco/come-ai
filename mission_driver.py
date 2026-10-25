@@ -526,8 +526,10 @@ def main_loop():
                 _cooldown = {k: v for k, v in _cooldown.items() if _now - v < 300}
                 main_loop._cooldown = _cooldown
 
-                ready = find_all_ready_missions(reg, slots_available)
+                ready = find_all_ready_missions(reg, max_parallel * 3 + len(inflight))
                 for mission in ready:
+                    if len(active_orders) >= max_parallel:
+                        break
                     if mission["id"] in inflight:
                         log(f"⏭ Mission {mission['id']} déjà en vol (worker vivant ou active) — pas de re-soumission")
                         continue
