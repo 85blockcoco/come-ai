@@ -1293,8 +1293,24 @@
       "dependencies": [
         "59"
       ],
-      "status": "pending",
-      "description": "Scheduler de questions par offre (mots-clés, secteur) + worksheets STAR guidées avec checklist de preuves et auto-évaluation chiffrée."
+      "status": "done",
+      "description": "Scheduler de questions par offre (mots-clés, secteur) + worksheets STAR guidées avec checklist de preuves et auto-évaluation chiffrée.",
+      "completed_at": "2026-10-25T22:15:19.501260",
+      "worker_result": {
+        "task_id": "cvboost-62-1792960803852",
+        "status": "done",
+        "files_created": [
+          "career/interview_sim.py",
+          "tests/test_interview_sim.py",
+          "tests/fixtures/interview_offers_synthetic.json",
+          "docs/agent-reports/SPEC-027-interview_sim.md"
+        ],
+        "output": "Mission SPEC-027 (CVBOOST-62) livrée : simulateur d'entretien STAR déterministe et local-first (build_question_set, StarWorksheet, evidence_checklist, self_score 0-100), 4 familles de questions, graine configurable, fixtures synthétiques uniquement, 3 routes REST servies via create_app() sur offre enregistrée, rapport d'agent et 29 tests synthétiques. Le commit local 3022372 a été réconcilié avec le tip distant f4c5e8d par un commit de merge ; les alias Python (build_questions, generate_question_set, get_question_set, load_fixtures) sont conservés.",
+        "logs": "pytest -q tests/test_interview_sim.py -> 29 passed\npytest -q (suite complète) -> 1536 passed, 1 skipped ; 1 échec préexistant et sans lien (test_local_storage_profile_preferences_and_persistence, échec aussi sur la base 091399c)\nruff check . -> All checks passed\ngit diff --check -> CLEAN\nmerge -X ours de origin/agent/spec-027-interview-sim (f4c5e8d) ; travail poussé sur agent/spec-027-interview-sim uniquement",
+        "error": null
+      },
+      "verified": "push vérifié + tests verts",
+      "push_verified": true
     },
     {
       "id": "63",
@@ -1327,8 +1343,19 @@
       "dependencies": [
         "60"
       ],
-      "status": "pending",
-      "description": "Planificateur de relances : lit candidatures + historique, calcule les actions du jour, refuse les sur-relances, s'intègre au cockpit existant."
+      "status": "done",
+      "description": "Planificateur de relances : lit candidatures + historique, calcule les actions du jour, refuse les sur-relances, s'intègre au cockpit existant.",
+      "completed_at": "2026-10-25T22:53:37.525085",
+      "verified": "push origin agent/spec-029-followup-engine (f4283b2) + 25 tests verts (contrôle manuel)",
+      "push_verified": true,
+      "worker_result": {
+        "status": "done",
+        "files_created": [
+          "career/followup_engine.py",
+          "tests/test_followup_engine.py"
+        ],
+        "output": "Moteur de relances chronologiques SPEC-029"
+      }
     },
     {
       "id": "65",
