@@ -2651,6 +2651,7 @@ function stageRequirementSnippets(job) {
 
 function stageOfferOverview(job, qualification) {
   const panel = make("section", "", "stage-offer-overview");
+  const evidence = {...(job.qualification_facts || {}), ...(qualification || {})};
   const factDefinitions = [
     ["Contrat", "contract", "briefcase"], ["Localisation", "location", "pin"],
     ["Publication", "publication", "calendar"], ["Début", "start", "play"],
@@ -2681,6 +2682,22 @@ function stageOfferOverview(job, qualification) {
   const knownCount = factDefinitions.length - missing.length;
   trust.append(make("span", `${knownCount}/${factDefinitions.length} informations essentielles renseignées`));
   panel.append(trust);
+
+  const provenance = evidence.source_provenance || [];
+  if (provenance.length) {
+    const sources = make("div", "", "stage-offer-provenance");
+    const primary = provenance.find((item) => item.is_representative);
+    sources.append(make("strong", `${provenance.length} source${provenance.length > 1 ? "s" : ""} rapprochée${provenance.length > 1 ? "s" : ""}`));
+    if (primary) sources.append(make("p", `Source retenue : ${primary.source_name || "source officielle"} · confiance ${primary.trust || "à vérifier"}.`));
+    provenance.filter((item) => !item.is_representative).slice(0, 4).forEach((item) => {
+      sources.append(make("p", `Autre provenance : ${item.source_name || "source"} · confiance ${item.trust || "à vérifier"}${item.official_url ? ` · ${item.official_url}` : ""}`));
+    });
+    panel.append(sources);
+  }
+  Object.entries(evidence.source_conflicts || {}).slice(0, 5).forEach(([field, values]) => {
+    const summary = Object.entries(values || {}).map(([source, value]) => `${source}: ${value}`).join(" ; ");
+    if (summary) panel.append(make("p", `Sources en désaccord sur ${field} : ${summary}`, "job-temporal-warning"));
+  });
 
   const requirements = stageRequirementSnippets(job);
   if (requirements.length) {
