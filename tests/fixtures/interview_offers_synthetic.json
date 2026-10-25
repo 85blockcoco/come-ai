@@ -1,0 +1,35 @@
+{
+  "label": "Offres synthétiques pour le simulateur d'entretien STAR (CVBOOST-62 / SPEC-027). Aucune donnée personnelle réelle.",
+  "offers": [
+    {
+      "id": "finance-ma",
+      "company": "Banque Synthétique",
+      "title": "Stagiaire M&A",
+      "job_family": "M&A / Investment Banking",
+      "city": "Paris",
+      "country": "France",
+      "requirements": "Modélisation financière, Excel avancé et analyse de valorisation. Anglais courant exigé.",
+      "description_original": "Stage de quatre mois au sein d'une équipe de fusions-acquisitions synthétique. Missions : préparation de supports, construction de modèles DCF et revue de données comptables."
+    },
+    {
+      "id": "data-intern",
+      "company": "Observatoire Synthétique",
+      "title": "Stagiaire Data Analyst",
+      "job_family": "Data / Analytics",
+      "city": "Lyon",
+      "country": "France",
+      "requirements": "Python, SQL et Power BI. Statistiques appliquées et communication écrite en français.",
+      "description_original": "Stage de six mois : nettoyage de jeux de données synthétiques, tableaux de bord et présentation des résultats à une équipe non technique."
+    },
+    {
+      "id": "consulting-intern",
+      "company": "Cabinet Synthétique",
+      "title": "Stagiaire Consultant",
+      "job_family": "Conseil / Strategy",
+      "city": "Genève",
+      "country": "Suisse",
+      "requirements": "Étude de marché, gestion de projet, PowerPoint et communication. Allemand apprécié.",
+      "description_original": "Stage de trois mois : recherche de marché synthétique, structuration de recommandations et préparation de présentations clients."
+    }
+  ]
+}
