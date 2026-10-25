@@ -15,8 +15,12 @@ from career.interview_sim import (
     InterviewQuestion,
     StarWorksheet,
     build_question_set,
+    build_questions,
     build_worksheet,
     evidence_checklist,
+    generate_question_set,
+    get_question_set,
+    load_fixtures,
     self_score,
 )
 from come_ai_web import create_app
@@ -367,3 +371,18 @@ def test_interview_question_contract_is_serializable() -> None:
         "question": "Q",
         "evidence_needed": ["E"],
     }
+
+
+def test_compatibility_aliases_and_count_match_canonical_builder() -> None:
+    offer = _offer("finance-ma")
+    canonical = [q.to_dict() for q in build_question_set(offer, seed=7, limit=14)]
+    for alias in (build_questions, generate_question_set, get_question_set):
+        assert [q.to_dict() for q in alias(offer, seed=7, count=14)] == canonical
+
+
+def test_bundled_fixtures_are_synthetic_and_loadable() -> None:
+    offers = load_fixtures()
+    assert len(offers) >= 3
+    assert all(offer.get("id") for offer in offers)
+    for offer in offers:
+        assert len(build_question_set(offer, seed=0)) >= MIN_QUESTIONS

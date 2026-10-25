@@ -13,6 +13,8 @@ real interview.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import json
+from pathlib import Path
 import re
 from typing import Any, Iterable, Literal, Mapping
 
@@ -247,6 +249,7 @@ def build_question_set(
     seed: int = 0,
     limit: int = DEFAULT_QUESTION_LIMIT,
     language: str = "fr",
+    count: int | None = None,
 ) -> list[InterviewQuestion]:
     """Build at least :data:`MIN_QUESTIONS` questions covering the four kinds.
 
@@ -258,6 +261,8 @@ def build_question_set(
     context = _offer_context(offer)
     lang = _language(language)
     value = _seed_value(seed)
+    if count is not None:
+        limit = count
     bounded_limit = _limit_value(limit)
 
     pools = {
@@ -863,3 +868,69 @@ def _dedupe(items: Iterable[str]) -> list[str]:
             seen.add(item)
             result.append(item)
     return result
+
+
+# ---------------------------------------------------------------------------
+# Compatibility helpers
+# ---------------------------------------------------------------------------
+
+_FIXTURES_FILE = (
+    Path(__file__).resolve().parents[1] / "tests" / "fixtures" / "interview_offers_synthetic.json"
+)
+
+
+def load_fixtures() -> list[dict[str, Any]]:
+    """Load the bundled synthetic offers (never real candidate data)."""
+
+    with _FIXTURES_FILE.open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    if isinstance(payload, dict):
+        payload = payload.get("offers", [])
+    if not isinstance(payload, list):
+        raise ValueError("interview fixture must be a list of offers")
+    return [item for item in payload if isinstance(item, dict)]
+
+
+def build_questions(*args: Any, **kwargs: Any) -> list[InterviewQuestion]:
+    """Alias kept for callers that used the earlier helper name."""
+
+    return build_question_set(*args, **kwargs)
+
+
+def generate_question_set(*args: Any, **kwargs: Any) -> list[InterviewQuestion]:
+    """Alias kept for callers that used the earlier helper name."""
+
+    return build_question_set(*args, **kwargs)
+
+
+def get_question_set(*args: Any, **kwargs: Any) -> list[InterviewQuestion]:
+    """Alias kept for callers that used the earlier helper name."""
+
+    return build_question_set(*args, **kwargs)
+
+
+def load_interview_fixtures() -> list[dict[str, Any]]:
+    """Alias kept for callers that used the earlier helper name."""
+
+    return load_fixtures()
+
+
+__all__ = [
+    "DEFAULT_QUESTION_LIMIT",
+    "InterviewQuestion",
+    "KINDS",
+    "MAX_QUESTIONS",
+    "MIN_QUESTIONS",
+    "STAR_PARTS",
+    "StarWorksheet",
+    "build_question_set",
+    "build_questions",
+    "build_worksheet",
+    "clean_field",
+    "evidence_checklist",
+    "generate_question_set",
+    "get_question_set",
+    "load_fixtures",
+    "load_interview_fixtures",
+    "self_score",
+]
