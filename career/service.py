@@ -19,7 +19,7 @@ import urllib.parse
 import uuid
 from contextlib import contextmanager
 from dataclasses import replace
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -112,6 +112,14 @@ from .exploration import (
 )
 from .offer_qualification import qualify_offer
 from .scoring import classify_job_family, score_job
+from .share_export import (
+    APPLICATION_SHARE_FIELDS,
+    JOB_SHARE_FIELDS,
+    PROFILE_SHARE_FIELDS,
+    build_bundle,
+    bundle_filename,
+    redact,
+)
 from workspace_core import UserFacingError, extract_text, safe_error
 from .profile_import import (
     ALLOWED_PROFILE_SUFFIXES,
@@ -4743,6 +4751,104 @@ class CareerService:
         except OSError:
             pass
         return target
+
+    def share_view(self, job_id: str) -> dict[str, Any]:
+        """Return the whitelisted, read-only projection used by a share link.
+
+        This method deliberately never returns the raw job/profile row: only
+        fields from ``share_export`` allow-lists survive.  Redacted names are
+        reported so the UI can explain what was omitted.
+        """
+        job = self.get_job(job_id)
+        profile = self.get_profile()
+        application: dict[str, Any] | None = None
+        application_ref = job.get("application")
+        if isinstance(application_ref, dict) and application_ref.get("id"):
+            application = self.get_application(str(application_ref["id"]))
+        application_view = redact(application, APPLICATION_SHARE_FIELDS) if application else None
+        job_view = redact(job, JOB_SHARE_FIELDS)
+        profile_view = redact(profile, PROFILE_SHARE_FIELDS)
+        return {
+            "schema": "career-share-view/1",
+            "offer_id": str(job["id"]),
+            "read_only": True,
+            "generated_at": utc_now(),
+            "job": {"fields": job_view.fields, "redacted": job_view.redacted},
+            "profile": {"fields": profile_view.fields, "redacted": profile_view.redacted},
+            "application": (
+                {"fields": application_view.fields, "redacted": application_view.redacted}
+                if application_view
+                else None
+            ),
+        }
+
+    def export_share_bundle(self, job_id: str) -> tuple[Path, dict[str, Any]]:
+        """Write one sanitised ZIP bundle and record the export in the audit log.
+
+        The bundle is built in memory first, then written through a private
+        temporary file so an interrupted export cannot leave a half-archive.
+        A document draft is optional and only the latest one is shared.
+        """
+        job = self.get_job(job_id)
+        application = None
+        application_ref = job.get("application")
+        if isinstance(application_ref, dict) and application_ref.get("id"):
+            application = self.get_application(str(application_ref["id"]))
+        documents: dict[str, str] = {}
+        drafts = [draft for draft in self.list_application_drafts() if draft.get("job_id") == job["id"]]
+        if drafts:
+            latest = self.get_application_draft(str(drafts[0]["id"]))
+            if latest.get("cv_markdown"):
+                documents["cv.md"] = str(latest["cv_markdown"])
+            if latest.get("letter_markdown"):
+                documents["lettre.md"] = str(latest["letter_markdown"])
+        moment = datetime.now(timezone.utc)
+        profile = self.get_profile()
+        sensitive_values = tuple(
+            profile.get(field) for field in ("contact_email", "contact_phone", "linkedin_url", "notes", "target_companies")
+        )
+        try:
+            bundle = build_bundle(
+                offer_id=str(job["id"]),
+                job=job,
+                profile=profile,
+                application=application,
+                documents=documents,
+                sensitive_values=sensitive_values,
+                generated_at=moment,
+            )
+            payload = bundle.zip_bytes()
+        except ValueError as error:
+            raise UserFacingError("Le partage n’a pas pu être préparé à partir de ces données locales.") from error
+        target = self.export_dir / bundle_filename(str(job["id"]), moment, nonce=uuid.uuid4().hex[:8])
+        temporary = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            temporary.write_bytes(payload)
+            os.chmod(temporary, 0o600)
+            os.replace(temporary, target)
+            os.chmod(target, 0o600)
+        except OSError as error:
+            temporary.unlink(missing_ok=True)
+            raise UserFacingError("Le dossier de partage local n’a pas pu être créé.") from error
+        with self._lock, self._connection() as connection:
+            self._audit(connection, "share_bundle_exported", "export", target.name)
+        return target, bundle.manifest
+
+    def list_share_exports(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        """List past bundle exports, traceable without opening the archive."""
+        bounded = max(1, min(int(limit), 200))
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, subject_id AS filename, created_at
+                FROM career_audit_log
+                WHERE action = 'share_bundle_exported'
+                ORDER BY created_at DESC, id DESC
+                LIMIT ?
+                """,
+                (bounded,),
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     def reset_personal_data(self, confirmation: str) -> None:
         if confirmation != DELETE_CONFIRMATION:
