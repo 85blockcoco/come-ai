@@ -13,7 +13,7 @@
 | Coverage computation | Extend existing `cv_coverage` from `application_prep.py` + `qualification.missing_fields` | Already computes `supported`/`to_verify`/`coverage_percent`; adds mandatory vs preferred split using qualification provenance | New coverage engine from scratch (reinvents existing logic), LLM-based (violates Constitution Principle II) |
 | Diff representation | `FitGap` dataclasses with `current_state`, `adapted_state`, `provenance` | Fits `CVAnalysisResult` extension pattern; serializable for JS; carries citations per Constitution Principle IV | Plain dicts (loses type safety), string-only descriptions (loses structured provenance) |
 | Kit template parameterization | Template DOCX per variant + python-docx programmatic injection | `application_studio.py` already uses python-docx; variant selects template + injects variant-specific content | Jinja2 on XML (complex, fragile), separate code paths per variant (duplication) |
-| Canva PDF reading order | pdfplumber `extract_words()` with (x0, top, x1, bottom) → sort by top, then x0 | pdfplumber already in deps; coordinates enable column detection; left-to-right within visual bands | pdfminer.six (lower-level, more complex), OCR-based (overkill, violates local-first) |
+| Canva PDF reading order | Use the existing `pypdf` visitor API with coordinate-based visual-band reconstruction | No new dependency; remains local and is covered by generated multi-column, floating-box and multi-page fixtures | Original pdfplumber proposal was superseded during implementation; OCR is unnecessary for text-based layouts |
 | Pipeline stage derivation | Computed at query time from existing tables (no schema change) | Assumptions explicitly state no schema changes; derived from `stage_matches`, `applications`, `application_drafts` | New `pipeline_stage` column (requires migration, violates assumptions), event log table (new table) |
 | JS pipeline view | New panel in `index.html` + `renderApplicationPipeline()` in `career.js` | Consistent with existing sprint/detail/prep panels (`renderApplicationSprint`, `renderStagePrep`) | Separate page (breaks SPA pattern), modal (less discoverable) |
 
@@ -23,7 +23,7 @@
 
 | Dependency | Version | Usage in Feature | Notes |
 |------------|---------|------------------|-------|
-| pdfplumber | Latest | Canva PDF word extraction with coordinates | Already in `requirements.txt` via `cv_quality` |
+| pypdf | Existing project version | Local PDF text and visitor-coordinate extraction | Already used by `career.cv_quality.parser`; no dependency added |
 | python-docx | Latest | DOCX generation for CV/letter kits | Already used in `application_studio.py` |
 | FastAPI | Latest | Pipeline endpoint | Already in `come_ai_web.py` |
 | pytest | Latest | All tests | Constitution Principle V |
@@ -68,7 +68,8 @@ Generated via `reportlab` or `fpdf2` in test setup — ensures deterministic, ve
 | 2026-10-21 | Diff as `FitGap` list with provenance | Planning | FR-003, FR-013 |
 | 2026-10-21 | Kit generation uses template DOCX per variant | Planning | FR-005, FR-006, FR-007 |
 | 2026-10-21 | Pipeline stage derived, not stored | Planning | FR-011, Assumptions |
-| 2026-10-21 | Canva PDF reading order via pdfplumber coordinates | Planning | FR-009, FR-010 |
+| 2026-10-21 | Canva PDF reading order via pdfplumber coordinates | Original plan; superseded by existing pypdf visitor implementation | FR-009, FR-010 |
+| 2026-10-25 | Use existing pypdf visitor API and synthetic visual-layout regressions | Implemented in the consolidation candidate; four-experience recall verified on synthetic layout | FR-009, FR-010 |
 
 ---
 

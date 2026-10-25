@@ -95,6 +95,7 @@ from __future__ import annotations
 import hashlib
 import re
 from dataclasses import asdict, dataclass, field
+from functools import lru_cache
 from typing import Any, Iterable, Literal, Mapping, Sequence
 
 from .models import clean_text, normalized_text
@@ -1021,13 +1022,20 @@ _AVAILABILITY_CONTEXT_MARKERS: tuple[str, ...] = (
 )
 
 
+@lru_cache(maxsize=256)
+def _compiled_markers(markers: tuple[str, ...]) -> tuple[re.Pattern[str], ...]:
+    """Compile static category markers once; never retain the matched text."""
+    return tuple(
+        re.compile(rf"\b{re.escape(key)}\b")
+        for marker in markers
+        if (key := normalized_text(marker))
+    )
+
+
 def _mentions(text: str, markers: Iterable[str]) -> bool:
     normalized = normalized_text(text)
-    for marker in markers:
-        key = normalized_text(marker)
-        if not key:
-            continue
-        if re.search(rf"\b{re.escape(key)}\b", normalized):
+    for pattern in _compiled_markers(tuple(markers)):
+        if pattern.search(normalized):
             return True
     return False
 

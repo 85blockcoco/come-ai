@@ -39,6 +39,34 @@ def test_pipeline_endpoint_tracks_full_local_cycle(tmp_path: Path) -> None:
     assert payload["focus_plan"]["automatic_submission"] is False
 
 
+def test_pipeline_reuses_the_single_stage_match_job_snapshot(tmp_path: Path, monkeypatch) -> None:
+    service = CareerService(tmp_path, curated_sources=())
+    service.update_stage_search(service.get_stage_search()["brief"])
+    for index in range(5):
+        service.import_job(
+            {
+                "company": f"Synthetic Bank {index}",
+                "title": "Finance Intern",
+                "official_url": f"https://careers.example.test/pipeline-cache-{index}",
+                "source_status": "open",
+            }
+        )
+
+    calls = 0
+    list_jobs = service.list_jobs
+
+    def count_list_jobs(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return list_jobs(*args, **kwargs)
+
+    monkeypatch.setattr(service, "list_jobs", count_list_jobs)
+    pipeline = service.get_application_pipeline()
+
+    assert calls == 1
+    assert len(pipeline["pipeline"]) == 5
+
+
 def test_pipeline_frontend_contract_exists() -> None:
     root = Path(__file__).resolve().parents[2]
     html = (root / "career_static" / "index.html").read_text(encoding="utf-8")

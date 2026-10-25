@@ -16,10 +16,13 @@ The original checklist was generated for `AI-Excel-Agent-application-sprint`; th
 
 - T005-T044 are implemented and covered by the existing variant, coverage, kit, API, UI and pipeline tests.
 - T045, T047-T057 are implemented/adapted and covered with synthetic Canva-equivalent PDFs, including a split experience continued on page two. Coordinate extraction uses the existing `pypdf` visitor API rather than adding `pdfplumber`; no dependency was added.
-- T046 remains open for a real personal CV; synthetic fixtures were used instead.
-- T058: full offline suite on this candidate — 2,964 passed, 3 skipped, 1 failed on a timing assertion (500-offer deduplication: 228 ms against a 200 ms limit). That unchanged baseline test passed four isolated reruns (one initial plus three consecutive); treat the full-suite timing result as a load-sensitive failure, not as a clean full-suite pass. Both nested-sandbox skips passed separately; the remaining skip is an absent offer-summary script/base.
-- T059: targeted variant, coverage, synthetic Canva parser, prep-panel, kit, pipeline and HTTP journey suite — 43 passed; the full suite also collected these tests. T060 covers the synthetic Career journey through exploration, preparation, explicit kit language, kit creation and persisted tracking after restart; the Canva import UI step was not exercised.
-- T061 (performance targets), T063 (README/docstring edits), T065 (formal Constitution checklist) and T066 (merge readiness) remain open.
+- T046 remains open for a real personal CV; synthetic fixtures were used instead. No personal CV was read.
+- T058 is **not currently green**. Exact candidate run after the sprint/pipeline performance changes: 2,967 passed, 2 skipped, 1 failed in 260.45 s. Failure: unchanged `tests/test_job_deduplication.py::test_five_hundred_offers_are_deduplicated_quickly`, measured 254 ms against 200 ms during the loaded full suite. Four subsequent isolated reruns passed (1.73–1.89 s each). Both skipped nested-sandbox tests passed individually on the same candidate revision. Do not report the full suite as passing.
+- T059 targeted matrix after the latest Career changes: **159 passed** across CV fit, sprint, qualification, exploration, Career service, pipeline, and contracts. Synthetic Canva, kit, variant and pipeline UI/API contracts are additionally covered by a 138-test focused run before the final pipeline cache test; the latter is included in the 159-test matrix.
+- T060 has verified synthetic Career browser flow through exploration, prep, explicit language, kit and persisted tracking after restart. The profile-import review UI was separately exercised in Chrome from an API-seeded synthetic PDF. Browser file selection itself remains unverified because the Chrome extension cannot access local file URLs in this setup; end-to-end quickstart remains open.
+- T061 has a repeatable offline harness at `scripts/benchmark_career_spec003.py`. Latest candidate run: sprint 150 median 1,407.4 ms (target <500 ms, **miss**); kit median 213.0 ms (target <2,000 ms, pass); pipeline with 50 offers median 90.4 ms (target <200 ms, pass); PDF extraction plus CV analysis median 14.6 ms (target <3,000 ms, pass; 4 synthetic experiences detected). Timing varies under machine load; sprint threshold remains open.
+- T063 is complete for this feature: this Quickstart now uses current test paths, the actual local data contract and a reproducible benchmark command; implementation modules contain their interface/local-only docstrings.
+- T065 (formal Constitution checklist) and T066 (merge readiness) remain open.
 - `ruff check .`, `git diff --check`, and JavaScript syntax checks pass. `ruff format --check .` reports 221 pre-existing files would be reformatted; no repository-wide formatting was applied. The changed Python files pass `ruff format --check`.
 
 ## Format: `[ID] [P?] [Story?] Description with file path`
@@ -34,7 +37,7 @@ The original checklist was generated for `AI-Excel-Agent-application-sprint`; th
 
 **Purpose**: Project initialization and basic structure
 
-- [x] T001 Verify Python 3.12+ environment and existing dependencies (pdfplumber, python-docx, FastAPI, pytest, Ruff) in `/Users/comedelavenne/AI-Excel-Agent-application-sprint`
+- [x] T001 Verify Python 3.12+ environment and existing dependencies (pypdf, python-docx, FastAPI, pytest, Ruff) in the isolated candidate environment
 - [x] T002 Confirm existing test suite passes (1387+ tests) with `pytest -q` in project root
 - [x] T003 [P] Create feature branch `003-ats-diagnostic-cv-variants-pipeline` from `main` (worktree: `/Users/comedelavenne/AI-Excel-Agent-application-sprint`)
 - [x] T004 [P] Create directory for new module: `career/cv_variants.py` (will hold variant definitions)
@@ -157,7 +160,7 @@ The original checklist was generated for `AI-Excel-Agent-application-sprint`; th
 
 ### Implementation for User Story 4
 
-- [x] T049 [P] [US4] **pdfplumber coordinate extraction** — Modify `career/cv_quality/parser.py` to use `pdfplumber.extract_words()` with `x0, top, x1, bottom` coordinates instead of text-only extraction
+- [x] T049 [P] [US4] **PDF coordinate extraction** — Use the existing `pypdf` visitor API in `career/cv_quality/parser.py` for visual reading-order reconstruction; no new PDF dependency was added
 - [x] T050 [P] [US4] **Visual block detection** — Add `detect_visual_blocks(words: list) -> list[VisualBlock]` in `parser.py`: cluster words by vertical proximity (same line/band), then sort blocks top-to-bottom, within band sort left-to-right by x0
 - [x] T051 [P] [US4] **Column association** — In `parser.py`, detect 2-column layouts: if words cluster into two distinct x0 bands (left narrow, right wide), associate left-band words (dates/locations) with right-band words (descriptions) by vertical overlap
 - [x] T052 [P] [US4] **Floating box grouping** — In `parser.py`, detect absolute-positioned text boxes: group words by proximity in both x and y, treat each cluster as a potential experience entry
@@ -175,12 +178,12 @@ The original checklist was generated for `AI-Excel-Agent-application-sprint`; th
 
 **Purpose**: Improvements affecting multiple user stories, validation, and delivery readiness
 
-- [x] T058 [P] **Full test suite pass** — Run `pytest -q` in project root, verify 1387+ tests pass, 0 failures, 1 skipped (exhaustiveness) — addresses SC-009, SC-010
-- [x] T059 [P] **New feature integration tests** — Run `pytest tests/test_cv_variants.py tests/test_cv_fit.py tests/test_application_pipeline.py tests/test_canva_pdf_extraction.py -v` — all green
+- [ ] T058 [P] **Full test suite pass** — Latest run has one load-sensitive deduplication timing failure; see current evidence above. Isolated reruns do not satisfy the full-suite gate.
+- [x] T059 [P] **New feature integration tests** — Run current variant, fit, sprint, exploration, kit, pipeline, qualification and Canva tests; latest broad targeted run: 159 passed
 - [ ] T060 [P] **Quickstart validation** — Execute manual validation per `quickstart.md`: sprint queue → prep → kit → pipeline → Canva import, verify all SC-001 through SC-010
-- [ ] T061 [P] **Performance benchmarks** — Measure sprint build <500ms (150 candidates), kit generation <2s, pipeline API <200ms (50 offers), PDF parsing <3s — log results
-- [ ] T062 [P] **Linting & formatting** — Run `ruff check .` and `ruff format .` — zero violations
-- [ ] T063 [P] **Documentation updates** — Update any README or inline docstrings for new modules (`cv_variants.py`, `cv_fit.py`, modified `application_studio.py`, `application_sprint.py`, `service.py`)
+- [ ] T061 [P] **Performance benchmarks** — Reproducible results are logged above; sprint build remains above its 500 ms target at 150 candidates
+- [ ] T062 [P] **Linting & formatting** — Global Ruff check and targeted formatting validation still required; no repository-wide format churn
+- [x] T063 [P] **Documentation updates** — Reconcile this Quickstart and the local parser/design record with the implemented pypdf, CV kit, pipeline and benchmark contracts
 - [x] T064 **End-to-end regression test** — Added `test_full_career_http_journey_explore_to_persisted_manual_kit` in `tests/test_career_explorer_web.py`: synthetic offer discovery → prep → explicit English CV variant kit → persisted tracking after service restart, with automatic submission asserted false
 - [ ] T065 **Constitution compliance check** — Verify: no cloud calls in core pipeline (Principle II), provenance on all displayed facts (Principle IV), tests pass before commit (Principle V), work in isolated branch (Principle VI), pure functions preferred (Principle VII)
 - [ ] T066 **Prepare merge request** — Ensure `git diff --check` clean, no uncommitted changes in worktree, all tests green, ready for `GO merge application sprint` approval

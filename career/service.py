@@ -2287,10 +2287,16 @@ class CareerService:
     def get_application_pipeline(self) -> dict[str, Any]:
         """Return a read-only, derived view of the complete local workflow."""
 
-        jobs = self.list_jobs()
         drafts = self.list_application_drafts()
         applications = self.list_applications()
+        # Stage matches already carry the serialized local jobs. Reuse them
+        # here instead of listing and serializing every offer twice.
         matches = self.list_stage_matches().get("matches") or []
+        jobs = [
+            match["job"]
+            for match in matches
+            if isinstance(match.get("job"), dict) and match["job"].get("id")
+        ]
         sprint_queue = [
             {
                 "job_id": str((match.get("job") or {}).get("id") or ""),

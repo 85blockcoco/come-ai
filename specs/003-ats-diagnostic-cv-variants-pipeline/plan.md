@@ -12,7 +12,7 @@ Connect three existing pillars — the Application Sprint queue (`application_sp
 
 **Language/Version**: Python 3.12+, vanilla ES6 JavaScript (no build step)
 
-**Primary Dependencies**: FastAPI (API), python-docx (DOCX generation), pdfplumber/pdfminer (PDF extraction), SQLite (FTS5), pytest, Ruff
+**Primary Dependencies**: FastAPI (API), python-docx (DOCX generation), existing `pypdf` visitor API (PDF coordinate extraction), SQLite (FTS5), pytest, Ruff
 
 **Storage**: SQLite (`career_data/career.sqlite3`) — existing tables: `jobs`, `stage_matches`, `applications`, `candidate_profile`, `profile_imports`, `application_drafts`; no schema changes required (pipeline stage derived from existing data)
 
@@ -116,7 +116,7 @@ All unknowns from Technical Context are resolved by the spec's Assumptions and e
 | Coverage computation | Reuse `cv_coverage` from `application_prep.py` + `qualification.missing_fields` | Already computes supported/to_verify; extend with mandatory vs preferred split |
 | Diff representation | List of `FitGap` objects with `current_state`, `adapted_state`, `provenance` | Fits `CVAnalysisResult` extension; serializable for JS |
 | Kit template parameterization | Jinja2-like string templates in `application_studio.py` per variant | python-docx uses template docx; variant selects template + injects content |
-| Canva PDF reading order | pdfplumber `extract_words` with x/y coordinates → left-to-right, top-to-bottom sort | pdfplumber already used; coordinates enable column detection |
+| Canva PDF reading order | Existing `pypdf` visitor API with x/y coordinates → visual-band reading order | Avoid a new PDF dependency; preserve local parsing and cover multi-column and continuation cases with synthetic fixtures |
 | Pipeline stage derivation | Computed from existing tables at query time (no new column) | Assumptions: no schema change; derived from `stage_matches`, `applications`, `application_drafts` |
 | JS pipeline view | New panel in `index.html` + `renderApplicationPipeline()` in `career.js` | Consistent with existing sprint/detail/prep panels |
 
@@ -318,11 +318,11 @@ class PipelineItem:
 
 **Run Commands**
 ```bash
-# 1. Full test suite (must pass 1387+ tests)
+# 1. Full test suite (must pass on the current candidate; report the exact collected/pass/skip/fail counts)
 pytest -q
 
 # 2. New feature integration tests
-pytest tests/test_cv_variants.py tests/test_cv_fit.py tests/test_application_pipeline.py tests/test_canva_pdf_extraction.py -v
+pytest tests/test_cv_variants.py tests/test_cv_fit.py tests/contract/test_pipeline_api.py tests/integration/test_us3_pipeline.py tests/test_canva_pdf_extraction.py -v
 
 # 3. Manual validation flow
 # Start server
