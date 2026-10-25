@@ -1,7 +1,7 @@
 "use strict";
 (() => {
   const n = (id) => document.getElementById(id);
-  let token = null, running = false, pollTimer = null;
+  let token = null, running = false, pollTimer = null, activeJobId = null;
   async function request(path, data) {
     const options = {headers: {"X-Workshop-Token": token || ""}};
     if (data !== undefined) { options.method = "POST"; options.headers["Content-Type"] = "application/json"; options.body = JSON.stringify(data); }
@@ -27,10 +27,30 @@
     }
   }
   function busy(value) { running = value; n("evolutionRun").disabled = value; n("evolutionDemo").disabled = value; }
+  function resumeActiveEvolution(base) {
+    const active = (base.active_jobs || []).find((job) =>
+      job.kind === "evolution" && ["queued", "running"].includes(job.status)
+    );
+    if (!active) {
+      if (activeJobId) {
+        clearTimeout(pollTimer);
+        activeJobId = null;
+        busy(false);
+      }
+      return;
+    }
+    if (activeJobId === active.job_id) return;
+    clearTimeout(pollTimer);
+    activeJobId = active.job_id;
+    busy(true);
+    show(active.message || "Reprise du cycle de développement en cours…");
+    void poll(active.job_id);
+  }
   async function refresh() {
     try {
       const base = await request("/status"); token = base.workshop_token;
       const data = await request("/evolution");
+      resumeActiveEvolution(base);
       const settings = data.settings || {}, provider = data.provider || {}, dashboard = data.dashboard || {}, metrics = dashboard.metrics || {};
       n("evolutionState").textContent = running ? "Cycle en cours" : provider.configured ? "Configuré · disponibilité à vérifier" : "Configuration nécessaire";
       n("evolutionProvider").textContent = `${provider.provider_id || settings.provider} · ${provider.model_id || settings.model} · ${provider.reason || "Quota non communiqué."}`;
@@ -58,18 +78,25 @@
     try {
       const job = await request(`/jobs/${encodeURIComponent(id)}`); show(job.message);
       if (["completed", "failed"].includes(job.status)) {
-        busy(false); clearTimeout(pollTimer);
+        activeJobId = null; busy(false); clearTimeout(pollTimer);
         const result = job.report || {}; renderRunResult(result);
         n("evolutionActivity").textContent = `${result.demo ? "Démonstration isolée" : "Cycle"} · ${result.status || job.status} · ${result.reason || job.message}`;
         await refresh(); return;
       }
       pollTimer = setTimeout(() => poll(id), 1200);
-    } catch (error) { busy(false); show(error.message); }
+    } catch (error) { activeJobId = null; busy(false); show(error.message); }
   }
   async function start(demo, taskId = null) {
     if (running) return;
-    try { if (!token) await refresh(); busy(true); const job = await request("/evolution/run", {task_id: taskId, demo, max_requests: 2, max_attempts: 2}); poll(job.job_id); }
-    catch (error) { busy(false); show(error.message); }
+    try {
+      if (!token) await refresh();
+      if (running) return;
+      busy(true);
+      const job = await request("/evolution/run", {task_id: taskId, demo, max_requests: 2, max_attempts: 2});
+      activeJobId = job.job_id;
+      poll(job.job_id);
+    }
+    catch (error) { activeJobId = null; busy(false); show(error.message); }
   }
   document.querySelector('[data-view-target="developerView"]').addEventListener("click", refresh);
   n("evolutionRun").addEventListener("click", () => start(false)); n("evolutionDemo").addEventListener("click", () => start(true));
