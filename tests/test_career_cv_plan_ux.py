@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -549,12 +550,16 @@ def test_no_cloud_or_native_dialogs_in_the_module() -> None:
     assert "var(--" in css, "les styles du plan réutilisent les tokens existants"
     assert "@media (max-width: 760px)" in css, "viewport étroit géré"
     index = INDEX_HTML.read_text(encoding="utf-8")
-    assert 'href="/career-static/cv_plan.css?v=codex-v3-20261025-rc2"' in index
+    cv_css = re.search(r'href="/career-static/cv_plan\.css\?v=([^"]+)"', index)
+    cv_script = re.search(r'<script src="/career-static/cv_plan\.js\?v=([^"]+)" defer></script>', index)
+    career_script = re.search(r'<script src="/career-static/career\.js\?v=([^"]+)" defer></script>', index)
+    assert cv_css and cv_script and career_script
+    assert cv_css.group(1) == cv_script.group(1) == career_script.group(1)
     # Régression : en mode local, la ligne de consentement cloud ne doit pas être
     # rendue (la règle .studio-consent a plus de poids que [hidden] sans ce correctif).
     assert ".studio-consent[hidden]" in (ROOT / "career_static" / "career.css").read_text(encoding="utf-8")
-    script_position = index.index('<script src="/career-static/cv_plan.js?v=codex-v3-20261025-rc2" defer></script>')
-    career_position = index.index('<script src="/career-static/career.js?v=codex-v3-20261025-rc2" defer></script>')
+    script_position = index.index(cv_script.group(0))
+    career_position = index.index(career_script.group(0))
     assert script_position < career_position, "cv_plan.js s'exécute avant l'accroche career.js"
     # Navigation inchangée : les sept onglets existants, aucun ajout ni retrait.
     for view in ("dashboard", "discover", "stagehunter", "applications", "interviews", "profile", "settings"):

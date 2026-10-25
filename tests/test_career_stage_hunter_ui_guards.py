@@ -8,6 +8,7 @@ coverage. The live-browser journey is a separate integration check.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -169,9 +170,12 @@ def test_dashboard_quick_tools_expose_only_real_career_views() -> None:
 
 def test_career_static_assets_are_versioned_for_release_cache_refresh() -> None:
     html = (Path(__file__).resolve().parents[1] / "career_static/index.html").read_text(encoding="utf-8")
-    version = "?v=codex-v3-20261025-rc2"
+    versions = re.findall(r'/career-static/(?:career\.css|cv_plan\.css|career\.js|cv_plan\.js)\?v=([^" ]+)', html)
+    assert len(versions) == 4
+    assert len(set(versions)) == 1, "les assets Career partagent la même version de cache"
+    assert re.fullmatch(r"codex-v3-\d{8}-rc\d+", versions[0])
     for asset in ("career.css", "cv_plan.css", "career.js", "cv_plan.js"):
-        assert f"/career-static/{asset}{version}" in html
+        assert f"/career-static/{asset}?v={versions[0]}" in html
 
 
 @pytest.mark.parametrize("scenario", ["http-error", "source-error", "partial", "success"])
