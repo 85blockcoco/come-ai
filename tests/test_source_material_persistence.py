@@ -74,3 +74,17 @@ def test_oversized_individual_field_is_bounded_before_it_is_stored(tmp_path) -> 
     imported = service.import_job(offer)
     value = imported["source_material"]["material"]["source_fields"]["greenhouse"]["oversized"]
     assert len(value) == 4_000
+
+
+def test_aggregate_oversized_source_block_does_not_fail_offer_import(tmp_path) -> None:
+    service = CareerService(tmp_path)
+    offer = payload()
+    offer["source_fields"] = {
+        f"provider_{provider}": {f"field_{index}": "x" * 4_000 for index in range(10)}
+        for provider in range(8)
+    }
+
+    imported = service.import_job(offer)
+
+    assert imported["id"]
+    assert imported["source_material"] is None

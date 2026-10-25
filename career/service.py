@@ -3311,6 +3311,15 @@ class CareerService:
         )
         return offer_intelligence_store.store_snapshot(connection, snapshot, now=now)
 
+    def _store_source_material(
+        self, connection: sqlite3.Connection, job_id: str, payload: Mapping[str, Any], *, now: str
+    ) -> None:
+        """Reject only oversized/unusable source metadata, never the offer."""
+        try:
+            source_material_store.store_current(connection, job_id, payload, now=now)
+        except (TypeError, ValueError):
+            self._audit(connection, "source_material_rejected", "job", job_id)
+
     def import_job(self, payload: dict[str, Any], *, availability: dict[str, Any] | None = None,
                    preserve_unknown_source_fields: bool = False) -> dict[str, Any]:
         current_availability = availability or self._current_availability_values()
@@ -3394,7 +3403,7 @@ class CareerService:
                 if store_qualification:
                     self._store_qualification_snapshot(connection, job_id, qualification, payload)
                 self._store_offer_intelligence(connection, {**job, "id": job_id}, now=now)
-                source_material_store.store_current(connection, job_id, payload, now=now)
+                self._store_source_material(connection, job_id, payload, now=now)
                 created = False
             else:
                 job_id = f"job_{uuid.uuid4().hex}"
@@ -3421,7 +3430,7 @@ class CareerService:
                 if qualification is not None:
                     self._store_qualification_snapshot(connection, job_id, qualification, payload)
                 self._store_offer_intelligence(connection, {**job, "id": job_id}, now=now)
-                source_material_store.store_current(connection, job_id, payload, now=now)
+                self._store_source_material(connection, job_id, payload, now=now)
                 created = True
         result = self.get_job(job_id)
         result["created"] = created
