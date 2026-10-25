@@ -120,7 +120,7 @@ def test_talent_com_health_check_returns_metrics():
         "last_ok", "last_error", "consecutive_failures",
         "raw_offers", "valid_offers", "finance_offers",
         "stage_offers", "conforming_offers", "to_verify_offers",
-        "raw_count", "filtered_count", "excluded_count", "excluded_by_country"
+        "raw_count", "filtered_count", "excluded_count", "excluded_by_country", "country_excluded_count"
     }
     assert all(isinstance(v, (bool, int, str, type(None), dict)) for v in health.values())
     assert isinstance(health["excluded_by_country"], dict)

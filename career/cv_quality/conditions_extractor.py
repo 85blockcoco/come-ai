@@ -228,7 +228,7 @@ _BENEFITS_PATTERNS: dict[str, tuple[str, ...]] = {
         r"\b(?:mutuelle|assurance\s+santé|health\s+insurance|krankenversicherung|assicurazione\s+salute|seguro\s+médico|ziekteverzekering)\b",
     ),
     "transport": (
-        r"\b(?:remboursement\s+transport|transport\s+allowance|jobticket|fahrtkostenzuschuss|rimborso\s+trasporti|transporte\s+público|vergoeding\s+openbaar\s+vervoer)\b",
+        r"\b(?:remboursement\s+(?:des?\s+)?transports?|transport\s+allowance|jobticket|fahrtkostenzuschuss|rimborso\s+trasporti|transporte\s+público|vergoeding\s+openbaar\s+vervoer)\b",
     ),
     "equipment": (
         r"\b(?:matériel\s+fourni|equipment\s+provided|arbeitsmittel|attrezzatura\s+fornita|equipo\s+proporcionado|apparatuur\s+geleverd)\b",

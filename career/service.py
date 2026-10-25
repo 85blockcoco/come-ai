@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sqlite3
 import threading
 import time
@@ -2475,25 +2476,6 @@ class CareerService:
             self._audit(connection, "interview_session_deleted", "interview_session", identifier)
 
     # -- SPEC-010 : préparation d'entretien ciblée -------------------------
-    def _application_context(self, job_id: str, language: Any) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], str]:
-        identifier = clean_text(job_id, limit=80)
-        normalized_language = normalize_language(language)
-        with self._lock, self._connection() as connection:
-            profile = self._row_dict(connection.execute("SELECT * FROM candidate_profile WHERE id = 1").fetchone())
-            intake_row = connection.execute("SELECT * FROM career_intake WHERE id = 1").fetchone()
-            job_row = connection.execute("SELECT * FROM jobs WHERE id = ?", (identifier,)).fetchone()
-            snapshot = offer_intelligence_store.load_snapshot(connection, identifier)
-        if not job_row:
-            raise UserFacingError("Cette offre Career n’existe pas.")
-        if not intake_row:
-            raise UserFacingError("Le mini-entretien Career local est indisponible.")
-        job = dict(job_row)
-        if snapshot:
-            # The CV and the cover letter quote the same canonical
-            # requirements as every other screen of the workspace.
-            job["offer_intelligence"] = snapshot
-        return profile, self._serialize_intake_row(intake_row), job, normalized_language
-
     def interview_prep_context(self) -> PrepContext:
         """Expose the local offer/profile resolution used by the preparation."""
         return PrepContext(
@@ -2665,14 +2647,18 @@ class CareerService:
             profile = self._row_dict(connection.execute("SELECT * FROM candidate_profile WHERE id = 1").fetchone())
             intake_row = connection.execute("SELECT * FROM career_intake WHERE id = 1").fetchone()
             job_row = connection.execute("SELECT * FROM jobs WHERE id = ?", (identifier,)).fetchone()
+            snapshot = offer_intelligence_store.load_snapshot(connection, identifier)
         if not job_row:
             raise UserFacingError("Cette offre Career n’existe pas.")
         if not intake_row:
             raise UserFacingError("Le mini-entretien Career local est indisponible.")
+        job = dict(job_row)
+        if snapshot:
+            job["offer_intelligence"] = snapshot
         return (
             self._profile_for_matching(profile),
             self._serialize_intake_row(intake_row),
-            dict(job_row),
+            job,
             normalized_language,
         )
 
@@ -7336,6 +7322,15 @@ class CareerService:
                     path.unlink()
                 except OSError:
                     pass
+        # Reviewed CV files are nested below exports/cv_review.  They contain
+        # the candidate wording and review decisions, so the same explicit
+        # reset must erase the whole application-owned subtree.
+        review_exports = self.export_dir / "cv_review"
+        try:
+            if review_exports.is_dir():
+                shutil.rmtree(review_exports)
+        except OSError:
+            pass
         # The freshness snapshots of SPEC-006 are private Career data too.
         try:
             self.offer_quality_store.path.unlink(missing_ok=True)

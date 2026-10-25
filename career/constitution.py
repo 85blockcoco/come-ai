@@ -1514,7 +1514,8 @@ DEFAULT_RULES: tuple[dict[str, Any], ...] = (
         "tags": ["score", "seuil"],
         "severity": "warning",
         "remediation": "Compléter le profil ou les exigences de l'offre pour clarifier la correspondance.",
-        "source_reference": "career/service.py:147-149",
+        "source_reference": "career/service.py:227-230",
+        "source_symbol": "_attach_qualification_presentation",
         "status": "active",
     },
     {
@@ -1527,7 +1528,8 @@ DEFAULT_RULES: tuple[dict[str, Any], ...] = (
         "scope": ["offer"],
         "tags": ["score", "seuil"],
         "severity": "info",
-        "source_reference": "career/service.py:147-149",
+        "source_reference": "career/service.py:227-230",
+        "source_symbol": "_attach_qualification_presentation",
         "status": "active",
     },
     {
@@ -1541,7 +1543,8 @@ DEFAULT_RULES: tuple[dict[str, Any], ...] = (
         "tags": ["durée", "seuil"],
         "severity": "error",
         "remediation": "Vérifier la durée annoncée ou les préférences de durée du profil.",
-        "source_reference": "career/offer_qualification.py:135",
+        "source_reference": "career/offer_qualification.py:229-239",
+        "source_symbol": "qualify_offer",
         "status": "active",
     },
     {
@@ -1554,7 +1557,8 @@ DEFAULT_RULES: tuple[dict[str, Any], ...] = (
         "scope": ["offer"],
         "tags": ["durée", "seuil"],
         "severity": "error",
-        "source_reference": "career/offer_qualification.py:152",
+        "source_reference": "career/offer_qualification.py:253-258",
+        "source_symbol": "qualify_offer",
         "status": "active",
     },
     {
@@ -1567,7 +1571,8 @@ DEFAULT_RULES: tuple[dict[str, Any], ...] = (
         "scope": ["offer"],
         "tags": ["calendrier", "seuil"],
         "severity": "warning",
-        "source_reference": "career/offer_qualification.py:159",
+        "source_reference": "career/offer_qualification.py:259-262",
+        "source_symbol": "qualify_offer",
         "status": "active",
     },
     {
@@ -1580,7 +1585,8 @@ DEFAULT_RULES: tuple[dict[str, Any], ...] = (
         "scope": ["offer"],
         "tags": ["contrat"],
         "severity": "error",
-        "source_reference": "career/offer_qualification.py:163",
+        "source_reference": "career/offer_qualification.py:263-264",
+        "source_symbol": "qualify_offer",
         "status": "active",
     },
     {
@@ -1594,7 +1600,8 @@ DEFAULT_RULES: tuple[dict[str, Any], ...] = (
         "tags": ["scoring", "cohérence"],
         "severity": "critical",
         "remediation": "Réaligner career/scoring.py sur la grille de poids officielle.",
-        "source_reference": "career/scoring.py:17",
+        "source_reference": "career/scoring.py:16-25",
+        "source_symbol": "SCORING_WEIGHTS",
         "status": "active",
     },
     {

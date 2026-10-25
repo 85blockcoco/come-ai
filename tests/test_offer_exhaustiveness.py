@@ -194,10 +194,12 @@ def test_qualify_offer_populates_exhaustiveness_fields():
     assert set(result.exhaustiveness_breakdown) == {"missions", "salary", "conditions", "education", "dates"}
     assert result.exhaustiveness_badge.startswith("Exhaustivité")
     assert result.exhaustiveness_badge_color in {"green", "orange", "red", "gray"}
-    # un stage 6 mois début février est daté ; aucune preuve missions/salaire/conditions/education
-    # n'a été détectée par les extracteurs (non intégrés) → seules les dates sont créditées
+    # Les cinq extracteurs intégrés créditent chaque fait présent dans la source.
     assert result.exhaustiveness_breakdown["dates"] == 10
-    assert result.exhaustiveness_missing == ("missions", "salary", "conditions", "education")
+    assert result.exhaustiveness_breakdown == {
+        "missions": 30, "salary": 25, "conditions": 20, "education": 15, "dates": 10,
+    }
+    assert result.exhaustiveness_missing == ()
     assert "exhaustiveness" in result.provenance
 
 

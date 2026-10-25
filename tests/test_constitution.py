@@ -662,14 +662,14 @@ def test_les_seuils_mirres_existent_dans_le_code_source() -> None:
     """Chaque seuil repris dans la Constitution est bien celui du code."""
     from career.scoring import SCORING_WEIGHTS
 
-    service_lines = (ROOT / "career" / "service.py").read_text(encoding="utf-8").splitlines()
-    qualification_lines = (ROOT / "career" / "offer_qualification.py").read_text(encoding="utf-8").splitlines()
-    assert "score >= 70" in service_lines[146]
-    assert "score >= 45" in service_lines[148]
-    assert "minimum_duration_months: int = 6" in qualification_lines[134]
-    assert "1 <= minimum_duration_months <= 24" in qualification_lines[151]
-    assert "allowed_start_months = [required_start_month] if required_start_month is not None else [1, 2, 3]" in qualification_lines[158]
-    assert 'allowed_contract_types = ["stage", "cdd", "cdi", "vie"]' in qualification_lines[162]
+    service_source = (ROOT / "career" / "service.py").read_text(encoding="utf-8")
+    qualification_source = (ROOT / "career" / "offer_qualification.py").read_text(encoding="utf-8")
+    assert "score >= 70" in service_source
+    assert "score >= 45" in service_source
+    assert "minimum_duration_months: int = 6" in qualification_source
+    assert "1 <= minimum_duration_months <= 24" in qualification_source
+    assert "allowed_start_months = [required_start_month] if required_start_month is not None else [1, 2, 3]" in qualification_source
+    assert 'allowed_contract_types = ["stage", "cdd", "cdi", "vie"]' in qualification_source
     assert sum(SCORING_WEIGHTS.values()) == 100
 
 

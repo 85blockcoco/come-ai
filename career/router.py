@@ -2459,7 +2459,6 @@ def create_career_router(
     from .dependencies import (
         DependencyGraph,
         DependencyNode,
-        DependencyEdge,
         analyze_impact,
         simulate_scenario,
         build_execution_plan,
@@ -2495,17 +2494,66 @@ def create_career_router(
         except Exception:
             pass
 
+    def _career_dependency_entities() -> dict[str, Any]:
+        """Read the local Career service through its public, read-only API."""
+        profile = service.get_profile()
+        offers = service.list_jobs()
+        applications = service.list_applications()
+        requirements: list[dict[str, Any]] = []
+        for offer in offers:
+            intelligence = service.get_offer_intelligence(str(offer.get("id") or ""))
+            snapshot = intelligence.get("snapshot") or {}
+            for record in snapshot.get("requirements") or []:
+                if isinstance(record, dict) and not record.get("injection_suspect"):
+                    requirements.append({**record, "offer_id": offer.get("id")})
+        evidences = [
+            {
+                "id": f"profile-{field}",
+                "title": f"Profil · {field}",
+                "profile_field": field,
+                "quality": "declared",
+            }
+            for field in ("education", "experience", "skills", "languages")
+            if str(profile.get(field) or "").strip()
+        ]
+        return {
+            "profile": profile,
+            "offers": offers,
+            "requirements": requirements,
+            "evidences": evidences,
+            "applications": applications,
+        }
+
+    @staticmethod
+    def _merge_dependency_graphs(current: DependencyGraph, incoming: DependencyGraph) -> DependencyGraph:
+        merged = current.copy()
+        for node in incoming.nodes.values():
+            merged.add_node(node)
+        for edge in incoming.edges:
+            merged.add_edge(
+                source_id=edge.source_id,
+                target_id=edge.target_id,
+                edge_type=edge.edge_type,
+                weight=edge.weight,
+                metadata=edge.metadata,
+            )
+        return merged
+
     @router.post("/dependencies/graph")
     async def build_dependency_graph(payload: dict[str, Any] | None = None) -> dict[str, Any]:
         payload = payload or {}
+        replace = bool(payload.get("replace", True))
         nodes = payload.get("nodes")
         edges = payload.get("edges")
         if nodes is None and edges is None:
-            entity_payload = {key: payload.get(key) for key in ("profile", "offers", "requirements", "evidences", "matchings", "applications") if key in payload}
-            graph = build_graph(**entity_payload) if entity_payload else _dep_graph()
+            if payload.get("refresh_from_career"):
+                entity_payload = _career_dependency_entities()
+            else:
+                entity_payload = {key: payload.get(key) for key in ("profile", "offers", "requirements", "evidences", "matchings", "applications") if key in payload}
+            incoming = build_graph(**entity_payload) if entity_payload else _dep_graph()
+            graph = incoming if replace else _merge_dependency_graphs(_dep_graph(), incoming)
         else:
             graph = DependencyGraph.from_dict({"nodes": nodes or {}, "edges": edges or [], "version": 1})
-            _set_dep_graph(graph)
         # refresh version
         graph.version = int(graph.version or 1)
         if hasattr(graph, "touch"):
@@ -2526,6 +2574,7 @@ def create_career_router(
         return to_jsonable(
             {
                 "node": node.to_dict(),
+                "neighbors": graph.neighbors(node_id),
                 "successors": graph.successors(node_id),
                 "predecessors": graph.predecessors(node_id),
                 "incoming_edges": [edge.to_dict() for edge in graph.incoming_edges(node_id)],
@@ -2536,12 +2585,11 @@ def create_career_router(
     @router.post("/dependencies/edges")
     async def add_dependency_edge(payload: DependencyEdgePayload) -> dict[str, Any]:
         graph = _dep_graph()
+        unknown = [node_id for node_id in (payload.source_id, payload.target_id) if node_id not in graph.nodes]
+        if unknown:
+            raise HTTPException(status_code=400, detail=f"unknown node: {', '.join(unknown)}")
         graph.add_edge(source_id=payload.source_id, target_id=payload.target_id, edge_type=payload.edge_type, weight=payload.weight, metadata=payload.metadata)
         graph.version = max(1, graph.version) + 1
-        # ensure nodes exist
-        for nid in (payload.source_id, payload.target_id):
-            if nid not in graph.nodes:
-                graph.add_node(DependencyNode(node_id=nid, node_type="requirement", label=nid))
         _set_dep_graph(graph)
         return {"edge": to_jsonable(graph.edges[-1].to_dict()), "graph_version": graph.version, "graph": to_jsonable(graph.to_dict())}
 
@@ -2549,6 +2597,8 @@ def create_career_router(
     async def delete_dependency_edge(edge_id: str) -> dict[str, Any]:
         graph = _dep_graph()
         deleted = graph.remove_edge(edge_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="edge not found")
         _set_dep_graph(graph)
         return {"deleted": deleted}
 
@@ -2563,6 +2613,8 @@ def create_career_router(
     async def analyze_dependency_impact(payload: ImpactPayload) -> dict[str, Any]:
         graph = _dep_graph()
         source = payload.source_node_id or payload.source
+        if source not in graph.nodes:
+            raise HTTPException(status_code=400, detail="unknown source node")
         kwargs = {}
         if payload.threshold is not None:
             kwargs["threshold"] = payload.threshold
@@ -2603,7 +2655,10 @@ def create_career_router(
         if not node_ids:
             # plan from all nodes
             node_ids = list(graph.nodes.keys())
-        plan_obj = build_execution_plan(graph, node_ids, payload.change_type)
+        unknown = [node_id for node_id in node_ids if node_id not in graph.nodes]
+        if unknown:
+            raise HTTPException(status_code=400, detail=f"unknown node: {', '.join(unknown)}")
+        plan_obj = build_execution_plan(graph, node_ids, action=payload.change_type)
         return {"plan": to_jsonable(plan_obj.to_dict())}
 
     @router.post("/dependencies/validate")
@@ -2612,10 +2667,11 @@ def create_career_router(
         return {"validation": {"valid": True, "errors": to_jsonable(validate_graph(graph))}}
 
     @router.post("/dependencies/snapshot")
-    async def snapshot_dependency_graph() -> dict[str, Any]:
+    async def snapshot_dependency_graph(payload: dict[str, Any] | None = None) -> dict[str, Any]:
         graph = _dep_graph()
         store = _dep_store()
-        snap = store.snapshot(graph)
+        _set_dep_graph(graph)
+        snap = store.snapshot(str((payload or {}).get("label") or ""))
         return to_jsonable(snap)
 
     @router.get("/dependencies/history")
@@ -2627,9 +2683,12 @@ def create_career_router(
     async def rollback_dependency_graph(payload: dict[str, Any] | None = None) -> dict[str, Any]:
         payload = payload or {}
         store = _dep_store()
-        graph = store.rollback(snapshot_id=payload.get("snapshot_id"), version=payload.get("version"))
+        try:
+            graph = store.rollback(payload.get("version"))
+        except (KeyError, TypeError, ValueError) as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
         _set_dep_graph(graph)
-        return to_jsonable(graph.to_dict())
+        return {"graph": to_jsonable(graph.to_dict())}
 
 
     @router.get("/api/career/dependencies/graph")

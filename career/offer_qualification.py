@@ -16,6 +16,7 @@ from typing import Any
 from .cv_quality.conditions_extractor import extract_conditions_from_offer
 from .cv_quality.missions_extractor import extract_missions
 from .cv_quality.education_extractor import extract_education
+from .cv_quality.parser import extract_salary
 from .exploration import _SENIOR_TITLE, classify_internship
 from .models import (
     DEFAULT_GEO_EXCLUDED_COUNTRIES,
@@ -293,6 +294,14 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
             [mission.text for mission in missions],
             "missions_extractor",
             missions[0].quote,
+        )
+
+    salaries = extract_salary(description)
+    if salaries:
+        evidence["salary"] = FactEvidence(
+            [asdict(salary) for salary in salaries],
+            "salary_extractor",
+            salaries[0].raw_text,
         )
 
     def field(name: str, label: str | None = None) -> str | None:

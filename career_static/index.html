@@ -895,7 +895,38 @@
           </section>
         </section>
 
-        <section id="view-constitution" class="career-view" tabindex="-1" hidden aria-labelledby="constitution-title"><h2 id="constitution-title">Constitution</h2><div id="constitution-app"></div></section>
+        <section id="view-constitution" class="career-view" tabindex="-1" hidden aria-labelledby="constitution-title">
+          <h2 id="constitution-title">Constitution</h2>
+          <p class="panel-help">Inspecte, vérifie et versionne les règles locales appliquées par Career.</p>
+          <div id="constitution-health"></div>
+          <div id="constitution-rules"></div>
+          <div id="constitution-graph"></div>
+          <div id="constitution-dashboard"></div>
+          <form id="constitution-editor" class="form-stack">
+            <input name="rule_id" placeholder="Identifiant de règle" required />
+            <input name="name" placeholder="Nom" required />
+            <select name="domain"><option value="matching">Matching</option><option value="privacy">Confidentialité</option><option value="export">Export</option></select>
+            <textarea name="description" placeholder="Description"></textarea>
+            <textarea name="rationale" placeholder="Justification"></textarea>
+            <input id="constitution-expression" name="expression" list="constitution-identifiers" placeholder="matching.score >= 45" required />
+            <datalist id="constitution-identifiers"></datalist>
+            <select name="severity"><option value="info">Information</option><option value="warning">Avertissement</option><option value="error">Erreur</option><option value="critical">Critique</option></select>
+            <input name="scope" placeholder="offer, matching" />
+            <input name="tags" placeholder="score, seuil" />
+            <textarea name="remediation" placeholder="Action corrective"></textarea>
+            <input name="author" value="local" />
+            <input name="approver" value="relecture" />
+            <textarea name="context" placeholder='{"matching":{"score":70}}'>{}</textarea>
+            <div class="inline-actions"><button type="submit">Enregistrer</button><button id="constitution-approve" type="button">Approuver</button><button id="constitution-check-expression" type="button">Vérifier</button><button id="constitution-preview-expression" type="button">Prévisualiser</button></div>
+            <p id="constitution-editor-status"></p><pre id="constitution-check"></pre><pre id="constitution-preview"></pre>
+          </form>
+          <form id="constitution-validator" class="form-stack">
+            <input name="entity_id" placeholder="Identifiant de l’entité" /><select name="entity_type"><option value="offer">Offre</option><option value="profile">Profil</option></select><input name="ruleset_id" value="career.core" /><textarea name="entity">{}</textarea><button id="constitution-validate" type="button">Valider l’entité</button>
+          </form>
+          <pre id="constitution-validation-result"></pre>
+          <button id="constitution-generate-tests" type="button">Générer les tests</button><pre id="constitution-generated"></pre>
+          <div id="constitution-history"></div><div id="constitution-audit"></div>
+        </section>
         <section id="view-dependencies" class="career-view" tabindex="-1" hidden aria-labelledby="dependencies-title"><h2 id="dependencies-title">Dépendances</h2><div id="dependencies-app"></div></section>
         <section id="view-settings" class="career-view" tabindex="-1" hidden aria-labelledby="settings-title">
           <section class="panel settings-panel">
@@ -1200,12 +1231,12 @@
     <script src="/career-static/js/traceability.js" defer></script>
     <script src="/career-static/js/offer-quality.js" defer></script>
     <script src="/career-static/js/interview-prep.js" defer></script>
+    <script src="/career-static/js/dependencies.js" defer></script>
     <script src="/career-static/career.js" defer></script>
     <script src="/career-static/js/daily-digest.js" defer></script>
     <script src="/career-static/js/profile-builder.js" defer></script>
     <script src="/career-static/js/memory-panel.js" defer></script>
     <script src="/career-static/js/evidence-center.js" defer></script>
     <script src="/career-static/js/constitution.js" defer></script>
-    <script src="/career-static/js/dependencies.js" defer></script>
   </body>
 </html>

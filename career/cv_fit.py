@@ -348,10 +348,19 @@ def generate_diff(
     return unique[: max(0, int(max_gaps))]
 
 
-def serialize_gap(gap: FitGap) -> dict[str, Any]:
-    """Convert a gap and either provenance representation to JSON-safe data."""
+def serialize_gap(gap: FitGap, *, include_source_text: bool = False) -> dict[str, Any]:
+    """Convert a gap to the public JSON contract.
 
-    return asdict(gap)
+    The complete CV source is private working data.  Callers must opt in
+    explicitly when a trusted local workflow needs it; regular API payloads
+    expose only the document metadata.
+    """
+
+    payload = asdict(gap)
+    provenance = payload.get("provenance")
+    if isinstance(provenance, dict) and not include_source_text:
+        provenance.pop("source_text", None)
+    return payload
 
 
 def derive_pipeline_stage(job_id: str, context: Any) -> PipelineStage:
