@@ -120,6 +120,7 @@ from .offer_intelligence import (
 )
 from . import offer_intelligence_store
 from .scoring import classify_job_family, score_job
+from .source_coverage import CoverageRunNotFound, compute_metrics
 from workspace_core import UserFacingError, extract_text, safe_error
 from .profile_import import (
     ALLOWED_PROFILE_SUFFIXES,
@@ -2618,6 +2619,17 @@ class CareerService:
                 "registry": list(self._exploration_registry()), "limits": self._exploration_limits(),
                 "disclaimer": "Sources publiques uniquement. Résultats du dernier parcours, reclassés localement ; aucune candidature envoyée."
                 + (" Tes critères ont changé : relance l’exploration pour couvrir les sources avec ces critères." if changed else "")}
+
+    def get_stage_source_coverage(self, run_id: str | None = None) -> dict[str, Any]:
+        """Return exact synthetic/live metrics for the latest local exploration."""
+        current = self.get_exploration().get("run_id", "")
+        requested = clean_text(run_id, limit=160) or clean_text(current, limit=160)
+        if not requested:
+            raise UserFacingError("Aucune exploration locale n’est disponible à mesurer.")
+        try:
+            return compute_metrics(requested, base_dir=self.base_dir).to_dict()
+        except CoverageRunNotFound as error:
+            raise UserFacingError(str(error)) from error
 
     def explore_internships(self, *, force: bool = False) -> dict[str, Any]:
         """Explicit read-only exploration; works with zero personal boards.

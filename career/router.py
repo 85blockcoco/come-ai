@@ -464,6 +464,11 @@ def create_career_router(
         # Opening Career reads the last local report; it never fetches boards.
         return await local(service.get_exploration)
 
+    @router.get("/api/career/stage-search/coverage")
+    async def stage_search_coverage(run_id: str | None = Query(default=None, max_length=160)) -> Any:
+        """Recalculate exact source coverage from the selected local run."""
+        return await local(lambda: service.get_stage_source_coverage(run_id))
+
     @router.post("/api/career/stage-search/explore")
     async def explore_stages(payload: DiscoverySearchPayload) -> Any:
         return await local(lambda: service.explore_internships(force=payload.force))

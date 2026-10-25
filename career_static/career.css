@@ -339,6 +339,10 @@ footer { margin: 18px 3px 0; color: var(--muted); font-size: .72rem; line-height
 .stagehunter-progress.is-complete { border-color: #91cbaa; background: var(--good-soft); }
 .stagehunter-progress.is-error { border-color: #e7b2ad; background: var(--danger-soft); }
 .stagehunter-progress.is-error .stagehunter-progress-fill { background: var(--danger); box-shadow: none; }
+.stagehunter-source-coverage { display: grid; gap: 10px; margin-top: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-soft); }
+.stagehunter-source-coverage-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.stagehunter-source-coverage-bucket { padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.stagehunter-source-coverage-bucket p { margin: 5px 0 0; color: var(--muted); font-size: .74rem; line-height: 1.45; }
 .stagehunter-result-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 10px 0 14px; }
 .stagehunter-summary-item { display: grid; gap: 2px; min-width: 0; padding: 10px 11px; border: 1px solid #d8e8df; border-radius: 11px; background: #fff; }
 .stagehunter-summary-item strong { color: var(--accent-dark); font-size: 1.08rem; font-variant-numeric: tabular-nums; }

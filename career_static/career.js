@@ -3036,6 +3036,48 @@ function resumeExplorationIfNeeded() {
   if (handle) stageHunterRunPoll = handle;
 }
 
+function renderSourceCoverage(report) {
+  const target = $("#stagehunter-source-coverage");
+  if (!target) return;
+  target.replaceChildren();
+  target.hidden = false;
+  const number = (value) => Number.isFinite(Number(value)) ? Number(value) : "non mesuré";
+  const buckets = report?.metrics || {};
+  target.append(make("strong", "Couverture mesurée à partir des offres et sources de ce parcours"));
+  const grid = make("div", "", "stagehunter-source-coverage-grid");
+  [["live", "Sources réelles"], ["synthetic", "Données synthétiques"]].forEach(([key, label]) => {
+    const metrics = buckets[key] || {};
+    const card = make("section", "", "stagehunter-source-coverage-bucket");
+    card.append(make("strong", label));
+    card.append(make("p", `Sources : ${number(metrics.sources_queried)}/${number(metrics.sources_planned)} consultées · ${number(metrics.sources_succeeded)} avec annonces valides · ${number(metrics.sources_cached)} en cache · ${number(metrics.sources_failed)} en échec.`));
+    card.append(make("p", `Offres : ${number(metrics.raw_offers)} brutes · ${number(metrics.offers_post_dedup)} après déduplication · ${number(metrics.offers_verified_url)} URL vérifiées · ${number(metrics.compliant)} conformes · ${number(metrics.to_verify)} à vérifier · ${number(metrics.non_compliant)} non conformes.`));
+    card.append(make("p", `Faits disponibles : localisation ${number(metrics.offers_with_location)} · publication ${number(metrics.offers_with_published_date)} · début ${number(metrics.offers_with_start_date)} · durée ${number(metrics.offers_with_duration)} · prérequis ${number(metrics.offers_with_requirements)}.`));
+    grid.append(card);
+  });
+  target.append(grid);
+  const unattributed = report?.unattributed || {};
+  target.append(make("p", `Non attribuées : ${number(unattributed.sources)} sources · ${number(unattributed.offers)} offres. Aucune estimation; les données synthétiques ne gonflent pas les compteurs réels.`, "fixed-period-note"));
+  if (report?.coherence?.ok === false) {
+    const warning = make("ul", "", "job-reasons");
+    (report.coherence.violations || []).forEach((violation) => warning.append(make("li", violation)));
+    target.append(warning);
+  }
+}
+
+function loadStageSourceCoverage(runId) {
+  const target = $("#stagehunter-source-coverage");
+  if (!target) return;
+  target.replaceChildren();
+  target.hidden = !runId;
+  if (!runId) return;
+  api(`/api/career/stage-search/coverage?run_id=${encodeURIComponent(runId)}`)
+    .then(renderSourceCoverage)
+    .catch((error) => {
+      target.hidden = false;
+      target.textContent = error?.message || "La mesure exacte de couverture n’est pas disponible pour ce parcours.";
+    });
+}
+
 function renderStageExploration(payload) {
   const status = $("#stagehunter-explore-status");
   const sources = $("#stagehunter-explore-sources");
@@ -3071,6 +3113,7 @@ function renderStageExploration(payload) {
     sources.append(entry);
   });
   coverage.textContent = `Offres conformes aux critères : ${number("confirmed_count")} · offres à vérifier : ${number("uncertain_count")} · offres exclues : ${number("excluded_count")} · entrées invalides : ${number("invalid_count")}. ${number("sources_not_queried")} sources non consultées. Limite : ${payload.limits?.max_sources ?? "non communiquée"} sources et ${payload.limits?.max_results ?? "non communiqué"} résultats classés. Les dates, la durée et les conditions absentes restent à vérifier. Aucun CV, profil ou critère personnel n’est transmis aux sites. La présence dans un flux public ne garantit pas que le recruteur accepte encore les candidatures.`;
+  loadStageSourceCoverage(payload.run_id);
 }
 
 function renderExplorationMatches(payload) {

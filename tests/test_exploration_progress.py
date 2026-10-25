@@ -133,9 +133,11 @@ def wait_until(predicate, timeout: float = 10.0) -> bool:
 
 
 def test_a_run_walks_through_the_real_phases_and_counts_real_work(tmp_path: Path) -> None:
-    boards = {"alpha": [posting("a1"), posting("a2")], "beta": [posting("b1")]}
-    boards["alpha"][0]["content"] = "Synthetic finance internship. Starting January 2027 for six months."
-    service, transport = service_with(tmp_path, boards)
+    boards = {"synthetic-alpha": [posting("a1"), posting("a2")], "synthetic-beta": [posting("b1")]}
+    boards["synthetic-alpha"][0]["content"] = "Synthetic finance internship. Starting January 2027 for six months."
+    service, transport = service_with(
+        tmp_path, boards, sources=[source("synthetic-alpha"), source("synthetic-beta")]
+    )
     explorations = ExplorationService(service)
     try:
         state = explorations.start(force=True)
@@ -166,6 +168,16 @@ def test_a_run_walks_through_the_real_phases_and_counts_real_work(tmp_path: Path
             and fact["quote"] == "Starting January 2027"
             for fact in temporal_facts
         )
+        coverage = service.get_stage_source_coverage(final["run_id"])
+        assert coverage["coherence"]["ok"] is True
+        assert coverage["run_id"] == final["run_id"]
+        assert coverage["metrics"]["synthetic"]["sources_planned"] == 2
+        assert coverage["metrics"]["synthetic"]["raw_offers"] == 3
+        with TestClient(create_app(tmp_path, career_override=service)) as client:
+            response = client.get(f"/api/career/stage-search/coverage?run_id={final['run_id']}")
+        assert response.status_code == 200
+        assert response.json()["run_id"] == final["run_id"]
+        assert response.json()["metrics"]["synthetic"]["offers_post_dedup"] == 3
         # The published snapshot is the one of this run.
         assert service.get_exploration()["run_id"] == final["run_id"]
     finally:
