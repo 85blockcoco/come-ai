@@ -267,6 +267,9 @@ button:focus-visible, a:focus-visible { outline: 3px solid #2270d4; outline-offs
 .developer-card > p { color: var(--muted, #66756f); line-height: 1.6; }
 .developer-patch-card { grid-column: 1 / -1; }
 .developer-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 20px 0; }
+.developer-confirmation { border: 1px solid var(--line, #d7dce2); border-radius: 12px; padding: 16px; margin: 16px 0; background: var(--surface, #fff); }
+.developer-confirmation h3 { margin: 0 0 8px; }
+.developer-confirmation p { margin: 0; }
 .developer-form { display: grid; gap: 10px; }
 .developer-form label { font-size: 13px; font-weight: 650; margin-top: 6px; }
 .developer-form input, .developer-form select, .developer-form textarea { width: 100%; border: 1px solid var(--developer-border); border-radius: 10px; background: #fff; color: #20352c; font: inherit; font-size: 14px; padding: 11px 12px; }

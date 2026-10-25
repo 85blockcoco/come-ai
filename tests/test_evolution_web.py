@@ -50,3 +50,8 @@ def test_evolution_candidate_result_has_direct_review_handoff() -> None:
     assert 'addEventListener("devkit:open-candidate"' in devkit
     assert 'request(`/candidates/${encodeURIComponent(requestedId)}`)' in devkit
     assert "ui.diff.textContent = preview.diff" in devkit
+    assert 'id="developerApplyConfirmYes"' in html
+    assert 'id="developerRollbackConfirmYes"' in html
+    assert 'ui.applyConfirm.hidden = false' in devkit
+    assert 'ui.rollbackConfirm.hidden = false' in devkit
+    assert 'window.confirm(' not in devkit

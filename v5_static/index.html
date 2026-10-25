@@ -291,6 +291,16 @@
               </form>
               <pre id="developerDiff" class="developer-diff" tabindex="0" aria-label="Aperçu des modifications" hidden></pre>
               <div class="developer-actions"><button id="developerValidate" type="button" class="primary-button" disabled>Tester le correctif isolé</button><button id="developerApply" type="button" class="secondary-button" disabled>Appliquer le correctif testé</button><button id="developerRollback" type="button" class="text-button danger" hidden>Restaurer les originaux</button></div>
+              <section id="developerApplyConfirm" class="developer-confirmation" role="group" aria-labelledby="developerApplyConfirmTitle" hidden>
+                <h3 id="developerApplyConfirmTitle">Confirmer l’application du correctif</h3>
+                <p>Le correctif validé sera appliqué au projet. Les fichiers originaux seront sauvegardés pour permettre un retour arrière. Redémarre ensuite Côme AI.</p>
+                <div class="developer-actions"><button id="developerApplyConfirmYes" type="button" class="primary-button">Confirmer l’application</button><button id="developerApplyConfirmNo" type="button" class="text-button">Annuler</button></div>
+              </section>
+              <section id="developerRollbackConfirm" class="developer-confirmation" role="group" aria-labelledby="developerRollbackConfirmTitle" hidden>
+                <h3 id="developerRollbackConfirmTitle">Confirmer la restauration</h3>
+                <p>Les fichiers originaux seront restaurés seulement si aucun fichier concerné n’a changé depuis l’application.</p>
+                <div class="developer-actions"><button id="developerRollbackConfirmYes" type="button" class="primary-button danger">Restaurer les originaux</button><button id="developerRollbackConfirmNo" type="button" class="text-button">Annuler</button></div>
+              </section>
               <p id="developerPatchStatus" class="quiet-status" aria-live="polite">Le code principal est modifié seulement après tes tests et ta confirmation. La sauvegarde permet un retour arrière.</p>
               <div class="developer-history"><h3>Correctifs &amp; sauvegardes conservés</h3><div id="developerHistory"></div></div>
             </section>
@@ -299,7 +309,7 @@
       </main>
     </div>
     <script src="/v5-static/v5.js" defer></script>
-    <script src="/v5-static/devkit.js?v=rc4" defer></script>
+    <script src="/v5-static/devkit.js?v=rc5" defer></script>
     <script src="/v5-static/evolution.js?v=rc4" defer></script>
   </body>
 </html>

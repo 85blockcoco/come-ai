@@ -6,6 +6,7 @@
     status: node("developerStatus"), check: node("developerCheck"), export: node("developerExport"), report: node("developerReport"), downloads: node("developerDownloads"),
     issue: node("developerIssueForm"), title: node("developerIssueTitle"), description: node("developerIssueDescription"), errors: node("developerIssueErrors"), files: node("developerIssueFiles"),
     patchForm: node("developerPatchForm"), format: node("developerPatchFormat"), upload: node("developerPatchUpload"), patch: node("developerPatchText"), diff: node("developerDiff"), validate: node("developerValidate"), apply: node("developerApply"), rollback: node("developerRollback"), patchStatus: node("developerPatchStatus"), history: node("developerHistory"),
+    applyConfirm: node("developerApplyConfirm"), applyConfirmYes: node("developerApplyConfirmYes"), applyConfirmNo: node("developerApplyConfirmNo"), rollbackConfirm: node("developerRollbackConfirm"), rollbackConfirmYes: node("developerRollbackConfirmYes"), rollbackConfirmNo: node("developerRollbackConfirmNo"),
   };
   let token = null;
   let candidateId = null;
@@ -27,7 +28,14 @@
     ui.check.disabled = value;
     ui.validate.disabled = value || !candidateId;
     ui.patchForm.querySelector("button").disabled = value;
-    if (value) ui.apply.disabled = true;
+    if (value) {
+      ui.apply.disabled = true;
+      ui.applyConfirmYes.disabled = true;
+      ui.rollbackConfirmYes.disabled = true;
+    } else {
+      ui.applyConfirmYes.disabled = false;
+      ui.rollbackConfirmYes.disabled = false;
+    }
   }
 
   function renderReport(report, current = true) {
@@ -78,7 +86,7 @@
         if (transaction.status !== "applied") continue;
         const button = document.createElement("button"); button.type = "button"; button.className = "text-button danger";
         button.textContent = `Restaurer ${transaction.transaction_id.slice(0, 8)}`;
-        button.addEventListener("click", () => { transactionId = transaction.transaction_id; ui.rollback.hidden = false; ui.rollback.focus(); ui.patchStatus.textContent = "Sauvegarde sélectionnée. Confirme avec « Restaurer les originaux »."; }); ui.history.append(button);
+        button.addEventListener("click", () => { transactionId = transaction.transaction_id; ui.rollback.hidden = false; ui.rollbackConfirm.hidden = false; ui.rollbackConfirmYes.focus(); ui.patchStatus.textContent = "Sauvegarde sélectionnée. Vérifie les conditions puis confirme la restauration."; }); ui.history.append(button);
       }
       ui.status.textContent = "Atelier local prêt. Les exports et diagnostics ne font aucun appel à une IA.";
       if (!busy && result.active_jobs && result.active_jobs.length) {
@@ -164,22 +172,36 @@
       ui.patchStatus.textContent = `Copie préparée · ${(result.changed_files || []).length} fichier(s) modifié(s). Le correctif doit maintenant être testé.`;
     } catch (error) { ui.patchStatus.textContent = error.message; }
   });
-  ui.apply.addEventListener("click", async () => {
-    if (!candidateId || busy || !window.confirm("Appliquer les modifications de cet aperçu après validation ? Les originaux seront sauvegardés. Redémarre ensuite Côme AI pour charger le nouveau code.")) return;
-    ui.apply.disabled = true;
+  ui.apply.addEventListener("click", () => {
+    if (!candidateId || busy || ui.apply.disabled) return;
+    ui.applyConfirm.hidden = false;
+    ui.applyConfirmYes.focus();
+  });
+  ui.applyConfirmNo.addEventListener("click", () => { ui.applyConfirm.hidden = true; ui.apply.focus(); });
+  ui.applyConfirmYes.addEventListener("click", async () => {
+    if (!candidateId || busy) return;
+    ui.applyConfirmYes.disabled = true;
     try {
       const result = await request(`/candidates/${encodeURIComponent(candidateId)}/apply`, { confirmed: true });
       transactionId = result.transaction_id; ui.rollback.hidden = !transactionId; ui.validate.disabled = true;
+      ui.applyConfirm.hidden = true;
       ui.patchStatus.textContent = "Correctif appliqué et originaux sauvegardés. Redémarre Côme AI pour utiliser la nouvelle version.";
       refresh();
-    } catch (error) { ui.patchStatus.textContent = error.message; }
+    } catch (error) { ui.patchStatus.textContent = error.message; ui.applyConfirmYes.disabled = false; }
   });
-  ui.rollback.addEventListener("click", async () => {
-    if (!transactionId || busy || !window.confirm("Restaurer les originaux sauvegardés ? Toute nouvelle édition des fichiers concernés empêchera l’écrasement.")) return;
+  ui.rollback.addEventListener("click", () => {
+    if (!transactionId || busy) return;
+    ui.rollbackConfirm.hidden = false;
+    ui.rollbackConfirmYes.focus();
+  });
+  ui.rollbackConfirmNo.addEventListener("click", () => { ui.rollbackConfirm.hidden = true; ui.rollback.focus(); });
+  ui.rollbackConfirmYes.addEventListener("click", async () => {
+    if (!transactionId || busy) return;
+    ui.rollbackConfirmYes.disabled = true;
     try {
       await request(`/transactions/${encodeURIComponent(transactionId)}/rollback`, { confirmed: true });
-      ui.rollback.hidden = true; transactionId = null; ui.patchStatus.textContent = "Originaux restaurés. Redémarre Côme AI pour recharger le code.";
+      ui.rollback.hidden = true; ui.rollbackConfirm.hidden = true; transactionId = null; ui.patchStatus.textContent = "Originaux restaurés. Redémarre Côme AI pour recharger le code.";
       refresh();
-    } catch (error) { ui.patchStatus.textContent = error.message; }
+    } catch (error) { ui.patchStatus.textContent = error.message; ui.rollbackConfirmYes.disabled = false; }
   });
 })();
