@@ -9,6 +9,21 @@
     return result;
   }
   function show(value) { n("evolutionMessage").textContent = value; }
+  function renderRunResult(result) {
+    n("evolutionDetails").hidden = false;
+    n("evolutionDetails").textContent = JSON.stringify(result, null, 2);
+    const review = n("evolutionCandidateReview"); review.replaceChildren();
+    const candidateId = typeof result.candidate_id === "string" ? result.candidate_id : "";
+    if (candidateId) {
+      const button = document.createElement("button"); button.type = "button"; button.className = "secondary-button";
+      button.textContent = "Examiner le correctif proposé";
+      button.addEventListener("click", () => {
+        document.querySelector('[data-view-target="developerView"]').click();
+        window.dispatchEvent(new CustomEvent("devkit:open-candidate", {detail: {candidateId}}));
+      });
+      review.append(button);
+    }
+  }
   function busy(value) { running = value; n("evolutionRun").disabled = value; n("evolutionDemo").disabled = value; }
   async function refresh() {
     try {
@@ -42,7 +57,7 @@
       const job = await request(`/jobs/${encodeURIComponent(id)}`); show(job.message);
       if (["completed", "failed"].includes(job.status)) {
         busy(false); clearTimeout(pollTimer);
-        const result = job.report || {}; n("evolutionDetails").hidden = false; n("evolutionDetails").textContent = JSON.stringify(result, null, 2);
+        const result = job.report || {}; renderRunResult(result);
         n("evolutionActivity").textContent = `${result.demo ? "Démonstration isolée" : "Cycle"} · ${result.status || job.status} · ${result.reason || job.message}`;
         await refresh(); return;
       }

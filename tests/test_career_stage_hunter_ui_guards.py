@@ -129,6 +129,37 @@ assert.strictEqual(confirmed.children[0].children[1].className, "good");
     assert completed.returncode == 0, completed.stderr
 
 
+def test_application_kit_flow_requires_an_explicit_supported_language() -> None:
+    root = Path(__file__).resolve().parents[1]
+    js = (root / "career_static/career.js").read_text(encoding="utf-8")
+    html = (root / "career_static/index.html").read_text(encoding="utf-8")
+    function = js.split("async function startApplicationKitFlow(jobId, language, variant = \"\") {", 1)[1].split(
+        "\nasync function consumePendingKit()", 1
+    )[0]
+    script = r'''
+const assert = require("assert");
+let requestCount = 0;
+let lastMessage;
+const setMessage = (message, error = false) => { lastMessage = { message, error }; };
+const api = async (_path, options) => { requestCount += 1; return { ...JSON.parse(options.body), application: {}, draft: {} }; };
+const showKitInApplications = async () => {};
+async function startApplicationKitFlow(jobId, language, variant = "") {FUNCTION
+(async () => {
+  await startApplicationKitFlow("offer-synthetic", "", "markets");
+  assert.strictEqual(requestCount, 0, "aucune requête si la langue n'est pas choisie");
+  assert.strictEqual(lastMessage.error, true);
+  await startApplicationKitFlow("offer-synthetic", "en", "markets");
+  assert.strictEqual(requestCount, 1);
+})();
+'''.replace("FUNCTION", function)
+    completed = subprocess.run([_node(), "-e", script], text=True, capture_output=True, timeout=8)
+    assert completed.returncode == 0, completed.stderr
+    assert 'id="application-draft-language" required' in html
+    assert '<option value="">Choisir la langue du dossier…</option>' in html
+    assert 'kitLanguage.append(new Option("Choisir la langue du dossier…", ""))' in js
+    assert "kit.disabled = true" in js
+
+
 def test_stage_match_sort_keeps_nonconforming_offers_below_eligible_ones() -> None:
     source = (Path(__file__).resolve().parents[1] / "career_static/career.js").read_text()
     function = source.split("function stageMatchEligibilityRank(match) {", 1)[1].split(

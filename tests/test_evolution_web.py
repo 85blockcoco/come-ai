@@ -33,3 +33,18 @@ def test_evolution_backlog_settings_persist_and_offline_forces_local_provider(tm
             assert performance["timeout_seconds"] == 60
     finally:
         app.state.runtime.task_runner.stop(wait=True, timeout=1)
+
+
+def test_evolution_candidate_result_has_direct_review_handoff() -> None:
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    evolution = (root / "v5_static/evolution.js").read_text(encoding="utf-8")
+    devkit = (root / "v5_static/devkit.js").read_text(encoding="utf-8")
+    html = (root / "v5_static/index.html").read_text(encoding="utf-8")
+    assert 'id="evolutionCandidateReview"' in html
+    assert 'button.textContent = "Examiner le correctif proposé"' in evolution
+    assert 'detail: {candidateId}' in evolution
+    assert 'addEventListener("devkit:open-candidate"' in devkit
+    assert 'request(`/candidates/${encodeURIComponent(requestedId)}`)' in devkit
+    assert "ui.diff.textContent = preview.diff" in devkit

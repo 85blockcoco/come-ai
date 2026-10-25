@@ -2190,6 +2190,10 @@ async function showKitInApplications(kit) {
 }
 
 async function startApplicationKitFlow(jobId, language, variant = "") {
+  if (!["fr", "en", "it", "de"].includes(language)) {
+    setMessage("Choisis explicitement la langue du dossier avant de le créer.", true);
+    return;
+  }
   try {
     const kit = await api("/api/career/application-kits", {
       method: "POST",
@@ -2317,6 +2321,11 @@ elements.applicationDraftForm.addEventListener("submit", async (event) => {
   const mode = elements.applicationDraftMode.value;
   if (!jobId) {
     setMessage("Choisis d’abord une offre enregistrée.", true);
+    return;
+  }
+  if (!["fr", "en", "it", "de"].includes(elements.applicationDraftLanguage.value)) {
+    setMessage("Choisis explicitement la langue du dossier avant de le créer.", true);
+    elements.applicationDraftLanguage.focus();
     return;
   }
   if (mode === "ai" && !elements.applicationDraftConsent.checked) {
@@ -3531,6 +3540,7 @@ function renderStagePrep(prep) {
   actions.append(studio);
   const kitLanguage = make("select", "", "kit-language-select");
   kitLanguage.setAttribute("aria-label", "Langue du kit de candidature");
+  kitLanguage.append(new Option("Choisir la langue du dossier…", ""));
   ["fr", "en", "it", "de"].forEach((code) => kitLanguage.append(new Option(draftLanguageLabels[code], code)));
   const kitVariant = make("select", "", "kit-variant-select variant-specific");
   kitVariant.setAttribute("aria-label", "Variante CV ciblée");
@@ -3548,6 +3558,8 @@ function renderStagePrep(prep) {
   kitVariant.title = prep.variant_rationale || "Sélection manuelle possible";
   const kit = make("button", "Préparer le kit de candidature", "primary-button");
   kit.type = "button";
+  kit.disabled = true;
+  kitLanguage.addEventListener("change", () => { kit.disabled = !["fr", "en", "it", "de"].includes(kitLanguage.value); });
   // Un clic = un kit pour CETTE offre. Aucune boucle de candidature : le
   // suivi et le brouillon local sont créés une fois puis réutilisés.
   kit.addEventListener("click", () => startApplicationKitFlow(job.id, kitLanguage.value, kitVariant.value));

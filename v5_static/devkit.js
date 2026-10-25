@@ -45,6 +45,19 @@
     }
   }
 
+  async function openCandidate(requestedId) {
+    if (busy || typeof requestedId !== "string" || !requestedId) return;
+    try {
+      if (!token) { const status = await request("/status"); token = status.workshop_token; }
+      const preview = await request(`/candidates/${encodeURIComponent(requestedId)}`);
+      candidateId = preview.candidate_id || requestedId;
+      ui.diff.hidden = false; ui.diff.textContent = preview.diff;
+      ui.validate.disabled = false; ui.apply.disabled = preview.status !== "validated";
+      ui.patchStatus.textContent = preview.validated ? "Correctif validé précédemment. L’application recontrôle son empreinte et les conflits." : "Correctif conservé : lance sa validation avant application.";
+      ui.diff.scrollIntoView({behavior: "smooth", block: "center"});
+    } catch (error) { ui.patchStatus.textContent = error.message; }
+  }
+
   async function refresh() {
     try {
       const result = await request("/status"); token = result.workshop_token;
@@ -59,14 +72,7 @@
         if (!["staged", "validated"].includes(candidate.status)) continue;
         const button = document.createElement("button"); button.type = "button"; button.className = "text-button";
         button.textContent = `Relire ${candidate.candidate_id.slice(0, 8)} · ${candidate.status}`;
-        button.addEventListener("click", async () => {
-          if (busy) return;
-          try {
-            const preview = await request(`/candidates/${encodeURIComponent(candidate.candidate_id)}`);
-            candidateId = candidate.candidate_id; ui.diff.hidden = false; ui.diff.textContent = preview.diff; ui.validate.disabled = false; ui.apply.disabled = preview.status !== "validated";
-            ui.patchStatus.textContent = preview.validated ? "Correctif validé précédemment. L’application recontrôle son empreinte et les conflits." : "Correctif conservé : lance sa validation avant application.";
-          } catch (error) { ui.patchStatus.textContent = error.message; }
-        }); ui.history.append(button);
+        button.addEventListener("click", () => openCandidate(candidate.candidate_id)); ui.history.append(button);
       }
       for (const transaction of result.transactions || []) {
         if (transaction.status !== "applied") continue;
@@ -114,6 +120,7 @@
   }
 
   document.querySelector('[data-view-target="developerView"]').addEventListener("click", refresh);
+  window.addEventListener("devkit:open-candidate", (event) => openCandidate(event.detail?.candidateId));
   ui.check.addEventListener("click", () => check());
   ui.validate.addEventListener("click", () => check(candidateId));
   ui.export.addEventListener("click", async () => {
