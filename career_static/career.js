@@ -3330,6 +3330,40 @@ function renderVariantFitAnalysis(target, prep) {
   target.append(section);
 }
 
+function renderRequirementsFit(target, result) {
+  if (!result || !Array.isArray(result.fits) || !result.fits.length) return;
+  const labels = {
+    supported:"appuyée par le profil approuvé",
+    unsupported:"écart établi par le profil approuvé",
+    contradicted:"contredite par le profil approuvé",
+    to_verify:"à vérifier",
+    not_applicable:"sans obligation pour le profil",
+  };
+  const categories = {
+    etudes:"Études", experience:"Expérience", tech:"Compétences techniques", outils:"Outils",
+    langues:"Langues", mobilite:"Mobilité", auth_travail:"Autorisation de travail",
+    dispo:"Disponibilité", diplomation:"Diplomation", other:"Autre",
+  };
+  const section = make("section", "", "stagehunter-prep-section requirements-fit");
+  section.append(make("h4", "Exigences de l’offre ↔ profil approuvé"));
+  section.append(make(
+    "p",
+    `${result.supported_count || 0} appuyées · ${result.to_verify_count || 0} à vérifier · ${result.unsupported_count || 0} écarts établis · ${result.contradicted_count || 0} contradictions. Ce résumé compare les exigences aux seuls champs enregistrés dans ton profil Career.`,
+    "scoring-disclaimer",
+  ));
+  const list = make("ul", "", "job-reasons");
+  result.fits.forEach((fit) => {
+    const item = make("li", "", `requirements-fit-item ${fit.verdict || "to_verify"}`);
+    item.append(make("strong", `${categories[fit.category] || "Autre"} · ${labels[fit.verdict] || "à vérifier"}`));
+    item.append(make("p", `Exigence source : « ${fit.requirement_text || "texte indisponible"} »`));
+    if (fit.profile_evidence) item.append(make("p", `Profil : « ${fit.profile_evidence} »`));
+    if (fit.reason) item.append(make("p", fit.reason));
+    list.append(item);
+  });
+  section.append(list);
+  target.append(section);
+}
+
 function renderStagePrep(prep) {
   const target = $("#stagehunter-prep");
   if (!target) return;
@@ -3358,6 +3392,7 @@ function renderStagePrep(prep) {
     target.append(warnings);
   }
   renderVariantFitAnalysis(target, prep);
+  renderRequirementsFit(target, prep.requirements_fit);
   const cvCoverage = prep.cv_coverage || {};
   if ((typeof renderCvPlanSection === "function") && ((prep.cv_action_plan || []).length || Number.isFinite(cvCoverage.requirements_total))) {
     const planSection = renderCvPlanSection(target, prep, job);

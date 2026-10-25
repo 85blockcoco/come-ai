@@ -262,6 +262,26 @@ def test_official_url_is_conserved_verbatim_through_the_journey(tmp_path: Path) 
     assert prep["job"]["source_name"] == "manual"
 
 
+def test_job_prep_compares_offer_requirements_with_saved_profile_facts(tmp_path: Path) -> None:
+    service = CareerService(tmp_path)
+    service.update_profile({"education": "Master 2 en Finance", "skills": "Excel"})
+    job = service.import_job(
+        synthetic_job(
+            requirements="Master 2 en Finance requis. Maîtrise d’Excel obligatoire.",
+            languages_required="Anglais C1 préféré.",
+        )
+    )
+
+    prep = service.get_job_prep(job["id"])
+
+    fit = prep["requirements_fit"]
+    assert fit["fits"]
+    supported = [item for item in fit["fits"] if item["verdict"] == "supported"]
+    assert any("Master 2" in item["profile_evidence"] for item in supported)
+    assert any("Excel" in item["profile_evidence"] for item in supported)
+    assert fit["to_verify_count"] >= 1  # absence is never treated as incompatibility
+
+
 # --- 5. Offres indisponibles --------------------------------------------------
 
 

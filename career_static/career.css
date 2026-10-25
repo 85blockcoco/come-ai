@@ -402,6 +402,9 @@ footer { margin: 18px 3px 0; color: var(--muted); font-size: .72rem; line-height
 .stagehunter-prep { margin-top: 10px; padding: 12px; border: 1px solid #c9ded2; border-radius: 10px; background: var(--surface-muted); }
 .stagehunter-prep-section { margin: 10px 0; }
 .stagehunter-prep-section h4 { margin: 0 0 5px; font-size: .85rem; }
+.requirements-fit-item { margin-bottom: 8px; }
+.requirements-fit-item.to_verify, .requirements-fit-item.unsupported, .requirements-fit-item.contradicted { color: var(--warning); }
+.requirements-fit-item p { margin: 4px 0; }
 .stagehunter-prep-actions { align-items: end; }
 .stagehunter-sprint { display: grid; gap: 14px; margin-top: 14px; }
 .sprint-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }

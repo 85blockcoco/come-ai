@@ -65,6 +65,7 @@ from .application_dashboard import (
 )
 from .application_prep import prepare_application, summarize_offer
 from .application_sprint import MAX_SPRINT_CANDIDATES, MAX_SPRINT_ITEMS, build_application_sprint
+from .requirements_fit import analyze_fit
 from .cv_fit import (
     PipelineItem,
     classify_variant,
@@ -2065,6 +2066,27 @@ class CareerService:
         context = self._scoring_context()
         profile = context.get("profile") or {}
         analysis = prepare_application(profile, context.get("intake") or {}, job)
+        approved_profile_facts = []
+        for field, category in (
+            ("education", "etudes"),
+            ("experience", "experience"),
+            ("skills", "tech"),
+            ("languages", "langues"),
+        ):
+            value = clean_text(profile.get(field), limit=20_000)
+            if value:
+                approved_profile_facts.append({
+                    "category": category,
+                    "value": value,
+                    "quote": value,
+                    "status": "approved",
+                    "source": "career_profile",
+                })
+        # These fields are only present after a person has saved them in the
+        # local editable Career profile. Do not inspect pending OCR previews.
+        analysis["requirements_fit"] = analyze_fit(
+            job, {"facts": approved_profile_facts}
+        ).to_dict()
         cv_analysis = self._current_cv_analysis()
         qualification = qualify_offer(job).to_dict()
         fit_job = {
