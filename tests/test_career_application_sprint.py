@@ -222,6 +222,59 @@ def test_application_sprint_http_uses_real_local_service_path(tmp_path: Path) ->
         assert "probabilité" in payload["disclaimer"]
 
 
+def test_application_sprint_reuses_profile_and_cv_analysis_for_candidates(
+    tmp_path: Path, monkeypatch
+) -> None:
+    service = CareerService(tmp_path, curated_sources=())
+    service.update_stage_search(service.get_stage_search()["brief"])
+    service.update_profile(
+        {
+            "education": "MSc Finance",
+            "experience": "Analyst | Synthetic Bank — Automated 500+ reports.",
+            "skills": "Excel, Python, valuation",
+            "languages": "English C1",
+        }
+    )
+    for index in range(4):
+        service.import_job(
+            {
+                "company": f"Synthetic Bank {index}",
+                "title": "Corporate Finance Intern",
+                "job_family": "Corporate Finance",
+                "official_url": f"https://careers.example.test/sprint-cache-{index}",
+                "city": "London",
+                "country": "United Kingdom",
+                "employment_type": "Internship",
+                "start_date": "2027-01-04",
+                "end_date": "2027-07-04",
+                "duration_months": 6,
+                "requirements": "Financial modelling and valuation",
+                "languages_required": "English",
+                "source_status": "open",
+            }
+        )
+
+    calls = {"scoring_context": 0, "cv_analysis": 0}
+    scoring_context = service._scoring_context
+    cv_analysis = service._current_cv_analysis
+
+    def count_context():
+        calls["scoring_context"] += 1
+        return scoring_context()
+
+    def count_cv_analysis():
+        calls["cv_analysis"] += 1
+        return cv_analysis()
+
+    monkeypatch.setattr(service, "_scoring_context", count_context)
+    monkeypatch.setattr(service, "_current_cv_analysis", count_cv_analysis)
+
+    result = service.get_application_sprint(limit=4)
+
+    assert len(result["queue"]) == 4
+    assert calls == {"scoring_context": 3, "cv_analysis": 1}
+
+
 def test_application_sprint_ui_contract_is_present() -> None:
     root = Path(__file__).resolve().parents[1]
     html = (root / "career_static/index.html").read_text(encoding="utf-8")

@@ -2112,10 +2112,16 @@ class CareerService:
             )
         return analyze_cv(document)
 
-    def get_job_prep(self, job_id: str) -> dict[str, Any]:
+    def get_job_prep(
+        self,
+        job_id: str,
+        *,
+        _scoring_context: dict[str, Any] | None = None,
+        _cv_analysis: Any | None = None,
+    ) -> dict[str, Any]:
         """Factual preparation panel for one offer; no model, no invention."""
-        job = self.get_job(job_id)
-        context = self._scoring_context()
+        context = _scoring_context if _scoring_context is not None else self._scoring_context()
+        job = self.get_job(job_id, scoring_context=context)
         profile = context.get("profile") or {}
         analysis = prepare_application(
             profile,
@@ -2158,7 +2164,7 @@ class CareerService:
         analysis["requirements_fit"] = analyze_fit(
             job, {"facts": approved_profile_facts}
         ).to_dict()
-        cv_analysis = self._current_cv_analysis()
+        cv_analysis = _cv_analysis if _cv_analysis is not None else self._current_cv_analysis()
         qualification = qualify_offer(job).to_dict()
         fit_job = {
             **job,
@@ -2254,8 +2260,17 @@ class CareerService:
             for match in matches
             if (match.get("stage_match") or {}).get("qualification_status") != "non_conforming"
         ][:MAX_SPRINT_CANDIDATES]
+        # All candidates in one sprint share the same approved profile and CV.
+        # Load those facts once instead of reopening SQLite and reparsing the
+        # current CV for every candidate.
+        scoring_context = self._scoring_context()
+        cv_analysis = self._current_cv_analysis()
         preparations = {
-            str(match["job"]["id"]): self.get_job_prep(str(match["job"]["id"]))
+            str(match["job"]["id"]): self.get_job_prep(
+                str(match["job"]["id"]),
+                _scoring_context=scoring_context,
+                _cv_analysis=cv_analysis,
+            )
             for match in eligible_matches
             if isinstance(match.get("job"), dict) and match["job"].get("id")
         }
@@ -3531,7 +3546,9 @@ class CareerService:
             "description_original": clean_text(payload.get("description_original"), limit=30_000),
         }
 
-    def get_job(self, job_id: str) -> dict[str, Any]:
+    def get_job(
+        self, job_id: str, *, scoring_context: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         with self._lock, self._connection() as connection:
             row = connection.execute(
                 """
@@ -3554,7 +3571,8 @@ class CareerService:
             ).fetchone()
             if not row:
                 raise UserFacingError("Cette offre Career n’existe pas.")
-            result = self._serialize_job(row, self._scoring_context())
+            context = scoring_context if scoring_context is not None else self._scoring_context()
+            result = self._serialize_job(row, context)
             self._attach_offer_intelligence(connection, result, full=True)
             self._attach_source_material(connection, result)
         return result
