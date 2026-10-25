@@ -1,0 +1,15 @@
+{
+  "files": 12,
+  "rows_per_file": 100000,
+  "total_rows": 1200000,
+  "generate_seconds": 3.5761,
+  "disk_mb": 28.3,
+  "inspect_seconds": 0.2511,
+  "register_seconds": 2.3878,
+  "consolidate_seconds": 8.1746,
+  "consolidated_rows": 1200000,
+  "quality_seconds": 8.7274,
+  "anomalies": 0,
+  "export_seconds": 2.2709,
+  "peak_rss_mb": 319.3
+}

@@ -1,0 +1,92 @@
+{
+  "aggregate": {
+    "pandas": {
+      "engine": "pandas",
+      "scenario": "aggregate",
+      "seconds_median": 0.3156,
+      "seconds_min": 0.3122,
+      "peak_rss_mb_median": 109.3,
+      "peak_rss_mb_max": 109.3,
+      "result": {
+        "rows": 500000,
+        "sum": 750000000.0,
+        "mean": 25.5
+      }
+    },
+    "duckdb": {
+      "engine": "duckdb",
+      "scenario": "aggregate",
+      "seconds_median": 0.3449,
+      "seconds_min": 0.3183,
+      "peak_rss_mb_median": 55.6,
+      "peak_rss_mb_max": 55.9,
+      "result": {
+        "rows": 500000,
+        "sum": 750000000.0,
+        "mean": 25.5
+      }
+    }
+  },
+  "analyze": {
+    "pandas": {
+      "engine": "pandas",
+      "scenario": "analyze",
+      "seconds_median": 0.8304,
+      "seconds_min": 0.816,
+      "peak_rss_mb_median": 136.4,
+      "peak_rss_mb_max": 136.5,
+      "result": {
+        "rows": 500000,
+        "trend": 0.766617,
+        "stats": {
+          "id": {
+            "sum": 124999750000.0,
+            "mean": 249999.5
+          },
+          "quantite": {
+            "sum": 12750000.0,
+            "mean": 25.5
+          },
+          "prix": {
+            "sum": 750000000.0,
+            "mean": 1500.0
+          },
+          "variation": {
+            "sum": 5895.0,
+            "mean": 0.01179
+          }
+        }
+      }
+    },
+    "duckdb": {
+      "engine": "duckdb",
+      "scenario": "analyze",
+      "seconds_median": 1.0412,
+      "seconds_min": 1.0217,
+      "peak_rss_mb_median": 150.9,
+      "peak_rss_mb_max": 151.2,
+      "result": {
+        "rows": 500000,
+        "trend": -0.00050594,
+        "stats": {
+          "id": {
+            "sum": 124999750000.0,
+            "mean": 249999.5
+          },
+          "quantite": {
+            "sum": 12750000.0,
+            "mean": 25.5
+          },
+          "prix": {
+            "sum": 750000000.0,
+            "mean": 1500.0
+          },
+          "variation": {
+            "sum": 5895.0,
+            "mean": 0.0118
+          }
+        }
+      }
+    }
+  }
+}

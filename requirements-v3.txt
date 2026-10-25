@@ -8,12 +8,10 @@ certifi>=2024.2
 pandas>=3.0,<4
 numpy>=2.0,<3
 openpyxl>=3.1,<4
+XlsxWriter>=3.2,<4
 
-# Lecture des clés depuis .env (evals + devkit l'importent directement)
-python-dotenv>=1.0,<2
-
-# Outils de qualité (développement)
-ruff>=0.9,<1
+# Moteur de données local DuckDB (couche additive come_data)
+duckdb>=1.1,<2
 
 # Documents et anciens classeurs
 pypdf>=5.0,<7
@@ -23,8 +21,6 @@ xlrd>=2.0.1,<3
 fastapi>=0.115,<1
 uvicorn[standard]>=0.30,<1
 python-multipart>=0.0.12,<1
-# TestClient de Starlette requiert httpx ; sans lui la CI échoue à l'import.
-httpx>=0.28,<2
 pytest>=8,<10
 
 # Exports Career locaux, sans Word, Pages, navigateur ou service distant
