@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import threading
 from pathlib import Path
 from typing import Any, Callable
 
@@ -14,6 +15,14 @@ from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
 from .profile_import import MAX_PROFILE_IMPORT_BYTES
+from .offline_mode import (
+    OfflineCache,
+    OfflineCacheError,
+    OfflineDataUnavailable,
+    decision_for_entry,
+    offline_banner,
+    serve_or_cache,
+)
 from .service import CareerService
 from workspace_core import UserFacingError, to_jsonable
 
@@ -242,6 +251,46 @@ class CVAnalyzeResponse(BaseModel):
     provenance: dict[str, Any]
 
 
+class OfflineCachePutPayload(BaseModel):
+    """One explicit local copy used when the network is unavailable."""
+
+    key: str = Field(min_length=1, max_length=120)
+    payload: dict[str, Any] = Field(default_factory=dict)
+    kind: str = Field(default="default", min_length=1, max_length=40)
+    max_age_hours: int | None = Field(default=None, ge=1, le=24 * 365)
+    fetched_at: str = Field(default="", max_length=64)
+
+
+OFFLINE_READ_KINDS = frozenset(
+    {"jobs", "offers", "applications", "checklists", "dossiers", "profile", "dashboard"}
+)
+
+
+def _offline_reader(service: CareerService, kind: str) -> Callable[[], dict[str, Any]]:
+    """Build the local refresh reader for one offline-capable read.
+
+    These readers use the existing Career service only; they never contact a
+    job board.  ``network_ok=False`` on the HTTP route simply bypasses them.
+    """
+    if kind in {"jobs", "offers"}:
+        return lambda: {"jobs": service.list_jobs()}
+    if kind in {"applications", "checklists", "dossiers"}:
+        return lambda: {"applications": service.list_applications()}
+    if kind == "profile":
+        return service.get_profile
+    if kind == "dashboard":
+        return service.dashboard
+    raise UserFacingError("Type de lecture hors-ligne inconnu.")
+
+
+def _decision_payload(decision: Any) -> dict[str, Any]:
+    return {
+        "source": decision.source,
+        "age_hours": decision.age_hours,
+        "degraded_fields": list(decision.degraded_fields),
+    }
+
+
 def create_career_router(
     service: CareerService,
     *,
@@ -253,6 +302,27 @@ def create_career_router(
 
     async def local(call: Any) -> Any:
         return to_jsonable(await run_in_threadpool(call))
+
+    # One bounded, private cache per Career data directory.  The instance is
+    # memoized so concurrent requests share the same file lock; the JSON file
+    # itself is re-read on every call, so the on-disk state stays authoritative.
+    offline_caches: dict[Path, OfflineCache] = {}
+    offline_caches_lock = threading.Lock()
+
+    def offline_cache() -> OfflineCache:
+        directory = service.data_dir / "offline"
+        with offline_caches_lock:
+            cache = offline_caches.get(directory)
+            if cache is None:
+                cache = OfflineCache(directory)
+                offline_caches[directory] = cache
+            return cache
+
+    def offline_call(call: Callable[[], Any]) -> Any:
+        try:
+            return call()
+        except OfflineCacheError as error:
+            raise UserFacingError(str(error)) from error
 
     @router.get("/career", include_in_schema=False)
     async def career_page() -> FileResponse:
@@ -281,6 +351,105 @@ def create_career_router(
             "interview_coach": capabilities["interview_coach"],
             "calendar_export": capabilities["calendar_export"],
             "stage_search": capabilities["stage_search"],
+        }
+
+    @router.get("/api/career/offline/status")
+    async def offline_status() -> Any:
+        """Cache inventory + freshness policy; never touches the network."""
+        return await local(offline_cache().status)
+
+    @router.get("/api/career/offline/cache")
+    async def offline_cache_inventory() -> Any:
+        return await local(lambda: {"entries": offline_cache().summaries()})
+
+    @router.get("/api/career/offline/cache/{cache_key}")
+    async def offline_cache_entry(cache_key: str) -> Any:
+        cache = offline_cache()
+        entry = await run_in_threadpool(
+            lambda: offline_call(lambda: cache.get(cache_key))
+        )
+        if entry is None:
+            raise HTTPException(
+                status_code=404, detail="Aucune copie hors-ligne pour cette clé."
+            )
+        decision = decision_for_entry(entry)
+        return {
+            "entry": entry.to_dict(),
+            "decision": _decision_payload(decision),
+            "banner": offline_banner(decision),
+        }
+
+    @router.post("/api/career/offline/cache", status_code=201)
+    async def store_offline_entry(payload: OfflineCachePutPayload) -> Any:
+        cache = offline_cache()
+        entry = await run_in_threadpool(
+            lambda: offline_call(
+                lambda: cache.put(
+                    payload.key,
+                    payload.payload,
+                    kind=payload.kind,
+                    max_age_hours=payload.max_age_hours,
+                    fetched_at=payload.fetched_at or None,
+                )
+            )
+        )
+        decision = decision_for_entry(entry)
+        return {
+            "entry": entry.to_dict(),
+            "decision": _decision_payload(decision),
+            "banner": offline_banner(decision),
+        }
+
+    @router.delete("/api/career/offline/cache/{cache_key}")
+    async def delete_offline_entry(cache_key: str) -> dict[str, bool]:
+        deleted = await local(
+            lambda: offline_call(lambda: offline_cache().delete(cache_key))
+        )
+        return {"deleted": bool(deleted)}
+
+    @router.delete("/api/career/offline/cache")
+    async def clear_offline_cache() -> Any:
+        deleted = await local(lambda: offline_call(offline_cache().clear))
+        return {"deleted": int(deleted)}
+
+    @router.get("/api/career/offline/read/{kind}/{cache_key}")
+    async def offline_read(
+        kind: str,
+        cache_key: str,
+        network: bool = True,
+        max_age_hours: int | None = Query(default=None, ge=1, le=24 * 365),
+    ) -> Any:
+        """Serve a Career read from the network, the cache, or explicitly stale.
+
+        ``network=false`` simulates a train/cut-out: the local reader is never
+        called.  With ``network=true``, a failing local read falls back to the
+        last copy and the response says how old it is.
+        """
+        if kind not in OFFLINE_READ_KINDS:
+            raise UserFacingError("Type de lecture hors-ligne inconnu.")
+        reader = _offline_reader(service, kind) if network else None
+        try:
+            result = await run_in_threadpool(
+                lambda: serve_or_cache(
+                    cache_key,
+                    cache=offline_cache(),
+                    reader=reader,
+                    network_ok=network,
+                    kind=kind,
+                    max_age_hours=max_age_hours,
+                )
+            )
+        except OfflineDataUnavailable as error:
+            raise HTTPException(status_code=503, detail=str(error)) from error
+        except OfflineCacheError as error:
+            raise UserFacingError(str(error)) from error
+        return {
+            "kind": kind,
+            "key": cache_key,
+            "payload": result.payload,
+            "decision": _decision_payload(result.decision),
+            "banner": offline_banner(result.decision),
+            "automatic_submission": False,
         }
 
     @router.post("/api/career/cv/analyze")
@@ -747,6 +916,9 @@ def create_career_router(
     @router.delete("/api/career/data")
     async def reset_data(payload: ResetPayload) -> dict[str, bool]:
         await local(lambda: service.reset_personal_data(payload.confirmation))
+        # An explicit Career reset also removes the offline snapshots: they
+        # contain the same private offers/checklists/profile the person erased.
+        await local(lambda: offline_call(offline_cache().clear))
         return {"deleted": True}
 
     return router

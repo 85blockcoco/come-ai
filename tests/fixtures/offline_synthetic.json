@@ -1,0 +1,48 @@
+{
+  "description": "Fixture synthétique SPEC-032 : aucune donnée réelle, domaines .test uniquement.",
+  "fetched_at": "2026-10-20T08:00:00+00:00",
+  "profile": {
+    "display_name": "Camille Synthétique",
+    "contact_email": "camille@example.test",
+    "education": "Master Synthétique Finance",
+    "skills": "Excel, analyse financière",
+    "languages": "Français natif, anglais C1"
+  },
+  "jobs": [
+    {
+      "id": "job-synthetic-0001",
+      "company": "Banque Synthétique",
+      "title": "Stage M&A Synthétique",
+      "city": "Londres",
+      "country": "Royaume-Uni",
+      "official_url": "https://careers.example.test/mna-2027",
+      "source_status": "open",
+      "deadline_date": "2026-11-30"
+    },
+    {
+      "id": "job-synthetic-0002",
+      "company": "Cabinet Synthétique",
+      "title": "Stage Analyse Financière",
+      "city": "Genève",
+      "country": "Suisse",
+      "official_url": "https://jobs.example.test/analyse-2027",
+      "source_status": "open",
+      "deadline_date": "2026-12-15"
+    }
+  ],
+  "applications": [
+    {
+      "id": "application-synthetic-0001",
+      "job_id": "job-synthetic-0001",
+      "stage": "to_prepare",
+      "checklist": {
+        "cv_reviewed": true,
+        "letter_reviewed": false,
+        "references_ready": false
+      }
+    }
+  ],
+  "checklists": {
+    "application-synthetic-0001": ["cv_reviewed"]
+  }
+}

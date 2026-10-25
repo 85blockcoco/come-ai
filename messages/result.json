@@ -1,0 +1,15 @@
+{
+  "status": "done",
+  "files_created": [
+    "career/offline_mode.py",
+    "career/router.py",
+    "tests/test_offline_mode.py",
+    "tests/fixtures/offline_synthetic.json",
+    "tests/test_career_agent.py",
+    "docs/agent-reports/SPEC-032-offline_mode.md",
+    "messages/result.json"
+  ],
+  "output": "SPEC-032 livré : cache JSON local borné et atomique, politique de fraîcheur par type de lecture, serve_or_cache network/cache/stale avec champs dégradés, bandeau hors-ligne et routes REST via create_app() ; 46 tests synthétiques et adversarial.",
+  "logs": "pytest -q tests/test_offline_mode.py → 46 passed\npytest -q → 1554 passed, 1 skipped (358 s)\nruff check . → All checks passed\ngit diff --check → CLEAN\nReset confidentialité efface le cache ; SCHEMA_VERSION inchangé (test PRAGMA).",
+  "error": null
+}
