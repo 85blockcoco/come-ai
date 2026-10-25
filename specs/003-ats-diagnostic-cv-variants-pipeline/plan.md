@@ -387,22 +387,23 @@ Reproducible command: `python scripts/benchmark_career_spec003.py` (synthetic lo
 
 | Measurement | Target | Observed median | Result |
 |---|---:|---:|---|
-| Sprint build, 150 candidates | <500 ms | 1,337.2 ms | Miss |
-| Application kit | <2,000 ms | 595.5 ms | Pass |
-| Pipeline API, 50 offers | <200 ms | 182.6 ms | Pass |
-| PDF extraction + CV analysis | <3,000 ms | 44.0 ms | Pass, 4 synthetic experiences detected |
+| Sprint build, 150 candidates | <500 ms | 777.3 ms | Miss |
+| Application kit | <2,000 ms | 345.6 ms | Pass |
+| Pipeline API, 50 offers | <200 ms | 151.8 ms | Pass |
+| PDF extraction + CV analysis | <3,000 ms | 22.4 ms | Pass, 4 synthetic experiences detected |
 
 The sprint now shares one scoring/profile snapshot and one CV analysis, loads
 the selected offers' full intelligence snapshots in one bounded query, and
-reuses serialized offer rows instead of fetching each offer again. It also
-skips the standalone requirements-fit calculation that the sprint builder does
-not consume; the normal individual preparation endpoint keeps that calculation.
+reuses serialized offer rows instead of fetching each offer again. It reuses
+the qualification already calculated for the same offer and skips the
+standalone requirements-fit calculation that the sprint builder does not
+consume; the normal individual preparation endpoint keeps that calculation.
 The 500 ms target remains unmet. Measurements vary across runs, so the values
 above are the latest observed run, not a stability guarantee.
 
 ### Candidate validation
 
-- Full offline suite on the code at `6e52b351fe8abfd587f3bf71e9201b46e7fdc74d`: **2,973 passed, 2 skipped, 0 failed in 417.63 s**. The two skipped tests require real nested macOS sandboxes and pytest skipped them inside this already sandboxed runner.
+- Full offline suite on the code at `edb624204a372117148e1d523a8971547d2e94d3`: **2,973 passed, 2 skipped, 0 failed in 291.75 s**. The two skipped tests require real nested macOS sandboxes and pytest skipped them inside this already sandboxed runner.
 - A focused Career criteria/search/deduplication matrix passed **282 tests**. The deduplication performance check passed in that run; another full-suite attempt before the optimization had shown variable timings, so the threshold is monitored rather than relaxed.
 - `ruff check .`, `node --check` for Career, Evolution and Dev Kit entrypoints, `compileall` for `career`, `devkit` and `data`, and `git diff --check` passed. A repo-wide formatter was not run because it would create broad unrelated churn.
 - Chrome route/render smoke used the synthetic local demo with external network blocked. It showed Stage as the sole initial contract selection, the 2027-01-01 start date, six-month minimum, France/Paris exclusions and manual-only application copy. Its synthetic Paris offer was correctly non-conforming and unknown dates remained “à vérifier”. This was not a full click-through or real-source search.
@@ -410,7 +411,7 @@ above are the latest observed run, not a stability guarantee.
 ### Remaining acceptance work
 
 - T060: perform a complete current-revision user journey through discovery, offer qualification, prep, variant kit, tracking and persisted restart; browser file selection remains unverified.
-- T061: the sprint-build median improved against the preceding observed run but remains above the 500 ms target; investigate the remaining per-candidate preparation cost.
+- T061: the sprint-build median improved after reusing qualification results but remains above the 500 ms target; investigate the remaining per-candidate preparation cost.
 - T062: resolve/record the formatting policy for touched files without reformatting unrelated files.
 - T065/T066: formal Constitution review and merge-readiness remain open. The real sandbox scenarios have not been verified on this exact runner.
 
