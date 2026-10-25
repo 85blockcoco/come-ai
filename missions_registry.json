@@ -1254,8 +1254,22 @@
       "dependencies": [
         "59"
       ],
-      "status": "pending",
-      "description": "Module analytics : entonnoir de conversion par étape, par semaine et par canal de source, avec détection automatique de l'étape goulot."
+      "status": "done",
+      "description": "Module analytics : entonnoir de conversion par étape, par semaine et par canal de source, avec détection automatique de l'étape goulot.",
+      "verified": "push origin worker/cvboost-60-1792960092897 + 19 tests verts (contrôle manuel)",
+      "completed_at": "2026-10-25T22:04:08.817158",
+      "push_verified": true,
+      "worker_result": {
+        "status": "done",
+        "files_created": [
+          "career/analytics_funnel.py",
+          "career/router.py",
+          "career/service.py",
+          "tests/test_analytics_funnel.py",
+          "tests/fixtures/analytics_synthetic.json"
+        ],
+        "output": "Entonnoir analytics candidatures SPEC-025"
+      }
     },
     {
       "id": "61",
