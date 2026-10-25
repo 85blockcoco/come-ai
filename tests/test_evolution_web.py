@@ -99,7 +99,11 @@ const timers = new Map();
 let nextTimer = 0;
 global.setTimeout = (callback) => { const id = ++nextTimer; timers.set(id, callback); return id; };
 global.clearTimeout = (id) => timers.delete(id);
-global.window = { dispatchEvent() {} };
+global.window = {
+  location: {hash:"#v5/developerView"},
+  addEventListener(name, callback) { listeners[name] = callback; },
+  dispatchEvent() {},
+};
 global.CustomEvent = class { constructor(type, options) { this.type = type; this.detail = options.detail; } };
 let statusCalls = 0;
 let jobCalls = 0;
@@ -127,16 +131,20 @@ global.fetch = async (url) => {
 eval(fs.readFileSync(SCRIPT_PATH, "utf8"));
 const idle = () => new Promise((resolve) => setImmediate(resolve));
 (async () => {
-  await developerTab.listeners.click();
+  // A direct page reload to this view does not generate a tab click.
   await idle();
   assert.strictEqual(jobCalls, 1, "the active evolution job is polled after page load");
   assert.strictEqual(document.getElementById("evolutionRun").disabled, true);
   assert.strictEqual(document.getElementById("evolutionState").textContent, "Cycle en cours");
   assert.strictEqual(document.getElementById("evolutionMessage").textContent, "Cycle à reprendre");
 
-  await developerTab.listeners.click();
+  window.location.hash = "#v5/assistantView";
+  await listeners.hashchange();
+  assert.strictEqual(jobCalls, 1, "leaving the view does not stop its active job poll");
+  window.location.hash = "#v5/developerView";
+  await listeners.hashchange();
   await idle();
-  assert.strictEqual(jobCalls, 1, "refreshing the view does not create duplicate poll loops");
+  assert.strictEqual(jobCalls, 1, "returning to the view does not create duplicate poll loops");
   assert.strictEqual(document.getElementById("evolutionRun").disabled, true);
 
   const timerId = [...timers.keys()][0];

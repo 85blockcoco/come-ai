@@ -1,7 +1,7 @@
 "use strict";
 (() => {
   const n = (id) => document.getElementById(id);
-  let token = null, running = false, pollTimer = null, activeJobId = null;
+  let token = null, running = false, pollTimer = null, activeJobId = null, refreshInProgress = false;
   async function request(path, data) {
     const options = {headers: {"X-Workshop-Token": token || ""}};
     if (data !== undefined) { options.method = "POST"; options.headers["Content-Type"] = "application/json"; options.body = JSON.stringify(data); }
@@ -47,6 +47,8 @@
     void poll(active.job_id);
   }
   async function refresh() {
+    if (refreshInProgress) return;
+    refreshInProgress = true;
     try {
       const base = await request("/status"); token = base.workshop_token;
       const data = await request("/evolution");
@@ -73,6 +75,7 @@
       for (const run of data.runs || []) { const button = document.createElement("button"); button.className = "text-button"; button.textContent = `${run.created_at} · ${run.model} · ${run.status}`; button.addEventListener("click", async () => { try { const result = await request(`/evolution/runs/${encodeURIComponent(run.run_id)}`); renderRunResult(result); } catch (error) { show(error.message); } }); n("evolutionHistory").append(button); }
       n("evolutionResources").textContent = JSON.stringify({catalogue: data.catalogue, usage: data.usage, independent_review: "En attente : aucun second modèle automatiquement invoqué", scheduling: false, automatic_deployment: false}, null, 2);
     } catch (error) { show(error.message); }
+    finally { refreshInProgress = false; }
   }
   async function poll(id) {
     try {
@@ -98,7 +101,12 @@
     }
     catch (error) { activeJobId = null; busy(false); show(error.message); }
   }
-  document.querySelector('[data-view-target="developerView"]').addEventListener("click", refresh);
+  const developerTab = document.querySelector('[data-view-target="developerView"]');
+  developerTab.addEventListener("click", refresh);
+  window.addEventListener("hashchange", () => {
+    if (window.location.hash === "#v5/developerView") refresh();
+  });
+  if (window.location.hash === "#v5/developerView") refresh();
   n("evolutionRun").addEventListener("click", () => start(false)); n("evolutionDemo").addEventListener("click", () => start(true));
   n("evolutionStop").addEventListener("click", async () => { try { show((await request("/evolution/stop", {})).message); } catch (error) { show(error.message); } });
   n("evolutionSettings").addEventListener("submit", async (event) => {
