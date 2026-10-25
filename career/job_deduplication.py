@@ -37,11 +37,10 @@ conflict detection and the precision/recall evaluation of the second.
 
 from __future__ import annotations
 
-import hashlib
 import re
 import unicodedata
 import urllib.parse
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any, Callable, Mapping, Sequence
@@ -437,7 +436,12 @@ def _raw_title_text(title: Any) -> str:
     """Return the lower-cased, accent-free title, punctuation preserved."""
     if isinstance(title, Mapping):
         title = title.get("title", "")
-    return _strip_accents(_clean_text(title, 300)).lower().replace("’", "'")
+    return _raw_title_text_from_value(_clean_text(title, 300))
+
+
+@lru_cache(maxsize=8192)
+def _raw_title_text_from_value(value: str) -> str:
+    return _strip_accents(value).lower().replace("’", "'")
 
 
 def _title_base(title: Any) -> str:
@@ -1179,7 +1183,6 @@ class _Record:
     digits: str
     freshness: float
     trust: str
-    identity: str
 
     @property
     def priority(self) -> int:
@@ -1205,20 +1208,6 @@ def _external_identity(job: Mapping[str, Any], source_name: str, source_id: str)
     return "", ""
 
 
-def _record_identity(record: _Record) -> str:
-    """Return a stable identity of a record (used in the audit report)."""
-    if record.external_id:
-        return f"ext:{record.external_id}"
-    if record.source_id:
-        return f"source:{record.source_name}:{record.source_id}"
-    if record.canonical_url:
-        return f"url:{record.canonical_url}"
-    digest = hashlib.sha1(
-        f"{record.company}|{record.title}|{record.city}".encode("utf-8")
-    ).hexdigest()[:16]
-    return f"hash:{digest}"
-
-
 def _build_record(index: int, job: Mapping[str, Any]) -> _Record:
     """Build the deduplication record of a job dictionary."""
     source_name = _clean_text(job.get("source_name"), 80)
@@ -1227,7 +1216,8 @@ def _build_record(index: int, job: Mapping[str, Any]) -> _Record:
     raw_title = _clean_text(job.get("title"), 300)
     base = _title_base(raw_title)
     declared_level = _declared_role_level(job)
-    record = _Record(
+    canonical_title = _title_canonical_from_base(base)
+    return _Record(
         index=index,
         job=job,
         source_name=source_name,
@@ -1238,17 +1228,15 @@ def _build_record(index: int, job: Mapping[str, Any]) -> _Record:
         apply_url=canonicalize_url(job.get("apply_url") or ""),
         company=company_canonical(job.get("company")),
         raw_title=raw_title,
-        title=_title_canonical_from_base(base),
+        title=canonical_title,
         concept=_title_concept_from_raw(_raw_title_text(raw_title)),
         level=declared_level or _role_level_from_base(base),
         city=_canonical_city(job.get("city")),
         country=_canonical_country(job.get("country")),
-        digits=_digit_signature(_title_canonical_from_base(base)),
+        digits=_digit_signature(canonical_title),
         freshness=_freshness(job),
         trust=_record_trust(job),
-        identity="",
     )
-    return replace(record, identity=_record_identity(record))
 
 
 # ---------------------------------------------------------------------------
