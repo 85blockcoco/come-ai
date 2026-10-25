@@ -672,6 +672,11 @@ def create_career_router(
             )
         )
 
+    # SPEC-025 : lecture pure du journal local (aucun envoi, aucune migration).
+    @router.get("/api/career/analytics/funnel")
+    async def analytics_funnel(channel: str = Query(default="", max_length=120)) -> Any:
+        return await local(lambda: service.analytics_funnel(channel=channel))
+
     @router.get("/api/career/applications/{application_id}")
     async def application(application_id: str) -> Any:
         return await local(lambda: service.get_application(application_id))

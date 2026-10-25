@@ -55,6 +55,7 @@ from .application_studio import (
     scan_kit_placeholders,
 )
 from .calendar_export import build_deadline_calendar_ics
+from .analytics_funnel import compute_funnel, normalize_channel
 from .application_dashboard import (
     CHECKLIST_EVENT_TYPE,
     CHECKLIST_KEYS,
@@ -128,6 +129,9 @@ from .qualification_persistence import (
 
 
 SCHEMA_VERSION = 8
+# SPEC-025 : borne le nombre de candidatures projetées en mémoire. Aucune
+# migration : l'entonnoir est une lecture pure du journal existant.
+MAX_FUNNEL_APPLICATIONS = 5_000
 # The Stage Hunter brief lives in career_settings as one JSON value: no
 # schema migration, and it is exported with the rest of the local settings.
 STAGE_SEARCH_SETTING_KEY = "stage_search_brief"
@@ -3678,6 +3682,90 @@ class CareerService:
             deadline=normalized_deadline,
             query=query,
         )
+
+    def analytics_funnel(self, *, channel: str = "") -> dict[str, Any]:
+        """SPEC-025 : entonnoir de conversion, lu depuis les données locales.
+
+        Une candidature ne compte « envoyée » que si un dépôt manuel a été
+        déclaré, jamais parce qu'une ligne SQLite existe. Les jalons
+        ``prepped``/``lettered`` viennent des brouillons et de la checklist,
+        ``followed_up`` d'une relance *planifiée localement*. Lecture seule,
+        sans migration ni réseau.
+        """
+        requested_channel = clean_text(channel, limit=120)
+        with self._lock, self._connection() as connection:
+            application_rows = connection.execute(
+                """
+                SELECT a.id AS application_id, a.job_id, a.stage, a.receipt_status,
+                       a.created_at, j.source_name
+                FROM applications a JOIN jobs j ON a.job_id = j.id
+                ORDER BY a.created_at ASC, a.id ASC
+                LIMIT ?
+                """,
+                (MAX_FUNNEL_APPLICATIONS,),
+            ).fetchall()
+            application_ids = [str(row["application_id"]) for row in application_rows]
+            events_by_application: dict[str, list[dict[str, Any]]] = {}
+            for start in range(0, len(application_ids), 900):
+                chunk = application_ids[start : start + 900]
+                placeholders = ", ".join("?" for _ in chunk)
+                event_rows = connection.execute(
+                    f"""
+                    SELECT application_id, event_type, detail, created_at
+                    FROM application_events
+                    WHERE application_id IN ({placeholders})
+                    ORDER BY created_at ASC, rowid ASC
+                    """,
+                    chunk,
+                ).fetchall()
+                for event_row in event_rows:
+                    events_by_application.setdefault(
+                        str(event_row["application_id"]), []
+                    ).append(dict(event_row))
+            drafts_by_job: dict[str, bool] = {}
+            draft_rows = connection.execute(
+                """
+                SELECT job_id, letter_markdown FROM application_drafts
+                WHERE job_id IN (SELECT job_id FROM applications)
+                """
+            ).fetchall()
+        for draft_row in draft_rows:
+            job_id = str(draft_row["job_id"])
+            has_letter = bool(str(draft_row["letter_markdown"] or "").strip())
+            drafts_by_job[job_id] = drafts_by_job.get(job_id, False) or has_letter
+
+        records: list[dict[str, Any]] = []
+        for row in application_rows:
+            job_id = str(row["job_id"])
+            application_id = str(row["application_id"])
+            records.append(
+                {
+                    "application_id": application_id,
+                    "stage": row["stage"],
+                    "receipt_status": row["receipt_status"],
+                    "created_at": row["created_at"],
+                    "channel": row["source_name"],
+                    "events": events_by_application.get(application_id, []),
+                    "has_draft": job_id in drafts_by_job,
+                    "has_letter": bool(drafts_by_job.get(job_id)),
+                }
+            )
+
+        report = compute_funnel(records, channel=requested_channel)
+        payload = report.to_dict()
+        payload.update(
+            {
+                "applications_counted": sum(
+                    1
+                    for record in records
+                    if not requested_channel
+                    or normalize_channel(record.get("channel")) == normalize_channel(requested_channel)
+                ),
+                "channel_filter": requested_channel,
+                "automatic_submission": False,
+            }
+        )
+        return payload
 
     def set_application_checklist(self, application_id: str, checked: list[str]) -> dict[str, Any]:
         """Enregistre l'état local de la checklist dans le journal existant.

@@ -1,0 +1,116 @@
+[
+  {
+    "application_id": "synth-a1",
+    "stage": "submitted",
+    "receipt_status": "unknown",
+    "created_at": "2026-10-05T09:00:00+00:00",
+    "channel": "LinkedIn",
+    "events": [
+      {
+        "event_type": "stage_updated",
+        "detail": "relancé par mail lundi (note libre : jamais interprétée comme preuve)",
+        "created_at": "2026-10-05T09:05:00+00:00"
+      }
+    ]
+  },
+  {
+    "application_id": "synth-a2",
+    "stage": "response_received",
+    "receipt_status": "confirmed",
+    "created_at": "2026-10-06T10:00:00+00:00",
+    "channel": "linkedin",
+    "has_draft": true,
+    "has_letter": true,
+    "events": [
+      {
+        "event_type": "checklist",
+        "detail": "{\"items\": {\"cv_reviewed\": true, \"letter_customized\": true}}",
+        "created_at": "2026-10-06T10:10:00+00:00"
+      }
+    ]
+  },
+  {
+    "application_id": "synth-a3",
+    "stage": "to_prepare",
+    "receipt_status": "not_submitted",
+    "created_at": "2026-10-06T18:00:00+00:00",
+    "channel": "Direct",
+    "has_draft": true,
+    "has_letter": false,
+    "events": [
+      {
+        "event_type": "checklist",
+        "detail": "{\"items\": {\"cv_reviewed\": true}}",
+        "created_at": "2026-10-06T18:05:00+00:00"
+      },
+      {
+        "event_type": "kit_content",
+        "detail": "{pas du json",
+        "created_at": "2026-10-06T18:06:00+00:00"
+      }
+    ]
+  },
+  {
+    "application_id": "synth-a4",
+    "stage": "interview",
+    "receipt_status": "confirmed",
+    "created_at": "2026-10-07T08:30:00+00:00",
+    "channel": "direct",
+    "has_draft": true,
+    "has_letter": true,
+    "events": [
+      {
+        "event_type": "checklist",
+        "detail": "{\"items\": {\"followup_planned\": true, \"letter_customized\": true}}",
+        "created_at": "2026-10-07T08:35:00+00:00"
+      }
+    ]
+  },
+  {
+    "application_id": "synth-a5",
+    "stage": "offer_received",
+    "receipt_status": "unknown",
+    "created_at": "2026-10-08T12:00:00+00:00",
+    "channel": "School board",
+    "has_draft": false,
+    "has_letter": true,
+    "events": []
+  },
+  {
+    "application_id": "synth-a6",
+    "stage": "receipt_unknown",
+    "receipt_status": "unknown",
+    "created_at": "2026-10-12T07:00:00+00:00",
+    "channel": "",
+    "events": [
+      {
+        "event_type": "application_created",
+        "detail": "",
+        "created_at": "2026-10-12T07:00:00+00:00"
+      }
+    ]
+  },
+  {
+    "application_id": "synth-a7",
+    "stage": "to_review",
+    "receipt_status": "not_submitted",
+    "created_at": "2026-10-13T07:00:00+00:00",
+    "channel": "linkedin",
+    "events": [
+      null,
+      "sent",
+      {"event_type": 42, "detail": {"clé": "valeur"}},
+      {"event_type": "checklist", "detail": "pas du json"}
+    ]
+  },
+  {
+    "application_id": "synth-a8",
+    "stage": "submitted",
+    "receipt_status": "confirmed",
+    "created_at": "2026-10-19T10:00:00+00:00",
+    "channel": "direct",
+    "has_draft": false,
+    "has_letter": false,
+    "events": []
+  }
+]

@@ -1,0 +1,15 @@
+{
+  "status": "done",
+  "files_created": [
+    "career/analytics_funnel.py",
+    "career/service.py",
+    "career/router.py",
+    "tests/test_analytics_funnel.py",
+    "tests/fixtures/analytics_synthetic.json",
+    "docs/agent-reports/SPEC-025-analytics_funnel.md",
+    "messages/result.json"
+  ],
+  "output": "SPEC-025 livrée : entonnoir local compute_funnel/funnel_by_channel/weakest_stage (7 étapes, séries ISO par semaine, canaux, goulot), intégration CareerService + GET /api/career/analytics/funnel, 19 tests synthétiques dont adversarial et smoke API.",
+  "logs": "pytest -q tests/test_analytics_funnel.py → 19 passed\npytest -q → 1526 passed, 1 skipped, 1 failed (test_local_storage_profile_preferences_and_persistence : échec PRÉ-EXISTANT sur la base a093c49, sans rapport avec SPEC-025 ; vérifié par stash)\nruff check . → All checks passed\ngit diff --check → CLEAN\nSCHEMA_VERSION inchangé (8), PRAGMA user_version vérifié\npush → origin/agent/spec-025-funnel-analytics uniquement (jamais main)",
+  "error": null
+}
