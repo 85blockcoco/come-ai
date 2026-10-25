@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
 
 from career.discovery import GreenhouseJobBoardConnector, PublicSourceError
 from career.exploration_run import EXPLORATION_PHASES, ExplorationRun, ExplorationRunStore
-from career.exploration_service import CareerExplorationBackend, ExplorationService
+from career.exploration_service import CareerExplorationBackend, ExplorationService, _Candidate
 from career.service import CareerService
 from come_ai_web import create_app
 from workspace_core import UserFacingError
@@ -95,6 +95,32 @@ def service_with(tmp_path: Path, boards, *, failing=(), sources=None, gate=None,
     )
     service.update_stage_search({"domains": ["Corporate Finance"], "cities": ["London"]})
     return service, transport
+
+
+def test_runtime_dedup_keeps_cross_source_provenance_and_location_conflicts():
+    shared_url = "https://boards.greenhouse.io/synthetic-bank/jobs/offer-1"
+    candidates = [
+        _Candidate(
+            job={"company": "Synthetic Bank", "title": "Corporate Finance Intern", "source_name": "greenhouse",
+                 "source_id": "gh-1", "official_url": shared_url, "city": "London", "country": "United Kingdom"},
+            match={}, classification={}, qualification={}, key=(0,),
+        ),
+        _Candidate(
+            job={"company": "Synthetic Bank", "title": "Corporate Finance Intern", "source_name": "lever",
+                 "source_id": "lever-1", "official_url": shared_url, "city": "Manchester", "country": "United Kingdom"},
+            match={}, classification={}, qualification={}, key=(0,),
+        ),
+    ]
+
+    kept = ExplorationService._deduplicate(candidates)
+
+    assert len(kept) == 1
+    evidence = kept[0].qualification
+    assert {item["source_name"] for item in evidence["source_provenance"]} == {"greenhouse", "lever"}
+    assert evidence["source_conflicts"]["city"] == {
+        "greenhouse:gh-1": "London",
+        "lever:lever-1": "Manchester",
+    }
 
 
 def wait_until(predicate, timeout: float = 10.0) -> bool:
