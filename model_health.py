@@ -24,6 +24,14 @@ STATE = ROOT / "model_health.json"
 LOGF = ROOT / "model_health.log"
 
 ALL_MODELS = [
+    # Modèles gratuits réellement disponibles (vérifiés le 25/10: répondent OK).
+    # Ils étaient absents du pool: la flotte ne tentait que des opencode-go/*
+    # à quota épuisé, d'où des échecs instantanés en série.
+    "opencode/big-pickle",
+    "opencode/nemotron-3.5-super-vl-free",
+    "opencode/mimo-v2.6-flash-free",
+    "opencode/deepseek-v4.1-flash-free",
+    "google/gemma-4-26b-a4b-it",
     "google/gemini-3.1-flash-lite",
     "opencode-go/minimax-m3.1-flash", "opencode-go/gemini-4-argon-contributor",
     "opencode-go/claude-haiku-5-5", "opencode-go/beam-free", "opencode-go/mimo-v2.6-flash",
@@ -64,11 +72,15 @@ def probe_once(model, timeout=40):
             capture_output=True, text=True, timeout=timeout, cwd=str(ROOT))
         out = (r.stdout or "") + (r.stderr or "")
         lat = round(time.time() - start, 1)
-        if "OK" in out or "ok" in out[:200]:
+        # Un message d'erreur peut contenir \"OK\" par hasard (ANSI, nom de
+        # modèle...). On classe d'abord les erreurs, ensuite on exige un vrai
+        # \"OK\" isolé.  Sans ça, un modèle à quota épuisé était marqué OK et
+        # brûlait tous les slots de la flotte.
+        limit = LIMIT_PAT.search(out)
+        if limit:
+            return "LIMIT", lat, limit.group(0) + " | " + out[:120].replace("\n", " ")
+        if re.search(r"(?<![A-Za-z])OK(?![A-Za-z])", out):
             return "OK", lat, out[:150].replace("\n", " ")
-        if LIMIT_PAT.search(out):
-            m = LIMIT_PAT.search(out)
-            return "LIMIT", lat, m.group(0) + " | " + out[:120].replace("\n", " ")
         return "UNAVAIL", lat, out[:150].replace("\n", " ")
     except subprocess.TimeoutExpired:
         return "SLOW", round(time.time() - start, 1), "timeout sans réponse"

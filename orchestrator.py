@@ -227,7 +227,12 @@ def run_worker(worktree_path: str, prompt: str, order_id: str) -> dict:
     # observé). Un modèle plafonné n'est jamais oublié, juste de côté.
     try:
         import model_health as mh
-        _FREE_POOL = mh.pick_pool() or ["google/gemini-3.1-flash-lite", "opencode-go/beam-free"]
+        _FREE_POOL = mh.pick_pool() or [
+            "opencode/big-pickle",
+            "opencode/nemotron-3.5-super-vl-free",
+            "opencode/mimo-v2.6-flash-free",
+            "opencode/deepseek-v4.1-flash-free",
+        ]
     except Exception as pool_err:
         log(f"pool fallback (model_health indisponible: {pool_err})")
         _FREE_POOL = ["google/gemini-3.1-flash-lite", "opencode-go/beam-free"]
