@@ -236,7 +236,12 @@ def run_worker(worktree_path: str, prompt: str, order_id: str) -> dict:
         ]
     except Exception as pool_err:
         log(f"pool fallback (model_health indisponible: {pool_err})")
-        _FREE_POOL = ["google/gemini-3.1-flash-lite", "opencode-go/beam-free"]
+        _FREE_POOL = [
+            "opencode/deepseek-v4.1-flash-free",
+            "opencode/big-pickle",
+            "opencode/mimo-v2.6-flash-free",
+            "opencode/nemotron-3.5-super-vl-free",
+        ]
     model = os.environ.get("WORKER_MODEL")
     # Sélection du modèle de départ + retry auto sur les autres du pool si
     # quota/indisponibilité instantanée (429, "Model unavailable", ...).
