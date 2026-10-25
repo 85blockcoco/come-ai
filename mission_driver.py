@@ -265,10 +265,16 @@ def wait_for_any_result(active: dict[str, dict], timeout: int = 14400) -> Option
             if order_id in alive:
                 continue
             queued = (QUEUE_DIR / f"{order_id}.json").exists()
-            inflight = (INFLIGHT_DIR / f"{order_id}.json").exists()
-            if inflight:
-                # L'orchestrateur le gère encore: ne pas court-circuiter.
-                continue
+            inflight_file = INFLIGHT_DIR / f"{order_id}.json"
+            if inflight_file.exists():
+                # Ne court-circuite que si le marqueur est récent: après un
+                # redémarrage de l'orchestrateur il reste des marqueurs orphelins
+                # qui bloquaient la flotte pendant des heures.
+                try:
+                    if now - inflight_file.stat().st_mtime < 300:
+                        continue
+                except Exception:
+                    pass
             if queued and age < max(grace_sec * 2, 600):
                 # Pas encore réclamé: laisser le temps à un slot de se libérer.
                 continue
@@ -300,6 +306,23 @@ def wait_for_any_result(active: dict[str, dict], timeout: int = 14400) -> Option
     log(f"⏰ TIMEOUT global après {timeout}s")
     return None
 
+
+
+
+def update_mission(mission_id: str, **fields) -> bool:
+    """Mutation atomique du registre: recharge puis écrit tout de suite.
+
+    L'ancien code chargeait le registre en début de boucle puis le réécrivait
+    plus tard, ce qui écrasait les statuts 'done' avec un snapshot périmé
+    (mission 61 vérifiée repassée en pending).
+    """
+    reg = load_registry()
+    mission = get_mission(reg, mission_id)
+    if not mission:
+        return False
+    mission.update(fields)
+    save_registry(reg)
+    return True
 
 
 def verify_mission(order_id: str, mission_id: str, result_data: dict) -> tuple[bool, str]:
@@ -551,15 +574,14 @@ def main_loop():
                     verified, why = verify_mission(order_id, mission_id, result_data)
                 if check_result_success(result_data) and verified:
                     log(f"✅ Mission {mission_id} RÉUSSIE — {why}")
-                    reg = load_registry()
-                    mission = get_mission(reg, mission_id)
-                    if mission:
-                        mission["status"] = "done"
-                        mission["completed_at"] = datetime.now().isoformat()
-                        mission["worker_result"] = result_data.get("worker_result", {})
-                        mission["verified"] = why
-                        save_registry(reg)
-                        log("📝 Registry mis à jour → done (vérifié)")
+                    update_mission(
+                        mission_id,
+                        status="done",
+                        completed_at=datetime.now().isoformat(),
+                        worker_result=result_data.get("worker_result", {}),
+                        verified=why,
+                    )
+                    log("📝 Registry mis à jour → done (vérifié)")
                 else:
                     if check_result_success(result_data):
                         log(f"🚫 Mission {mission_id} ANNONCÉE done mais NON VÉRIFIÉE: {why}")
@@ -575,10 +597,14 @@ def main_loop():
                             _cd = getattr(main_loop, "_cooldown", {})
                             _cd[mission_id] = time.time()
                             main_loop._cooldown = _cd
-                        # Resoumettre avec attempt+1
+                        # Resoumettre avec attempt+1, sauf si la mission a été
+                        # marquée done entre-temps (doublon d'order id).
                         time.sleep(10)
                         reg = load_registry()
                         mission = get_mission(reg, mission_id)
+                        if mission and mission.get("status") == "done":
+                            log(f"⏭ Mission {mission_id} déjà done — retry annulé")
+                            mission = None
                         if mission:
                             new_order_id = submit_mission(mission)
                             active_orders[new_order_id] = {

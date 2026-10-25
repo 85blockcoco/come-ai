@@ -284,7 +284,9 @@ def run_worker(worktree_path: str, prompt: str, order_id: str) -> dict:
         duration = time.time() - start
         blob = (result.stdout or "") + (result.stderr or "")
         instant_death = duration < 60 and "opencode" not in blob.lower()[:200]
-        quota_like = any(k in blob.lower() for k in ("quota", "exceeded your current", "model unavailable", "unavailable:"))
+        quota_like = any(k in blob.lower() for k in (
+            "quota", "rate limit", "exceeded your current", "model unavailable",
+            "unavailable:", "too many requests"))
         if result.returncode == 0:
             try:
                 mh.mark_run_ok(model, round(duration, 1))
