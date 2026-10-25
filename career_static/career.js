@@ -927,6 +927,7 @@ function jobCard(job, mode = "discover", qualification = null) {
   card.append(chips);
 
   const details = make("div", "", "job-details");
+  const temporalFacts = qualification?.temporal_facts || job.qualification_facts?.temporal_facts || [];
   if (job.deadline_date) details.append(make("p", `Date limite : ${job.deadline_date}`));
   if (job.start_date || job.end_date || job.duration_months) {
     details.append(make("p", `Période annoncée : ${[job.start_date, job.end_date].filter(Boolean).join(" → ") || "dates non précisées"}${job.duration_months ? ` · ${job.duration_months} mois` : ""}`));
@@ -949,6 +950,19 @@ function jobCard(job, mode = "discover", qualification = null) {
       details.append(make("p", `Contrôle géographique : ${geographyLabels[qualification.geography_status] || "à vérifier"}`));
     }
   } else if (!job.deadline_date && !job.start_date && !job.end_date && !job.duration_months) details.append(make("p", "Dates non renseignées."));
+  const temporalLabels = {
+    published:"publication", deadline:"date limite", start:"début", end:"fin",
+    duration_exact:"durée", duration_min:"durée minimale", duration_max:"durée maximale",
+    duration_range:"fourchette de durée",
+  };
+  temporalFacts.forEach((fact) => {
+    if (!fact?.quote) return;
+    const label = temporalLabels[fact.fact_type] || "fait temporel";
+    details.append(make("p", `Preuve ${label} (${fact.precision || "précision inconnue"}) : « ${fact.quote} »`));
+    if (Array.isArray(fact.contradictions) && fact.contradictions.length) {
+      details.append(make("p", `Contradiction temporelle à vérifier pour ${label}.`, "job-temporal-warning"));
+    }
+  });
   if (job.source_name && job.source_name !== "manual") {
     details.append(make("p", `Source officielle : ${job.source_name} · vérifiée : ${formatVerification(job.last_verified_at)}`));
   }

@@ -14,6 +14,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
 from .profile_import import MAX_PROFILE_IMPORT_BYTES
+from .offer_dates import extract_offer_dates
 from .offer_qualification import qualify_offer
 from .service import CareerService
 from workspace_core import UserFacingError, to_jsonable
@@ -510,13 +511,17 @@ def create_career_router(
         # The request model intentionally does not accept a client supplied
         # qualification. Derive source-attributed facts locally instead, with
         # neutral limits so the caller's search preferences are not guessed.
-        import_payload["qualification"] = qualify_offer(
+        qualification = qualify_offer(
             import_payload,
             minimum_duration_months=1,
             minimum_stage_duration_months=1,
             allowed_contract_types=["internship", "apprenticeship", "graduate", "VIE", "permanent", "fixed_term"],
             allowed_start_months=list(range(1, 13)),
         ).to_dict()
+        qualification["temporal_facts"] = [
+            fact.to_dict() for fact in extract_offer_dates(import_payload)
+        ]
+        import_payload["qualification"] = qualification
         result = await local(lambda: service.import_job(import_payload))
         return result
 

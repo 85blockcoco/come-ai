@@ -1254,7 +1254,10 @@ def test_http_job_import_derives_neutral_facts_without_trusting_client_verificat
         end_date="",
         duration_months=6,
         employment_type="Internship",
-        description_original="Synthetic finance internship. Starting January 2027 for six months.",
+        description_original=(
+            "Synthetic finance internship. Starting January 2027 for six months. "
+            "The internship starts in February 2027."
+        ),
     )
     # This endpoint must ignore caller supplied derived trust and recompute it.
     payload["qualification"] = {"verification_status": "verified", "target_status": "conforming"}
@@ -1267,6 +1270,14 @@ def test_http_job_import_derives_neutral_facts_without_trusting_client_verificat
     assert facts["start_month"] == 1
     assert facts["duration_min_months"] == 6
     assert facts["provenance"]["start_month"]["quote"] == "Starting January 2027"
+    temporal_starts = [fact for fact in facts["temporal_facts"] if fact["fact_type"] == "start"]
+    assert len(temporal_starts) == 2
+    assert all(fact["contradictions"] for fact in temporal_starts)
+    assert {fact["quote"] for fact in temporal_starts} == {
+        "Starting January 2027", "starts in February 2027"
+    }
+    assert any(fact["fact_type"] == "duration_exact" and fact["quote"] == "for six months"
+               for fact in facts["temporal_facts"])
     assert not job["start_date"]  # a month-only statement never becomes a day
     assert job["qualification_snapshot_current"] is True
     assert facts["verification_status"] != "verified"

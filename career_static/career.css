@@ -241,6 +241,7 @@ details summary:focus-visible { border-radius: 5px; outline-offset: 4px; }
 .job-chip.danger { color: var(--danger); background: var(--danger-soft); }
 .job-details { display: grid; gap: 3px; color: var(--muted); font-size: .75rem; line-height: 1.4; }
 .job-details strong { color: var(--ink); }
+.job-temporal-warning { color: var(--warning); font-weight: 650; }
 .job-reasons { margin: 9px 0; padding-left: 18px; color: var(--muted); font-size: .74rem; line-height: 1.4; }
 .scoring-summary { display: grid; gap: 6px; margin-top: 11px; padding: 10px; border: 1px solid #d2e9dc; border-radius: 9px; background: #f4fbf7; }
 .scoring-summary.blocked { border-color: #f0b7b1; background: var(--danger-soft); }
