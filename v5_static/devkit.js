@@ -14,9 +14,9 @@
   let pollTimer = null;
 
   async function request(path, data) {
-    const response = await fetch(`/api/devkit${path}`, data === undefined ? {} : {
-      method: "POST", headers: { "Content-Type": "application/json", "X-Workshop-Token": token || "" }, body: JSON.stringify(data),
-    });
+    const options = {headers: {"X-Workshop-Token": token || ""}};
+    if (data !== undefined) { options.method = "POST"; options.headers["Content-Type"] = "application/json"; options.body = JSON.stringify(data); }
+    const response = await fetch(`/api/devkit${path}`, options);
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.detail || "L’action de maintenance n’a pas abouti.");
     return result;
@@ -88,7 +88,18 @@
   }
 
   function addDownload(artifact) {
-    const link = document.createElement("a"); link.href = artifact.download_url; link.download = artifact.filename; link.textContent = `↓ ${artifact.filename}`; link.className = "developer-download"; ui.downloads.prepend(link);
+    const link = document.createElement("a"); link.href = artifact.download_url; link.download = artifact.filename; link.textContent = `↓ ${artifact.filename}`; link.className = "developer-download";
+    link.addEventListener("click", async (event) => {
+      event.preventDefault();
+      try {
+        const response = await fetch(artifact.download_url, {headers: {"X-Workshop-Token": token || ""}});
+        if (!response.ok) throw new Error("Le téléchargement local n’a pas abouti.");
+        const url = URL.createObjectURL(await response.blob());
+        const download = document.createElement("a"); download.href = url; download.download = artifact.filename; download.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (error) { ui.status.textContent = error.message; }
+    });
+    ui.downloads.prepend(link);
   }
 
   async function poll(jobId, candidate) {

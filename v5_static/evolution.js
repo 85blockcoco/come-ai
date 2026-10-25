@@ -3,7 +3,9 @@
   const n = (id) => document.getElementById(id);
   let token = null, running = false, pollTimer = null;
   async function request(path, data) {
-    const response = await fetch(`/api/devkit${path}`, data === undefined ? {} : {method: "POST", headers: {"Content-Type": "application/json", "X-Workshop-Token": token || ""}, body: JSON.stringify(data)});
+    const options = {headers: {"X-Workshop-Token": token || ""}};
+    if (data !== undefined) { options.method = "POST"; options.headers["Content-Type"] = "application/json"; options.body = JSON.stringify(data); }
+    const response = await fetch(`/api/devkit${path}`, options);
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.detail || "Le cycle n’a pas pu être lancé.");
     return result;
