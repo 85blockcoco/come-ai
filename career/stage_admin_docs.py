@@ -14,6 +14,8 @@ relevant consulate.
 
 from __future__ import annotations
 
+import csv
+import io
 from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Literal
 
@@ -29,25 +31,61 @@ _COUNTRY_ALIASES: dict[str, str] = {
     "france": "France",
     "uk": "United Kingdom",
     "gb": "United Kingdom",
+    "gbr": "United Kingdom",
     "united kingdom": "United Kingdom",
+    "royaume-uni": "United Kingdom",
+    "royaume uni": "United Kingdom",
     "england": "United Kingdom",
     "great britain": "United Kingdom",
     "de": "Germany",
+    "deu": "Germany",
     "germany": "Germany",
     "allemagne": "Germany",
+    "deutschland": "Germany",
     "nl": "Netherlands",
+    "nld": "Netherlands",
     "netherlands": "Netherlands",
     "holland": "Netherlands",
     "pays-bas": "Netherlands",
     "pays bas": "Netherlands",
+    "niederlande": "Netherlands",
     "be": "Belgium",
+    "bel": "Belgium",
     "belgium": "Belgium",
     "belgique": "Belgium",
+    "belgien": "Belgium",
 }
+
+# Upper bounds keep a malicious or accidental payload from growing without
+# limit.  They are deliberately generous for a real stage dossier.
+MAX_PROOF_REFS = 50
+MAX_PROOF_REF_LENGTH = 240
 
 
 def _clean(value: Any, *, limit: int = 120) -> str:
-    return str(value or "").replace("\x00", "").strip()[:limit]
+    """Strip control characters/NULs and enforce a hard length bound."""
+    text = str(value if value is not None else "")
+    text = "".join(char for char in text if char == "\t" or ord(char) >= 32)
+    return text.strip()[:limit]
+
+
+def _clean_proof_refs(values: Any) -> list[str]:
+    """Return deduplicated, non-empty proof references with bounded size."""
+    if values is None:
+        return []
+    if isinstance(values, (str, bytes)):
+        values = [values]
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for raw in values:
+        ref = _clean(raw, limit=MAX_PROOF_REF_LENGTH)
+        if not ref or ref in seen:
+            continue
+        seen.add(ref)
+        cleaned.append(ref)
+        if len(cleaned) >= MAX_PROOF_REFS:
+            break
+    return cleaned
 
 
 def normalize_country(value: Any) -> str:
@@ -86,8 +124,8 @@ class AdminItem:
         self.label_fr = _clean(self.label_fr, limit=240) or self.key
         if self.status not in VALID_STATUSES:
             raise ValueError(f"Statut inconnu pour {self.key!r}: {self.status!r}")
-        self.proof_refs = [str(x) for x in (self.proof_refs or []) if str(x).strip()]
-        self.required_proofs = [str(x) for x in (self.required_proofs or []) if str(x).strip()]
+        self.proof_refs = _clean_proof_refs(self.proof_refs)
+        self.required_proofs = _clean_proof_refs(self.required_proofs)
 
     @property
     def is_complete(self) -> bool:
@@ -96,6 +134,21 @@ class AdminItem:
     @property
     def is_blocking(self) -> bool:
         return bool(self.required and self.status not in ("ok", "not_applicable"))
+
+    @property
+    def missing_proofs(self) -> list[str]:
+        """Required proofs that are not yet covered by a provided reference.
+
+        Proof references are opaque labels (for example ``"convention_signée"``)
+        supplied by the caller; the module never reads a file or a URL.
+        """
+        provided = set(self.proof_refs)
+        return [proof for proof in self.required_proofs if proof not in provided]
+
+    @property
+    def proofs_complete(self) -> bool:
+        """True when the piece needs no further proof reference."""
+        return not self.missing_proofs
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -114,7 +167,9 @@ class AdminChecklist:
         self.items = list(self.items or [])
         if self.blocking_missing is None:
             self.blocking_missing = []
-        self.blocking_missing = [str(x) for x in self.blocking_missing if str(x).strip()]
+        self.blocking_missing = [
+            _clean(key, limit=80) for key in self.blocking_missing if _clean(key, limit=80)
+        ]
         # Keep blocking list coherent with items when empty.
         if not self.blocking_missing:
             self.blocking_missing = [
@@ -124,6 +179,15 @@ class AdminChecklist:
     @property
     def keys(self) -> list[str]:
         return [item.key for item in self.items]
+
+    @property
+    def missing_proofs(self) -> dict[str, list[str]]:
+        """Map of item key -> required proofs still missing for applicable required pieces."""
+        return {
+            item.key: item.missing_proofs
+            for item in self.items
+            if item.required and item.status != "not_applicable" and item.missing_proofs
+        }
 
     def get(self, key: str) -> AdminItem | None:
         for item in self.items:
@@ -144,7 +208,7 @@ class AdminChecklist:
             raise ValueError(f"Statut inconnu: {status!r}")
         item.status = status  # type: ignore[assignment]
         if proof_refs is not None:
-            item.proof_refs = [str(x) for x in proof_refs if str(x).strip()]
+            item.proof_refs = _clean_proof_refs(proof_refs)
         self.blocking_missing = [
             i.key for i in self.items if i.required and i.status not in ("ok", "not_applicable")
         ]
@@ -241,13 +305,13 @@ class _CountryRequirements(dict):
         return [replace(item) for item in super().__getitem__("France")]
 
     def __contains__(self, key: Any) -> bool:
-        return normalize_country(key) in super().keys() or True
+        return normalize_country(key) in super().keys()
 
     def get(self, key: Any, default: Any = None) -> Any:
-        try:
-            return self[key]
-        except KeyError:
-            return default
+        canonical = normalize_country(key)
+        if canonical in super().keys():
+            return super().__getitem__(canonical)
+        return default
 
 
 REQUIREMENTS_BY_COUNTRY = _CountryRequirements(
@@ -309,6 +373,22 @@ def completeness(checklist: AdminChecklist | Any) -> CompletenessResult:
         status = getattr(item, "status", None)
         if status in status_counts:
             status_counts[status] += 1
+    missing_proofs: dict[str, list[str]] = {}
+    proofs_required = 0
+    proofs_provided = 0
+    for item in items:
+        # Evidence is only expected for required pieces that are applicable.
+        # Optional or explicitly not-applicable pieces never reduce the score.
+        if not getattr(item, "required", False) or getattr(item, "status", None) == "not_applicable":
+            continue
+        required_proofs = list(getattr(item, "required_proofs", None) or [])
+        provided = set(getattr(item, "proof_refs", None) or [])
+        proofs_required += len(required_proofs)
+        proofs_provided += sum(1 for proof in required_proofs if proof in provided)
+        missing = [proof for proof in required_proofs if proof not in provided]
+        if missing:
+            missing_proofs[getattr(item, "key", "")] = missing
+    proof_percent = (proofs_provided / proofs_required * 100.0) if proofs_required else 100.0
     percent = (done / total * 100.0) if total else 100.0
     required_percent = (required_done / required_total * 100.0) if required_total else 100.0
     result = CompletenessResult(
@@ -325,6 +405,11 @@ def completeness(checklist: AdminChecklist | Any) -> CompletenessResult:
             "required_done": required_done,
             "required_percent": round(required_percent, 2),
             "required_score": round(required_percent, 2),
+            "proofs_required": proofs_required,
+            "proofs_provided": proofs_provided,
+            "proof_percent": round(proof_percent, 2),
+            "proofs_complete": not missing_proofs,
+            "missing_proofs": missing_proofs,
             "blocking_missing": list(blocking),
             "blocking_count": len(blocking),
             "status_counts": status_counts,
@@ -364,25 +449,25 @@ def build_admin_checklist(
     status_map: dict[str, str] = {}
     if isinstance(statuses, dict):
         for key, value in statuses.items():
-            status_map[str(key)] = str(value)
+            status = str(value)
+            if status not in VALID_STATUSES:
+                raise ValueError(f"Statut inconnu pour {key!r}: {status!r}")
+            status_map[str(key)] = status
     elif isinstance(statuses, (list, tuple, set)):
         for key in statuses:
             status_map[str(key)] = "ok"
     proof_map: dict[str, list[str]] = {}
     if isinstance(proof_refs, dict):
         for key, value in proof_refs.items():
-            if isinstance(value, (list, tuple)):
-                proof_map[str(key)] = [str(x) for x in value]
+            if isinstance(value, (list, tuple, set)):
+                proof_map[str(key)] = _clean_proof_refs(value)
             else:
-                proof_map[str(key)] = [str(value)]
+                proof_map[str(key)] = _clean_proof_refs([value])
     built_items: list[AdminItem] = []
     for template in items:
         item = replace(template)
         if template.key in status_map:
-            try:
-                item.status = status_map[template.key]  # type: ignore[assignment]
-            except ValueError:
-                pass
+            item.status = status_map[template.key]  # type: ignore[assignment]
         if template.key in proof_map:
             item.proof_refs = list(proof_map[template.key])
         built_items.append(item)
@@ -429,24 +514,39 @@ def update_item(checklist: AdminChecklist, key: str, status: str | None = None, 
 # ---------------------------------------------------------------------------
 
 
+def _md_cell(value: Any) -> str:
+    """Make a value safe inside a Markdown table cell."""
+    return _clean(value, limit=300).replace("|", "\\|").replace("\n", " ") or "—"
+
+
 def render_recap(checklist: AdminChecklist | Any, *, format: str = "markdown") -> str:
-    """Render an exportable recap (markdown or text)."""
+    """Render an exportable recap (markdown, text or csv).
+
+    Unknown formats fall back to plain text rather than raising, so an export
+    request can never break the local workspace.
+    """
     items = list(getattr(checklist, "items", None) or [])
     country = getattr(checklist, "country", None) or ""
     info = completeness(checklist)
+    fmt = (format or "markdown").strip().lower()
     lines: list[str] = []
-    if format.lower() in ("markdown", "md"):
+    if fmt in ("markdown", "md"):
         lines.append(f"# Checklist administrative — {country}")
         lines.append("")
         lines.append(f"Complétion : {info['done']}/{info['total']} ({info['percent']} %)")
         lines.append(f"Pièces bloquantes : {info['blocking_count']}")
+        lines.append(f"Preuves fournies : {info['proofs_provided']}/{info['proofs_required']} ({info['proof_percent']} %)")
         lines.append("")
-        lines.append("| Pièce | Requise | Statut | Preuves |")
-        lines.append("|---|---|---|---|")
+        lines.append("| Pièce | Requise | Statut | Preuves | Preuves manquantes |")
+        lines.append("|---|---|---|---|---|")
         for item in items:
             proofs = ", ".join(getattr(item, "proof_refs", None) or []) or "—"
+            missing = ", ".join(getattr(item, "missing_proofs", None) or []) or "—"
             req = "oui" if getattr(item, "required", False) else "non"
-            lines.append(f"| {getattr(item, 'label_fr', item.key)} | {req} | {getattr(item, 'status', '')} | {proofs} |")
+            lines.append(
+                f"| {_md_cell(getattr(item, 'label_fr', item.key))} | {req} | "
+                f"{_md_cell(getattr(item, 'status', ''))} | {_md_cell(proofs)} | {_md_cell(missing)} |"
+            )
         blocking = list(getattr(checklist, "blocking_missing", None) or [])
         if blocking:
             lines.append("")
@@ -457,12 +557,34 @@ def render_recap(checklist: AdminChecklist | Any, *, format: str = "markdown") -
                 lines.append(f"- {label} ({key})")
         lines.append("")
         lines.append("_Données génériques à vérifier auprès de l'institution d'accueil et du consulat._")
+    elif fmt in ("csv", "excel"):
+        buffer = io.StringIO()
+        writer = csv.writer(buffer, lineterminator="\n")
+        writer.writerow(["country", "key", "label_fr", "required", "status", "proof_refs", "missing_proofs"])
+        for item in items:
+            writer.writerow(
+                [
+                    country,
+                    getattr(item, "key", ""),
+                    getattr(item, "label_fr", ""),
+                    "oui" if getattr(item, "required", False) else "non",
+                    getattr(item, "status", ""),
+                    "|".join(getattr(item, "proof_refs", None) or []),
+                    "|".join(getattr(item, "missing_proofs", None) or []),
+                ]
+            )
+        return buffer.getvalue().rstrip("\n")
     else:
         lines.append(f"Checklist administrative - {country}")
         lines.append(f"Completion: {info['done']}/{info['total']} ({info['percent']}%)")
         lines.append(f"Blocking: {info['blocking_count']}")
+        lines.append(f"Proofs: {info['proofs_provided']}/{info['proofs_required']} ({info['proof_percent']}%)")
         for item in items:
-            lines.append(f"- [{getattr(item, 'status', '')}] {getattr(item, 'label_fr', item.key)} (required={getattr(item, 'required', False)})")
+            missing = ", ".join(getattr(item, "missing_proofs", None) or []) or "-"
+            lines.append(
+                f"- [{getattr(item, 'status', '')}] {getattr(item, 'label_fr', item.key)} "
+                f"(required={getattr(item, 'required', False)}, missing_proofs={missing})"
+            )
     return "\n".join(lines)
 
 

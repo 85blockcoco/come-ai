@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import os
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse
@@ -141,11 +141,14 @@ class ApplicationChecklistPayload(BaseModel):
     checked: list[str] = Field(default_factory=list, max_length=10)
 
 
+AdminDocStatus = Literal["missing", "in_progress", "ok", "not_applicable"]
+
+
 class AdminDocChecklistPayload(BaseModel):
     """Local update of an administrative checklist (no submission, no network)."""
 
     country: str = Field(default="France", max_length=80)
-    statuses: dict[str, str] = Field(default_factory=dict)
+    statuses: dict[str, AdminDocStatus] = Field(default_factory=dict)
     proof_refs: dict[str, list[str]] = Field(default_factory=dict)
 
 

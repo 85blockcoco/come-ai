@@ -12,13 +12,22 @@
         "photo": "not_applicable"
       },
       "proof_refs": {
-        "convention": ["syn-convention-001"],
-        "school_certificate": ["syn-scolarite-001"],
-        "civil_id": ["syn-piece-identite-001"]
+        "convention": [
+          "syn-convention-001"
+        ],
+        "school_certificate": [
+          "syn-scolarite-001"
+        ],
+        "civil_id": [
+          "syn-piece-identite-001"
+        ]
       },
       "expected_percent": 66.67,
       "expected_required_percent": 60.0,
-      "expected_blocking": ["insurance", "bank_details"]
+      "expected_blocking": [
+        "insurance",
+        "bank_details"
+      ]
     },
     "United Kingdom": {
       "statuses": {
@@ -32,13 +41,22 @@
         "insurance": "ok"
       },
       "proof_refs": {
-        "passport": ["syn-passeport-uk-001"],
-        "convention": ["syn-convention-uk-001"],
-        "insurance": ["syn-assurance-uk-001"]
+        "passport": [
+          "syn-passeport-uk-001"
+        ],
+        "convention": [
+          "syn-convention-uk-001"
+        ],
+        "insurance": [
+          "syn-assurance-uk-001"
+        ]
       },
       "expected_percent": 62.5,
       "expected_required_percent": 66.67,
-      "expected_blocking": ["visa", "proof_of_funds"]
+      "expected_blocking": [
+        "visa",
+        "proof_of_funds"
+      ]
     },
     "Germany": {
       "statuses": {
@@ -52,12 +70,19 @@
         "civil_id": "ok"
       },
       "proof_refs": {
-        "civil_id": ["syn-passeport-piece-de-001"],
-        "health_insurance": ["syn-assurance-sante-de-001"]
+        "civil_id": [
+          "syn-passeport-piece-de-001"
+        ],
+        "health_insurance": [
+          "syn-assurance-sante-de-001"
+        ]
       },
       "expected_percent": 62.5,
       "expected_required_percent": 66.67,
-      "expected_blocking": ["visa", "convention"]
+      "expected_blocking": [
+        "visa",
+        "convention"
+      ]
     },
     "Netherlands": {
       "statuses": {
@@ -71,11 +96,15 @@
         "insurance": "ok"
       },
       "proof_refs": {
-        "convention": ["syn-convention-nl-001"]
+        "convention": [
+          "syn-convention-nl-001"
+        ]
       },
       "expected_percent": 62.5,
       "expected_required_percent": 83.33,
-      "expected_blocking": ["health_insurance"]
+      "expected_blocking": [
+        "health_insurance"
+      ]
     },
     "Belgium": {
       "statuses": {
@@ -88,11 +117,171 @@
         "residence_permit": "missing"
       },
       "proof_refs": {
-        "passport": ["syn-piece-identite-be-001"]
+        "passport": [
+          "syn-piece-identite-be-001"
+        ]
       },
       "expected_percent": 57.14,
       "expected_required_percent": 75.0,
-      "expected_blocking": ["convention"]
+      "expected_blocking": [
+        "convention"
+      ]
+    }
+  },
+  "_synthetic": true,
+  "_disclaimer": "Données 100% synthétiques pour les tests SPEC-028. Aucune personne, entreprise, institution ou pièce réelle. Exigences génériques et indicatives, sans valeur juridique.",
+  "required_keys": {
+    "France": [
+      "convention",
+      "school_certificate",
+      "civil_id",
+      "insurance",
+      "bank_details"
+    ],
+    "United Kingdom": [
+      "passport",
+      "visa",
+      "cas_letter",
+      "proof_of_funds",
+      "convention",
+      "insurance"
+    ],
+    "Germany": [
+      "passport",
+      "visa",
+      "enrollment",
+      "convention",
+      "health_insurance",
+      "civil_id"
+    ],
+    "Netherlands": [
+      "passport",
+      "visa",
+      "enrollment",
+      "convention",
+      "health_insurance",
+      "insurance"
+    ],
+    "Belgium": [
+      "passport",
+      "convention",
+      "school_certificate",
+      "insurance"
+    ]
+  },
+  "optional_keys": {
+    "France": [
+      "photo"
+    ],
+    "United Kingdom": [
+      "ihs",
+      "accommodation"
+    ],
+    "Germany": [
+      "blocked_account",
+      "registration"
+    ],
+    "Netherlands": [
+      "proof_of_funds",
+      "bsn"
+    ],
+    "Belgium": [
+      "visa",
+      "proof_of_funds",
+      "residence_permit"
+    ]
+  },
+  "required_proofs": {
+    "France": {
+      "convention": [
+        "convention_signée"
+      ],
+      "school_certificate": [
+        "certificat_scolarité"
+      ],
+      "civil_id": [
+        "pièce_identité"
+      ],
+      "insurance": [
+        "attestation_assurance"
+      ],
+      "bank_details": [
+        "rib"
+      ]
+    },
+    "United Kingdom": {
+      "passport": [
+        "passeport"
+      ],
+      "visa": [
+        "visa_ou_autorisation"
+      ],
+      "cas_letter": [
+        "lettre_acceptation"
+      ],
+      "proof_of_funds": [
+        "justificatif_ressources"
+      ],
+      "convention": [
+        "convention_signée"
+      ],
+      "insurance": [
+        "attestation_assurance"
+      ]
+    },
+    "Germany": {
+      "passport": [
+        "passeport"
+      ],
+      "visa": [
+        "visa_national"
+      ],
+      "enrollment": [
+        "certificat_scolarité"
+      ],
+      "convention": [
+        "convention_signée"
+      ],
+      "health_insurance": [
+        "attestation_santé"
+      ],
+      "civil_id": [
+        "pièce_identité"
+      ]
+    },
+    "Netherlands": {
+      "passport": [
+        "passeport"
+      ],
+      "visa": [
+        "visa_ou_permis"
+      ],
+      "enrollment": [
+        "certificat_scolarité"
+      ],
+      "convention": [
+        "convention_signée"
+      ],
+      "health_insurance": [
+        "attestation_santé"
+      ],
+      "insurance": [
+        "attestation_assurance"
+      ]
+    },
+    "Belgium": {
+      "passport": [
+        "pièce_identité"
+      ],
+      "convention": [
+        "convention_signée"
+      ],
+      "school_certificate": [
+        "certificat_scolarité"
+      ],
+      "insurance": [
+        "attestation_assurance"
+      ]
     }
   }
 }

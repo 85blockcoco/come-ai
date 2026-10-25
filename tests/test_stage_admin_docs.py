@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from career.stage_admin_docs import (
+    MAX_PROOF_REFS,
     AdminChecklist,
     AdminItem,
     REQUIREMENTS_BY_COUNTRY,
@@ -220,3 +222,92 @@ def test_synthetic_fixture_scenarios() -> None:
                 assert item.proof_refs == refs, (country, item.key)
                 # Synthetic-only: every proof reference is tagged as synthetic.
                 assert all(ref.startswith("syn-") for ref in refs), (country, item.key)
+
+
+def test_module_requirements_match_synthetic_fixture_contract() -> None:
+    data = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
+    assert data["_synthetic"] is True
+    for country, required_keys in data["required_keys"].items():
+        items = requirements_for_country(country)
+        assert [item.key for item in items if item.required] == required_keys, country
+        assert [item.key for item in items if not item.required] == data["optional_keys"][country], country
+        for item in items:
+            if not item.required:
+                continue
+            expected = data["required_proofs"][country].get(item.key, [])
+            assert item.required_proofs == expected, (country, item.key)
+
+
+def test_every_required_piece_declares_expected_proofs() -> None:
+    for country in REQUIREMENTS_BY_COUNTRY:
+        for item in requirements_for_country(country):
+            if item.required:
+                assert item.required_proofs, (country, item.key)
+
+
+def test_proof_references_drive_evidence_completeness() -> None:
+    data = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
+    country = "France"
+    statuses = {key: "ok" for key in data["required_keys"][country]}
+    checklist = build_admin_checklist("FR", statuses=statuses, proof_refs=data["required_proofs"][country])
+    result = completeness(checklist)
+    assert result["blocking_missing"] == []
+    assert result["proofs_complete"] is True
+    assert result["missing_proofs"] == {}
+    assert result["proof_percent"] == 100.0
+
+
+def test_evidence_gap_does_not_hide_missing_statuses() -> None:
+    data = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
+    scenario = data["countries"]["Germany"]
+    checklist = build_admin_checklist("DE", statuses=scenario["statuses"], proof_refs=scenario["proof_refs"])
+    result = completeness(checklist)
+    assert result["blocking_missing"] == scenario["expected_blocking"]
+    assert result["proofs_complete"] is False
+    assert "visa" in result["missing_proofs"]
+    assert "convention" in result["missing_proofs"]
+
+
+def test_invalid_status_is_rejected_by_builder() -> None:
+    with pytest.raises(ValueError):
+        build_admin_checklist("France", statuses={"convention": "done"})
+
+
+def test_invalid_status_payload_is_rejected_by_api(tmp_path: Path) -> None:
+    service = CareerService(tmp_path, curated_sources=())
+    app = create_app(base_dir=tmp_path, career_override=service)
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/career/admin-docs/checklist",
+            json={"country": "FR", "statuses": {"convention": "done"}},
+        )
+        assert response.status_code == 422
+
+
+def test_proof_refs_are_sanitized_and_bounded() -> None:
+    refs = ["syn-a", "syn-a", "", "   ", "syn\x00b", "x" * 500] + [f"ref-{i}" for i in range(100)]
+    checklist = build_admin_checklist("France", statuses={"convention": "ok"}, proof_refs={"convention": refs})
+    item = checklist.get("convention")
+    assert item is not None
+    assert len(item.proof_refs) <= MAX_PROOF_REFS
+    assert item.proof_refs[:2] == ["syn-a", "synb"]
+    assert all("\x00" not in ref for ref in item.proof_refs)
+    assert all(len(ref) <= 240 for ref in item.proof_refs)
+    assert len(set(item.proof_refs)) == len(item.proof_refs)
+
+
+def test_recap_csv_export_and_unknown_format_fallback() -> None:
+    checklist = build_admin_checklist("France", statuses={"convention": "ok"})
+    csv_text = render_recap(checklist, format="csv")
+    lines = csv_text.splitlines()
+    assert lines[0] == "country,key,label_fr,required,status,proof_refs,missing_proofs"
+    assert any(line.startswith("France,convention,") for line in lines)
+    text = render_recap(checklist, format="not-a-real-format")
+    assert "Checklist administrative - France" in text
+    assert "Proofs:" in text
+
+
+def test_requirements_map_does_not_advertise_unknown_countries() -> None:
+    assert "Atlantis" not in REQUIREMENTS_BY_COUNTRY
+    assert "fr" in REQUIREMENTS_BY_COUNTRY
+    assert REQUIREMENTS_BY_COUNTRY["fr"] == REQUIREMENTS_BY_COUNTRY["France"]

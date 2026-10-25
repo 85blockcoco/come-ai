@@ -8,10 +8,9 @@
   ],
   "files_modified": [
     "career/router.py",
-    "career/service.py",
     "messages/result.json"
   ],
-  "output": "SPEC-028 (mission cvboost-63) livré : checklist administrative par pays (FR + UK/DE/NL/BE), statuts missing/in_progress/ok/not_applicable, preuves exigées et référencées, complétion, récap exportable, endpoints REST create_app() (GET/POST /api/career/admin-docs/* + alias stage-admin-docs, schema_version=7 intact), fixture synthétique intervenue (incluse dans la livraison précédente manquante).",
-  "logs": "pytest -q tests/test_stage_admin_docs.py → 18 passed (dont smoke HTTP, 2 cas adversariaux, scénarios fixture synthetic)\npytest -q (suite complète) → 1442 passed, 1 skipped (skip préexistant)\nruff check . → All checks passed\ngit diff --check → clean\nchecklist_codex.sh → TOUT VERT\npush sur origin/agent/spec-028-stage-admin-docs (pas de main)",
+  "output": "SPEC-028 (mission cvboost-63) livré : checklist administrative par pays (France + Royaume-Uni/Allemagne/Pays-Bas/Belgique), statuts missing/in_progress/ok/not_applicable validés (ValueError côté module, 422 côté REST), pièces requises et preuves référencées avec bornes anti-abus (50 références max, 240 caractères), taux de complétion et de preuves, récap exportable (markdown/text/csv), endpoints REST create_app() (GET/POST /api/career/admin-docs* + alias stage-admin-docs, schéma inchangé), fixture synthétique multi-scénarios, 27 tests (HTTP, cas adversariaux, contrat fixture). Aucune donnée réelle, aucun secret.",
+  "logs": "pytest -q tests/test_stage_admin_docs.py → 27 passed\npytest -q (suite complète) → 1451 passed, 1 skipped (skip préexistant)\nruff check . → All checks passed\n./checklist_codex.sh all → TOUT VERT\ngit diff --check → clean\npush sur origin/agent/spec-028-stage-admin-docs (jamais main)",
   "error": null
 }
