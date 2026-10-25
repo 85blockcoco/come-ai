@@ -5,9 +5,10 @@
     "career/router.py",
     "tests/test_offer_compare.py",
     "tests/fixtures/offers_compare_synthetic.json",
-    "docs/agent-reports/SPEC-026-offer_compare.md"
+    "docs/agent-reports/SPEC-026-offer_compare.md",
+    "tests/test_career_agent.py"
   ],
-  "output": "Comparateur d'offres côte à côte livré : attributs normalisés alignés, score pondéré configurable, tie-breaker fraîcheur+fit, endpoint REST et tests (10 passants).",
-  "logs": "pytest -q -> 1434 passed, 1 skipped; ruff check . -> All checks passed; git diff --check -> clean",
+  "output": "Comparateur d'offres côte à côte (SPEC-026) livré : normalisation des attributs, matrice alignée avec None explicite, score pondéré configurable, tie-breaker fraîcheur+fit, deux endpoints REST et 33 tests dont cas adversariaux.",
+  "logs": "pytest -q tests/test_offer_compare.py -> 33 passed\npytest -q -> 1541 passed, 1 skipped\nruff check . -> All checks passed\ngit diff --check -> clean\nBranches poussées : worker/cvboost-61-1792953412034 et agent/spec-026-offer-compare",
   "error": null
 }

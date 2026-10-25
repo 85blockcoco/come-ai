@@ -1,82 +1,42 @@
 [
   {
-    "offer_id": "offer_alpha",
-    "id": "offer_alpha",
+    "offer_id": "offre_alpha",
     "attrs": {
-      "salary": 42000,
+      "salary": "42 000 €",
       "remote_days": 1,
       "fit": 8,
-      "freshness": 6,
+      "freshness": "2026-10-20",
       "location_score": 7
-    },
-    "salary": 42000,
-    "remote_days": 1,
-    "fit": 8,
-    "freshness": 6,
-    "location_score": 7
+    }
   },
   {
-    "offer_id": "offer_beta",
-    "id": "offer_beta",
+    "offer_id": "offre_beta",
     "attrs": {
-      "salary": 48000,
+      "salary": "48k",
       "remote_days": 3,
       "fit": 7,
-      "freshness": 9,
+      "freshness": "2026-10-24",
       "location_score": 6
-    },
-    "salary": 48000,
-    "remote_days": 3,
-    "fit": 7,
-    "freshness": 9,
-    "location_score": 6
+    }
   },
   {
-    "offer_id": "offer_gamma",
-    "id": "offer_gamma",
+    "offer_id": "offre_gamma",
     "attrs": {
       "salary": 45000,
       "remote_days": 2,
       "fit": 9,
-      "freshness": 5,
+      "freshness": "2026-10-10",
       "location_score": 8
-    },
-    "salary": 45000,
-    "remote_days": 2,
-    "fit": 9,
-    "freshness": 5,
-    "location_score": 8
+    }
   },
   {
-    "offer_id": "offer_delta",
-    "id": "offer_delta",
+    "offer_id": "offre_delta",
     "attrs": {
       "salary": null,
       "remote_days": 4,
       "fit": 6,
-      "freshness": 8,
+      "freshness": "2026-10-23",
       "location_score": null
-    },
-    "salary": null,
-    "remote_days": 4,
-    "fit": 6,
-    "freshness": 8,
-    "location_score": null
-  },
-  {
-    "offer_id": "offer_epsilon",
-    "id": "offer_epsilon",
-    "attrs": {
-      "salary": 47000,
-      "remote_days": 2,
-      "fit": 8,
-      "freshness": 8,
-      "location_score": 7
-    },
-    "salary": 47000,
-    "remote_days": 2,
-    "fit": 8,
-    "freshness": 8,
-    "location_score": 7
+    }
   }
 ]

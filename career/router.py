@@ -347,24 +347,20 @@ def create_career_router(
 
     @router.post("/api/career/offers/compare")
     async def compare_offers_endpoint(payload: OfferComparePayload) -> Any:
-        from career.offer_compare import compare_offers
+        from career.offer_compare import compare_offers, verdict_to_dict
 
-        result = await run_in_threadpool(
-            lambda: compare_offers(
-                payload.offers,
-                weights=payload.weights,
-                tie_breakers=payload.tie_breakers,
-                higher_is_better=payload.higher_is_better,
+        try:
+            result = await run_in_threadpool(
+                lambda: compare_offers(
+                    payload.offers,
+                    weights=payload.weights or None,
+                    tie_breakers=payload.tie_breakers or None,
+                    higher_is_better=payload.higher_is_better or None,
+                )
             )
-        )
-        return to_jsonable(
-            {
-                "matrix": result.matrix,
-                "weighted_scores": result.weighted_scores,
-                "ranking": result.ranking,
-                "tie_breaker_used": result.tie_breaker_used,
-            }
-        )
+        except (TypeError, ValueError) as error:
+            raise UserFacingError(f"Comparaison d’offres invalide : {error}") from error
+        return to_jsonable(verdict_to_dict(result))
 
     @router.post("/api/career/offer-compare")
     async def compare_offers_alias(payload: OfferComparePayload) -> Any:
