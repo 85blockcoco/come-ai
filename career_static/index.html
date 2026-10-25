@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
     <title>Côme AI Career — espace local</title>
-    <link rel="stylesheet" href="/career-static/career.css?v=codex-v3-20261025-rc5" />
-    <link rel="stylesheet" href="/career-static/cv_plan.css?v=codex-v3-20261025-rc5" />
+    <link rel="stylesheet" href="/career-static/career.css?v=codex-v3-20261025-rc8" />
+    <link rel="stylesheet" href="/career-static/cv_plan.css?v=codex-v3-20261025-rc8" />
   </head>
   <body>
     <a class="skip-link" href="#career-main">Aller au contenu Career</a>
@@ -384,14 +384,16 @@
                 <div id="stagehunter-contract-types" class="stagehunter-domains"></div>
               </fieldset>
               <fieldset>
-                <legend>Mois de début possibles</legend>
+                <legend>Mois de début acceptés</legend>
                 <label class="stagehunter-domain"><input id="stagehunter-quarter-one" type="checkbox" /> Premier trimestre (janvier à mars)</label>
                 <div id="stagehunter-start-months" class="stagehunter-domains"></div>
+                <p class="fixed-period-note">Tous les mois sont acceptés par défaut à partir de la date cible. Décoche ceux qui ne te conviennent pas.</p>
               </fieldset>
               <div class="form-row two-columns">
+                <label>Début au plus tôt<input id="stagehunter-start-date" type="date" /></label>
                 <label>Durée minimale requise pour un stage (mois)<input id="stagehunter-min-stage-duration" type="number" min="1" max="24" inputmode="numeric" /></label>
-                <p class="fixed-period-note">Une offre sans date de début ou sans durée connue reste « à vérifier » ; elle ne sera pas déclarée conforme.</p>
               </div>
+              <p class="fixed-period-note">Une date ou une durée inconnue reste « à vérifier ». Les offres qui commencent avant la date cible ou durent moins longtemps sont écartées.</p>
               <fieldset>
                 <legend>Domaines de la finance</legend>
                 <div id="stagehunter-domains" class="stagehunter-domains"></div>
@@ -734,8 +736,8 @@
         <span>Côme AI Career fonctionne localement par défaut : OCR macOS, profil, pertinence, candidatures et coach textuel. Les boards publics ne sont lus qu’après ton clic ; aucun dépôt de candidature n’est automatisé.</span>
       </footer>
     </div>
-    <script src="/career-static/cv_plan.js?v=codex-v3-20261025-rc5" defer></script>
-    <script src="/career-static/js/exploration-progress.js?v=codex-v3-20261025-rc5" defer></script>
-    <script src="/career-static/career.js?v=codex-v3-20261025-rc5" defer></script>
+    <script src="/career-static/cv_plan.js?v=codex-v3-20261025-rc8" defer></script>
+    <script src="/career-static/js/exploration-progress.js?v=codex-v3-20261025-rc8" defer></script>
+    <script src="/career-static/career.js?v=codex-v3-20261025-rc8" defer></script>
   </body>
 </html>

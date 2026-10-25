@@ -443,6 +443,7 @@ class WelcomeJungleConnector:
                 job,
                 allowed_contract_types=brief.get("contract_types"),
                 allowed_start_months=brief.get("start_months"),
+                required_start_date=brief.get("start_date"),
                 minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
             ).to_dict()
             job["qualification"] = qualification

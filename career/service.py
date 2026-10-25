@@ -63,6 +63,7 @@ from .application_dashboard import (
     RECEIPT_FILTER_VALUES,
     build_dashboard_payload,
 )
+from .action_center import build_application_action_center
 from .application_prep import prepare_application, summarize_offer
 from .application_sprint import MAX_SPRINT_CANDIDATES, MAX_SPRINT_ITEMS, build_application_sprint
 from .requirements_fit import analyze_fit
@@ -1960,6 +1961,12 @@ class CareerService:
         brief["excluded_countries"] = ["France"]
         brief["excluded_cities"] = ["Paris"]
         brief["require_known_location"] = True
+        if not raw:
+            # This product is configured for the current user's stated goal:
+            # internships from January 2027 onward. Every month after that
+            # date remains eligible unless the person narrows the month list.
+            brief["start_date"] = "2027-01-01"
+            brief["start_months"] = list(range(1, 13))
         # A stored brief can become invalid without any action from the person
         # (a vocabulary entry removed by an update, a manual database edit…).
         # A read must never fail hard and lock the whole tab: fall back to an
@@ -1980,6 +1987,8 @@ class CareerService:
                 brief["excluded_countries"] = ["France"]
                 brief["excluded_cities"] = ["Paris"]
                 brief["require_known_location"] = True
+                brief["start_date"] = "2027-01-01"
+                brief["start_months"] = list(range(1, 13))
                 stored_brief_invalid = True
         return {
             "brief": brief,
@@ -1989,7 +1998,7 @@ class CareerService:
             "search_terms": search_terms_for(brief.get("domains", [])),
             "disclaimer": (
                 "Critères enregistrés localement. Par défaut : Stage, CDD, CDI et VIE, "
-                "tous les domaines financiers, débuts de janvier à mars et stages d’au moins six mois. "
+                "tous les domaines financiers, débuts à partir du 1er janvier 2027 et stages d’au moins six mois. "
                 "France et Paris sont exclus ; un pays inconnu reste à vérifier. Modifie les cases selon ta recherche."
             ),
         }
@@ -2020,6 +2029,7 @@ class CareerService:
                     job,
                     allowed_contract_types=brief.get("contract_types"),
                     allowed_start_months=brief.get("start_months"),
+                    required_start_date=brief.get("start_date"),
                     minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
                     excluded_countries=brief.get("excluded_countries"),
                     excluded_cities=brief.get("excluded_cities"),
@@ -2056,6 +2066,7 @@ class CareerService:
                     job,
                     allowed_contract_types=brief.get("contract_types"),
                     allowed_start_months=brief.get("start_months"),
+                    required_start_date=brief.get("start_date"),
                     minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
                     excluded_countries=brief.get("excluded_countries"),
                     excluded_cities=brief.get("excluded_cities"),
@@ -2285,6 +2296,7 @@ class CareerService:
         sprint_by_job = {item["job_id"]: item for item in sprint_queue}
         draft_by_job = {str(item.get("job_id")): item for item in drafts}
         app_by_job = {str(item.get("job_id")): item for item in applications}
+        jobs_by_id = {str(item.get("id")): item for item in jobs}
         job_context = {
             str(job["id"]): {
                 "qualification_facts_json": "1"
@@ -2344,8 +2356,7 @@ class CareerService:
                 item.company.casefold(),
             )
         )
-        return {
-            "pipeline": [
+        serialized = [
                 {
                     "job_id": item.job_id,
                     "company": item.company,
@@ -2357,11 +2368,22 @@ class CareerService:
                     "tracking_stage": item.tracking_stage,
                     "readiness": item.readiness,
                     "match_score": item.match_score,
+                    "application_id": clean_text(
+                        app_by_job.get(item.job_id, {}).get("id"), limit=80
+                    ) or None,
+                    "official_url": clean_text(
+                        jobs_by_id.get(item.job_id, {}).get("official_url"), limit=2_000
+                    ),
+                    "source_verified": bool(
+                        jobs_by_id.get(item.job_id, {}).get("source_verified")
+                    ),
+                    "deadline_date": clean_text(
+                        jobs_by_id.get(item.job_id, {}).get("deadline_date"), limit=32
+                    ),
                 }
                 for item in items
-            ],
-            "automatic_submission": False,
-        }
+            ]
+        return build_application_action_center(serialized)
 
     def get_job_summary(
         self,
@@ -2589,6 +2611,7 @@ class CareerService:
                 {**job, "source_verified": bool(reference.get("verified_at"))},
                 allowed_contract_types=brief.get("contract_types"),
                 allowed_start_months=brief.get("start_months"),
+                required_start_date=brief.get("start_date"),
                 minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
                 excluded_countries=brief.get("excluded_countries"),
                 excluded_cities=brief.get("excluded_cities"),
@@ -2732,6 +2755,7 @@ class CareerService:
                         {**job, "source_verified": bool(result.verified_at)},
                         allowed_contract_types=brief.get("contract_types"),
                         allowed_start_months=brief.get("start_months"),
+                        required_start_date=brief.get("start_date"),
                         minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
                         excluded_countries=brief.get("excluded_countries"),
                         excluded_cities=brief.get("excluded_cities"),

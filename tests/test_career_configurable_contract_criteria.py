@@ -48,6 +48,33 @@ def test_april_stage_is_excluded_by_default_month_selection():
     assert result.target_status == "non_conforming"
 
 
+def test_earliest_start_date_is_a_hard_qualification_criterion():
+    before = offer("Finance Intern", "Internship", 12, duration=6)
+    before["start_date"] = "2026-12-01"
+    result = qualify_offer(
+        before,
+        allowed_start_months=list(range(1, 13)),
+        required_start_date="2027-01-01",
+        as_of=date(2026, 10, 18),
+    )
+    assert result.target_status == "non_conforming"
+    assert "avant la date minimale" in " ".join(result.reasons).lower()
+
+
+def test_earliest_start_date_keeps_unknown_year_unverified():
+    value = offer("Finance Intern", "Internship", 1, duration=6)
+    value.pop("start_date")
+    value["description_original"] = "Finance internship starts in January and lasts six months."
+    result = qualify_offer(
+        value,
+        allowed_start_months=list(range(1, 13)),
+        required_start_date="2027-01-01",
+        as_of=date(2026, 10, 18),
+    )
+    assert result.target_status == "to_verify"
+    assert "année de début" in " ".join(result.missing_fields)
+
+
 @pytest.mark.parametrize("title,employment,month,expected_type", [
     ("Financial Analyst", "CDD", 2, "fixed_term"),
     ("Financial Analyst", "CDI", 3, "permanent"),
@@ -98,7 +125,10 @@ def test_contract_and_month_criteria_validate_and_persist_locally(tmp_path):
     assert defaults["contract_types"] == ["stage", "cdd", "cdi", "vie"]
     assert defaults["start_months"] == [1, 2, 3]
     assert defaults["minimum_stage_duration_months"] == 6
-    assert set(CareerService(tmp_path).get_stage_search()["brief"]["domains"]) == set(STAGE_DOMAINS)
+    career_defaults = CareerService(tmp_path).get_stage_search()["brief"]
+    assert set(career_defaults["domains"]) == set(STAGE_DOMAINS)
+    assert career_defaults["start_date"] == "2027-01-01"
+    assert career_defaults["start_months"] == list(range(1, 13))
     chosen = validate_brief({"contract_types": ["cdd", "vie"], "start_months": [2, 12],
                              "minimum_stage_duration_months": 8})
     assert chosen["contract_types"] == ["cdd", "vie"]
@@ -133,6 +163,38 @@ def test_saved_month_and_contract_criteria_are_reused_by_matching(tmp_path):
     by_month = {item["job"]["start_date"][5:7]: item for item in matches["matches"]}
     assert by_month["02"]["stage_match"]["qualification_status"] == "to_verify"
     assert by_month["04"]["stage_match"]["qualification_status"] == "non_conforming"
+
+
+def test_earliest_date_is_reused_by_saved_offer_qualification(tmp_path):
+    service = CareerService(tmp_path)
+    for start_date in ("2026-12-01", "2027-01-01", "2027-07-01"):
+        service.import_job({
+            "company": "Synthetic Finance",
+            "title": "Finance Intern",
+            "source_name": "synthetic",
+            "source_id": f"synthetic-start-{start_date}",
+            "official_url": f"https://careers.example.test/start-{start_date}",
+            "job_family": "Corporate Finance",
+            "city": "London",
+            "country": "United Kingdom",
+            "start_date": start_date,
+            "duration_months": 6,
+            "source_status": "open",
+            "employment_type": "Internship",
+            "source_verified": True,
+        })
+    service.update_stage_search({
+        "domains": ["Corporate Finance"],
+        "contract_types": ["stage"],
+        "start_date": "2027-01-01",
+        "start_months": list(range(1, 13)),
+        "excluded_countries": [],
+    })
+    matches = service.list_stage_matches()["matches"]
+    status_by_start = {item["job"]["start_date"]: item["qualification"]["target_status"] for item in matches}
+    assert status_by_start["2026-12-01"] == "non_conforming"
+    assert status_by_start["2027-01-01"] != "non_conforming"
+    assert status_by_start["2027-07-01"] != "non_conforming"
 
 
 @pytest.mark.parametrize("employment", ["CDD", "CDI", "VIE"])

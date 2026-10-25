@@ -796,6 +796,31 @@ def test_dates_outside_the_window_are_visible_in_the_reason() -> None:
     assert "termine" in dates["reason"] or "avant" in dates["reason"]
 
 
+def test_matching_uses_source_quoted_start_month_when_structured_date_is_absent() -> None:
+    brief = validate_brief({"start_date": "2027-01-01"})
+    job = dict(synthetic_job(
+        start_date="",
+        description_original="Synthetic finance internship starting January 2027 for six months.",
+    ))
+    match = score_brief_match(brief, job)
+    dates = next(component for component in match["components"] if component["key"] == "dates")
+    assert dates["status"] == "match"
+    assert "January 2027" in dates["reason"]
+    assert not any("Dates non renseignées" in item for item in match["unknowns"])
+
+
+def test_matching_keeps_start_month_without_year_as_review() -> None:
+    brief = validate_brief({"start_date": "2027-01-01"})
+    job = dict(synthetic_job(
+        start_date="",
+        description_original="Synthetic finance internship starting in January for six months.",
+    ))
+    match = score_brief_match(brief, job)
+    dates = next(component for component in match["components"] if component["key"] == "dates")
+    assert dates["status"] in {"review", "unknown"}
+    assert "année" in dates["reason"].lower() or any("année" in item.lower() for item in match["unknowns"])
+
+
 def test_multi_domain_offer_lists_every_matched_domain() -> None:
     brief = validate_brief({"domains": ["Private Equity", "Transaction Services", "M&A"]})
     match = score_brief_match(
@@ -820,6 +845,8 @@ def test_first_open_starts_with_useful_finance_defaults_and_explains_itself(tmp_
     expected["excluded_countries"] = ["France"]
     expected["excluded_cities"] = ["Paris"]
     expected["require_known_location"] = True
+    expected["start_date"] = "2027-01-01"
+    expected["start_months"] = list(range(1, 13))
     assert payload["brief"] == expected
     assert payload["stored_brief_invalid"] is False
     assert payload["vocabulary"]["domains"], "le formulaire des domaines doit être renseignable"

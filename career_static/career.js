@@ -2555,6 +2555,7 @@ function renderStageBrief(payload) {
         [...monthsTarget.querySelectorAll("input")].some((input) => input.value === String(month) && input.checked));
     };
   });
+  $("#stagehunter-start-date").value = brief.start_date || "";
   $("#stagehunter-min-stage-duration").value = brief.minimum_stage_duration_months ?? 6;
   $("#stagehunter-other-domains").value = (brief.other_domains || []).join(", ");
   $("#stagehunter-roles").value = (brief.roles || []).join(", ");
@@ -3308,6 +3309,23 @@ function renderApplicationPipeline(payload) {
   target.replaceChildren();
   target.hidden = false;
   const pipeline = payload.pipeline || [];
+  const summary = payload.summary || {};
+  const focus = payload.focus_plan || {};
+  target.append(make(
+    "p",
+    `${summary.actions_now || 0} action(s) à traiter · ${summary.urgent_deadlines || 0} échéance(s) urgente(s) · ` +
+      `${summary.facts_to_verify || 0} offre(s) à vérifier · plan ${focus.planned_minutes || 0}/${focus.budget_minutes || 60} min. ` +
+      "Tout dépôt reste manuel.",
+    "application-meta",
+  ));
+  if (focus.items?.length) {
+    const focusList = make("ul", "", "application-focus-list");
+    focus.items.forEach((action) => focusList.append(make(
+      "li",
+      `${action.company} — ${action.action_label} (${action.estimated_minutes} min)`,
+    )));
+    target.append(focusList);
+  }
   if (!pipeline.length) {
     target.append(make("p", "Aucune offre dans le pipeline.", "empty-state"));
     return;
@@ -3319,15 +3337,24 @@ function renderApplicationPipeline(payload) {
       make("h4", `${item.company} — ${item.title}`),
       make(
         "p",
-        `Stade : ${item.stage} · Variante : ${item.variant_label || "non sélectionnée"} · Score : ${item.match_score || 0}`,
+        `${item.stage_label || item.stage} · ${item.progress_percent || 0}% · ${item.variant_label || "aucune variante CV"} · Score : ${item.match_score || 0}` +
+          (item.deadline_status === "urgent" ? ` · Échéance dans ${item.days_until_deadline} j` : ""),
         "application-meta",
       ),
+      make("p", item.next_action_detail || "Étape suivante à vérifier localement.", "scoring-disclaimer"),
     );
+    if (item.blockers?.length) {
+      const blockerList = make("ul", "", "application-blockers");
+      item.blockers.forEach((blocker) => blockerList.append(make("li", blocker)));
+      row.append(blockerList);
+    }
     const actions = make("div", "", "job-actions");
-    const prepare = make("button", "Préparer", "secondary-button");
-    prepare.type = "button";
-    prepare.addEventListener("click", () => loadStagePrep(item.job_id));
-    actions.append(prepare);
+    if (!["closed", "deadline_passed", "monitor_response"].includes(item.next_action_code)) {
+      const prepare = make("button", item.next_action_label || "Préparer l’offre", "secondary-button");
+      prepare.type = "button";
+      prepare.addEventListener("click", () => loadStagePrep(item.job_id));
+      actions.append(prepare);
+    }
     if (!item.tracking_stage) {
       const track = make("button", "Créer le suivi", "primary-button");
       track.type = "button";
@@ -3568,6 +3595,7 @@ async function loadStageHunter() {
   const applications = await api("/api/career/applications");
   state.applications = applications.applications || [];
   renderStageApplications();
+  await loadApplicationPipeline();
 }
 
 $("#stagehunter-brief-form")?.addEventListener("submit", async (event) => {
@@ -3586,7 +3614,7 @@ $("#stagehunter-brief-form")?.addEventListener("submit", async (event) => {
     excluded_countries: stageHunterListValue("#stagehunter-excluded-countries"),
     excluded_cities: stageHunterListValue("#stagehunter-excluded-cities"),
     require_known_location: $("#stagehunter-require-known-location").checked,
-    start_date: "",
+    start_date: $("#stagehunter-start-date").value,
     duration_months: null,
     contract_types: [...document.querySelectorAll("#stagehunter-contract-types input:checked")].map((box) => box.value),
     start_months: [...document.querySelectorAll("#stagehunter-start-months input:checked")].map((box) => Number.parseInt(box.value, 10)),

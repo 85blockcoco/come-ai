@@ -34,6 +34,9 @@ def test_pipeline_endpoint_tracks_full_local_cycle(tmp_path: Path) -> None:
     assert item["variant_label"] == "Markets / Quant"
     assert item["kit_generated_at"]
     assert item["tracking_stage"] == "to_review"
+    assert item["next_action_code"] == "review_kit"
+    assert item["source_trust_status"] == "to_verify"
+    assert payload["focus_plan"]["automatic_submission"] is False
 
 
 def test_pipeline_frontend_contract_exists() -> None:
@@ -44,3 +47,10 @@ def test_pipeline_frontend_contract_exists() -> None:
     assert "/api/career/application-pipeline" in js
     assert "renderApplicationPipeline" in js
     assert "Créer le suivi" in js
+    assert "focus_plan" in js
+    assert "next_action_label" in js
+    assert "Tout dépôt reste manuel" in js
+    assert "await loadApplicationPipeline();" in js
+    assert "focus_plan" in js
+    assert "next_action_label" in js
+    assert "Tout dépôt reste manuel" in js

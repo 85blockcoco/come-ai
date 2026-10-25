@@ -262,6 +262,8 @@ details summary:focus-visible { border-radius: 5px; outline-offset: 4px; }
 .external-link { color: #235746; text-decoration: none; }
 .external-link:hover { color: var(--accent); text-decoration: underline; }
 .application-meta { margin: 10px 0; color: var(--muted); font-size: .75rem; line-height: 1.4; }
+.application-focus-list, .application-blockers { margin: 8px 0; padding-left: 1.25rem; color: var(--muted); font-size: .78rem; line-height: 1.5; }
+.application-blockers { color: var(--warning-ink, #7b3b00); }
 .application-actions { flex-wrap: wrap; gap: 7px; }
 .application-actions select { width: auto; min-width: 170px; }
 .application-actions label { display: grid; gap: 5px; flex: 1 1 240px; font-size: .76rem; }
