@@ -124,6 +124,7 @@ from . import source_material_store
 from .scoring import classify_job_family, score_job
 from .source_coverage import CoverageRunNotFound, compute_metrics
 from workspace_core import UserFacingError, extract_text, safe_error
+from .cv_quality.parser import extract_text_from_file
 from .profile_import import (
     ALLOWED_PROFILE_SUFFIXES,
     MAX_PROFILE_IMPORT_BYTES,
@@ -998,8 +999,18 @@ class CareerService:
             ocr_pages = 0
             ocr_warnings: list[str] = []
             try:
-                text = extract_text(destination).strip()
-            except UserFacingError:
+                if suffix == ".md":
+                    # The quality parser intentionally accepts only PDF,
+                    # DOCX, and TXT. Preserve Markdown support from the
+                    # profile-import contract through the local text reader.
+                    text = extract_text(destination).strip()
+                else:
+                    # PDFs use coordinate-aware Canva reading order; DOCX/TXT
+                    # retain the same local quality parser for extraction.
+                    doc_input = extract_text_from_file(destination)
+                    text = doc_input.text.strip()
+                    extraction_method = f"cv_quality_{doc_input.filetype}"
+            except (UserFacingError, ValueError, FileNotFoundError):
                 # A scanned PDF often raises the same user-facing extraction
                 # error as a text-less PDF. It is safe to try on-device OCR
                 # only for the private file just uploaded by this endpoint.
