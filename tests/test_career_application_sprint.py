@@ -254,9 +254,10 @@ def test_application_sprint_reuses_profile_and_cv_analysis_for_candidates(
             }
         )
 
-    calls = {"scoring_context": 0, "cv_analysis": 0}
+    calls = {"scoring_context": 0, "cv_analysis": 0, "get_job": 0}
     scoring_context = service._scoring_context
     cv_analysis = service._current_cv_analysis
+    get_job = service.get_job
 
     def count_context():
         calls["scoring_context"] += 1
@@ -266,13 +267,18 @@ def test_application_sprint_reuses_profile_and_cv_analysis_for_candidates(
         calls["cv_analysis"] += 1
         return cv_analysis()
 
+    def count_get_job(*args, **kwargs):
+        calls["get_job"] += 1
+        return get_job(*args, **kwargs)
+
     monkeypatch.setattr(service, "_scoring_context", count_context)
     monkeypatch.setattr(service, "_current_cv_analysis", count_cv_analysis)
+    monkeypatch.setattr(service, "get_job", count_get_job)
 
     result = service.get_application_sprint(limit=4)
 
     assert len(result["queue"]) == 4
-    assert calls == {"scoring_context": 3, "cv_analysis": 1}
+    assert calls == {"scoring_context": 1, "cv_analysis": 1, "get_job": 0}
 
 
 def test_application_sprint_ui_contract_is_present() -> None:

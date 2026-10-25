@@ -2027,11 +2027,13 @@ class CareerService:
             self._audit(connection, "stage_search_updated", "preferences", "stage_search")
         return self.get_stage_search()
 
-    def list_stage_matches(self) -> dict[str, Any]:
+    def list_stage_matches(
+        self, *, _scoring_context: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         """Rank every stored offer against the brief, with the reason for each score."""
         payload = self.get_stage_search()
         brief = payload["brief"]
-        jobs = self.list_jobs()
+        jobs = self.list_jobs(_scoring_context=_scoring_context)
         matches: list[dict[str, Any]] = []
         if payload["configured"]:
             for job in jobs:
@@ -2129,10 +2131,16 @@ class CareerService:
         *,
         _scoring_context: dict[str, Any] | None = None,
         _cv_analysis: Any | None = None,
+        _job: dict[str, Any] | None = None,
+        _include_requirements_fit: bool = True,
     ) -> dict[str, Any]:
         """Factual preparation panel for one offer; no model, no invention."""
         context = _scoring_context if _scoring_context is not None else self._scoring_context()
-        job = self.get_job(job_id, scoring_context=context)
+        job = (
+            dict(_job)
+            if isinstance(_job, dict)
+            else self.get_job(job_id, scoring_context=context)
+        )
         profile = context.get("profile") or {}
         analysis = prepare_application(
             profile,
@@ -2154,27 +2162,28 @@ class CareerService:
             if field in job:
                 prep_job[field] = job[field]
         analysis["job"] = prep_job
-        approved_profile_facts = []
-        for field, category in (
-            ("education", "etudes"),
-            ("experience", "experience"),
-            ("skills", "tech"),
-            ("languages", "langues"),
-        ):
-            value = clean_text(profile.get(field), limit=20_000)
-            if value:
-                approved_profile_facts.append({
-                    "category": category,
-                    "value": value,
-                    "quote": value,
-                    "status": "approved",
-                    "source": "career_profile",
-                })
-        # These fields are only present after a person has saved them in the
-        # local editable Career profile. Do not inspect pending OCR previews.
-        analysis["requirements_fit"] = analyze_fit(
-            job, {"facts": approved_profile_facts}
-        ).to_dict()
+        if _include_requirements_fit:
+            approved_profile_facts = []
+            for field, category in (
+                ("education", "etudes"),
+                ("experience", "experience"),
+                ("skills", "tech"),
+                ("languages", "langues"),
+            ):
+                value = clean_text(profile.get(field), limit=20_000)
+                if value:
+                    approved_profile_facts.append({
+                        "category": category,
+                        "value": value,
+                        "quote": value,
+                        "status": "approved",
+                        "source": "career_profile",
+                    })
+            # These fields are only present after a person has saved them in
+            # the local editable Career profile. Do not inspect pending OCR.
+            analysis["requirements_fit"] = analyze_fit(
+                job, {"facts": approved_profile_facts}
+            ).to_dict()
         cv_analysis = _cv_analysis if _cv_analysis is not None else self._current_cv_analysis()
         qualification = qualify_offer(job).to_dict()
         fit_job = {
@@ -2265,7 +2274,12 @@ class CareerService:
         rules from the individual Career screens.
         """
         bounded_limit = max(1, min(MAX_SPRINT_ITEMS, int(limit or 12)))
-        matches = self.list_stage_matches().get("matches") or []
+        # Share the same profile/preferences snapshot across ranking and
+        # preparation. This keeps a sprint internally consistent if profile
+        # settings change while it is being assembled and avoids rereading it.
+        scoring_context = self._scoring_context()
+        stage_search = self.list_stage_matches(_scoring_context=scoring_context)
+        matches = stage_search.get("matches") or []
         eligible_matches = [
             match
             for match in matches
@@ -2274,25 +2288,49 @@ class CareerService:
         # All candidates in one sprint share the same approved profile and CV.
         # Load those facts once instead of reopening SQLite and reparsing the
         # current CV for every candidate.
-        scoring_context = self._scoring_context()
         cv_analysis = self._current_cv_analysis()
+        candidate_ids = [
+            str(match["job"]["id"])
+            for match in eligible_matches
+            if isinstance(match.get("job"), dict) and match["job"].get("id")
+        ]
+        snapshots: dict[str, dict[str, Any]] = {}
+        if candidate_ids:
+            placeholders = ",".join("?" for _ in candidate_ids)
+            with self._lock, self._connection() as connection:
+                rows = connection.execute(
+                    "SELECT job_id, snapshot_json FROM job_offer_intelligence_snapshots "
+                    f"WHERE is_current = 1 AND job_id IN ({placeholders})",
+                    candidate_ids,
+                ).fetchall()
+            for row in rows:
+                try:
+                    snapshot = json.loads(row["snapshot_json"] or "{}")
+                except (TypeError, ValueError):
+                    snapshot = {}
+                if isinstance(snapshot, dict):
+                    snapshots[str(row["job_id"])] = snapshot
         preparations = {
             str(match["job"]["id"]): self.get_job_prep(
                 str(match["job"]["id"]),
                 _scoring_context=scoring_context,
                 _cv_analysis=cv_analysis,
+                _job={
+                    **match["job"],
+                    "offer_intelligence": snapshots.get(str(match["job"]["id"])),
+                },
+                _include_requirements_fit=False,
             )
             for match in eligible_matches
             if isinstance(match.get("job"), dict) and match["job"].get("id")
         }
-        context = self._scoring_context()
         return build_application_sprint(
             matches,
             preparations,
             self.list_applications(),
             limit=bounded_limit,
-            profile=context.get("profile") or {},
-            criteria=self.get_stage_search().get("brief") or {},
+            profile=scoring_context.get("profile") or {},
+            criteria=stage_search.get("brief") or {},
         )
 
     def get_application_pipeline(self) -> dict[str, Any]:
@@ -3650,6 +3688,7 @@ class CareerService:
         source_status: str = "",
         shortlisted: bool | None = None,
         calendar_status: str = "",
+        _scoring_context: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         clauses = ["1 = 1"]
         params: list[Any] = []
@@ -3708,7 +3747,7 @@ class CareerService:
                     payload = {}
                 summaries[identifier] = payload if isinstance(payload, dict) else {}
             source_material = source_material_store.load_current_all(connection)
-        context = self._scoring_context()
+        context = _scoring_context if _scoring_context is not None else self._scoring_context()
         jobs = [self._serialize_job(row, context) for row in rows]
         for job in jobs:
             # The explorer shows the identifiers of the current snapshot: it
