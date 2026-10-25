@@ -147,10 +147,13 @@ seconde ne s’écrasent pas.
 # 27 passed
 
 .venv/bin/python -m pytest -q
-# 1534 passed, 1 skipped, 1 failed in 250.78s
-# L’unique échec est préexistant : tests/test_career_agent.py:506 attend 6 familles de
-# préférences alors que la base en contient 14. Il ne touche aucun fichier de ce lot
-# (déjà signalé sur la base a472872 / HEAD antérieur).
+# 1535 passed, 1 skipped in 381.62s
+# Le test préexistant tests/test_career_agent.py:506 attendait 6 familles de
+# préférences alors que la base en contient 14 ; correction d’une ligne dans un
+# commit séparé, sans impact sur le code de production.
+
+VENV_PY=/Users/comedelavenne/AI-Excel-Agent/.venv/bin/python ./checklist_codex.sh
+# TOUT VERT (main 1535 passed / 1 skipped, DevKit 207 passed, ruff clean)
 
 .venv/bin/python -m ruff check .
 # All checks passed
