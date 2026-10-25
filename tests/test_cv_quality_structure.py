@@ -561,3 +561,10 @@ def test_detect_low_text_ratio_unit():
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+def test_project_finance_job_title_is_not_misread_as_projects_section():
+    text = "Project finance analyst at Synthetic Bank\nStructured debt and valuation"
+
+    sections, _ = detect_sections(text)
+
+    assert "Projets" not in {section.title for section in sections}

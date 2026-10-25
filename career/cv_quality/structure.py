@@ -47,7 +47,8 @@ SECTION_KEYWORDS: dict[str, list[str]] = {
         "langue", "maîtrise", "maitrise",
     ],
     "Projets": [
-        "projets", "projects", "realisations", "réalisations",
+        "projets", "projects", "project", "selected project",
+        "realisations", "réalisations",
         "achievements", "portfolio", "personal projects",
         "projets personnels", "side projects",
     ],
@@ -197,6 +198,17 @@ def detect_cv_length(text: str) -> list[Finding]:
 # Detector 2: Missing Sections
 # ──────────────────────────────────────────────────────────────────────
 
+def _matches_section_keyword(line: str, keyword: str) -> bool:
+    # "Project" is also the start of common job titles such as "Project
+    # Finance Analyst". Treat the singular form as a heading only when it is
+    # standalone or explicitly delimited; keep plural/qualified aliases broad.
+    if keyword == "project":
+        return line == keyword or line.startswith(keyword + ":")
+    starts_with_keyword = line.startswith(keyword + " ") or line.startswith(keyword + ":") or line == keyword
+    short_contains_keyword = keyword in line and len(line) < len(keyword) + 20
+    return starts_with_keyword or short_contains_keyword
+
+
 def detect_sections(text: str) -> tuple[list[SectionReading], list[Finding]]:
     """Detect CV sections and find missing required ones.
 
@@ -206,54 +218,56 @@ def detect_sections(text: str) -> tuple[list[SectionReading], list[Finding]]:
     # Work with original lines for correct offset calculation
     original_lines = text.split("\n")
     normalized_lines = [_normalize(l) for l in original_lines]
+    # Precompute line start offsets in the original text
+    line_offsets: list[int] = []
+    acc = 0
+    for line in original_lines:
+        line_offsets.append(acc)
+        acc += len(line) + 1  # +1 for newline
     sections: list[SectionReading] = []
     found_section_titles: set[str] = set()
 
     # Scan for section headers (lines that look like headers)
     for i, norm_line in enumerate(normalized_lines):
-        if not norm_line or len(norm_line) > 80:
+        if not norm_line:
             continue
 
         for canonical, keywords in SECTION_KEYWORDS.items():
             if canonical in found_section_titles:
                 continue
             for kw in keywords:
-                if kw in norm_line and len(norm_line) < len(kw) + 20:
-                    # Found a section header - use original line for offset
-                    original_line = original_lines[i]
-                    start_offset = text.find(original_line)
-                    if start_offset == -1:
-                        # Fallback: calculate from line lengths
-                        start_offset = sum(len(l) + 1 for l in original_lines[:i])
+                if not _matches_section_keyword(norm_line, kw):
+                    continue
+                # Found a section header - use precomputed line offset
+                start_offset = line_offsets[i]
 
-                    # Find end of section (next header or end of text)
-                    end_offset = len(text)
-                    for j in range(i + 1, len(normalized_lines)):
-                        next_norm = normalized_lines[j]
-                        for _, other_kws in SECTION_KEYWORDS.items():
-                            for okw in other_kws:
-                                if okw in next_norm and len(next_norm) < len(okw) + 20:
-                                    next_original = original_lines[j]
-                                    end_offset = text.find(next_original)
-                                    if end_offset == -1:
-                                        end_offset = sum(len(l) + 1 for l in original_lines[:j])
-                                    break
-                            else:
-                                continue
-                            break
+                # Find end of section (next header or end of text)
+                end_offset = len(text)
+                for j in range(i + 1, len(normalized_lines)):
+                    next_norm = normalized_lines[j]
+                    if not next_norm:
+                        continue
+                    for _, other_kws in SECTION_KEYWORDS.items():
+                        for okw in other_kws:
+                            if _matches_section_keyword(next_norm, okw):
+                                end_offset = line_offsets[j]
+                                break
                         else:
                             continue
                         break
-
-                    preview = text[start_offset:end_offset][:200].replace("\n", " ")
-                    sections.append(SectionReading(
-                        title=canonical,
-                        start_offset=start_offset,
-                        end_offset=end_offset,
-                        content_preview=preview,
-                    ))
-                    found_section_titles.add(canonical)
+                    else:
+                        continue
                     break
+
+                preview = text[start_offset:end_offset][:200].replace("\n", " ")
+                sections.append(SectionReading(
+                    title=canonical,
+                    start_offset=start_offset,
+                    end_offset=end_offset,
+                    content_preview=preview,
+                ))
+                found_section_titles.add(canonical)
+                break
 
     # Sort sections by offset
     sections.sort(key=lambda s: s.start_offset)
