@@ -411,7 +411,9 @@ function createProfileImportField(field, value, evidence = []) {
   row.dataset.field = field;
   const selected = document.createElement("input");
   selected.type = "checkbox";
-  selected.checked = true;
+  // Import suggestions are a draft. Require an explicit choice for every
+  // profile field so opening a review cannot preselect writes by default.
+  selected.checked = false;
   selected.id = `profile-import-select-${field}`;
   selected.className = "profile-import-select";
   const content = make("div", "", "profile-import-field-content");
