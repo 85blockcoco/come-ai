@@ -162,7 +162,7 @@ Les deux routes sont servies via `create_app()` et couvertes par un smoke test H
 | `pytest -q tests/test_followup_engine.py tests/test_career_application_dashboard.py` | **47 passed** |
 | `ruff check` sur les fichiers modifiés | **All checks passed!** |
 | `git diff --check` | **propre** |
-| Suite complète `pytest -q` | **1532 passed, 1 skipped, 1 failed** |
+| Suite complète `pytest -q` | **1533 passed, 1 skipped** |
 
 Les tests couvrent : J+7 exact et refus avant J+7, intervalle de 5 jours, plafond,
 politique personnalisée, valeurs de politique invalides, raisons `viewed_no_reply` et
@@ -217,5 +217,5 @@ cette branche.
 git diff --check
 ```
 
-La suite complète reste à **1 échec préexistant documenté** (§6.1) ; les tests du
-périmètre SPEC-029 sont tous verts.
+La suite complète est **verte** : `1533 passed, 1 skipped` (le skip est un test
+optionnel dont le script ou la base est absent dans ce worktree).
