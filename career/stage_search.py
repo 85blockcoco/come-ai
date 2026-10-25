@@ -188,7 +188,7 @@ def default_brief() -> dict[str, Any]:
         "require_known_location": False,
         "start_date": "",
         "duration_months": None,
-        "contract_types": ["stage", "cdd", "cdi", "vie"],
+        "contract_types": ["stage"],
         "start_months": [1, 2, 3],
         "minimum_stage_duration_months": 6,
         "education_preference": "bachelor_m1_then_m2",
@@ -316,7 +316,7 @@ def validate_brief(payload: Any) -> dict[str, Any]:
         if not 1 <= duration <= 24:
             raise UserFacingError("La durée recherchée doit être comprise entre 1 et 24 mois.")
     contract_types: list[str] = []
-    for item in _string_list(payload.get("contract_types", ["stage", "cdd", "cdi", "vie"]),
+    for item in _string_list(payload.get("contract_types", ["stage"]),
                              "Les types de contrat", max_items=4, max_length=20):
         canonical = item.strip().casefold()
         if canonical not in CONTRACT_TYPES:
@@ -414,7 +414,7 @@ def brief_is_configured(brief: dict[str, Any]) -> bool:
             clean_text(brief.get("duration_months")),
             clean_text(brief.get("study_level"), limit=120),
             brief.get("languages"),
-            brief.get("contract_types", ["stage", "cdd", "cdi", "vie"]) != ["stage", "cdd", "cdi", "vie"],
+            brief.get("contract_types", ["stage"]) != ["stage"],
             brief.get("start_months", [1, 2, 3]) != [1, 2, 3],
             brief.get("minimum_stage_duration_months", 6) != 6,
         ]

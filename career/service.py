@@ -2008,7 +2008,7 @@ class CareerService:
             "vocabulary": stage_search_vocabulary(),
             "search_terms": search_terms_for(brief.get("domains", [])),
             "disclaimer": (
-                "Critères enregistrés localement. Par défaut : Stage, CDD, CDI et VIE, "
+                "Critères enregistrés localement. Par défaut : stages uniquement, "
                 "tous les domaines financiers, débuts à partir du 1er janvier 2027 et stages d’au moins six mois. "
                 "France et Paris sont exclus ; un pays inconnu reste à vérifier. Modifie les cases selon ta recherche."
             ),

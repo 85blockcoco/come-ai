@@ -99,7 +99,7 @@ class StageSearchPayload(BaseModel):
     require_known_location: bool = True
     start_date: str = Field(default="", max_length=32)
     duration_months: int | None = Field(default=None, ge=1, le=24)
-    contract_types: list[str] = Field(default_factory=lambda: ["stage", "cdd", "cdi", "vie"], max_length=4)
+    contract_types: list[str] = Field(default_factory=lambda: ["stage"], max_length=4)
     start_months: list[int] = Field(default_factory=lambda: [1, 2, 3], max_length=12)
     minimum_stage_duration_months: int = Field(default=6, ge=1, le=24)
     education_preference: str = Field(default="bachelor_m1_then_m2", max_length=40)

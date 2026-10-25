@@ -122,11 +122,12 @@ def test_unknown_dates_and_duration_are_not_invented():
 def test_contract_and_month_criteria_validate_and_persist_locally(tmp_path):
     defaults = default_brief()
     assert defaults["domains"] == []
-    assert defaults["contract_types"] == ["stage", "cdd", "cdi", "vie"]
+    assert defaults["contract_types"] == ["stage"]
     assert defaults["start_months"] == [1, 2, 3]
     assert defaults["minimum_stage_duration_months"] == 6
     career_defaults = CareerService(tmp_path).get_stage_search()["brief"]
     assert set(career_defaults["domains"]) == set(STAGE_DOMAINS)
+    assert career_defaults["contract_types"] == ["stage"]
     assert career_defaults["start_date"] == "2027-01-01"
     assert career_defaults["start_months"] == list(range(1, 13))
     chosen = validate_brief({"contract_types": ["cdd", "vie"], "start_months": [2, 12],
