@@ -276,7 +276,12 @@ def company_canonical(name: Any) -> str:
     ``GmbH``, ``AG``, ``SRL``, ``SpA``, ``BV``, ``NV``, ``PLC``, ``Group``,
     ``Groupe``…) removed as whole words.
     """
-    text = _strip_accents(_company_text(name)).lower()
+    return _company_canonical_from_text(_company_text(name))
+
+
+@lru_cache(maxsize=8192)
+def _company_canonical_from_text(company_text: str) -> str:
+    text = _strip_accents(company_text).lower()
     text = _squash(re.sub(r"[^\w\s]", " ", text))
     if not text:
         return ""
@@ -437,11 +442,17 @@ def _raw_title_text(title: Any) -> str:
 
 def _title_base(title: Any) -> str:
     """Return the lower-cased, accent-free title, punctuation turned into spaces."""
-    text = _strip_title_noise(_raw_title_text(title))
+    return _title_base_from_raw(_raw_title_text(title))
+
+
+@lru_cache(maxsize=8192)
+def _title_base_from_raw(raw: str) -> str:
+    text = _strip_title_noise(raw)
     text = re.sub(r"[^\w\s]", " ", text)
     return _squash(text)
 
 
+@lru_cache(maxsize=8192)
 def _title_canonical_from_base(base: str) -> str:
     """Return the canonical title of an already normalised title."""
     text = base
@@ -463,6 +474,7 @@ def title_canonical(title: Any) -> str:
     return _title_canonical_from_base(_title_base(title))
 
 
+@lru_cache(maxsize=8192)
 def _title_concept_from_raw(raw: str) -> str:
     """Return the business concept of an already normalised title.
 
@@ -857,7 +869,12 @@ def _canonical_city(city: Any) -> str:
     Only the city itself identifies the place: the rest never contradicts
     another source, so it is dropped instead of becoming a false conflict.
     """
-    raw = _strip_accents(_clean_text(city, 120)).lower()
+    return _canonical_city_text(_clean_text(city, 120))
+
+
+@lru_cache(maxsize=8192)
+def _canonical_city_text(city_text: str) -> str:
+    raw = _strip_accents(city_text).lower()
     raw = re.sub(r"\([^)]*\)", " ", raw)
     raw = re.sub(r"[|/]+", " ", raw)
     candidates: list[str] = []
@@ -887,7 +904,12 @@ def _canonical_country(country: Any) -> str:
     prefix, because a prefix never equals the real code of another country
     (``"Nederland"`` is not ``"ne"``).
     """
-    text = _strip_accents(_clean_text(country, 120)).lower()
+    return _canonical_country_text(_clean_text(country, 120))
+
+
+@lru_cache(maxsize=8192)
+def _canonical_country_text(country_text: str) -> str:
+    text = _strip_accents(country_text).lower()
     text = re.sub(r"\([^)]*\)", " ", text)
     text = re.sub(r"[^\w\s]", " ", text)
     text = _squash(text)
@@ -1126,7 +1148,10 @@ def _parse_timestamp(raw: Any) -> float | None:
 def _freshness(job: Mapping[str, Any]) -> float:
     """Return the freshness of a record (0.0 when no date is known)."""
     for field_name in FRESHNESS_FIELDS:
-        parsed = _parse_timestamp(job.get(field_name, ""))
+        value = job.get(field_name, "")
+        if value is None or (isinstance(value, str) and not value):
+            continue
+        parsed = _parse_timestamp(value)
         if parsed is not None:
             return parsed
     return 0.0
@@ -1695,6 +1720,21 @@ def _record_weight(record: Mapping[str, Any]) -> tuple[int, int, float, int, int
     return (trust, tier, freshness, priority, verified, completeness)
 
 
+def _built_record_weight(record: _Record) -> tuple[int, int, float, int, int, int]:
+    """Elect a built record using facts already computed during normalization."""
+    tier = _source_tier(record.source_name, record.job)
+    verified = 1 if record.job.get("source_verified") else 0
+    completeness = _record_completeness(record.job)
+    return (
+        TRUST_RANK.get(record.trust, TRUST_RANK["missing"]),
+        tier,
+        record.freshness,
+        record.priority,
+        verified,
+        completeness,
+    )
+
+
 def choose_best(records: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
     """Choose the record that represents a merged group.
 
@@ -1781,8 +1821,8 @@ def _build_groups(
     groups: list[dict[str, Any]] = []
     for indexes in clusters:
         members = [records[index] for index in indexes]
-        best = choose_best([member.job for member in members])
-        best_record = next(member for member in members if member.job is best)
+        best_record = max(members, key=_built_record_weight)
+        best = best_record.job
         provenances = [
             _provenance(member.job, member.priority, member.index == best_record.index)
             for member in members
