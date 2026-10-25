@@ -1290,8 +1290,20 @@
       "dependencies": [
         "59"
       ],
-      "status": "pending",
-      "description": "Moteur de checklist administrative par pays, statut par pièce (missing/in_progress/ok/not_applicable), preuves exigées, récap exportable."
+      "status": "done",
+      "description": "Moteur de checklist administrative par pays, statut par pièce (missing/in_progress/ok/not_applicable), preuves exigées, récap exportable.",
+      "verified": "push origin agent/spec-028-stage-admin-docs + 18 tests verts (contrôle manuel)",
+      "completed_at": "2026-10-25T21:37:11.825689",
+      "push_verified": true,
+      "worker_result": {
+        "status": "done",
+        "files_created": [
+          "tests/test_stage_admin_docs.py",
+          "tests/fixtures/admin_docs_synthetic.json",
+          "docs/agent-reports/SPEC-028-stage_admin_docs.md"
+        ],
+        "output": "Checklist documents administratifs stage — SPEC-028"
+      }
     },
     {
       "id": "64",
