@@ -580,6 +580,10 @@ def main_loop():
                         completed_at=datetime.now().isoformat(),
                         worker_result=result_data.get("worker_result", {}),
                         verified=why,
+                        # Marqueur attendu par guardian_anti_fake_done.py:
+                        # sans lui, le gardien re-déclare la mission pending
+                        # toutes les 90 s alors qu'elle est réellement prouvée.
+                        push_verified=True,
                     )
                     log("📝 Registry mis à jour → done (vérifié)")
                 else:

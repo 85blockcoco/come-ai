@@ -1265,9 +1265,11 @@
       "dependencies": [
         "59"
       ],
-      "status": "pending",
+      "status": "done",
       "description": "Comparateur : attributs normalisés alignés par offre, score pondéré configurable, verdict lisible avec tie-breaker (fraîcheur + fit).",
-      "verified": "push origin worker/cvboost-61-1792953412034 + 33 tests verts (contrôle manuel)"
+      "verified": "push origin worker/cvboost-61-1792953412034 + 33 tests verts (contrôle manuel)",
+      "completed_at": "2026-10-25T21:31:32.880684",
+      "push_verified": true
     },
     {
       "id": "62",
