@@ -45,6 +45,7 @@ def test_evolution_candidate_result_has_direct_review_handoff() -> None:
     assert 'id="evolutionCandidateReview"' in html
     assert 'button.textContent = "Examiner le correctif proposé"' in evolution
     assert 'detail: {candidateId}' in evolution
+    assert 'renderRunResult(result); } catch (error) { show(error.message); } }); n("evolutionHistory").append(button);' in evolution
     assert 'addEventListener("devkit:open-candidate"' in devkit
     assert 'request(`/candidates/${encodeURIComponent(requestedId)}`)' in devkit
     assert "ui.diff.textContent = preview.diff" in devkit

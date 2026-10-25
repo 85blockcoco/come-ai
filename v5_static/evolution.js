@@ -48,7 +48,7 @@
         n("evolutionBacklog").append(row);
       }
       n("evolutionHistory").replaceChildren();
-      for (const run of data.runs || []) { const button = document.createElement("button"); button.className = "text-button"; button.textContent = `${run.created_at} · ${run.model} · ${run.status}`; button.addEventListener("click", async () => { try { const result = await request(`/evolution/runs/${encodeURIComponent(run.run_id)}`); n("evolutionDetails").hidden = false; n("evolutionDetails").textContent = JSON.stringify(result, null, 2); } catch (error) { show(error.message); } }); n("evolutionHistory").append(button); }
+      for (const run of data.runs || []) { const button = document.createElement("button"); button.className = "text-button"; button.textContent = `${run.created_at} · ${run.model} · ${run.status}`; button.addEventListener("click", async () => { try { const result = await request(`/evolution/runs/${encodeURIComponent(run.run_id)}`); renderRunResult(result); } catch (error) { show(error.message); } }); n("evolutionHistory").append(button); }
       n("evolutionResources").textContent = JSON.stringify({catalogue: data.catalogue, usage: data.usage, independent_review: "En attente : aucun second modèle automatiquement invoqué", scheduling: false, automatic_deployment: false}, null, 2);
     } catch (error) { show(error.message); }
   }
