@@ -15,7 +15,6 @@ pytest.importorskip("duckdb")
 
 from come_data import ComeDataEngine  # noqa: E402
 from come_data import finance  # noqa: E402
-from come_data.errors import DataEngineError  # noqa: E402
 
 SERIES = [100.0, 110.0, 99.0, 120.0, 115.0, 130.0]
 

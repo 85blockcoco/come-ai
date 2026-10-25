@@ -484,7 +484,7 @@ class DataEngine:
         for column in safe_frame.columns:
             # Pandas 3 utilise un dtype ``str`` dédié : couvrir object ET str.
             dtype = safe_frame[column].dtype
-            if dtype == object or str(dtype) in {"string", "str"}:
+            if dtype is object or str(dtype) in {"string", "str"}:
                 safe_frame[column] = safe_frame[column].map(_excel_safe)
         if suffix == ".csv":
             safe_frame.to_csv(target, index=False, encoding="utf-8")
