@@ -15,6 +15,9 @@ ROOT = Path(__file__).resolve().parent
 REGISTRY = ROOT / "missions_registry.json"
 FROM_A = ROOT / "messages" / "from_A.json"
 TO_A = ROOT / "messages" / "to_A.json"
+QUEUE_DIR = ROOT / "messages" / "queue"
+INFLIGHT_DIR = ROOT / "messages" / "inflight"
+RESULTS_DIR = ROOT / "messages" / "results"
 LOG_FILE = ROOT / "mission_driver.log"
 
 running = True
@@ -125,158 +128,171 @@ def deps_met(reg: dict, mission: dict) -> bool:
     return True
 
 def submit_mission(mission: dict) -> str:
+    """Dépose la mission dans la file parallèle (un fichier = une mission).
+
+    Ne bloque plus sur le mono-slot from_A.json: l'orchestrateur réclame les
+    fichiers de queue/ tant qu'il a des slots libres.
+    """
     prompt = load_prompt(mission["prompt_file"])
-    order_id = f"cvboost-{mission['id']}-{int(time.time())}"
-    
-    from_a_data = {
+    order_id = f"cvboost-{mission['id']}-{int(time.time() * 1000)}"
+
+    QUEUE_DIR.mkdir(parents=True, exist_ok=True)
+    entry = {
         "order_id": order_id,
+        "mission_id": mission["id"],
         "status": "ready_for_worker",
-        "verifications_done": [
-            f"mission_{mission['id']}_dependencies_checked",
-            "registry_validated"
-        ],
-        "prompt_for_worker": f"MISSION CVBOOST-{mission['id'].upper()} — {mission['title']}\n\n{prompt}"
+        "prompt_for_worker": f"MISSION CVBOOST-{mission['id'].upper()} — {mission['title']}\n\n{prompt}",
+        "submitted_at": time.time(),
     }
-    
-    FROM_A.parent.mkdir(exist_ok=True)
-    
-    # Attendre que l'orchestrateur soit libre (status == "waiting")
-    for _ in range(120):  # max 2 min
-        if FROM_A.exists():
-            try:
-                data = json.loads(FROM_A.read_text(encoding="utf-8"))
-                if data.get("status") == "waiting":
-                    break
-            except:
-                pass
-        time.sleep(1)
-    
-    FROM_A.write_text(json.dumps(from_a_data, ensure_ascii=False, indent=1), encoding="utf-8")
-    log(f"📤 Mission {mission['id']} soumise (order: {order_id})")
-    
-    # Attendre que l'orchestrateur prenne la mission (status -> "processing")
-    for _ in range(60):  # max 60s
-        if FROM_A.exists():
-            try:
-                data = json.loads(FROM_A.read_text(encoding="utf-8"))
-                if data.get("status") == "processing" and data.get("order_id") == order_id:
-                    log(f"🔄 Orchestrateur a pris la mission {mission['id']}")
-                    return order_id
-            except:
-                pass
-        time.sleep(1)
-    
-    log(f"⚠️ Timeout attente prise en charge {mission['id']}, on continue quand même")
+    target = QUEUE_DIR / f"{order_id}.json"
+    tmp = target.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(entry, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.replace(target)
+
+    # Observabilité: refléter la dernière soumission dans from_A.json sans
+    # écraser un "processing" en cours.
+    try:
+        current = json.loads(FROM_A.read_text(encoding="utf-8")) if FROM_A.exists() else {}
+    except Exception:
+        current = {}
+    if current.get("status") != "processing":
+        FROM_A.parent.mkdir(exist_ok=True)
+        FROM_A.write_text(
+            json.dumps(
+                {
+                    "order_id": order_id,
+                    "status": "ready_for_worker",
+                    "verifications_done": [
+                        f"mission_{mission['id']}_dependencies_checked",
+                        "registry_validated",
+                    ],
+                    "prompt_for_worker": entry["prompt_for_worker"],
+                },
+                ensure_ascii=False,
+                indent=1,
+            ),
+            encoding="utf-8",
+        )
+
+    log(f"📤 Mission {mission['id']} déposée dans queue/ (order: {order_id})")
     return order_id
 
+def _read_result_for(order_id: str) -> Optional[dict]:
+    """Résultat d'une mission: results/<order_id>.json puis result.json du worktree."""
+    res = RESULTS_DIR / f"{order_id}.json"
+    if res.exists():
+        try:
+            return json.loads(res.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    worktree = ROOT.parent / f"AI-Excel-Agent-worker-{order_id}"
+    fallback = worktree / "messages" / "result.json"
+    if fallback.exists():
+        try:
+            worker_result = json.loads(fallback.read_text(encoding="utf-8"))
+            return {
+                "from_": "orchestrator",
+                "to": "agent_A",
+                "worker_result": {
+                    "task_id": order_id,
+                    "status": worker_result.get("status", "failed"),
+                    "files_created": worker_result.get("files_created", []),
+                    "output": worker_result.get("output", ""),
+                    "logs": worker_result.get("logs", ""),
+                    "error": worker_result.get("error", ""),
+                },
+                "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            }
+        except Exception:
+            pass
+    return None
+
+
+def _alive_worker_orders() -> set[str]:
+    """Order ids dont le process opencode est réellement vivant (via ps)."""
+    import re as _re
+    import subprocess as _sub
+    alive: set[str] = set()
+    try:
+        out = _sub.run(["ps", "-ax", "-o", "command="], capture_output=True, text=True, timeout=10).stdout
+        for line in out.splitlines():
+            m = _re.search(r"--title\s+Worker-(cvboost-\d+-\d+)", line)
+            if m:
+                alive.add(m.group(1))
+    except Exception:
+        pass
+    return alive
+
+
 def wait_for_any_result(active: dict[str, dict], timeout: int = 14400) -> Optional[tuple[str, dict]]:
-    """Attend qu'UNE des missions actives finisse. Retourne (order_id, result) ou None si timeout global.
-    Vérifie aussi result.json dans le worktree si to_A.json n'est pas mis à jour."""
+    """Attend qu'UNE des missions actives finisse. Retourne (order_id, result).
+
+    Sources de vérité, dans l'ordre: results/<order_id>.json, puis
+    result.json du worktree.  Un worker n'est déclaré mort qu'après une
+    période de grâce: pendant les premières minutes, l'orchestrateur peut
+    être en train de créer le worktree ou de démarrer opencode, et le déclarer
+    mort trop tôt provoquait des échecs/retries en cascade.
+    """
     start = time.time()
     last_log = 0
-    log(f"⏳ wait_for_any_result: debut, timeout={timeout}, running={running}, active={list(active.keys())}")
+    grace_sec = float(os.environ.get("WORKER_GRACE_SEC", "180"))
+    log(f"⏳ wait_for_any_result: debut, timeout={timeout}, active={list(active.keys())}")
     while time.time() - start < timeout and running:
-        # Vérifier si on a encore des missions actives
         if not active:
             return None
 
-        # 1a. Vérifier si l'orchestrateur a avancé (from_A en waiting/ready_for_worker ou nouvel order_id)
-        #     → la mission précédente est terminée (succès ou échec)
-        if FROM_A.exists():
+        # 1. Résultat publié (succès ou échec explicite)
+        for order_id in list(active.keys()):
+            data = _read_result_for(order_id)
+            if data:
+                log(f"🎯 Résultat trouvé pour {order_id}")
+                return order_id, data
+
+        # 2. Détection de mort, avec grâce et sans tuer une mission en file
+        alive = _alive_worker_orders()
+        now = time.time()
+        for order_id, info in list(active.items()):
+            age = now - info.get("submitted_at", now)
+            if age < grace_sec:
+                continue
+            if order_id in alive:
+                continue
+            queued = (QUEUE_DIR / f"{order_id}.json").exists()
+            inflight = (INFLIGHT_DIR / f"{order_id}.json").exists()
+            if inflight:
+                # L'orchestrateur le gère encore: ne pas court-circuiter.
+                continue
+            if queued and age < max(grace_sec * 2, 600):
+                # Pas encore réclamé: laisser le temps à un slot de se libérer.
+                continue
+            log(f"⚠️ Worker mort pour {order_id} (aucun process, aucun résultat, âge {int(age)}s) → échec")
             try:
-                from_data = json.loads(FROM_A.read_text(encoding="utf-8"))
-                from_status = from_data.get("status", "")
-                from_order = from_data.get("order_id", "")
-                # Cas 1: from_A en waiting ou ready_for_worker → orchestrator a fini UNE mission
-                if from_status in ("waiting", "ready_for_worker"):
-                    # Vérifier si from_order correspond à une mission active
-                    if from_order and from_order in active:
-                        # L'orchestrateur a vraiment fini cette mission
-                        if TO_A.exists():
-                            try:
-                                to_content = TO_A.read_text(encoding="utf-8").strip()
-                                if to_content:
-                                    to_data = json.loads(to_content)
-                                    wr = to_data.get("worker_result", {})
-                                    task_id = wr.get("task_id", "") if isinstance(wr, dict) else ""
-                                    for oid in list(active.keys()):
-                                        if task_id and (oid in task_id or task_id in oid):
-                                            log(f"🎯 Résultat trouvé via from_A avancé pour {oid}")
-                                            return oid, to_data
-                            except Exception:
-                                pass
-                        log(f"⚠️ from_A status={from_status}, mission {from_order} considérée échouée (pas de result)")
-                        return from_order, {"from_": "orchestrator", "to": "agent_A",
-                                       "worker_result": {"task_id": from_order, "status": "failed",
-                                                        "files_created": [], "output": "", "logs": "worker failed (no result)",
-                                                        "error": "no result.json"}, "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
-                    # Si from_order ne correspond à aucune mission active, from_A est juste idle → ne rien faire
-                # Cas 2: from_A processing mais worker mort → échec
-                if from_status == "processing" and from_order and from_order in active:
-                    import subprocess as _sp3
-                    ps_out = _sp3.run(["ps", "-ax", "-o", "command="], capture_output=True, text=True, timeout=10).stdout
-                    if f"Worker-{from_order}" not in ps_out:
-                        log(f"⚠️ Worker mort pour {from_order} (from_A processing mais pas de process) → échec")
-                        return from_order, {"from_": "orchestrator", "to": "agent_A",
-                                       "worker_result": {"task_id": from_order, "status": "failed",
-                                                        "files_created": [], "output": "", "logs": "worker process dead",
-                                                        "error": "process dead"}, "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+                (QUEUE_DIR / f"{order_id}.json").unlink(missing_ok=True)
             except Exception:
                 pass
+            return order_id, {
+                "from_": "orchestrator",
+                "to": "agent_A",
+                "worker_result": {
+                    "task_id": order_id,
+                    "status": "failed",
+                    "files_created": [],
+                    "output": "",
+                    "logs": "worker process dead",
+                    "error": "process dead",
+                },
+                "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            }
 
-        # 1. Vérifier to_A.json (standard)
-        if TO_A.exists():
-            try:
-                content = TO_A.read_text(encoding="utf-8").strip()
-                if content:
-                    data = json.loads(content)
-                    if isinstance(data, dict):
-                        wr = data.get("worker_result") or {}
-                        task_id = wr.get("task_id", "") if isinstance(wr, dict) else ""
-                        for order_id in list(active.keys()):
-                            if task_id and (order_id in task_id or task_id in order_id or 
-                                            order_id.split("-")[-1] in task_id or task_id.split("-")[-1] in order_id):
-                                result = data
-                                return order_id, result
-            except Exception as e:
-                log(f"⚠️ Erreur lecture to_A.json: {e}")
-        
-        # 2. Vérifier result.json dans les worktrees (fallback si orchestrateur n'a pas écrit to_A.json)
-        for order_id in list(active.keys()):
-            # Chercher le worktree correspondant
-            worktree_path = ROOT.parent / f"AI-Excel-Agent-worker-{order_id}"
-            result_file = worktree_path / "messages" / "result.json"
-            if result_file.exists():
-                try:
-                    worker_result = json.loads(result_file.read_text(encoding="utf-8"))
-                    if worker_result.get("status") == "done":
-                        log(f"🎯 Résultat trouvé dans worktree pour {order_id} (fallback result.json)")
-                        # Construire un result_data compatible
-                        result_data = {
-                            "from_": "orchestrator",
-                            "to": "agent_A",
-                            "worker_result": {
-                                "task_id": order_id,
-                                "status": "done",
-                                "files_created": worker_result.get("files_created", []),
-                                "output": worker_result.get("output", ""),
-                                "logs": worker_result.get("logs", ""),
-                                "error": worker_result.get("error", "")
-                            },
-                            "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-                        }
-                        return order_id, result_data
-                except Exception as e:
-                    log(f"⚠️ Erreur lecture worktree result.json: {e}")
-        
-        if time.time() - last_log > 30:
-            elapsed = int(time.time() - min(v['submitted_at'] for v in active.values()))
+        if now - last_log > 30:
+            elapsed = int(now - min(v.get("submitted_at", now) for v in active.values()))
             log(f"⏳ {len(active)} missions en cours... ({elapsed}s) — {list(active.keys())}")
-            last_log = time.time()
+            last_log = now
         time.sleep(3)
-    
+
     log(f"⏰ TIMEOUT global après {timeout}s")
     return None
+
 
 def check_result_success(result: dict | None) -> bool:
     if not result:
@@ -323,11 +339,20 @@ def adopt_alive_workers(reg: dict) -> None:
             log(f"🧲 Worker adopté: {order} (pid {pid}) — mission {mid} en vol, pas de re-soumission")
 
 def reap_active(active: dict) -> None:
-    """Libère les orders dont le worker est mort sans result.json."""
+    """Libère les orders dont le worker est mort sans result.json.
+
+    Ne libère jamais un order encore en file (queue/) ou réclamé
+    (inflight/): l'orchestrateur peut n'avoir pas encore démarré le process.
+    """
     import subprocess as _sub
+    alive = _alive_worker_orders()
     for order in list(active.keys()):
         res = Path(ROOT.parent) / f"AI-Excel-Agent-worker-{order}" / "messages" / "result.json"
         if res.exists():
+            continue
+        if (QUEUE_DIR / f"{order}.json").exists() or (INFLIGHT_DIR / f"{order}.json").exists():
+            continue
+        if order in alive:
             continue
         pid = active[order].get("pid")
         still = False
@@ -337,7 +362,8 @@ def reap_active(active: dict) -> None:
                 still = str(pid) in r.stdout
             except Exception:
                 still = False
-        if not still:
+        age = time.time() - active[order].get("submitted_at", time.time())
+        if not still and age > 180:
             log(f"🪦 Reap: {order} worker mort sans result.json — slot libéré")
             active.pop(order, None)
 

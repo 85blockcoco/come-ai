@@ -23,8 +23,44 @@ TASK_FILE = MESSAGES / "task.json"
 RESULT_FILE = MESSAGES / "result.json"
 LOG_FILE = ROOT / "orchestrator.log"
 
-POLL_INTERVAL = 3  # secondes
-# MAX_WORKERS permet de limiter la machine secondaire (ex: 2) sans toucher
+# File d'attente parallèle: une mission = un fichier.  Le driver dépose dans
+# queue/, l'orchestrateur réclame atomiquement vers inflight/, puis publie le
+# résultat dans results/<order_id>.json.  from_A.json reste alimenté pour la
+# compatibilité (observabilité), mais n'est plus le seul slot disponible.
+QUEUE_DIR = MESSAGES / "queue"
+INFLIGHT_DIR = MESSAGES / "inflight"
+RESULTS_DIR = MESSAGES / "results"
+
+# Contrat de reporting ajouté à CHAQUE prompt worker: sans ce bloc, certains
+# workers rendent le travail sans écrire result.json et la mission est comptée
+# comme échouée alors que le code est livré.
+WORKER_REPORTING_FOOTER = """
+
+---
+
+## CONTRAT DE SORTIE (OBLIGATOIRE, À FAIRE EN DERNIER)
+
+1. Lance les tests des fichiers que tu as touchés puis, si possible, la suite
+   complète : `.venv/bin/python -m pytest -q` (ou `python3 -m pytest -q`).
+   Lance aussi `ruff check .` sur les fichiers modifiés.
+2. Écris `messages/result.json` DANS CE WORKTREE avec exactement :
+
+```json
+{
+  "status": "done",
+  "files_created": ["chemin/relatif/fichier.py", "tests/test_x.py"],
+  "output": "Résumé en 1-2 phrases de ce qui est livré",
+  "logs": "dernières lignes de pytest / ruff",
+  "error": null
+}
+```
+
+`status` vaut `"done"` seulement si les tests pertinents passent et que le code
+est réellement écrit. Sinon `"failed"` avec `error` renseigné.
+Ne termine jamais sans avoir écrit ce fichier.
+"""
+
+POLL_INTERVAL = 3  # secondes# MAX_WORKERS permet de limiter la machine secondaire (ex: 2) sans toucher
 # au registre partagé. Absent = 4 (comportement historique).
 MAX_PARALLEL_WORKERS = int(os.environ.get("MAX_WORKERS", "4"))
 
@@ -89,6 +125,38 @@ def write_to_a(to_a: ToA) -> None:
         MESSAGES.mkdir(exist_ok=True)
         TO_A.write_text(json.dumps(asdict(to_a), ensure_ascii=False, indent=1), encoding="utf-8")
 
+
+def publish_result(order_id: str, mission_id: str | None, result: dict) -> None:
+    """Publie le résultat d'une mission dans results/<order_id>.json.
+
+    Un fichier par mission: indispensable pour que plusieurs workers en
+    parallèle ne s'écrasent pas mutuellement (l'ancien to_A.json unique ne
+    pouvait porter qu'un seul résultat).
+    """
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    worker_result = result.get("worker_result") or {}
+    payload = {
+        "from_": "orchestrator",
+        "to": "agent_A",
+        "mission_id": mission_id,
+        "worker_result": {
+            "task_id": order_id,
+            "status": result.get("status", "failed"),
+            "files_created": worker_result.get("files_created", []),
+            "output": worker_result.get("output", ""),
+            "logs": worker_result.get("logs", "")
+            or ((result.get("stdout", "") or "") + "\n" + (result.get("stderr", "") or ""))[-4000:],
+            "error": result.get("error") or worker_result.get("error") or "",
+        },
+        "duration_sec": result.get("duration_sec"),
+        "model_used": result.get("model_used", ""),
+        "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    target = RESULTS_DIR / f"{order_id}.json"
+    tmp = target.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.replace(target)
+
 def write_task(task: Task) -> None:
     with file_lock:
         MESSAGES.mkdir(exist_ok=True)
@@ -116,10 +184,11 @@ def set_from_a_processing(order_id: str) -> None:
     """Marque from_A.json comme processing pour éviter le double traitement."""
     write_from_a_status("processing", order_id)
 
-def create_worktree(order_id: str, base_branch: str = "main") -> tuple[str, str]:
+def create_worktree(order_id: str, base_branch: str | None = None) -> tuple[str, str]:
     """Crée un worktree dédié pour le worker. Retourne (path, branch_name)."""
     branch = f"worker/{order_id}"
     worktree_path = ROOT.parent / f"AI-Excel-Agent-worker-{order_id}"
+    base_branch = base_branch or os.environ.get("WORKER_BASE_BRANCH", "main")
 
     # Nettoyer si existe déjà
     if worktree_path.exists():
@@ -129,8 +198,8 @@ def create_worktree(order_id: str, base_branch: str = "main") -> tuple[str, str]
     # Supprimer la branche si elle existe (force delete)
     subprocess.run(["git", "branch", "-D", branch], cwd=ROOT, capture_output=True, check=False)
 
-    # Créer la branche depuis main
-    subprocess.run(["git", "branch", branch, "main"], cwd=ROOT, check=True)
+    # Créer la branche depuis la base
+    subprocess.run(["git", "branch", branch, base_branch], cwd=ROOT, check=True)
     subprocess.run(["git", "worktree", "add", str(worktree_path), branch], cwd=ROOT, check=True)
 
     log(f"Worktree créé: {worktree_path} (branche {branch})")
@@ -150,7 +219,7 @@ def run_worker(worktree_path: str, prompt: str, order_id: str) -> dict:
 
     # Écrire le prompt dans un fichier temporaire pour éviter les problèmes d'échappement
     prompt_file = Path(worktree_path) / "WORKER_PROMPT.md"
-    prompt_file.write_text(prompt, encoding="utf-8")
+    prompt_file.write_text(prompt + WORKER_REPORTING_FOOTER, encoding="utf-8")
 
     # Pool DYNAMIQUE trié par santé/performance (model_health.py):
     # les modèles OK d'abord (score = 60/latence), les LIMIT/SLOW reviennent
@@ -236,6 +305,13 @@ def run_worker(worktree_path: str, prompt: str, order_id: str) -> dict:
             pass
 
     final_status = "done" if result.returncode == 0 else "failed"
+    _worker_status = str(worker_result.get("status") or "").strip().lower()
+    if _worker_status in ("done", "failed"):
+        # Le worker est la source de vérité: un code retour 0 sans travail
+        # réel ne doit jamais être compté comme un succès.
+        final_status = _worker_status
+    elif result.returncode == 0 and not worker_result:
+        final_status = "failed"
     if result.returncode == 0 and duration < 90 and not worker_result:
         # "Polite exit": le worker a répondu une phrase de courtoisie et sorti
         # code 0 sans aucun travail (jamais vu après 90s de vrai travail).
@@ -252,7 +328,7 @@ def run_worker(worktree_path: str, prompt: str, order_id: str) -> dict:
         "model_used": model
     }
 
-def process_mission(order_id: str, prompt: str) -> tuple[str, dict]:
+def process_mission(order_id: str, prompt: str, mission_id: str | None = None) -> tuple[str, dict]:
     """Traite une mission complète. Retourne (order_id, result)."""
     log(f"=== DÉBUT MISSION {order_id} ===")
 
@@ -261,6 +337,16 @@ def process_mission(order_id: str, prompt: str) -> tuple[str, dict]:
 
     # 1. Créer worktree
     worktree_path, branch = create_worktree(order_id)
+
+    if not prompt.strip():
+        # Un prompt vide produit un worker qui sort immédiatement: on échoue
+        # tout de suite plutôt que de brûler un slot.
+        log(f"⚠️ {order_id}: prompt vide → échec immédiat")
+        result = {"status": "failed", "error": "prompt vide", "duration_sec": 0.0}
+        publish_result(order_id, mission_id, result)
+        with file_lock:
+            (INFLIGHT_DIR / f"{order_id}.json").unlink(missing_ok=True)
+        return order_id, result
 
     try:
         # 2. Écrire task.json pour le worker
@@ -289,9 +375,17 @@ def process_mission(order_id: str, prompt: str) -> tuple[str, dict]:
         )
         write_to_a(to_a)
 
+        # 5. Publier le résultat par mission (source de vérité en parallèle)
+        publish_result(order_id, mission_id, result)
+
         log(f"Mission {order_id} terminée: {result.get('status')}")
 
     finally:
+        # Marquer la fin: le fichier inflight disparaît une fois le résultat publié.
+        try:
+            (INFLIGHT_DIR / f"{order_id}.json").unlink(missing_ok=True)
+        except Exception:
+            pass
         # Nettoyage SÉCURISÉ: on ne supprime JAMAIS le worktree d'office.  On vérifie
         # d'abord sur origin que la branche du worker a bien été poussée. Sinon on
         # garde tout (protectino anti-race sur to_A.json / faux-dones).
@@ -307,8 +401,13 @@ def process_mission(order_id: str, prompt: str) -> tuple[str, dict]:
             log(f"Worktree nettoyé (push vérifié sur origin): {worktree_path}")
         else:
             log(f"Worktree CONSERVÉ ({'pas pousse' if not _pushed else 'resultat non-done'}): {worktree_path}")
-        # 6. Remettre from_A.json à waiting
-        set_from_a_waiting()
+        # 6. from_A.json redevient "waiting" seulement si plus rien n'est en vol
+        try:
+            still_inflight = list(INFLIGHT_DIR.glob("*.json"))
+        except Exception:
+            still_inflight = []
+        if not still_inflight:
+            set_from_a_waiting()
         log(f"=== FIN MISSION {order_id} ===")
 
     return order_id, result
@@ -355,25 +454,60 @@ def main_loop():
                 log(f"🔧 Slots disponibles: {slots_available}, futures: {len(futures)}")
 
                 if slots_available > 0:
-                    with file_lock:
-                        if FROM_A.exists():
-                            try:
-                                data = json.loads(FROM_A.read_text(encoding="utf-8"))
-                                log(f"🔍 from_A lu: status={data.get('status')}, order_id={data.get('order_id')}")
-                                if data.get("status") == "ready_for_worker" and data.get("order_id"):
-                                    order_id = data["order_id"]
-                                    log(f"✅ Condition remplie, soumission mission {order_id}")
+                    claimed = 0
+                    for qfile in sorted(QUEUE_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime):
+                        if claimed >= slots_available:
+                            break
+                        try:
+                            entry = json.loads(qfile.read_text(encoding="utf-8"))
+                        except Exception:
+                            continue
+                        order_id = str(entry.get("order_id") or "").strip()
+                        if not order_id:
+                            qfile.unlink(missing_ok=True)
+                            continue
+                        # Réclamation atomique: queue/ -> inflight/
+                        INFLIGHT_DIR.mkdir(parents=True, exist_ok=True)
+                        dest = INFLIGHT_DIR / qfile.name
+                        try:
+                            qfile.replace(dest)
+                        except Exception:
+                            continue
+                        with file_lock:
+                            write_from_a_status("processing", order_id)
+                        future = executor.submit(
+                            process_mission,
+                            order_id,
+                            entry.get("prompt_for_worker", ""),
+                            entry.get("mission_id"),
+                        )
+                        futures[future] = order_id
+                        claimed += 1
+                        log(f"🚀 Mission {order_id} réclamée depuis queue/ ({len(futures)}/{MAX_PARALLEL_WORKERS} workers)")
+                    step_started = claimed > 0
 
-                                    # Marquer comme processing immédiatement
-                                    write_from_a_status("processing", order_id)
-                                    log("📝 Status mis à jour: processing")
+                    # Compatibilité: ancien protocole mono-slot via from_A.json,
+                    # uniquement si la queue parallèle est vide.
+                    if not step_started and not any(QUEUE_DIR.glob("*.json")):
+                        with file_lock:
+                            if FROM_A.exists():
+                                try:
+                                    data = json.loads(FROM_A.read_text(encoding="utf-8"))
+                                    log(f"🔍 from_A lu: status={data.get('status')}, order_id={data.get('order_id')}")
+                                    if data.get("status") == "ready_for_worker" and data.get("order_id"):
+                                        order_id = data["order_id"]
+                                        log(f"✅ Condition remplie, soumission mission {order_id}")
 
-                                    # Soumettre au pool de threads
-                                    future = executor.submit(process_mission, order_id, data.get("prompt_for_worker", ""))
-                                    futures[future] = order_id
-                                    log(f"🚀 Mission {order_id} soumise au pool ({len(futures)}/{MAX_PARALLEL_WORKERS} workers)")
-                            except Exception as e:
-                                log(f"ERREUR lecture from_A.json: {e}")
+                                        # Marquer comme processing immédiatement
+                                        write_from_a_status("processing", order_id)
+                                        log("📝 Status mis à jour: processing")
+
+                                        # Soumettre au pool de threads
+                                        future = executor.submit(process_mission, order_id, data.get("prompt_for_worker", ""))
+                                        futures[future] = order_id
+                                        log(f"🚀 Mission {order_id} soumise au pool ({len(futures)}/{MAX_PARALLEL_WORKERS} workers)")
+                                except Exception as e:
+                                    log(f"ERREUR lecture from_A.json: {e}")
 
                 time.sleep(POLL_INTERVAL)
                 # Heartbeat log every 30 seconds
