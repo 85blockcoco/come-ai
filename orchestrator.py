@@ -150,6 +150,7 @@ def publish_result(order_id: str, mission_id: str | None, result: dict) -> None:
         },
         "duration_sec": result.get("duration_sec"),
         "model_used": result.get("model_used", ""),
+        "pushed": bool(result.get("pushed")),
         "completed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
     target = RESULTS_DIR / f"{order_id}.json"
@@ -380,7 +381,22 @@ def process_mission(order_id: str, prompt: str, mission_id: str | None = None) -
         )
         write_to_a(to_a)
 
-        # 5. Publier le résultat par mission (source de vérité en parallèle)
+        # 5. Pousser la branche AVANT de publier: un statut "done" sans
+        #    branche sur origin n'est pas une preuve (règle du projet).
+        pushed = False
+        if result.get("status") == "done":
+            try:
+                _p = subprocess.run(["git", "push", "-u", "origin", branch],
+                                    cwd=worktree_path, capture_output=True, text=True, timeout=180)
+                if _p.returncode == 0:
+                    pushed = True
+                else:
+                    log(f"⚠️ push {branch} refusé: {(_p.stderr or '')[-300:]}")
+            except Exception as e:
+                log(f"⚠️ push {branch} erreur: {e}")
+            result["pushed"] = pushed
+
+        # 6. Publier le résultat par mission (source de vérité en parallèle)
         publish_result(order_id, mission_id, result)
 
         log(f"Mission {order_id} terminée: {result.get('status')}")

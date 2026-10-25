@@ -7,6 +7,7 @@ import json
 import os
 import time
 import signal
+import sys
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
@@ -185,6 +186,12 @@ def _read_result_for(order_id: str) -> Optional[dict]:
             return json.loads(res.read_text(encoding="utf-8"))
         except Exception:
             pass
+    # Fallback interdit tant que le worker vit: il peut écrire result.json au
+    # milieu de son travail (faux done constaté sur la mission 61).  En
+    # revanche un marqueur inflight périmé (orchestrateur redémarré) ne doit
+    # pas bloquer éternellement la récupération du travail déjà livré.
+    if order_id in _alive_worker_orders():
+        return None
     worktree = ROOT.parent / f"AI-Excel-Agent-worker-{order_id}"
     fallback = worktree / "messages" / "result.json"
     if fallback.exists():
@@ -294,6 +301,82 @@ def wait_for_any_result(active: dict[str, dict], timeout: int = 14400) -> Option
     return None
 
 
+
+def verify_mission(order_id: str, mission_id: str, result_data: dict) -> tuple[bool, str]:
+    """Preuve avant de marquer une mission done: branche poussée + tests verts.
+
+    Un result.json qui dit "done" ne suffit jamais (règle projet: jamais de
+    done sur parole).  On vérifie la branche sur origin, la présence réelle
+    des fichiers déclarés et l'exécution des tests déclarés.
+    """
+    import subprocess as _sp
+    import tempfile
+    branch = f"worker/{order_id}"
+    wr = result_data.get("worker_result", {}) or {}
+
+    if wr.get("status") != "done":
+        return False, f"statut worker={wr.get('status')}"
+
+    # 1. pousser la branche si le worker ne l'a pas fait (le worktree local
+    #    contient les commits; on ne dépend pas du bon vouloir du worker).
+    wt_path = ROOT.parent / f"AI-Excel-Agent-worker-{order_id}"
+    if wt_path.exists():
+        try:
+            _sp.run(["git", "push", "-u", "origin", branch], cwd=str(wt_path),
+                    capture_output=True, text=True, timeout=180)
+        except Exception:
+            pass
+
+    # 2. branche réellement sur origin
+    try:
+        r = _sp.run(["git", "ls-remote", "--heads", "origin", branch], cwd=ROOT,
+                    capture_output=True, text=True, timeout=60)
+    except Exception as e:
+        return False, f"ls-remote impossible: {e}"
+    if not (r.stdout or "").strip():
+        return False, f"branche {branch} absente sur origin (pas de push)"
+
+    files = [f for f in (wr.get("files_created") or []) if isinstance(f, str)]
+    if not files:
+        return False, "files_created vide"
+
+    # 2. les fichiers déclarés existent dans la branche poussée
+    missing = []
+    for f in files:
+        if _sp.run(["git", "cat-file", "-e", f"origin/{branch}:{f}"], cwd=ROOT,
+                   capture_output=True, timeout=30).returncode != 0:
+            missing.append(f)
+    if missing:
+        return False, "fichiers absents de la branche: " + ", ".join(missing[:5])
+
+    # 3. les tests déclarés passent dans un worktree temporaire de la branche
+    test_files = [f for f in files if f.startswith("tests/") and f.endswith(".py")]
+    if not test_files:
+        return False, "aucun test livré"
+    tmpdir = Path(tempfile.mkdtemp(prefix=f"verify-{order_id}-"))
+    wt = tmpdir / "wt"
+    try:
+        add = _sp.run(["git", "worktree", "add", "--detach", str(wt), f"origin/{branch}"],
+                      cwd=ROOT, capture_output=True, text=True, timeout=180)
+        if add.returncode != 0:
+            # worktree add refuse parfois un chemin hors repo: fallback clone local
+            add = _sp.run(["git", "clone", "--quiet", "--depth", "1", "--branch", branch,
+                           str(ROOT), str(wt)], capture_output=True, text=True, timeout=300)
+            if add.returncode != 0:
+                return False, f"worktree/clone impossible: {add.stderr[-200:]}"
+        run = _sp.run([sys.executable, "-m", "pytest", "-q", *test_files], cwd=str(wt),
+                      capture_output=True, text=True, timeout=900)
+        tail = (run.stdout or "")[-300:]
+        if run.returncode != 0:
+            return False, f"tests rouges: {tail}"
+        return True, "push vérifié + tests verts"
+    finally:
+        _sp.run(["git", "worktree", "remove", "--force", str(wt)], cwd=ROOT,
+                capture_output=True, timeout=120)
+        import shutil
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+
 def check_result_success(result: dict | None) -> bool:
     if not result:
         return False
@@ -401,12 +484,14 @@ def main_loop():
                                 inflight.add(m.group(1))
                 except Exception:
                     pass
-                # Aussi vérifier from_A (seulement si processing activement)
+                # from_A n'est qu'un miroir d'observabilité: ne compter une
+                # mission comme "en vol" que si son process vit réellement
+                # (sinon un from_A périmé bloque une mission pour toujours).
                 try:
                     from_data = json.loads(FROM_A.read_text(encoding="utf-8"))
                     from_order = from_data.get("order_id", "")
                     from_status = from_data.get("status", "")
-                    if from_status == "processing" and from_order:
+                    if from_status == "processing" and from_order and from_order in _alive_worker_orders():
                         m = _re2.search(r"cvboost-(\d+)-", from_order)
                         if m:
                             inflight.add(m.group(1))
@@ -461,17 +546,23 @@ def main_loop():
                 attempt = mission_info.get("attempt", 1)
                 max_attempts = mission_info.get("max_attempts", 3)
                 
+                verified, why = (False, "résultat non exploitable")
                 if check_result_success(result_data):
-                    log(f"✅ Mission {mission_id} RÉUSSIE")
+                    verified, why = verify_mission(order_id, mission_id, result_data)
+                if check_result_success(result_data) and verified:
+                    log(f"✅ Mission {mission_id} RÉUSSIE — {why}")
                     reg = load_registry()
                     mission = get_mission(reg, mission_id)
                     if mission:
                         mission["status"] = "done"
                         mission["completed_at"] = datetime.now().isoformat()
                         mission["worker_result"] = result_data.get("worker_result", {})
+                        mission["verified"] = why
                         save_registry(reg)
-                        log("📝 Registry mis à jour → done")
+                        log("📝 Registry mis à jour → done (vérifié)")
                 else:
+                    if check_result_success(result_data):
+                        log(f"🚫 Mission {mission_id} ANNONCÉE done mais NON VÉRIFIÉE: {why}")
                     # Échec : retry si attempts restants
                     if attempt < max_attempts:
                         log(f"🔄 Mission {mission_id} ÉCHOUÉE (tentative {attempt}/{max_attempts}), retry...")
