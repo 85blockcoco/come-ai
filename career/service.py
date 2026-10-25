@@ -4804,6 +4804,18 @@ class CareerService:
                 except OSError:
                     pass
 
+    def build_admin_checklist(self, country: Any = "France", statuses: Any = None, proof_refs: Any = None) -> dict[str, Any]:
+        from .stage_admin_docs import build_admin_checklist as _build, completeness as _completeness, to_dict as _to_dict
+
+        checklist = _build(country, statuses=statuses, proof_refs=proof_refs)
+        return {"checklist": _to_dict(checklist), "completeness": _completeness(checklist)}
+
+    def admin_doc_requirements(self, country: Any = "France") -> dict[str, Any]:
+        from .stage_admin_docs import normalize_country, requirements_for_country
+
+        canonical = normalize_country(country)
+        return {"country": canonical, "requirements": [item.to_dict() for item in requirements_for_country(canonical)]}
+
     def safe_export_path(self, filename: str) -> Path:
         candidate = (self.export_dir / Path(filename).name).resolve()
         if (

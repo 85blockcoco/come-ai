@@ -15,6 +15,13 @@ from starlette.datastructures import UploadFile
 
 from .profile_import import MAX_PROFILE_IMPORT_BYTES
 from .service import CareerService
+from .stage_admin_docs import (
+    build_admin_checklist,
+    completeness,
+    normalize_country,
+    render_recap,
+    requirements_for_country,
+)
 from workspace_core import UserFacingError, to_jsonable
 
 
@@ -138,6 +145,14 @@ class ApplicationChecklistPayload(BaseModel):
     """Cinq cases locales seulement ; rien n'est transitionné ni envoyé."""
 
     checked: list[str] = Field(default_factory=list, max_length=10)
+
+
+class AdminDocChecklistPayload(BaseModel):
+    """Local update of an administrative checklist (no submission, no network)."""
+
+    country: str = Field(default="France", max_length=80)
+    statuses: dict[str, str] = Field(default_factory=dict)
+    proof_refs: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class ResetPayload(BaseModel):
@@ -748,6 +763,72 @@ def create_career_router(
     async def reset_data(payload: ResetPayload) -> dict[str, bool]:
         await local(lambda: service.reset_personal_data(payload.confirmation))
         return {"deleted": True}
+
+    # ------------------------------------------------------------------
+    # SPEC-028 — administrative documents checklist for internships abroad
+    # ------------------------------------------------------------------
+    def _admin_checklist_response(country: str, statuses: dict[str, str] | None = None, proof_refs: dict[str, list[str]] | None = None) -> dict[str, Any]:
+        checklist = build_admin_checklist(country, statuses=statuses, proof_refs=proof_refs)
+        return {
+            "country": checklist.country,
+            "checklist": checklist.to_dict(),
+            "completeness": completeness(checklist),
+            "recap": render_recap(checklist),
+        }
+
+    @router.get("/api/career/admin-docs/requirements")
+    async def admin_docs_requirements(country: str = Query(default="France")) -> Any:
+        canonical = normalize_country(country)
+        items = requirements_for_country(canonical)
+        return await local(lambda: {
+            "country": canonical,
+            "requirements": [item.to_dict() for item in items],
+        })
+
+    @router.get("/api/career/admin-docs/checklist")
+    async def admin_docs_checklist(country: str = Query(default="France")) -> Any:
+        return await local(lambda: _admin_checklist_response(country))
+
+    @router.post("/api/career/admin-docs/checklist")
+    async def admin_docs_checklist_update(payload: AdminDocChecklistPayload) -> Any:
+        return await local(lambda: _admin_checklist_response(
+            payload.country, statuses=payload.statuses, proof_refs=payload.proof_refs
+        ))
+
+    @router.get("/api/career/admin-docs/recap")
+    async def admin_docs_recap(country: str = Query(default="France"), format: str = Query(default="markdown")) -> Any:
+        checklist = build_admin_checklist(country)
+        return await local(lambda: {
+            "country": checklist.country,
+            "format": format,
+            "recap": render_recap(checklist, format=format),
+            "completeness": completeness(checklist),
+        })
+
+    # Aliases using the module/spec name, in case callers use it directly.
+    @router.get("/api/career/stage-admin-docs/requirements")
+    async def stage_admin_docs_requirements(country: str = Query(default="France")) -> Any:
+        canonical = normalize_country(country)
+        items = requirements_for_country(canonical)
+        return await local(lambda: {"country": canonical, "requirements": [item.to_dict() for item in items]})
+
+    @router.get("/api/career/stage-admin-docs/checklist")
+    async def stage_admin_docs_checklist(country: str = Query(default="France")) -> Any:
+        return await local(lambda: _admin_checklist_response(country))
+
+    @router.post("/api/career/stage-admin-docs/checklist")
+    async def stage_admin_docs_checklist_update(payload: AdminDocChecklistPayload) -> Any:
+        return await local(lambda: _admin_checklist_response(
+            payload.country, statuses=payload.statuses, proof_refs=payload.proof_refs
+        ))
+
+    @router.get("/api/career/stage-admin-docs")
+    async def stage_admin_docs_root(country: str = Query(default="France")) -> Any:
+        return await local(lambda: _admin_checklist_response(country))
+
+    @router.get("/api/career/admin-docs")
+    async def admin_docs_root(country: str = Query(default="France")) -> Any:
+        return await local(lambda: _admin_checklist_response(country))
 
     return router
 
