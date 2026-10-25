@@ -176,3 +176,20 @@ def test_experience_continuation_at_next_page_stays_with_the_same_entry(tmp_path
     assert first.company == "Split Synthetic Bank"
     assert "reduced review time by 20%" in first.description
     assert second.company == "Previous Synthetic Bank"
+
+
+def test_pdf_current_transform_is_used_for_top_down_reading_order(tmp_path: Path) -> None:
+    path = tmp_path / "top-down-transform.pdf"
+    pdf = canvas.Canvas(str(path), pagesize=(595, 842))
+    pdf.saveState()
+    pdf.translate(0, 842)
+    pdf.scale(1, -1)
+    pdf.setFont("Helvetica", 10)
+    pdf.drawString(30, 40, "TOP ITEM")
+    pdf.drawString(30, 140, "LOWER ITEM")
+    pdf.restoreState()
+    pdf.save()
+
+    text = extract_text_from_file(path).text
+
+    assert text.index("TOP ITEM") < text.index("LOWER ITEM")
