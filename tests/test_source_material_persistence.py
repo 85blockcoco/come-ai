@@ -88,3 +88,47 @@ def test_aggregate_oversized_source_block_does_not_fail_offer_import(tmp_path) -
 
     assert imported["id"]
     assert imported["source_material"] is None
+
+
+def test_html_connector_fields_survive_real_exploration_import(tmp_path) -> None:
+    from fastapi.testclient import TestClient
+
+    from come_ai_web import create_app
+    from career.connectors.jobteaser import JobTeaserConnector
+
+    html = """<article class="job-card">
+      <h3 class="title">Corporate Finance Intern</h3>
+      <span class="company">Synthetic Finance</span>
+      <span class="location">London, United Kingdom</span>
+      <span class="contract">Internship</span>
+      <a href="/en/jobs/synthetic-finance-internship"></a>
+      <div class="description">A six-month finance internship.</div>
+    </article>"""
+    source = {
+        "id": "synthetic:jobteaser:board",
+        "provider": "jobteaser",
+        "company": "Synthetic Finance",
+        "board_token": "synthetic-finance",
+        "verified_at": "2026-10-20T00:00:00Z",
+        "provenance_url": "https://www.jobteaser.com/en/jobs",
+    }
+    connector = JobTeaserConnector(
+        fetch=lambda _url: html,
+        clock=lambda: "2026-10-25T00:00:00Z",
+    )
+    service = CareerService(
+        tmp_path,
+        curated_sources=(source,),
+        exploration_connectors={"jobteaser": connector},
+    )
+
+    result = service.explore_internships()
+
+    assert result["summary"]["imported_count"] == 1
+    imported = service.list_jobs()[0]
+    fields = imported["source_material"]["material"]["source_fields"]["jobteaser"]
+    assert fields["contract_type"] == "Internship"
+    assert fields["location"] == "London, United Kingdom"
+    with TestClient(create_app(base_dir=tmp_path, career_override=service)) as client:
+        api_offer = client.get("/api/career/jobs").json()["jobs"][0]
+    assert api_offer["source_material"]["material"]["source_fields"]["jobteaser"]["contract_type"] == "Internship"

@@ -25,6 +25,7 @@ from ..models import clean_text, canonical_url
 from ..exploration import classify_internship, criteria_admit, ranking_key
 from ..offer_qualification import qualify_offer
 from ..stage_search import default_brief, score_brief_match, validate_brief
+from ..source_fields import attach_source_material
 
 
 _TALENT_BASE = "https://www.talent.com"
@@ -334,7 +335,7 @@ def _iter_raw_offers(
             if not job_id:
                 job_id = str(hash(official_url))[-12:]
 
-            yield {
+            job = {
                 "company": company,
                 "title": title,
                 "source_name": "talent_com",
@@ -358,6 +359,13 @@ def _iter_raw_offers(
                 "eligibility_requirement": "",
                 "description_original": description,
             }
+            yield attach_source_material(
+                job,
+                "talent_com",
+                {"title": title, "company": company, "location": location_text,
+                 "contract_type": contract_type, "url": url_raw},
+                description=description,
+            )
 
         if len(page_jobs) < 15:
             break
