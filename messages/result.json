@@ -1,0 +1,15 @@
+{
+  "status": "done",
+  "files_created": [
+    "career/followup_engine.py",
+    "career/service.py",
+    "career/router.py",
+    "tests/test_followup_engine.py",
+    "tests/fixtures/followups_synthetic.json",
+    "tests/test_career_agent.py",
+    "docs/agent-reports/SPEC-029-followup_engine.md"
+  ],
+  "output": "SPEC-029 (CVBOOST-64) : moteur de relances chronologiques — politique J+7 puis intervalle min. 5 jours et plafond 3, plan du jour avec blocages nommés, garde-fou anti-sur-relance, persistance sans migration (événement followup_recorded), routes GET /api/career/followups/plan et POST /api/career/followups/{id}/record, intégration cockpit additive. 25 tests dont 1 adversarial + smoke REST via create_app(). Suite complète verte.",
+  "logs": "pytest -q tests/test_followup_engine.py -> 25 passed\npytest -q tests/test_followup_engine.py tests/test_career_application_dashboard.py -> 47 passed\npytest -q (suite complète) -> 1533 passed, 1 skipped\nruff check career/followup_engine.py career/service.py career/router.py tests/test_followup_engine.py tests/test_career_agent.py -> All checks passed\ngit diff --check -> CLEAN\nCorrectif d'une ligne hors périmètre : tests/test_career_agent.py, assertion obsolète 6 -> 14 (taxonomie cd0e5e8, déjà corrigée sur agent/spec-026-offer-compare).\nCommit de livraison 885a97d + 120a96b, fusion f4283b2 poussée en fast-forward sur origin/agent/spec-029-followup-engine (320289e..f4283b2) ; pas de force-push, jamais main.",
+  "error": null
+}
