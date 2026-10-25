@@ -150,3 +150,29 @@ def test_multi_page_experiences_keep_logical_order(tmp_path: Path) -> None:
         "Mar 2022",
         "Mar 2023",
     ]
+
+
+def test_experience_continuation_at_next_page_stays_with_the_same_entry(tmp_path: Path) -> None:
+    path = tmp_path / "split-experience.pdf"
+    pdf = canvas.Canvas(str(path), pagesize=(595, 842))
+    pdf.setFont("Helvetica-Bold", 14)
+    pdf.drawString(220, 805, "EXPERIENCE")
+    pdf.setFont("Helvetica", 9)
+    pdf.drawString(25, 760, "Jan 2024 - Jun 2024")
+    pdf.drawString(220, 760, "Analyst | Split Synthetic Bank")
+    pdf.drawString(220, 742, "- Built a portfolio reporting model for 30 companies")
+    pdf.showPage()
+    pdf.setFont("Helvetica", 9)
+    pdf.drawString(220, 805, "which reduced review time by 20% across the team.")
+    pdf.drawString(25, 755, "Jul 2023 - Dec 2023")
+    pdf.drawString(220, 755, "Intern | Previous Synthetic Bank")
+    pdf.drawString(220, 737, "- Reconciled 500 transactions and corrected 12 records")
+    pdf.save()
+
+    analysis = analyze_cv(extract_text_from_file(path))
+
+    assert len(analysis.experiences) == 2
+    first, second = analysis.experiences
+    assert first.company == "Split Synthetic Bank"
+    assert "reduced review time by 20%" in first.description
+    assert second.company == "Previous Synthetic Bank"
