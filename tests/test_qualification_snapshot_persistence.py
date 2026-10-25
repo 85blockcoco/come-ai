@@ -16,7 +16,7 @@ def _payload(*, month: int = 1, quote: str = "starting January 2027") -> dict:
         "title": "Investment Banking Intern",
         "source_name": "greenhouse",
         "source_id": "synthetic-1",
-        "official_url": "https://example.test/jobs/synthetic-1",
+        "official_url": "https://boards.greenhouse.io/synthetic-bank/jobs/synthetic-1",
         "description_original": f"Internship {quote} for six months.",
         "source_verified": True,
         "qualification": {
@@ -209,6 +209,7 @@ def test_manual_claim_does_not_create_persisted_source_verification(tmp_path) ->
     stored = service.import_job(payload)
     assert stored["qualification_snapshot_current"] is False
     assert stored["source_verified"] is False
+    assert stored["official_source_trust"]["status"] == "verified"
 
 
 def test_unverified_same_source_refresh_does_not_downgrade_verified_snapshot(tmp_path) -> None:
@@ -217,7 +218,7 @@ def test_unverified_same_source_refresh_does_not_downgrade_verified_snapshot(tmp
     trusted.update(
         source_name="greenhouse",
         source_id="synthetic-verified",
-        official_url="https://example.test/jobs/synthetic-verified",
+        official_url="https://boards.greenhouse.io/synthetic-bank/jobs/synthetic-verified",
         source_verified=True,
         start_date="2027-01-05",
         duration_months=6,

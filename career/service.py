@@ -66,6 +66,7 @@ from .application_dashboard import (
 from .application_prep import prepare_application, summarize_offer
 from .application_sprint import MAX_SPRINT_CANDIDATES, MAX_SPRINT_ITEMS, build_application_sprint
 from .requirements_fit import analyze_fit
+from .source_trust import check_trust, status_label as source_trust_label
 from .cv_fit import (
     PipelineItem,
     classify_variant,
@@ -2066,6 +2067,20 @@ class CareerService:
         context = self._scoring_context()
         profile = context.get("profile") or {}
         analysis = prepare_application(profile, context.get("intake") or {}, job)
+        # Keep the preparation card aligned with the canonical offer serializer.
+        # prepare_application intentionally returns a compact offer object, so
+        # attach the locally reconstructed source trust and qualification facts
+        # needed by the UI instead of letting it display a generic fallback.
+        prep_job = dict(analysis.get("job") or {})
+        for field in (
+            "qualification_facts",
+            "official_source_trust",
+            "official_source_trust_label",
+            "source_verified",
+        ):
+            if field in job:
+                prep_job[field] = job[field]
+        analysis["job"] = prep_job
         approved_profile_facts = []
         for field, category in (
             ("education", "etudes"),
@@ -3491,12 +3506,22 @@ class CareerService:
         result["qualification_facts"] = decode_qualification_snapshot(qualification_row)
         snapshot_current = snapshot_matches_current_source(result)
         result["qualification_snapshot_current"] = snapshot_current
+        source_trust = check_trust(
+            result.get("official_url") or "",
+            employer_hint=result.get("company") or "",
+            declared_provider=result.get("source_name") or "",
+            clock=lambda: clean_text(result.get("last_verified_at") or result.get("updated_at"), limit=40)
+            or "unknown",
+        ).to_dict()
+        result["official_source_trust"] = source_trust
+        result["official_source_trust_label"] = source_trust_label(source_trust["status"])
         # Trust is reconstructed only from a current, source-attributed
         # snapshot or from a job tied to a discovery source after a successful
         # feed read. A manual import cannot become verified by claiming a flag.
         result["source_verified"] = bool(
             result.get("official_url")
             and result.get("last_verified_at")
+            and source_trust["status"] == "verified"
             and (
                 (
                     snapshot_current

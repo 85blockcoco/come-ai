@@ -963,8 +963,10 @@ function jobCard(job, mode = "discover", qualification = null) {
       details.append(make("p", `Contradiction temporelle à vérifier pour ${label}.`, "job-temporal-warning"));
     }
   });
-  if (job.source_name && job.source_name !== "manual") {
-    details.append(make("p", `Source officielle : ${job.source_name} · vérifiée : ${formatVerification(job.last_verified_at)}`));
+  if (job.official_url) {
+    details.append(make("p", `Origine du lien : ${job.official_source_trust_label || "Source liée, non vérifiée"}`));
+    const reason = job.official_source_trust?.reasons?.[0];
+    if (reason) details.append(make("p", reason, job.official_source_trust?.status === "contradictory" ? "job-temporal-warning" : ""));
   }
   card.append(details);
   if (!qualification && (job.calendar_reasons || []).length) {
@@ -2593,8 +2595,7 @@ function stageContractLabel(value) {
 }
 
 function stageOfferFactValue(job, qualification, key) {
-  const facts = qualification && Object.keys(qualification).length
-    ? qualification : (job.qualification_facts || {});
+  const facts = {...(job.qualification_facts || {}), ...(qualification || {})};
   if (key === "contract") return stageContractLabel(facts.contract_type || job.employment_type);
   if (key === "location") return [job.city || facts.city, job.country || facts.country].filter(Boolean).join(", ") || "À vérifier";
   if (key === "publication") return formatStageDate(job.posted_date || facts.posted_date);
@@ -2602,7 +2603,12 @@ function stageOfferFactValue(job, qualification, key) {
     if (job.start_date || facts.start_date) return formatStageDate(job.start_date || facts.start_date);
     if (Number.isInteger(facts.start_month) && facts.start_month >= 1 && facts.start_month <= 12) {
       const month = new Date(Date.UTC(2000, facts.start_month - 1, 1)).toLocaleDateString("fr-FR", {month:"long", timeZone:"UTC"});
-      return `${month} · année à vérifier`;
+      const temporalStarts = (facts.temporal_facts || []).filter((fact) =>
+        fact.fact_type === "start" && Number.isInteger(fact.value?.year)
+        && fact.value?.month === facts.start_month && !(fact.contradictions || []).length
+      );
+      const years = [...new Set(temporalStarts.map((fact) => fact.value.year))];
+      return years.length === 1 ? `${month} ${years[0]}` : `${month} · année à vérifier`;
     }
     return "À vérifier";
   }
@@ -2650,11 +2656,11 @@ function stageOfferOverview(job, qualification) {
   panel.append(grid);
 
   const trust = make("div", "", "stage-offer-trust");
-  if (job.official_url && job.source_name && job.source_name !== "manual") {
-    trust.append(chip("Source officielle liée", "good"));
-    trust.append(make("span", `${job.source_name} · vérifiée ${formatVerification(job.last_verified_at)}`));
-  } else if (job.official_url) {
-    trust.append(chip("Lien fourni · origine à vérifier", "warning"));
+  if (job.official_url) {
+    const trustStatus = job.official_source_trust?.status || "unverified";
+    const tone = trustStatus === "verified" ? "good" : trustStatus === "contradictory" ? "danger" : "warning";
+    trust.append(chip(job.official_source_trust_label || "Source liée, non vérifiée", tone));
+    (job.official_source_trust?.reasons || []).slice(0, 2).forEach((reason) => trust.append(make("span", reason)));
   } else {
     trust.append(chip("Lien officiel manquant", "warning"));
   }
@@ -3382,7 +3388,7 @@ function renderStagePrep(prep) {
   target.append(
     make(
       "p",
-      `Source : ${job.source_name || "inconnue"} · statut : ${job.source_status === "open" ? "ouverte" : "à vérifier"} · consultation : ${formatVerification(job.last_verified_at)}`,
+      `Source déclarée : ${job.source_name || "inconnue"} · origine du lien : ${job.official_source_trust_label || "Source liée, non vérifiée"} · annonce ${job.source_status === "open" ? "ouverte" : "à vérifier"} · contenu ${job.source_verified ? `vérifié le ${formatVerification(job.last_verified_at)}` : "non vérifié"}`,
       "application-meta",
     ),
   );

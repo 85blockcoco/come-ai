@@ -1282,6 +1282,7 @@ def test_http_job_import_derives_neutral_facts_without_trusting_client_verificat
     assert job["qualification_snapshot_current"] is True
     assert facts["verification_status"] != "verified"
     assert job["source_verified"] is False
+    assert job["official_source_trust"]["status"] == "contradictory"
 
 
 def test_discovery_routes_use_an_injected_offline_connector_and_keep_exports_private(tmp_path: Path) -> None:

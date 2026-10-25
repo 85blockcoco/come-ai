@@ -18,6 +18,8 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 from career.application_prep import extract_requirements, prepare_application
+from career.offer_dates import extract_offer_dates
+from career.offer_qualification import qualify_offer
 from career.router import create_career_router
 from career.service import CareerService
 from career.stage_search import (
@@ -280,6 +282,38 @@ def test_job_prep_compares_offer_requirements_with_saved_profile_facts(tmp_path:
     assert any("Master 2" in item["profile_evidence"] for item in supported)
     assert any("Excel" in item["profile_evidence"] for item in supported)
     assert fit["to_verify_count"] >= 1  # absence is never treated as incompatibility
+
+
+def test_job_prep_carries_reconstructed_source_trust_and_temporal_evidence(tmp_path: Path) -> None:
+    service = CareerService(tmp_path)
+    payload = synthetic_job(
+        company="Synthetic Bank",
+        source_name="greenhouse",
+        source_id="synthetic-january-2027",
+        official_url="https://boards.greenhouse.io/synthetic-bank/jobs/synthetic-january-2027",
+        description_original="Synthetic internship starting January 2027 for six months.",
+        duration_months=6,
+    )
+    qualification = qualify_offer(
+        payload,
+        minimum_duration_months=1,
+        minimum_stage_duration_months=1,
+        allowed_contract_types=["internship"],
+        allowed_start_months=list(range(1, 13)),
+    ).to_dict()
+    qualification["temporal_facts"] = [fact.to_dict() for fact in extract_offer_dates(payload)]
+    payload["qualification"] = qualification
+    job = service.import_job(payload)
+
+    prep_job = service.get_job_prep(job["id"])["job"]
+
+    assert prep_job["official_source_trust"]["status"] == "verified"
+    assert prep_job["official_source_trust_label"] == "Source officielle vérifiée"
+    assert prep_job["source_verified"] is False  # URL trust does not verify offer content.
+    assert any(
+        fact["fact_type"] == "start" and fact["value"]["year"] == 2027
+        for fact in prep_job["qualification_facts"]["temporal_facts"]
+    )
 
 
 # --- 5. Offres indisponibles --------------------------------------------------

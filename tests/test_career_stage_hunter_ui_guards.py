@@ -169,7 +169,7 @@ def test_dashboard_quick_tools_expose_only_real_career_views() -> None:
 
 def test_career_static_assets_are_versioned_for_release_cache_refresh() -> None:
     html = (Path(__file__).resolve().parents[1] / "career_static/index.html").read_text(encoding="utf-8")
-    version = "?v=codex-v3-20261025"
+    version = "?v=codex-v3-20261025-rc2"
     for asset in ("career.css", "cv_plan.css", "career.js", "cv_plan.js"):
         assert f"/career-static/{asset}{version}" in html
 

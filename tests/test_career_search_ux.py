@@ -56,6 +56,10 @@ const known = {
 assert.match(stageOfferFactValue(known.job, known.qualification, "location"), /Milan/);
 assert.match(stageOfferFactValue(known.job, known.qualification, "start"), /févr|2027/);
 assert.strictEqual(stageOfferFactValue(known.job, known.qualification, "duration"), "6 mois");
+const evidencedYear = {job:{qualification_facts:{temporal_facts:[{fact_type:"start", value:{month:1, year:2027}, contradictions:[]}]}}, qualification:{start_month:1}};
+assert.strictEqual(stageOfferFactValue(evidencedYear.job, evidencedYear.qualification, "start"), "janvier 2027");
+const conflictedYear = {job:{}, qualification:{start_month:1, temporal_facts:[{fact_type:"start", value:{month:1, year:2027}, contradictions:["date contradictoire"]}]}};
+assert.strictEqual(stageOfferFactValue(conflictedYear.job, conflictedYear.qualification, "start"), "janvier · année à vérifier");
 '''.replace("HELPERS", helpers)
     completed = subprocess.run([_node(), "-e", script], capture_output=True, text=True, timeout=8)
     assert completed.returncode == 0, completed.stderr
@@ -74,7 +78,8 @@ def test_offer_cards_surface_all_decision_facts_and_source_reliability() -> None
     ):
         assert f'"{label}"' in source
     assert "Informations manquantes" in source
-    assert "Source officielle liée" in source
+    assert "official_source_trust_label" in source
+    assert "Origine du lien" in source
     assert "Prérequis repérés dans l’offre" in source
 
 
