@@ -410,7 +410,7 @@ def test_requirements_extraction_is_bounded_and_source_faithful() -> None:
     items = extract_requirements(dict(synthetic_job(requirements="Exigence A.\nExigence B.\nExigence A.")))
     texts = [item["text"] for item in items]
     assert texts.count("Exigence A.") == 1
-    assert all(item["source"] in {"requirements", "languages_required", "eligibility_requirement", "role_level"} for item in items)
+    assert all(item["source"] in {"requirements", "languages_required", "eligibility_requirement"} for item in items)
 
 
 # --- 8. Comportement en l'absence de fournisseur IA ---------------------------

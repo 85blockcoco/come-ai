@@ -50,11 +50,11 @@
       "case": "employer_careers_page",
       "url": "https://careers.acme-corp.com/jobs/finance-intern",
       "employer_hint": "Acme Corp",
-      "expected_status": "verified",
+      "expected_status": "unverified",
       "expected_provider": "employer",
       "expected_canonical_host": "careers.acme-corp.com",
-      "expected_employer_match": "confirmed",
-      "expected_registry_evidence": "registry:employer:acme-corp.com"
+      "expected_employer_match": "unknown",
+      "expected_registry_evidence": null
     },
     {
       "id": "syn-06",
@@ -159,7 +159,7 @@
       "expected_status": "unverified",
       "expected_provider": "employer",
       "expected_canonical_host": "careers.acme-corp.com",
-      "expected_employer_match": "confirmed",
+      "expected_employer_match": "unknown",
       "expected_registry_evidence": null
     },
     {

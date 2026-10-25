@@ -5,9 +5,9 @@ computed from source metadata.  This module replaces that boolean with an
 explicit, replayable and explainable decision:
 
 ``verified``
-    The link is proven to be the employer's own source: a known ATS host
-    plus a coherent employer, or the employer's own domain matching the
-    declared employer.
+    The link is supported by an exact record in the curated source registry:
+    a known ATS board tied to that employer, or a curated employer domain.
+    A matching-looking domain name alone is never proof.
 ``unverified``
     The link is usable but nothing ties it to a given employer: it stays a
     *linked* source, never a proven one.
@@ -461,22 +461,19 @@ def _employer_decision(host: str, hint: str, reasons: list[str]) -> tuple[str, s
         return "verified", "confirmed", record.id
 
     label = core_label(host)
-    reasons.append(f"Domaine d'employeur : {domain} (hôte observé : {host}).")
-    if hint:
-        if names_match(hint, label):
-            reasons.append(f"Le domaine « {label} » correspond à l'employeur annoncé « {hint} ».")
-            reasons.append(
-                f"Preuve : « registry:employer:{domain} » (domaine de l'employeur ; "
-                "aucun enregistrement curaté ne couvre ce domaine)."
-            )
-            return "verified", "confirmed", f"registry:employer:{domain}"
+    reasons.append(f"Domaine d'employeur non répertorié : {domain} (hôte observé : {host}).")
+    if hint and not names_match(hint, label):
         reasons.append(
             f"Le domaine « {label} » ne correspond pas à l'employeur annoncé « {hint} » : incohérence."
         )
         return "contradictory", "mismatch", None
-    reasons.append(
-        "Aucun indice d'employeur fourni : le domaine n'est rattaché à aucune preuve d'employeur."
-    )
+    if hint:
+        reasons.append(
+            f"Le nom de domaine « {label} » ressemble à l'employeur annoncé « {hint} », "
+            "mais cette ressemblance ne prouve pas que le site lui appartient."
+        )
+    else:
+        reasons.append("Aucun indice ne rattache ce domaine à un employeur connu.")
     return "unverified", "unknown", None
 
 
@@ -629,11 +626,12 @@ def check_trust(
         reasons.append("Lien non chiffré (http) : il ne peut pas être considéré comme vérifié.")
         status = "unverified"
 
-    if port not in {None, 80, 443} and status == "verified":
+    if port not in {None, 80, 443}:
         reasons.append(
-            f"Port non standard ({port}) : un lien de publication officielle n'utilise pas de port dédié."
+            f"Port non standard ({port}) : ce lien ne peut pas être considéré comme une preuve officielle."
         )
-        status = "unverified"
+        if status == "verified":
+            status = "unverified"
 
     return _result(status, provider, canonical_host, employer_match, evidence, reasons, checked_at)
 

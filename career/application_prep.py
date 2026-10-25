@@ -161,6 +161,13 @@ _CHECKS: tuple[dict[str, Any], ...] = (
 )
 
 
+def _is_unknown_sentinel(text: str) -> bool:
+    return normalized_text(text).strip(" .:;-") in {
+        "unknown", "inconnu", "inconnue", "not specified", "unspecified",
+        "not provided", "non precise", "non renseigne", "non renseignee",
+    }
+
+
 def _tokens(text: str) -> list[str]:
     return [
         token
@@ -189,6 +196,11 @@ def extract_requirements(job: dict[str, Any]) -> list[dict[str, str]]:
     def add(text: Any, source: str) -> None:
         statement = clean_text(text, limit=MAX_TEXT_LENGTH)
         if len(statement) < 4:
+            return
+        # API defaults and imported records often use a sentinel for an
+        # absent requirement. It is metadata, not employer evidence and must
+        # never become a profile match or a CV action.
+        if _is_unknown_sentinel(statement):
             return
         if any(statement.casefold() == existing["text"].casefold() for existing in items):
             return
@@ -232,14 +244,11 @@ def extract_requirements(job: dict[str, Any]) -> list[dict[str, str]]:
             if len(items) >= MAX_REQUIREMENTS:
                 break
     languages = clean_text(job.get("languages_required"), limit=400)
-    if languages:
+    if languages and not _is_unknown_sentinel(languages):
         add(f"Langues requises : {languages}", "languages_required")
     eligibility = clean_text(job.get("eligibility_requirement"), limit=400)
-    if eligibility:
+    if eligibility and not _is_unknown_sentinel(eligibility):
         add(f"Éligibilité : {eligibility}", "eligibility_requirement")
-    role_level = clean_text(job.get("role_level"), limit=200)
-    if role_level:
-        add(f"Niveau visé : {role_level}", "role_level")
     return items
 
 
@@ -304,6 +313,8 @@ def _canonical_requirements(intelligence: Mapping[str, Any] | None) -> list[dict
         identifier = clean_text(record.get("id"), limit=80)
         text = clean_text(record.get("text"), limit=MAX_TEXT_LENGTH)
         if not identifier or not text:
+            continue
+        if _is_unknown_sentinel(text):
             continue
         canonical.append(
             {

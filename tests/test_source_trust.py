@@ -103,13 +103,14 @@ def test_decision_is_deterministic_and_replayable():
     assert first.checked_at == FIXED_CLOCK
 
 
-def test_a_legitimate_employer_domain_outside_the_four_ats_is_not_rejected():
+def test_an_unregistered_employer_lookalike_domain_is_never_proven_by_its_name():
     result = check_trust("https://www.acme-corp.com/careers/stage-finance",
                          employer_hint="Acme Corp", clock=lambda: FIXED_CLOCK)
-    assert result.status == "verified"
+    assert result.status == "unverified"
     assert result.provider == "employer"
     assert result.canonical_host == "acme-corp.com"
-    assert result.registry_evidence == "registry:employer:acme-corp.com"
+    assert result.registry_evidence is None
+    assert any("ne prouve pas" in reason for reason in result.reasons)
 
 
 def test_a_lookalike_domain_is_never_verified():

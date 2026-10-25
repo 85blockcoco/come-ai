@@ -25,6 +25,22 @@ def test_blank_optional_fields_do_not_invent_empty_requirements() -> None:
     assert extract_requirements({"languages_required": "", "eligibility_requirement": ""}) == []
 
 
+def test_unknown_sentinels_never_become_requirements_or_profile_evidence() -> None:
+    assert extract_requirements({
+        "eligibility_requirement": "unknown",
+        "languages_required": "not specified",
+        "role_level": "Internship",
+    }) == []
+    result = prepare_application(
+        {"eligibility": "unknown", "skills": "unknown"},
+        {},
+        {"requirements": "unknown", "eligibility_requirement": "unknown"},
+    )
+    assert result["requirements"] == []
+    assert result["matched_elements"] == []
+    assert result["cv_action_plan"] == []
+
+
 def test_description_requirements_quote_source_and_stop_at_other_section() -> None:
     description = (
         "Requirements:\nExcel modelling and valuation skills.\n"
