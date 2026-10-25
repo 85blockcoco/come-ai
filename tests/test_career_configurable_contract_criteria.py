@@ -304,6 +304,8 @@ def test_configurable_fields_survive_the_real_http_request_model(tmp_path):
     app = FastAPI()
     app.include_router(create_career_router(service))
     with TestClient(app) as client:
+        defaults = client.get("/api/career/stage-search").json()["brief"]
+        assert defaults["contract_types"] == ["stage"]
         response = client.put("/api/career/stage-search", json={
             "contract_types": ["cdd", "vie"], "start_months": [2, 12],
             "minimum_stage_duration_months": 8, "education_preference": "any"})
