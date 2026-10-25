@@ -17,13 +17,13 @@ The original checklist was generated for `AI-Excel-Agent-application-sprint`; th
 - T005-T044 are implemented and covered by the existing variant, coverage, kit, API, UI and pipeline tests.
 - T045, T047-T057 are implemented/adapted and covered with synthetic Canva-equivalent PDFs, including a split experience continued on page two. Coordinate extraction uses the existing `pypdf` visitor API rather than adding `pdfplumber`; no dependency was added.
 - T046 remains open for a real personal CV; synthetic fixtures were used instead. No personal CV was read.
-- T058 current exact candidate run at `2bb5d9221afc21efbd90c1aa6d691b46e21a0baa` (the full suite ran on the byte-identical worktree immediately before commit): **2,971 passed, 2 skipped, 0 failed in 204.65 s** (`COME_AI_DIAGNOSTICS_OFFLINE=1`, full suite). The two skipped macOS nested-sandbox tests were invoked separately on this SHA but remained skipped because the runner detects an already active sandbox. Earlier sandbox passes were on `6a8f02f`, not this exact SHA. The previous load-sensitive deduplication failure is historical and did not recur in this full run.
-- T059 current targeted criteria matrix on `2bb5d92`: **187 passed** across contract defaults, explicit contract choices, qualification, Stage Hunter and exploration. The focused UX/integration matrix also passed **19 tests** (Career stale-exploration, profile imports, Dev Kit integration and active-run resume); the full suite covers Spec 003 feature tests.
-- T060 has verified synthetic Career browser flow through exploration, prep, explicit language, kit and persisted tracking after restart. The profile-import review UI was separately exercised in Chrome from an API-seeded synthetic PDF. Browser file selection itself remains unverified because the Chrome extension cannot access local file URLs in this setup; end-to-end quickstart remains open.
-- T061 has a repeatable offline harness at `scripts/benchmark_career_spec003.py`. Latest candidate run: sprint 150 median 1,407.4 ms (target <500 ms, **miss**); kit median 213.0 ms (target <2,000 ms, pass); pipeline with 50 offers median 90.4 ms (target <200 ms, pass); PDF extraction plus CV analysis median 14.6 ms (target <3,000 ms, pass; 4 synthetic experiences detected). Timing varies under machine load; sprint threshold remains open.
-- T063 is complete for this feature: this Quickstart now uses current test paths, the actual local data contract and a reproducible benchmark command; implementation modules contain their interface/local-only docstrings.
-- T065 (formal Constitution checklist) and T066 (merge readiness) remain open.
-- `ruff check .`, `git diff --check`, and JavaScript syntax checks pass. `ruff format --check .` reports 221 pre-existing files would be reformatted; no repository-wide formatting was applied. The changed Python files pass `ruff format --check`.
+- T058 current code run at `25bec6d6237df7e577bf28d0d88291e6c9a76c41`: **2,973 passed, 2 skipped, 0 failed in 347.21 s** (`COME_AI_DIAGNOSTICS_OFFLINE=1`). The two skipped macOS sandbox tests were invoked separately on an earlier SHA but were skipped by the active outer sandbox in this campaign; no current-runner real-sandbox pass is claimed.
+- T059 focused Career criteria/search/deduplication matrix on the current implementation: **282 passed in 38.34 s**. The complete suite also includes the Spec 003 feature, Dev Kit active-cycle resume and Career import tests.
+- T060 remains open. The current Chrome smoke verified route rendering, target defaults, qualification messaging and manual-only safeguards with synthetic data, but did not complete a click-through from source exploration to persisted application tracking. Local browser file selection is also unverified.
+- T061 has a repeatable synthetic offline harness at `scripts/benchmark_career_spec003.py`. Latest run: sprint 150 median 1,639.6 ms (target <500 ms, **miss**); kit median 251.5 ms (target <2,000 ms, pass); pipeline 50 offers median 144.2 ms (target <200 ms, pass); PDF analysis median 18.0 ms (target <3,000 ms, pass; 4 synthetic experiences). Sprint performance remains open.
+- T063 is complete for the tested synthetic/API contracts and benchmark command; this plan records the latest measured limits and open acceptance work.
+- T065 (formal Constitution checklist) and T066 (merge readiness) remain open. A real CV was not opened; no assertion about personal-CV validation is made.
+- `ruff check .`, `git diff --check`, JavaScript syntax checks and compileall pass. A repo-wide formatter was not run; formatting is not marked complete.
 
 ## Format: `[ID] [P?] [Story?] Description with file path`
 
@@ -178,15 +178,13 @@ The original checklist was generated for `AI-Excel-Agent-application-sprint`; th
 
 **Purpose**: Improvements affecting multiple user stories, validation, and delivery readiness
 
-- [x] T058 [P] **Full test suite pass** — Latest exact candidate run: 2,971 passed, 2 skipped, 0 failed; two sandbox checks remain environment-skipped on this SHA.
-- [x] T059 [P] **New feature integration tests** — Feature and integration suites are included in the 2,971-pass full candidate run; the latest additional UX/API matrix passed 19 tests.
-- [ ] T060 [P] **Quickstart validation** — Execute manual validation per `quickstart.md`: sprint queue → prep → kit → pipeline → Canva import, verify all SC-001 through SC-010
-- [ ] T061 [P] **Performance benchmarks** — Reproducible results are logged above; sprint build remains above its 500 ms target at 150 candidates
-- [ ] T062 [P] **Linting & formatting** — Global Ruff check and targeted formatting validation still required; no repository-wide format churn
-- [x] T063 [P] **Documentation updates** — Reconcile this Quickstart and the local parser/design record with the implemented pypdf, CV kit, pipeline and benchmark contracts
-- [x] T064 **End-to-end regression test** — Added `test_full_career_http_journey_explore_to_persisted_manual_kit` in `tests/test_career_explorer_web.py`: synthetic offer discovery → prep → explicit English CV variant kit → persisted tracking after service restart, with automatic submission asserted false
-- [ ] T065 **Constitution compliance check** — Verify: no cloud calls in core pipeline (Principle II), provenance on all displayed facts (Principle IV), tests pass before commit (Principle V), work in isolated branch (Principle VI), pure functions preferred (Principle VII)
-- [ ] T066 **Prepare merge request** — Ensure `git diff --check` clean, no uncommitted changes in worktree, all tests green, ready for `GO merge application sprint` approval
+- [ ] T060 [P] **Quickstart validation** — Complete a current-revision browser journey from discovery through qualification, prep, kit, tracking and persistence; route/render smoke alone does not verify all SC-001 through SC-010.
+- [ ] T061 [P] **Performance benchmarks** — Latest reproducible run is logged in plan.md; sprint build remains above its 500 ms target at 150 candidates.
+- [ ] T062 [P] **Linting & formatting** — Global Ruff, JavaScript syntax, compileall and diff checks pass; formatting policy/targeted check remains open to avoid unrelated churn.
+- [x] T063 [P] **Documentation updates** — This plan and status record now match measured synthetic results and outstanding acceptance gaps.
+- [x] T064 **End-to-end regression test** — The full suite includes the existing synthetic HTTP journey test from exploration to a persisted manual kit; this is HTTP integration coverage, not a browser E2E claim.
+- [ ] T065 **Constitution compliance check** — Formal checklist has not been completed for the current candidate.
+- [ ] T066 **Prepare merge request** — Candidate is not ready: sprint benchmark misses target; browser click-through, formatting decision and exact-runner sandbox verification remain open.
 
 ---
 

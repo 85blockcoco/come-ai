@@ -4,26 +4,23 @@ Date: 2026-10-25. This is an in-progress record; claims below are limited to com
 
 ## Candidate snapshot (current at 2026-10-25)
 
-- Source repository: `/Users/comedelavenne/AI-Excel-Agent`.
-- Source checkout: `agent/cvboost-04-ats` at `3e4f96959934f0fabe73470433fb8e22db85b75a`.
-- Source checkout has 93 status entries (3 tracked modifications, 90 untracked); no unmerged index entries. These are preserved and were not used as a candidate source.
-- The source repository reports 1,116 local refs and 1,072 registered worktrees. No branch/worktree deletion or cleanup was performed.
-- Protected base selected: committed `main` at `2e52575e0011a14825559f3037a794a6659f5465`, the latest committed base observed in this local repository. This is a conservative base, not a claim that main is stable.
-- Isolated repository: `candidate/`; active Git worktree: `candidate-worktree/`, branch `codex/v3-stable-consolidation`, rooted at `origin/main` `2e52575e0011a14825559f3037a794a6659f5465`.
-- Current candidate HEAD: `2bb5d9221afc21efbd90c1aa6d691b46e21a0baa` on `codex/v3-stable-consolidation`, **49 commits ahead of `origin/main`**. The full suite ran immediately before commit on a byte-identical tree. The candidate worktree is clean after this status update. `main` and the dirty historical source checkout remain unchanged.
-- Latest integration adds explicit Career profile-import approval, shared sprint context and CV-analysis reuse, Pipeline snapshot reuse, cached fit marker regexes, coordinate-aware private PDF/DOCX/TXT CV import while retaining Markdown import support, an internship-only default contract filter with other contracts still selectable, and a reproducible synthetic Spec 003 benchmark. It advances targeted UX/performance but the full global consolidation remains incomplete and is not merge-ready.
-- Exact candidate-code offline full suite on `2bb5d9221afc21efbd90c1aa6d691b46e21a0baa` (same code bytes as the immediately pre-commit run): **2,971 passed, 2 skipped, 0 failed in 204.65s**. The two skipped nested macOS sandbox tests were invoked separately on this SHA but remained skipped because this runner detects an already active sandbox; the earlier separate passes were on `6a8f02f`, so they are not attributed to this SHA. Career benchmark on this code: sprint 150 median 1,407.4 ms (500 ms target missed); kit 213.0 ms, pipeline 50 offers 90.4 ms, and synthetic PDF analysis 14.6 ms all met their listed thresholds.
-- No commits, ref updates, or working-tree edits were made to source `main` or the dirty source checkout. No destructive Git operation was used.
+- Source repository: `/Users/comedelavenne/AI-Excel-Agent`; source checkout `agent/cvboost-04-ats` at `3e4f96959934f0fabe73470433fb8e22db85b75a`. Its 93 dirty status entries and all source files were preserved.
+- Protected base: committed `origin/main` `2e52575e0011a14825559f3037a794a6659f5465`, used as a conservative ancestry base only.
+- Candidate worktree: `candidate-worktree/`, branch `codex/v3-stable-consolidation`, currently at code commit `25bec6d6237df7e577bf28d0d88291e6c9a76c41`, **54 commits ahead of `origin/main`**. No `main` operation was performed.
+- Recent user-facing changes: Stage-only initial contract selection; stale Career explorations return users to saved offers; active Dev Kit cycle resumes polling after page reload; private CV import retains Markdown and uses coordinate-aware parsing; current PDF transformation matrices are applied; generic Project Finance job titles are not mistaken for a Projects section.
+- Full offline candidate suite on code SHA `25bec6d`: **2,973 passed, 2 skipped, 0 failed in 347.21s**. Both skipped tests require real nested macOS sandboxes; the active outer sandbox prevents that verification.
+- Focused Career criteria/search/deduplication matrix: **282 passed in 38.34s**. Separate browser/DevKit focused set before the last Career changes: 19 passed.
+- Latest synthetic benchmark (`python scripts/benchmark_career_spec003.py`): sprint 150 median 1,639.6 ms (500 ms target missed); kit 251.5 ms, pipeline 50 offers 144.2 ms, PDF extraction + analysis 18.0 ms (four synthetic experiences), all meeting their recorded thresholds.
+- `ruff check .`, JavaScript syntax checks, `compileall` for `career`, `devkit`, `data`, and `git diff --check` passed. No repository-wide formatting was run.
+- Chrome rendered `/career` and `/career#career/stagehunter` from a synthetic local app with external networking blocked. It showed Stage as the only initial selection, the 2027-01-01 target date, six-month minimum, France/Paris exclusions and no-auto-apply language; a synthetic Paris/example.test offer was marked non-conforming and missing dates remained “à vérifier”. This was a route/render smoke, not a complete browser journey or real-source search.
+- No personal CV, `.env` or API key was read. The candidate is **not merge-ready**: sprint performance, full browser acceptance and exact-runner sandbox validation remain open.
 
 ## Latest Career / Dev Kit UX verification (2026-10-25)
 
-- Private CV import lot: Markdown fallback preserved; coordinate-aware extraction used for PDF/DOCX/TXT. Synthetic two-column PDF test checks detected experience entries; no personal files or network providers used. The dedicated import tests passed (3), included in the exact full-suite result above.
-- Career stale-exploration recovery: `career_static/career.js` switches to saved offers when criteria changed and explicitly says old results are stale; regression test asserts old matches are never shown as current.
-- Dev Kit active-cycle resume: `v5_static/evolution.js` resumes polling the server-reported active job on page load; `tests/test_evolution_web.py` covers refresh/reload and completion.
-- Latest focused integration command covered `tests/test_evolution_web.py`, `tests/test_career_search_ux.py`, `tests/integration/test_career_profile_import_flow.py`, and `tests/test_devkit_integration.py`: **19 passed in 6.31s**. Additional focused Career/Dev Kit set: **79 passed in 11.54s**.
-- `ruff check .` passed. Small changed-file formatter checks passed. JavaScript syntax checks passed for `career_static/career.js`, `v5_static/evolution.js`, and `v5_static/devkit.js`. `compileall` completed for existing `career`, `devkit`, and `data` directories; the attempted optional `excel` and `app.py` paths do not exist in this candidate.
-- The two separate real macOS sandbox commands were attempted on this SHA and pytest skipped both due to the outer sandbox; no current-SHA real-sandbox pass is claimed.
-- Candidate browser smoke on loopback used synthetic profile/offer data, temporary storage and blocked external networking. Chrome rendered `/career` and `/career#career/stagehunter`, showing the 2027-01-01 start date, six-month minimum, France/Paris exclusions, unknown-location review and manual-only application notice. The synthetic Paris/example.test listing was correctly marked non-conforming with source contradiction; missing dates stayed “à vérifier”. This verified routes and rendered UI, not a complete click-through or real-source search.
+- The Markdown import regression and coordinate-aware synthetic PDF import passed in the full suite. No personal CV was opened.
+- `career_static/career.js` recovers saved offers when criteria changed; `v5_static/evolution.js` resumes a server-reported active Developer Kit cycle. Their respective regression tests passed in the full suite.
+- Current full-suite result and synthetic benchmark are recorded above.
+- Chrome route/render smoke was limited to synthetic data and loopback. It did not exercise real online sources or complete the application journey in the browser.
 
 ## Initial contribution matrix
 
