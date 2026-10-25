@@ -1,9 +1,9 @@
 # SPEC-032 — Mode hors-ligne & cache local
 
 **Mission** : CVBOOST-67 (SPEC-032)
-**Branche de travail** : `worker/cvboost-67-1792962374897`
+**Branche de travail** : `worker/cvboost-67-1792965306227`
 **Branche de livraison demandée** : `agent/spec-032-offline-cache`
-**Base** : `main` (worktree orchestrateur, commit `a472872`)
+**Base** : `8fe62ab` (worktree orchestrateur, branche `worker/cvboost-67-1792965306227`)
 **Date** : 2026-10-25
 **Auteur** : Worker CVBOOST-67
 
@@ -159,15 +159,22 @@ Exemple de réponse hors-ligne :
   instance protège lecture/écriture.
 * **Un test préexistant ajusté** : `tests/test_career_agent.py` attendait
   6 familles de préférences alors que `career/service.py` en seed 14 depuis
-  une mission antérieure. L'assertion est passée à 14 (correctif déjà présent
-  dans le worktree principal, non commité) ; aucun comportement produit n'est
+  le commit `cd0e5e8` (`JOB_FAMILIES`) : ce test était donc rouge sur la base
+  `8fe62ab`. L'assertion est alignée sur 14 ; aucun comportement produit n'est
   modifié.
 
 ## 8. Vérifications
 
 ```text
-.venv/bin/python -m pytest -q tests/test_offline_mode.py  → 46 passed
-.venv/bin/python -m pytest -q                             → 1554 passed, 1 skipped
-.venv/bin/python -m ruff check .                          → All checks passed
+python -m pytest -q tests/test_offline_mode.py            → 46 passed
+python -m pytest -q tests/test_offline_mode.py tests/test_career_agent.py → 85 passed
+python -m pytest -q                                       → 1554 passed, 1 skipped (466 s)
+python -m ruff check .                                    → All checks passed
+./checklist_codex.sh secrets / injection / lint           → TOUT VERT
 git diff --check                                          → CLEAN
 ```
+
+Le seul test ignoré (`tests/test_offer_summary_exhaustiveness.py`) l'est pour
+une raison préexistante (script/base absents de l'environnement), sans lien
+avec ce lot. Suite complète rejouée sous charge (2 autres workers en parallèle),
+d'où la durée.
