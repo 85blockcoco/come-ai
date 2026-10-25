@@ -1,0 +1,72 @@
+{
+  "offer_id": "job_synthetic_share_030",
+  "profile": {
+    "id": 1,
+    "display_name": "Camille Exemple",
+    "contact_email": "camille.exemple@example.invalid",
+    "contact_phone": "+33 6 00 00 00 00",
+    "linkedin_url": "https://www.linkedin.com/in/camille-exemple",
+    "education": "Master Finance — Université Synthétique",
+    "experience": "Stage analyse financière — Banque Fictive",
+    "skills": "Modélisation Excel, Python, analyse financière",
+    "languages": "Français, anglais",
+    "eligibility": "compatible",
+    "target_companies": "Banque Fictive",
+    "notes": "Note personnelle privée : ne jamais partager.",
+    "created_at": "2026-09-01T08:00:00+00:00",
+    "updated_at": "2026-10-01T08:00:00+00:00",
+    "readiness": {"score": 80, "blocking": []}
+  },
+  "job": {
+    "id": "job_synthetic_share_030",
+    "company": "Banque Synthétique",
+    "title": "Stagiaire M&A",
+    "job_family": "M&A / Investment Banking",
+    "city": "Paris",
+    "country": "France",
+    "employment_type": "Stage",
+    "role_level": "Junior",
+    "duration_months": 4,
+    "start_date": "2027-02-01",
+    "end_date": "2027-05-31",
+    "deadline_date": "2026-12-15",
+    "posted_date": "2026-10-01",
+    "requirements": "Modélisation Excel.\nAnglais courant.",
+    "languages_required": "Français, anglais",
+    "eligibility_requirement": "Convention de stage obligatoire",
+    "official_url": "https://careers.example.test/jobs/synthetic-42",
+    "source_status": "open",
+    "personal_note": "Note personnelle privée sur cette offre.",
+    "shortlisted": true,
+    "description_original": "Description publique synthétique de l’offre.",
+    "calendar_reasons": ["deadline_soon"],
+    "scoring": {"score": 88, "blocking_constraints": []},
+    "application": {
+      "id": "app_synthetic_share_030",
+      "stage": "ready_to_apply",
+      "receipt_status": "not_submitted",
+      "approval_granted": true
+    }
+  },
+  "application": {
+    "id": "app_synthetic_share_030",
+    "job_id": "job_synthetic_share_030",
+    "stage": "ready_to_apply",
+    "receipt_status": "not_submitted",
+    "approval_granted": true,
+    "confirmation_reference": "REF-PRIVEE-030",
+    "personal_note": "Note privée de suivi.",
+    "checklist_json": "{\"cv_reviewed\": true}",
+    "events": [
+      {
+        "event_type": "application_created",
+        "detail": "private detail",
+        "created_at": "2026-10-01T08:00:00+00:00"
+      }
+    ],
+    "company": "Banque Synthétique",
+    "title": "Stagiaire M&A",
+    "created_at": "2026-10-01T08:00:00+00:00",
+    "updated_at": "2026-10-02T08:00:00+00:00"
+  }
+}

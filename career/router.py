@@ -723,6 +723,26 @@ def create_career_router(
         await local(lambda: service.delete_interview_session(session_id))
         return {"deleted": True}
 
+    @router.get("/api/career/jobs/{job_id}/share-view")
+    async def job_share_view(job_id: str) -> Any:
+        """Read-only, whitelisted projection of one offer (no private field)."""
+        return await local(lambda: service.share_view(job_id))
+
+    @router.post("/api/career/jobs/{job_id}/share-bundle")
+    async def job_share_bundle(job_id: str) -> FileResponse:
+        """Build a sanitised ZIP (manifest + documents) for one offer."""
+        path, _manifest = await run_in_threadpool(service.export_share_bundle, job_id)
+        return FileResponse(
+            path,
+            filename=path.name,
+            media_type="application/zip",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.get("/api/career/share-exports")
+    async def share_exports() -> dict[str, Any]:
+        return await local(lambda: {"share_exports": service.list_share_exports()})
+
     @router.get("/api/career/export/{export_format}")
     async def export_applications(export_format: str) -> FileResponse:
         path = await run_in_threadpool(lambda: service.export_applications(export_format))
