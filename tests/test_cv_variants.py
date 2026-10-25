@@ -138,6 +138,7 @@ def test_job_family_mapping_matches_classification_contract() -> None:
         "FP&A": ["corporate_finance"],
         "Financial Planning": ["corporate_finance"],
         "Treasury": ["corporate_finance"],
+        "Corporate Finance": ["corporate_finance"],
     }
 
 

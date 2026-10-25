@@ -33,6 +33,22 @@ def test_classification_markets_from_keywords_without_family_match() -> None:
     assert result.scores["markets"] == 0.55
 
 
+def test_classification_corporate_finance_family_selects_corporate_finance_variant() -> None:
+    result = classify_variant(
+        {
+            "job_family": "Corporate Finance",
+            "requirements": "Financial reporting, budgeting and Excel.",
+            "qualification": {"provenance": {}},
+        },
+        {"experience": ""},
+        ALL_VARIANTS,
+    )
+
+    assert result.primary_variant.id == "corporate_finance"
+    assert result.scores["corporate_finance"] == 0.7
+    assert "job_family" in result.rationale
+
+
 def test_classification_tie_break_is_deterministic() -> None:
     result = classify_variant({}, {}, ALL_VARIANTS)
 
