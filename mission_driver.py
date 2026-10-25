@@ -320,6 +320,12 @@ def update_mission(mission_id: str, **fields) -> bool:
     mission = get_mission(reg, mission_id)
     if not mission:
         return False
+    # Ne jamais rétrograder une mission déjà prouvée (done + push_verified):
+    # un résultat d'ordre concurrent/perdu ne doit pas écraser une vérification manuelle.
+    if (mission.get("status") == "done" and mission.get("push_verified")
+            and fields.get("status") in ("pending", "failed", "partial")):
+        log(f"🛡️ Mission {mission_id} déjà done+push_verified — écriture '{fields.get('status')}' ignorée")
+        return False
     mission.update(fields)
     save_registry(reg)
     return True
