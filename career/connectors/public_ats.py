@@ -26,6 +26,7 @@ from ..offer_qualification import qualify_offer
 from ..scoring import classify_job_family
 from ..stage_search import default_brief, score_brief_match, validate_brief
 from ..models import clean_text
+from ..source_fields import attach_source_material
 
 
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
@@ -303,9 +304,10 @@ class LeverConnector(PublicATSConnector):
 
     def _normalise_one(self, source: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:
         categories = raw.get("categories") if isinstance(raw.get("categories"), dict) else {}
-        return _common_job(self.provider, source, raw.get("id"), raw.get("text"),
+        job = _common_job(self.provider, source, raw.get("id"), raw.get("text"),
                            raw.get("hostedUrl"), raw.get("applyUrl"), raw.get("descriptionPlain"),
                            categories.get("location"), raw.get("country"), categories.get("commitment"), "")
+        return attach_source_material(job, self.provider, raw, description=job["description_original"])
 
 
 class AshbyConnector(PublicATSConnector):
@@ -339,9 +341,10 @@ class AshbyConnector(PublicATSConnector):
         country = postal.get("addressCountry")
         job_url = raw.get("jobUrl")
         fallback_id = urllib.parse.urlsplit(str(job_url or "")).path.rstrip("/").rsplit("/", 1)[-1]
-        return _common_job(self.provider, source, raw.get("id") or fallback_id, raw.get("title"),
+        job = _common_job(self.provider, source, raw.get("id") or fallback_id, raw.get("title"),
                            job_url, raw.get("applyUrl"), raw.get("descriptionPlain"),
                            location, country, raw.get("employmentType"), raw.get("publishedAt"))
+        return attach_source_material(job, self.provider, raw, description=job["description_original"])
 
 
 class SmartRecruitersConnector(PublicATSConnector):
@@ -386,10 +389,11 @@ class SmartRecruitersConnector(PublicATSConnector):
         # The documented list response's `ref` is an official API detail URL;
         # a human apply link is used when a source supplies one directly.
         official_url = raw.get("applyUrl") or raw.get("ref")
-        return _common_job(self.provider, source, raw.get("id"), raw.get("name"), official_url,
+        job = _common_job(self.provider, source, raw.get("id"), raw.get("name"), official_url,
                            raw.get("applyUrl"), raw.get("description"), location.get("city"),
                            location.get("country"), contract.get("label"), raw.get("releasedDate"),
                            company_name=company.get("name"))
+        return attach_source_material(job, self.provider, raw, description=job["description_original"])
 
 
 def _common_job(provider: str, source: dict[str, Any], job_id: Any, title: Any, official_url: Any,

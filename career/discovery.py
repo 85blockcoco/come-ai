@@ -38,6 +38,7 @@ from .scoring import classify_job_family
 from .stage_search import default_brief, score_brief_match, validate_brief
 from .exploration import classify_internship, criteria_admit
 from .offer_qualification import qualify_offer
+from .source_fields import attach_source_material
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from .job_deduplication import DedupReport
@@ -504,6 +505,7 @@ class GreenhouseJobBoardConnector:
                     "description_original": description,
                     "job_family": classify_job_family(title, description),
                 }
+                job = attach_source_material(job, "greenhouse", raw, description=description)
                 evaluated_count += 1
                 if country_canonical and country_canonical in excluded_codes:
                     # The country is excluded on the source side: the offer is

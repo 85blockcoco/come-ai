@@ -119,6 +119,7 @@ from .offer_intelligence import (
     snapshot_summary,
 )
 from . import offer_intelligence_store
+from . import source_material_store
 from .scoring import classify_job_family, score_job
 from .source_coverage import CoverageRunNotFound, compute_metrics
 from workspace_core import UserFacingError, extract_text, safe_error
@@ -550,6 +551,7 @@ class CareerService:
             # The versioned offer-intelligence snapshot lives beside the offers,
             # never as a new column on the offers themselves.
             offer_intelligence_store.ensure_schema(connection)
+            source_material_store.ensure_schema(connection)
         try:
             os.chmod(self.db_path, 0o600)
         except OSError:
@@ -3392,6 +3394,7 @@ class CareerService:
                 if store_qualification:
                     self._store_qualification_snapshot(connection, job_id, qualification, payload)
                 self._store_offer_intelligence(connection, {**job, "id": job_id}, now=now)
+                source_material_store.store_current(connection, job_id, payload, now=now)
                 created = False
             else:
                 job_id = f"job_{uuid.uuid4().hex}"
@@ -3418,6 +3421,7 @@ class CareerService:
                 if qualification is not None:
                     self._store_qualification_snapshot(connection, job_id, qualification, payload)
                 self._store_offer_intelligence(connection, {**job, "id": job_id}, now=now)
+                source_material_store.store_current(connection, job_id, payload, now=now)
                 created = True
         result = self.get_job(job_id)
         result["created"] = created
@@ -3519,7 +3523,14 @@ class CareerService:
                 raise UserFacingError("Cette offre Career n’existe pas.")
             result = self._serialize_job(row, self._scoring_context())
             self._attach_offer_intelligence(connection, result, full=True)
+            self._attach_source_material(connection, result)
         return result
+
+    @staticmethod
+    def _attach_source_material(connection: sqlite3.Connection, result: dict[str, Any]) -> None:
+        """Expose the exact, attributed source fields as unverified material."""
+        snapshot = source_material_store.load_current(connection, str(result.get("id") or ""))
+        result["source_material"] = snapshot
 
     @staticmethod
     def _attach_offer_intelligence(
@@ -3628,19 +3639,21 @@ class CareerService:
                 except (TypeError, ValueError):
                     payload = {}
                 summaries[identifier] = payload if isinstance(payload, dict) else {}
+            source_material = source_material_store.load_current_all(connection)
         context = self._scoring_context()
         jobs = [self._serialize_job(row, context) for row in rows]
         for job in jobs:
             # The explorer shows the identifiers of the current snapshot: it
-            # never recomputes a requirement on its own.  The summary is the
-            # very same document as the one of the detailed view: only the
-            # version travels beside it, never inside it.
+            # never recomputes a requirement on its own. The summary is the
+            # very same document as the detailed view, while source material
+            # stays a separately labelled set of publisher-provided fields.
             identifier = str(job.get("id") or "")
             summary = summaries.get(identifier)
             job["offer_intelligence_summary"] = summary
             job["offer_intelligence"] = None
             job["offer_intelligence_current"] = identifier in versions
             job["offer_intelligence_version"] = versions.get(identifier)
+            job["source_material"] = source_material.get(identifier)
         source_rank = {"open": 0, "unknown": 1, "closed": 2}
         jobs.sort(
             key=lambda job: (

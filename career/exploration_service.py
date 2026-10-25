@@ -743,6 +743,10 @@ class ExplorationService:
             "eligibility_requirement": clean_text(offer.get("eligibility_requirement"), limit=2_000),
             "description_original": clean_text(offer.get("description_original"), limit=30_000),
         }
+        if isinstance(offer.get("source_fields"), dict):
+            normalized["source_fields"] = offer["source_fields"]
+        if isinstance(offer.get("source_conflicts"), list):
+            normalized["source_conflicts"] = offer["source_conflicts"]
         return normalized
 
     def _qualify_offers(

@@ -977,6 +977,25 @@ function jobCard(job, mode = "discover", qualification = null) {
     const summary = Object.entries(values || {}).map(([source, value]) => `${source}: ${value}`).join(" ; ");
     if (summary) details.append(make("p", `Sources en désaccord sur ${field} : ${summary}`, "job-temporal-warning"));
   });
+  const sourceMaterial = job.source_material?.material || {};
+  const publishedFields = sourceMaterial.source_fields || {};
+  const hasPublishedFields = Object.values(publishedFields).some((fields) => fields && Object.keys(fields).length);
+  if (hasPublishedFields || (sourceMaterial.source_conflicts || []).length) {
+    const published = make("details");
+    published.append(make("summary", "Champs transmis par la source (à vérifier)"));
+    published.append(make("p", "Valeurs conservées telles que reçues du connecteur. Elles ne remplacent pas les faits qualifiés."));
+    Object.entries(publishedFields).slice(0, 8).forEach(([provider, fields]) => {
+      Object.entries(fields || {}).slice(0, 40).forEach(([field, value]) => {
+        const rendered = typeof value === "string" ? value : JSON.stringify(value);
+        published.append(make("p", `${provider}.${field} : ${rendered}`));
+      });
+    });
+    (sourceMaterial.source_conflicts || []).slice(0, 25).forEach((conflict) => {
+      const sourceField = conflict.source_field ? ` (${conflict.source_field})` : "";
+      published.append(make("p", `Contradiction à vérifier${sourceField} : ${conflict.source_value ?? "valeur publiée inconnue"} / ${conflict.description_value ?? "texte inconnu"}${conflict.quote ? ` · « ${conflict.quote} »` : ""}`, "job-temporal-warning"));
+    });
+    card.append(published);
+  }
   if (job.official_url) {
     details.append(make("p", `Origine du lien : ${job.official_source_trust_label || "Source liée, non vérifiée"}`));
     const reason = job.official_source_trust?.reasons?.[0];

@@ -161,6 +161,7 @@ def test_a_run_walks_through_the_real_phases_and_counts_real_work(tmp_path: Path
         stored = service.get_job(service.list_jobs()[0]["id"])
         temporal_facts = stored["qualification_facts"]["temporal_facts"]
         assert stored["qualification_facts"]["source_provenance"]
+        assert stored["source_material"]["material"]["source_fields"]["greenhouse"]["title"] == "Corporate Finance Intern"
         assert stored["qualification_facts"]["source_provenance"][0]["source_id"] == "a1"
         assert any(
             fact["fact_type"] == "start"
