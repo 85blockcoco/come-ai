@@ -2132,6 +2132,7 @@ class CareerService:
         _scoring_context: dict[str, Any] | None = None,
         _cv_analysis: Any | None = None,
         _job: dict[str, Any] | None = None,
+        _qualification: dict[str, Any] | None = None,
         _include_requirements_fit: bool = True,
     ) -> dict[str, Any]:
         """Factual preparation panel for one offer; no model, no invention."""
@@ -2185,7 +2186,11 @@ class CareerService:
                 job, {"facts": approved_profile_facts}
             ).to_dict()
         cv_analysis = _cv_analysis if _cv_analysis is not None else self._current_cv_analysis()
-        qualification = qualify_offer(job).to_dict()
+        qualification = (
+            dict(_qualification)
+            if isinstance(_qualification, dict)
+            else qualify_offer(job).to_dict()
+        )
         fit_job = {
             **job,
             **analysis,
@@ -2319,6 +2324,7 @@ class CareerService:
                     **match["job"],
                     "offer_intelligence": snapshots.get(str(match["job"]["id"])),
                 },
+                _qualification=match.get("qualification"),
                 _include_requirements_fit=False,
             )
             for match in eligible_matches
