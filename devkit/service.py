@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import sys
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -26,6 +27,10 @@ class DeveloperWorkshop:
 
     def __init__(self, project_root: Path, storage_root: Path | None = None, *, busy_check: Callable[[], bool] | None = None):
         self.project_root = project_root.resolve()
+        # The app is already running inside its selected Python environment.
+        # Reuse that exact interpreter for isolated diagnostics instead of
+        # guessing that a second venv exists under every project root.
+        self.python_executable = Path(sys.executable)
         self.storage_root = storage_root or self.project_root / ".devkit"
         if self.storage_root.is_symlink():
             raise KitError("Le dossier de l’atelier doit être un dossier local réel.")
@@ -55,7 +60,9 @@ class DeveloperWorkshop:
             if self._evolution is None:
                 from devkit.evolution_manager import EvolutionManager
 
-                self._evolution = EvolutionManager(self.project_root, self.storage_root)
+                self._evolution = EvolutionManager(
+                    self.project_root, self.storage_root, python_executable=self.python_executable
+                )
             return self._evolution
 
     def start_evolution(self, task_id: str | None = None, *, max_requests: int = 2, max_attempts: int = 2, demo: bool = False) -> dict[str, Any]:
@@ -135,7 +142,7 @@ class DeveloperWorkshop:
             report = run_diagnostics(
                 root,
                 report_dir=self.reports if candidate_id is None else self.storage_root / "candidate_reports" / str(candidate_id),
-                python_executable=self.project_root / ".venv" / "bin" / "python",
+                python_executable=self.python_executable,
                 require_sandbox=candidate_id is not None,
             )
             if candidate_id:

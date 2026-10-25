@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 import time
 import zipfile
 from pathlib import Path
@@ -74,6 +75,7 @@ def test_http_export_issue_and_test_gated_patch_preserve_private_files(tmp_path:
                 # Simulated runner metadata; this test checks transport and
                 # gating, while diagnostics tests exercise the real sandbox.
                 assert kwargs["require_sandbox"] is True
+                assert kwargs["python_executable"] == Path(sys.executable)
                 return {"schema_version": 1, "status": "passed", "sandbox_used": True, "tests_executed": 1, "pytest_receipt_verified": True,
                         "source_fingerprint": source_fingerprint(project_root), "checks": [{"name": "pytest", "status": "passed", "output": "1 passed"}]}
 

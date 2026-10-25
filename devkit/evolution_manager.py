@@ -16,16 +16,18 @@ from workspace_core import read_dotenv
 
 
 class EvolutionManager:
-    def __init__(self, project_root: Path, storage_root: Path):
+    def __init__(self, project_root: Path, storage_root: Path, *, python_executable: Path | None = None):
         self.project_root = project_root
         self.storage_root = storage_root
+        self.python_executable = Path(python_executable or project_root / ".venv" / "bin" / "python")
         self.directory = storage_root / "evolution"
         if self.directory.is_symlink():
             raise KitError("Le dossier d’évolution doit être un dossier local réel.")
         self.directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         from devkit.intelligence_router import create_routed_provider
 
-        self.engine = EvolutionEngine(project_root, storage_root, provider_factory=create_routed_provider)
+        self.engine = EvolutionEngine(project_root, storage_root, python_executable=self.python_executable,
+                                      provider_factory=create_routed_provider)
         self._cancel = threading.Event()
 
     def settings(self) -> ProviderSettings:
@@ -154,7 +156,7 @@ class EvolutionManager:
         )
         _atomic_write(tests / "test_redaction.py", test_code.encode(), 0o600)
         state = demo_dir / "state"
-        engine = EvolutionEngine(root, state, python_executable=self.project_root / ".venv" / "bin" / "python",
+        engine = EvolutionEngine(root, state, python_executable=self.python_executable,
                                  provider_factory=lambda _, settings: create_routed_provider(self.project_root, settings))
         task = engine.store.add_task("Corriger la redaction OpenRouter de Côme AI — démonstration isolée",
             "La fonction safe_error copiée du projet ne masque pas un jeton OpenRouter brut. Ajouter cette protection sans perdre les protections Gemini et chemins existantes. Aucun fichier de tests ne peut être modifié.",
