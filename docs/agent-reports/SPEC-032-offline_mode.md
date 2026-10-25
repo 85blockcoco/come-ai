@@ -170,9 +170,13 @@ python -m pytest -q tests/test_offline_mode.py            → 46 passed
 python -m pytest -q tests/test_offline_mode.py tests/test_career_agent.py → 85 passed
 python -m pytest -q                                       → 1554 passed, 1 skipped (466 s)
 python -m ruff check .                                    → All checks passed
-./checklist_codex.sh secrets / injection / lint           → TOUT VERT
+./checklist_codex.sh all                                  → TOUT VERT
 git diff --check                                          → CLEAN
 ```
+
+`checklist_codex.sh all` passe intégralement ; les étapes 2-4 et 8 sont
+« ignorées » uniquement parce que les worktrees frères (`memory`,
+`study-coach`) ne sont pas montés dans ce worktree, pas à cause de ce lot.
 
 Le seul test ignoré (`tests/test_offer_summary_exhaustiveness.py`) l'est pour
 une raison préexistante (script/base absents de l'environnement), sans lien
