@@ -1,0 +1,20 @@
+{
+  "label": "workspace synthétique SPEC-034 — aucune donnée réelle",
+  "schema_version": 7,
+  "files": {
+    "applications/demo-application.json": {
+      "id": "demo-application-001",
+      "company": "Entreprise Fictive SAS",
+      "role": "Stagiaire analyse financière (démo)",
+      "stage": "to_review",
+      "synthetic": true
+    },
+    "documents/cover-letter-demo.txt": "Lettre de motivation entièrement synthétique pour les tests SPEC-034.\nAucune personne réelle n'est mentionnée.\n",
+    "exports/demo-tracker.csv": "company,role,stage\nEntreprise Fictive SAS,Stagiaire analyse financière (démo),to_review\n",
+    "proofs/offer-demo.json": {
+      "source": "https://example.test/offers/demo-001",
+      "captured_at": "2026-10-20T10:00:00Z",
+      "synthetic": true
+    }
+  }
+}

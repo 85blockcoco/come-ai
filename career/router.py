@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable
 
@@ -15,6 +16,21 @@ from starlette.datastructures import UploadFile
 
 from .profile_import import MAX_PROFILE_IMPORT_BYTES
 from .service import CareerService
+from .workspace_backup import (
+    BACKUP_SCHEMA_VERSION,
+    BackupConflictError,
+    BackupConfirmationRequired,
+    BackupIntegrityError,
+    BackupNotFoundError,
+    BackupSchemaMismatch,
+    UnsafeBackupEntry,
+    WorkspaceBackupError,
+    create_backup,
+    diff_state,
+    manifest_to_dict,
+    plan_to_dict,
+    restore_backup,
+)
 from workspace_core import UserFacingError, to_jsonable
 
 
@@ -142,6 +158,14 @@ class ApplicationChecklistPayload(BaseModel):
 
 class ResetPayload(BaseModel):
     confirmation: str = Field(min_length=1, max_length=100)
+
+
+class WorkspaceRestorePayload(BaseModel):
+    """Explicit consent flags for restoring a workspace archive."""
+
+    confirm: bool = False
+    upgrade: bool = False
+    accept_conflicts: bool = False
 
 
 class ProfileTextImportPayload(BaseModel):
@@ -748,6 +772,111 @@ def create_career_router(
     async def reset_data(payload: ResetPayload) -> dict[str, bool]:
         await local(lambda: service.reset_personal_data(payload.confirmation))
         return {"deleted": True}
+
+    # -- SPEC-034: workspace backup / restore --------------------------------
+    # Archives stay next to the migration snapshots but in their own
+    # sub-directory, so ``reset_personal_data`` never removes them and the
+    # workspace walk never archives its own backups.
+    workspace_backup_dir = service.backups_dir / "workspace"
+
+    def _workspace_backup_path(filename: str) -> Path:
+        name = Path(filename).name
+        if name != filename or not name.endswith(".zip") or name.startswith("."):
+            raise HTTPException(status_code=400, detail="Nom de sauvegarde invalide.")
+        candidate = (workspace_backup_dir / name).resolve()
+        if candidate.parent != workspace_backup_dir.resolve() or not candidate.is_file():
+            raise HTTPException(status_code=404, detail="Sauvegarde introuvable.")
+        return candidate
+
+    def _workspace_backup_http_error(error: WorkspaceBackupError) -> HTTPException:
+        if isinstance(error, BackupNotFoundError):
+            status_code = 404
+        elif isinstance(error, (BackupConflictError, BackupConfirmationRequired, BackupSchemaMismatch)):
+            status_code = 409
+        elif isinstance(error, (BackupIntegrityError, UnsafeBackupEntry)):
+            status_code = 422
+        else:
+            status_code = 400
+        plan = getattr(error, "plan", None)
+        detail: str | dict[str, Any] = str(error)
+        if plan is not None:
+            detail = {"message": str(error), "plan": plan_to_dict(plan)}
+        return HTTPException(status_code=status_code, detail=detail)
+
+    @router.get("/api/career/workspace/backups")
+    async def list_workspace_backups() -> Any:
+        def _list() -> dict[str, Any]:
+            workspace_backup_dir.mkdir(parents=True, exist_ok=True)
+            items = []
+            for path in sorted(workspace_backup_dir.glob("*.zip")):
+                if not path.is_file():
+                    continue
+                stat_result = path.stat()
+                items.append(
+                    {
+                        "filename": path.name,
+                        "size_bytes": stat_result.st_size,
+                        "modified_at": datetime.fromtimestamp(stat_result.st_mtime, tz=UTC).isoformat().replace("+00:00", "Z"),
+                    }
+                )
+            return {"backups": items, "schema_version": BACKUP_SCHEMA_VERSION}
+
+        return await local(_list)
+
+    @router.post("/api/career/workspace/backups", status_code=201)
+    async def create_workspace_backup() -> Any:
+        def _create() -> dict[str, Any]:
+            workspace_backup_dir.mkdir(parents=True, exist_ok=True)
+            path, manifest = create_backup(service.data_dir, schema_version=BACKUP_SCHEMA_VERSION)
+            return {
+                "filename": path.name,
+                "size_bytes": path.stat().st_size,
+                "download_url": f"/api/career/workspace/backups/{path.name}",
+                "manifest": manifest_to_dict(manifest),
+            }
+
+        try:
+            return await local(_create)
+        except WorkspaceBackupError as error:
+            raise _workspace_backup_http_error(error) from error
+
+    @router.post("/api/career/workspace/backups/{filename}/plan")
+    async def plan_workspace_restore(filename: str) -> Any:
+        path = _workspace_backup_path(filename)
+        try:
+            plan_payload = await local(lambda: plan_to_dict(diff_state(path, service.data_dir)))
+        except WorkspaceBackupError as error:
+            raise _workspace_backup_http_error(error) from error
+        return {"filename": filename, "plan": plan_payload}
+
+    @router.post("/api/career/workspace/backups/{filename}/restore")
+    async def restore_workspace_backup(filename: str, payload: WorkspaceRestorePayload) -> Any:
+        path = _workspace_backup_path(filename)
+        try:
+            plan_payload = await local(
+                lambda: plan_to_dict(
+                    restore_backup(
+                        path,
+                        service.data_dir,
+                        confirm=payload.confirm,
+                        upgrade=payload.upgrade,
+                        accept_conflicts=payload.accept_conflicts,
+                    )
+                )
+            )
+        except WorkspaceBackupError as error:
+            raise _workspace_backup_http_error(error) from error
+        return {"filename": filename, "restored": True, "plan": plan_payload}
+
+    @router.get("/api/career/workspace/backups/{filename}")
+    async def download_workspace_backup(filename: str) -> FileResponse:
+        path = _workspace_backup_path(filename)
+        return FileResponse(
+            path,
+            filename=path.name,
+            media_type="application/zip",
+            headers={"Cache-Control": "no-store"},
+        )
 
     return router
 
