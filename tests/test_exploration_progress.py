@@ -108,6 +108,7 @@ def wait_until(predicate, timeout: float = 10.0) -> bool:
 
 def test_a_run_walks_through_the_real_phases_and_counts_real_work(tmp_path: Path) -> None:
     boards = {"alpha": [posting("a1"), posting("a2")], "beta": [posting("b1")]}
+    boards["alpha"][0]["content"] = "Synthetic finance internship. Starting January 2027 for six months."
     service, transport = service_with(tmp_path, boards)
     explorations = ExplorationService(service)
     try:
@@ -129,6 +130,14 @@ def test_a_run_walks_through_the_real_phases_and_counts_real_work(tmp_path: Path
         assert final["offers_persisted"] == 3
         assert len(transport.calls) == 2
         assert len(service.list_jobs()) == 3
+        stored = service.get_job(service.list_jobs()[0]["id"])
+        temporal_facts = stored["qualification_facts"]["temporal_facts"]
+        assert any(
+            fact["fact_type"] == "start"
+            and fact["value"] == {"day": None, "month": 1, "year": 2027}
+            and fact["quote"] == "Starting January 2027"
+            for fact in temporal_facts
+        )
         # The published snapshot is the one of this run.
         assert service.get_exploration()["run_id"] == final["run_id"]
     finally:

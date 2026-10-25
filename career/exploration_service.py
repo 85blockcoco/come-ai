@@ -54,6 +54,7 @@ from .exploration_run import (
     ExplorationRunStore,
 )
 from .models import canonical_url, clean_text, utc_now
+from .offer_dates import extract_offer_dates
 from .offer_qualification import qualify_offer
 from .stage_search import score_brief_match
 
@@ -764,6 +765,9 @@ class ExplorationService:
                 excluded_cities=brief.get("excluded_cities"),
                 require_known_location=brief.get("require_known_location", False),
             ).to_dict()
+            qualification["temporal_facts"] = [
+                fact.to_dict() for fact in extract_offer_dates(job)
+            ]
             if qualification.get("target_status") == "non_conforming":
                 continue
             if qualification.get("contract_type") == "unknown" and not classification.get("evidence"):
