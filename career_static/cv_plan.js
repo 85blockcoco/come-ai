@@ -411,7 +411,10 @@ function renderCvPlanItem(entry, job, coverage, reviewed, context) {
     copy.append(
       make(
         "p",
-        item.blocking_note || "Blocage factuel : n’inscris pas cette exigence dans ton CV tant qu’aucune preuve vérifiable n’existe côté profil.",
+        item.blocking_note ||
+          (item.profile_evidence
+            ? "Une preuve liée à cette exigence existe, mais elle ne la couvre pas entièrement. Présente uniquement les faits prouvés et ne la reformule pas comme une conformité."
+            : "Blocage factuel : n’inscris pas cette exigence dans ton CV tant qu’aucune preuve vérifiable n’existe côté profil."),
         "scoring-disclaimer cv-plan-blocking-note",
       ),
     );
