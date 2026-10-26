@@ -2281,14 +2281,7 @@ class CareerService:
     def _gaps_with_requirement_ids(
         gaps: list[Any], job: dict[str, Any]
     ) -> list[dict[str, Any]]:
-        """Attach the canonical requirement identifier to every CV gap.
-
-        The gap keeps its own wording; the identifier is the one of the
-        versioned snapshot, so the matching panel points at the very same
-        requirement as the explorer, the detailed view, the cover letter and
-        the application checklist.  A gap without a canonical counterpart
-        simply has no identifier: none is ever invented.
-        """
+        """Attach the canonical requirement identifier to every CV gap."""
         payload = [serialize_gap(gap) for gap in gaps]
         snapshot = job.get("offer_intelligence")
         if not isinstance(snapshot, Mapping):
@@ -2302,6 +2295,38 @@ class CareerService:
             if identifier:
                 gap["requirement_id"] = identifier
         return payload
+
+    def build_apply_kit(
+        self,
+        job_id: str,
+        language: str = "fr",
+        variant: str | None = None,
+        profile: Any = None,
+    ) -> dict[str, Any]:
+        if isinstance(language, Mapping) and profile is None:
+            profile = language
+            language = "fr"
+        if profile is None:
+            profile = self.get_profile()
+        from dataclasses import asdict
+
+        from career.apply_kit import build_apply_kit as _build
+
+        job = self.get_job(job_id)
+        try:
+            intake = self.get_intake()
+        except Exception:
+            intake = {}
+        kit = _build(
+            job_id,
+            profile,
+            job=job,
+            intake=intake,
+            service=self,
+            variant=variant,
+            language=language,
+        )
+        return asdict(kit)
 
     def get_application_sprint(self, *, limit: int = 12) -> dict[str, Any]:
         # Ranking and preparation normalize many of the same short job and
