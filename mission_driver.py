@@ -602,7 +602,10 @@ def main_loop():
                         log(f"🔄 Mission {mission_id} ÉCHOUÉE (tentative {attempt}/{max_attempts}), retry...")
                         reg = load_registry()
                         mission = get_mission(reg, mission_id)
-                        if mission:
+                        if mission and mission.get("push_verified"):
+                            log(f"🛡️ Mission {mission_id} done+push_verified — pas de retry")
+                            mission = None
+                        elif mission:
                             mission["status"] = "pending"
                             save_registry(reg)
                             # Cooldown 5 min pour cette mission
@@ -630,7 +633,9 @@ def main_loop():
                         log(f"❌ Mission {mission_id} ÉCHOUÉE DÉFINITIVEMENT après {max_attempts} tentatives")
                         reg = load_registry()
                         mission = get_mission(reg, mission_id)
-                        if mission:
+                        if mission and mission.get("push_verified"):
+                            log(f"🛡️ Mission {mission_id} done+push_verified — statut 'failed' ignoré")
+                        elif mission:
                             mission["status"] = "failed"
                             save_registry(reg)
             else:
