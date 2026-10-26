@@ -226,6 +226,19 @@ class InterviewAnswerPayload(BaseModel):
     answer: str = Field(min_length=3, max_length=6_000)
 
 
+class InterviewSimWorksheetPayload(BaseModel):
+    """One STAR draft scored locally; no provider is called."""
+
+    job_id: str = Field(default="", max_length=80)
+    question_id: str = Field(default="", max_length=200)
+    seed: int = Field(default=0, ge=0, le=1_000_000)
+    situation: str = Field(default="", max_length=4_000)
+    task: str = Field(default="", max_length=4_000)
+    action: str = Field(default="", max_length=4_000)
+    result: str = Field(default="", max_length=4_000)
+    evidence_checked: list[str] = Field(default_factory=list, max_length=20)
+
+
 class CVAnalyzePayload(BaseModel):
     """Request payload for CV structural analysis."""
     text: str = Field(min_length=1, max_length=200_000)
@@ -279,6 +292,7 @@ def create_career_router(
             "discovery": capabilities["discovery"],
             "scoring": capabilities["scoring"],
             "interview_coach": capabilities["interview_coach"],
+            "interview_sim": capabilities["interview_sim"],
             "calendar_export": capabilities["calendar_export"],
             "stage_search": capabilities["stage_search"],
         }
@@ -722,6 +736,109 @@ def create_career_router(
     async def delete_interview_session(session_id: str) -> dict[str, bool]:
         await local(lambda: service.delete_interview_session(session_id))
         return {"deleted": True}
+
+    @router.get("/api/career/interview-sim/questions/{job_id}")
+    async def interview_sim_questions(
+        job_id: str,
+        seed: int = Query(default=0, ge=0, le=1_000_000),
+        limit: int = Query(default=16, ge=12, le=40),
+    ) -> Any:
+        """Deterministic STAR question set built from one saved offer."""
+
+        from .interview_sim import build_question_set
+
+        def build() -> dict[str, Any]:
+            job = service.get_job(job_id)
+            questions = build_question_set(job, seed=seed, limit=limit)
+            return {
+                "job_id": job["id"],
+                "company": job.get("company", ""),
+                "title": job.get("title", ""),
+                "seed": seed,
+                "kinds": list(dict.fromkeys(question.kind for question in questions)),
+                "questions": [question.to_dict() for question in questions],
+                "disclaimer": (
+                    "Questions générées localement à partir de l’offre ; elles ne prédisent pas "
+                    "le contenu réel de l’entretien."
+                ),
+            }
+
+        return await local(build)
+
+    @router.get("/api/career/interview-sim/worksheet/{job_id}/{question_id}")
+    async def interview_sim_worksheet(
+        job_id: str,
+        question_id: str,
+        seed: int = Query(default=0, ge=0, le=1_000_000),
+    ) -> Any:
+        """Blank STAR worksheet with the evidence checklist for one question."""
+
+        from .interview_sim import MAX_QUESTIONS, build_question_set, build_worksheet
+
+        def build() -> dict[str, Any]:
+            job = service.get_job(job_id)
+            questions = build_question_set(job, seed=seed, limit=MAX_QUESTIONS)
+            question = next((item for item in questions if item.id == question_id), None)
+            if question is None:
+                raise UserFacingError("Cette question d’entraînement n’existe pas pour cette offre.")
+            worksheet = build_worksheet(question)
+            return {
+                "job_id": job["id"],
+                "question": question.to_dict(),
+                "worksheet": worksheet.to_dict(),
+                "evidence_checklist": [
+                    {"label": item, "checked": False} for item in question.evidence_needed
+                ],
+                "disclaimer": (
+                    "Fiche STAR d’entraînement locale ; aucune réponse n’est envoyée ni évaluée "
+                    "par un recruteur."
+                ),
+            }
+
+        return await local(build)
+
+    @router.post("/api/career/interview-sim/worksheet")
+    async def score_interview_sim_worksheet(payload: InterviewSimWorksheetPayload) -> Any:
+        """Score the structure of one STAR draft; bounded and fully local."""
+
+        from .interview_sim import MAX_QUESTIONS, build_question_set, build_worksheet, self_score
+        from .interview_sim import StarWorksheet
+
+        def build() -> dict[str, Any]:
+            question = None
+            if payload.job_id:
+                job = service.get_job(payload.job_id)
+                questions = build_question_set(job, seed=payload.seed, limit=MAX_QUESTIONS)
+                question = next((item for item in questions if item.id == payload.question_id), None)
+                if question is None:
+                    raise UserFacingError("Cette question d’entraînement n’existe pas pour cette offre.")
+            elif not payload.question_id:
+                raise UserFacingError("Sélectionne une question avant de remplir la fiche STAR.")
+
+            if question is not None:
+                worksheet = build_worksheet(
+                    question,
+                    situation=payload.situation,
+                    task=payload.task,
+                    action=payload.action,
+                    result=payload.result,
+                    evidence_checked=payload.evidence_checked,
+                )
+            else:
+                worksheet = StarWorksheet(
+                    question_id=payload.question_id,
+                    situation=payload.situation,
+                    task=payload.task,
+                    action=payload.action,
+                    result=payload.result,
+                    evidence_checked=payload.evidence_checked,
+                )
+            return {
+                "worksheet": worksheet.to_dict(),
+                "self_score": self_score(worksheet, question=question),
+            }
+
+        return await local(build)
 
     @router.get("/api/career/export/{export_format}")
     async def export_applications(export_format: str) -> FileResponse:

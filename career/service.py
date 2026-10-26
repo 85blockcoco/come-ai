@@ -4505,6 +4505,15 @@ class CareerService:
                 "provider_required": False,
                 "recruitment_probability": False,
             },
+            "interview_sim": {
+                "enabled": True,
+                "local_only": True,
+                "min_questions_per_offer": 12,
+                "kinds": ["behavior", "technical", "motivation", "company"],
+                "star_worksheets": True,
+                "provider_required": False,
+                "recruitment_probability": False,
+            },
             "discovery": {
                 "enabled": True,
                 "providers": ["greenhouse"],
