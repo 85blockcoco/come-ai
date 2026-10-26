@@ -666,8 +666,26 @@
       "dependencies": [
         "10"
       ],
-      "status": "pending",
-      "description": "Protection GitHub main : branch protection rules, required status checks (ruff, pytest, js tests, browser E2E, migrations, secrets, privacy, no-auto-apply, provenance, deterministic DOCX, smoke test). PR obligatoire, merge only if all green."
+      "status": "done",
+      "description": "Protection GitHub main : branch protection rules, required status checks (ruff, pytest, js tests, browser E2E, migrations, secrets, privacy, no-auto-apply, provenance, deterministic DOCX, smoke test). PR obligatoire, merge only if all green.",
+      "completed_at": "2026-10-26T01:55:59.819377",
+      "verified": "push origin worker/cvboost-37-1792974228931 (caf3505) + 9 tests verts (contrôle manuel)",
+      "push_verified": true,
+      "worker_result": {
+        "status": "done",
+        "files_created": [
+          "career/ci_guards.py",
+          "career/privacy.py",
+          "career/no_auto_apply.py",
+          "career/provenance.py",
+          "career/migrations.py",
+          "career/document_export.py",
+          ".github/workflows/ci.yml",
+          "tests/test_ci_guards.py",
+          "tests/e2e/"
+        ],
+        "output": "SPEC-007 CI/CD + protection main + E2E Playwright"
+      }
     },
     {
       "id": "38",
