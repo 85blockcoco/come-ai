@@ -1,0 +1,15 @@
+{
+  "status": "done",
+  "files_created": [
+    "career/faq_mining.py",
+    "career/router.py",
+    "career/service.py",
+    "tests/test_faq_mining.py",
+    "tests/fixtures/faq_offers_synthetic.json",
+    "docs/agent-reports/SPEC-031-faq_mining.md",
+    "tests/test_geo_ranking.py"
+  ],
+  "output": "Minage FAQ sectorielle livré : clustering d'intentions déterministe, termes fréquents, questions probables et réponses issues uniquement des preuves verbatim du profil, avec routes REST POST/GET et tests synthétiques adversarial.",
+  "logs": "pytest -q tests/test_faq_mining.py → 9 passed\npytest -q tests/test_geo_ranking.py tests/test_faq_mining.py → 36 passed\npytest -q → 1553 passed, 1 skipped\nruff check . → All checks passed\ngit diff --check → propre",
+  "error": null
+}
