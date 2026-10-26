@@ -21,7 +21,7 @@ from contextlib import contextmanager
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, Mapping
 
 from .models import (
     AVAILABILITY_STATES,
@@ -2120,6 +2120,38 @@ class CareerService:
         )
         self._prep_cache.add(job_id)
         return analysis
+
+    def build_apply_kit(
+        self,
+        job_id: str,
+        language: str = "fr",
+        variant: str | None = None,
+        profile: Any = None,
+    ) -> dict[str, Any]:
+        if isinstance(language, Mapping) and profile is None:
+            profile = language
+            language = "fr"
+        if profile is None:
+            profile = self.get_profile()
+        from dataclasses import asdict
+
+        from career.apply_kit import build_apply_kit as _build
+
+        job = self.get_job(job_id)
+        try:
+            intake = self.get_intake()
+        except Exception:
+            intake = {}
+        kit = _build(
+            job_id,
+            profile,
+            job=job,
+            intake=intake,
+            service=self,
+            variant=variant,
+            language=language,
+        )
+        return asdict(kit)
 
     def get_application_sprint(self, *, limit: int = 12) -> dict[str, Any]:
         """Prioritise a bounded batch for local preparation, without sending.

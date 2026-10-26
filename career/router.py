@@ -180,6 +180,13 @@ class ApplicationKitPayload(BaseModel):
     variant: str = Field(default="m_a", pattern="^(m_a|markets|corporate_finance)$")
 
 
+class ApplyKitPayload(BaseModel):
+    """Optional body for the one-call apply kit endpoint."""
+
+    language: str = Field(default="fr", min_length=2, max_length=16)
+    variant: str | None = Field(default=None, pattern="^(m_a|markets|corporate_finance)$")
+
+
 class ApplicationKitTextsPayload(BaseModel):
     """Edited kit texts; each field stays optional so saves can be partial."""
 
@@ -627,6 +634,15 @@ def create_career_router(
             lambda: service.create_application_kit(
                 payload.job_id, payload.language, payload.variant
             )
+        )
+
+    @router.post("/api/career/apply-kit/{job_id}")
+    async def apply_kit(job_id: str, payload: ApplyKitPayload | None = None) -> Any:
+        """One call: ready-to-review application dossier for one offer."""
+        language = payload.language if payload is not None else "fr"
+        variant = payload.variant if payload is not None else None
+        return await local(
+            lambda: service.build_apply_kit(job_id, language, variant)
         )
 
     @router.get("/api/career/applications/{application_id}/kit")
