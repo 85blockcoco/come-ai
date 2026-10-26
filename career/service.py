@@ -21,7 +21,7 @@ from contextlib import contextmanager
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, Mapping
 
 from .models import (
     AVAILABILITY_STATES,
@@ -54,7 +54,6 @@ from .application_studio import (
     render_application_html,
     scan_kit_placeholders,
 )
-from .apply_kit import build_apply_kit as _module_build_apply_kit
 from .calendar_export import build_deadline_calendar_ics
 from .application_dashboard import (
     CHECKLIST_EVENT_TYPE,
@@ -2122,28 +2121,43 @@ class CareerService:
         self._prep_cache.add(job_id)
         return analysis
 
-    def build_apply_kit(self, job_id: str, profile: Any = None) -> dict[str, Any]:
-        identifier = clean_text(job_id, limit=80)
-        job = self.get_job(identifier)
+    def build_apply_kit(
+        self,
+        job_id: str,
+        language: str = "fr",
+        variant: str | None = None,
+        profile: Any = None,
+    ) -> dict[str, Any]:
+        if isinstance(language, Mapping) and profile is None:
+            profile = language
+            language = "fr"
         if profile is None:
             profile = self.get_profile()
-        intake = self._scoring_context().get("intake", {}) or {}
-        kit = _module_build_apply_kit(
-            identifier,
+        from dataclasses import asdict
+
+        from career.apply_kit import build_apply_kit as _build
+
+        job = self.get_job(job_id)
+        try:
+            intake = self.get_intake()
+        except Exception:
+            intake = {}
+        kit = _build(
+            job_id,
             profile,
-            service=self,
             job=job,
             intake=intake,
+            service=self,
+            variant=variant,
+            language=language,
         )
-        from .apply_kit import to_dict
-
-        return to_dict(kit)
+        return asdict(kit)
 
     def get_apply_kit(self, job_id: str, profile: Any = None) -> dict[str, Any]:
-        return self.build_apply_kit(job_id, profile)
+        return self.build_apply_kit(job_id, profile=profile)
 
     def apply_kit(self, job_id: str, profile: Any = None) -> dict[str, Any]:
-        return self.build_apply_kit(job_id, profile)
+        return self.build_apply_kit(job_id, profile=profile)
 
     def get_application_sprint(self, *, limit: int = 12) -> dict[str, Any]:
         """Prioritise a bounded batch for local preparation, without sending.

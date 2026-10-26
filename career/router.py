@@ -242,6 +242,13 @@ class CVAnalyzeResponse(BaseModel):
     provenance: dict[str, Any]
 
 
+class ApplyKitPayload(BaseModel):
+    """Optional body for the one-call apply kit endpoint."""
+
+    language: str = Field(default="fr", min_length=2, max_length=16)
+    variant: str | None = Field(default=None, pattern="^(m_a|markets|corporate_finance)$")
+
+
 def create_career_router(
     service: CareerService,
     *,
@@ -517,9 +524,13 @@ def create_career_router(
         return await local(lambda: service.get_job_prep(job_id))
 
     @router.post("/api/career/apply-kit/{job_id}")
-    async def apply_kit(job_id: str) -> Any:
-        """Build a ready-to-submit dossier for one offer (SPEC-044)."""
-        return await local(lambda: service.build_apply_kit(job_id))
+    async def apply_kit(job_id: str, payload: ApplyKitPayload | None = None) -> Any:
+        """One call: ready-to-review application dossier for one offer."""
+        language = payload.language if payload is not None else "fr"
+        variant = payload.variant if payload is not None else None
+        return await local(
+            lambda: service.build_apply_kit(job_id, language, variant)
+        )
     @router.get("/api/career/jobs/{job_id}/summary")
     async def job_summary(
         job_id: str,
