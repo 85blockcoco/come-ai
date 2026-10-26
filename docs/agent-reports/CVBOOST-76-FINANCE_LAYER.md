@@ -1,7 +1,7 @@
 # CVBOOST-76 — SPEC-041 — Couche finance (lexique, FAQ, cases techniques)
 
-**Branche :** `agent/spec-041-finance-layer` — **Worktree :** `AI-Excel-Agent-worker-cvboost-76-1793025523699`
-**Statut :** ✅ Terminé — 56 tests hors-ligne verts, ruff propre.
+**Branche de livraison :** `worker/cvboost-76-1793025955890` (contenu identique poussé sur `agent/spec-041-finance-layer`) — **Worktree :** `AI-Excel-Agent-worker-cvboost-76-1793025955890`
+**Statut :** ✅ Terminé — 56 tests finance verts, suite complète 1598 passed (2 échecs geo_ranking pré-existants, voir Logs), ruff propre, checklist TOUT VERT.
 
 ## Livré
 
@@ -40,12 +40,18 @@
 
 ```
 .venv/bin/python -m pytest -q tests/test_finance_lexicon.py tests/test_interview_finance.py
-→ 56 passed in 2.10s
-ruff check career/finance_lexicon.py career/interview_finance.py tests/*.py
-→ All checks passed
+→ 56 passed in 4.41s
+ruff check . → All checks passed
+git diff --check → CLEAN
+checklist_codex.sh (VENV_PY=.venv principal) → TOUT VERT
 ```
 
-Suite complète volontairement non lancée (interdiction du contrat de sortie : tests ciblés uniquement).
+Suite complète : `pytest -q` → **1598 passed, 1 skipped, 2 failed**. Les 2 échecs
+(`tests/test_geo_ranking.py::test_ranking_integration_uses_the_total_score`,
+`::test_internship_selection_reports_the_geographic_signal`) sont **pré-existants au
+commit de base 2e52575** (vérifié dans un worktree jetable à ce commit : mêmes 2
+échecs) — régression du filtre pays « Zéro France » (Mission 11/13), hors périmètre
+de la couche finance qui n'ajoute que des fichiers nouveaux.
 
 ## Pistes d'intégration (hors périmètre de cette mission)
 
