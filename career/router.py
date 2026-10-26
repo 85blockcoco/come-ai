@@ -15,6 +15,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
 from .exploration_service import ExplorationService
+from .ats_guide import human_apply_guide
 from .send_confirmation import SendEvidence, parse_sent_datetime
 from .profile_import import MAX_PROFILE_IMPORT_BYTES
 from .offer_dates import extract_offer_dates
@@ -318,6 +319,7 @@ def create_career_router(
             "interview_coach": capabilities["interview_coach"],
             "calendar_export": capabilities["calendar_export"],
             "stage_search": capabilities["stage_search"],
+            "ats_guide": capabilities["ats_guide"],
         }
 
     @router.post("/api/career/cv/analyze")
@@ -488,6 +490,16 @@ def create_career_router(
     @router.get("/api/career/application-pipeline")
     async def application_pipeline() -> Any:
         return await local(service.get_application_pipeline)
+
+    @router.get("/api/career/ats-guide/{job_id}")
+    async def ats_guide(job_id: str) -> Any:
+        def build() -> dict[str, Any]:
+            job = service.get_job(job_id)
+            return {
+                "job_id": job["id"], "company": job.get("company", ""), "title": job.get("title", ""),
+                **human_apply_guide(job).to_dict(), "automated_submission": False,
+            }
+        return await local(build)
 
     @router.get("/api/career/stage-search/explore")
     async def last_stage_exploration() -> Any:

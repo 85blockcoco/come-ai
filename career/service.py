@@ -5505,6 +5505,13 @@ class CareerService:
                 "local_only": True,
                 "invented_facts": False,
             },
+            "ats_guide": {
+                "enabled": True,
+                "local_only": True,
+                "network_requests": False,
+                "automated_submission": False,
+                "platforms": ["greenhouse", "lever", "workday", "smartrecruiters", "recruitcrm", "breezy", "jobvite", "ashby", "ripplematch", "custom"],
+            },
         }
 
     def export_deadline_calendar(self) -> Path:
