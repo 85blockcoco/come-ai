@@ -11,6 +11,7 @@ helpers.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from datetime import date
 from typing import Any, Mapping
 
 from career.application_prep import prepare_application
@@ -41,12 +42,6 @@ _REQUIRED_PROFILE_FIELDS: tuple[str, ...] = (
     "experience",
     "skills",
 )
-
-
-def _as_dict(value: Any) -> dict[str, Any]:
-    if isinstance(value, Mapping):
-        return dict(value)
-    return {}
 
 
 def _job_id_from(job_id: Any, job: Mapping | None) -> str:
@@ -111,7 +106,36 @@ def _answers(profile: Mapping[str, Any], intake: Mapping[str, Any], job: Mapping
     return {key: value for key, value in answers.items() if str(value).strip()}
 
 
-def _readiness(profile: Mapping[str, Any], job: Mapping[str, Any], unverified: list[dict[str, Any]]) -> tuple[int, list[str]]:
+_DEADLINE_WARNING_DAYS = 14
+
+
+def _deadline_note(deadline: str) -> tuple[str, bool]:
+    """Human note for a deadline plus whether it needs immediate attention."""
+
+    text = str(deadline or "").strip()
+    if not text:
+        return "", False
+    try:
+        parsed = date.fromisoformat(text)
+    except ValueError:
+        return text, False
+    days_left = (parsed - date.today()).days
+    if days_left < 0:
+        return f"{text} — échéance dépassée", True
+    if days_left <= _DEADLINE_WARNING_DAYS:
+        return f"{text} — échéance proche ({days_left} j)", True
+    return text, False
+
+
+def _readiness(
+    profile: Mapping[str, Any],
+    job: Mapping[str, Any],
+    unverified: list[dict[str, Any]],
+    *,
+    variant: dict[str, Any] | None,
+    letter: dict[str, Any] | None,
+    deep_link: str | None,
+) -> tuple[int, list[str]]:
     block_reasons: list[str] = []
     score = 100
     for field in _REQUIRED_PROFILE_FIELDS:
@@ -129,24 +153,65 @@ def _readiness(profile: Mapping[str, Any], job: Mapping[str, Any], unverified: l
         count = len(unverified)
         block_reasons.append(f"{count} exigence(s) non étayée(s) dans le profil.")
         score -= min(30, 10 * count)
-    # Offer-level sanity.
-    if not str(job.get("official_url") or "").strip():
+    if variant is None:
+        block_reasons.append("Aucune variante CV n'a pu être sélectionnée.")
+        score -= 20
+    if letter is None:
+        block_reasons.append("Lettre de motivation indisponible.")
+        score -= 15
+    # Offer-level sanity: a dossier is not ready without a place to apply.
+    if not deep_link:
         block_reasons.append("Lien officiel de l'offre manquant.")
         score -= 10
     score = max(0, min(100, score))
     return score, block_reasons
 
 
-def _checklist(profile: Mapping[str, Any], job: Mapping[str, Any], variant: dict[str, Any] | None, letter: dict[str, Any] | None, unverified: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _checklist(
+    profile: Mapping[str, Any],
+    job: Mapping[str, Any],
+    variant: dict[str, Any] | None,
+    letter: dict[str, Any] | None,
+    unverified: list[dict[str, Any]],
+    export_urls: Mapping[str, str],
+) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     items.append({"id": "profile", "label": "Profil candidat complété", "done": all(str(profile.get(f) or "").strip() for f in _REQUIRED_PROFILE_FIELDS), "note": ""})
     items.append({"id": "eligibility", "label": "Autorisation de travail vérifiée", "done": str(profile.get("eligibility") or "").strip().lower() not in ("", "unknown"), "note": ""})
     items.append({"id": "variant", "label": "Variante CV sélectionnée", "done": variant is not None, "note": (variant or {}).get("label", "") if isinstance(variant, dict) else ""})
     items.append({"id": "letter", "label": "Lettre adaptée générée", "done": letter is not None, "note": ""})
+    items.append({
+        "id": "attach_cv",
+        "label": "Joindre le CV au format PDF",
+        "done": False,
+        "note": str(export_urls.get("cv_pdf") or "Export à générer depuis l'application."),
+    })
+    items.append({
+        "id": "attach_letter",
+        "label": "Joindre la lettre au format PDF",
+        "done": False,
+        "note": str(export_urls.get("letter_pdf") or "Export à générer depuis l'application."),
+    })
     items.append({"id": "official_url", "label": "Lien officiel de l'offre vérifié", "done": bool(str(job.get("official_url") or "").strip()), "note": str(job.get("official_url") or "").strip()})
     deadline = str(job.get("deadline_date") or "").strip()
     if deadline:
-        items.append({"id": "deadline", "label": "Date limite vérifiée", "done": False, "note": deadline})
+        note, urgent = _deadline_note(deadline)
+        items.append({
+            "id": "deadline",
+            "label": "Date limite proche à vérifier" if urgent else "Date limite vérifiée",
+            "done": False,
+            "note": note,
+            "urgent": urgent,
+        })
+    start_date = str(job.get("start_date") or "").strip()
+    end_date = str(job.get("end_date") or "").strip()
+    if start_date or end_date:
+        items.append({
+            "id": "dates",
+            "label": "Dates du stage vérifiées",
+            "done": False,
+            "note": f"{start_date or '?'} → {end_date or '?'}",
+        })
     for entry in unverified[:5]:
         req = clean_text(entry.get("requirement"), limit=200)
         items.append({"id": "evidence", "label": f"Preuve à apporter : {req}", "done": False, "note": clean_text(entry.get("note"), limit=200)})
@@ -270,8 +335,22 @@ def build_apply_kit(
             deep_link = value.strip()
             break
 
-    readiness, block_reasons = _readiness(profile, job, unverified)
-    checklist = _checklist(profile, job, variant_payload, letter_payload, unverified)
+    readiness, block_reasons = _readiness(
+        profile,
+        job,
+        unverified,
+        variant=variant_payload,
+        letter=letter_payload,
+        deep_link=deep_link,
+    )
+    checklist = _checklist(
+        profile,
+        job,
+        variant_payload,
+        letter_payload,
+        unverified,
+        export_urls,
+    )
     answers = _answers(profile, intake, job, normalized_language)
 
     return ApplyKit(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
+from career.apply_kit import build_apply_kit
 from career.router import create_career_router
 from career.service import CareerService
 from workspace_core import UserFacingError
@@ -107,9 +109,68 @@ def test_apply_kit_endpoint_smoke(tmp_path: Path):
 
 
 def test_apply_kit_module_dataclass():
-    from career.apply_kit import ApplyKit, build_apply_kit
+    from career.apply_kit import ApplyKit
 
     kit = build_apply_kit("x", {}, job=None)
     assert isinstance(kit, ApplyKit)
     assert kit.readiness == 0
     assert kit.block_reasons
+
+
+def test_apply_kit_checklist_lists_human_steps(tmp_path: Path):
+    service = CareerService(tmp_path)
+    service.update_profile(synthetic_profile())
+    job = service.import_job(synthetic_job())
+    kit = service.build_apply_kit(job["id"])
+
+    items = {item["id"]: item for item in kit["checklist"]}
+    assert items["attach_cv"]["done"] is False
+    assert items["attach_letter"]["done"] is False
+    assert items["submit"]["done"] is False
+    assert "Aucune soumission automatique" in items["submit"]["note"]
+    assert items["deadline"]["done"] is False
+    assert items["dates"]["done"] is False
+    # No submission field/action is ever exposed by the kit itself.
+    assert "submitted" not in kit
+
+
+def test_apply_kit_near_deadline_is_flagged(tmp_path: Path):
+    service = CareerService(tmp_path)
+    service.update_profile(synthetic_profile())
+    near = (date.today() + timedelta(days=3)).isoformat()
+    job = service.import_job(synthetic_job(deadline_date=near))
+    kit = service.build_apply_kit(job["id"])
+
+    deadline_item = next(item for item in kit["checklist"] if item["id"] == "deadline")
+    assert deadline_item["urgent"] is True
+    assert "proche" in deadline_item["note"]
+
+
+def test_apply_kit_answers_and_exports(tmp_path: Path):
+    service = CareerService(tmp_path)
+    service.update_profile(synthetic_profile())
+    job = service.import_job(synthetic_job())
+    kit = service.build_apply_kit(job["id"])
+
+    assert kit["answers"]["display_name"] == "Personne Démo"
+    assert kit["answers"]["education"] == "Master Finance (démo)"
+    assert set(kit["export_urls"]) == {"cv_pdf", "letter_pdf", "cv_docx", "letter_docx"}
+
+
+def test_apply_kit_explicit_variant_override(tmp_path: Path):
+    service = CareerService(tmp_path)
+    service.update_profile(synthetic_profile())
+    job = service.import_job(synthetic_job())
+    kit = service.build_apply_kit(job["id"], variant="markets")
+
+    assert kit["variant"]["id"] == "markets"
+
+
+def test_apply_kit_unknown_job_module_is_clean():
+    kit = build_apply_kit("job_unknown_12345678", synthetic_profile(), job=None)
+
+    assert kit.readiness == 0
+    assert kit.block_reasons == ["Offre inconnue ou introuvable."]
+    assert kit.variant is None
+    assert kit.letter is None
+    assert kit.export_urls == {}
