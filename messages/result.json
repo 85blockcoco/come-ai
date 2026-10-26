@@ -1,0 +1,31 @@
+{
+  "status": "done",
+  "files_created": [
+    ".github/workflows/ci.yml",
+    ".github/branch-protection/main.yml",
+    ".github/branch-protection/apply.sh",
+    "career/document_export.py",
+    "career/ci_guards.py",
+    "career/privacy.py",
+    "career/no_auto_apply.py",
+    "career/provenance.py",
+    "career/migrations.py",
+    "career/docx.py",
+    "package.json",
+    "scripts/js_smoke.mjs",
+    "tests/e2e/conftest.py",
+    "tests/e2e/utils.py",
+    "tests/e2e/test_offer_to_kit.py",
+    "tests/e2e/test_profile_incomplete.py",
+    "tests/e2e/test_anti_invention.py",
+    "tests/e2e/test_no_auto_apply.py",
+    "tests/e2e/fixtures/offers/synthetic_offer.json",
+    "tests/e2e/fixtures/profiles/synthetic_profile.json",
+    "tests/smoke/test_app_boot.py",
+    "tests/test_ci_guards.py",
+    "docs/agent-reports/SPEC-007-CI_CD_PROTECTION.md"
+  ],
+  "output": "CI à 11 contrôles requis alignés sur la protection de main, documentation + script d'application GitHub, 4 parcours E2E Playwright et contrôles CI (privacy, no-auto-apply, provenance, migrations, DOCX déterministe).",
+  "logs": "E2E_REQUIRE_BROWSER=1 pytest -q tests/e2e → 4 passed (Chromium réel, 120.83s)\npytest -q tests/test_ci_guards.py tests/smoke → 9 passed\npytest -q tests/test_career_application_kit.py tests/integration/test_us3_pipeline.py tests/test_qualification_snapshot_persistence.py → 27 passed\npython -m career.{privacy,no_auto_apply,provenance,migrations} check → OK\npython -m career.docx check-deterministic → OK (0fa996e1d377…)\nnpm test → OK — 5 fichiers JS valides\nruff check . → All checks passed\ngit diff --check → propre",
+  "error": null
+}
