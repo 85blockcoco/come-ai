@@ -14,6 +14,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
 from .profile_import import MAX_PROFILE_IMPORT_BYTES
+from .ats_guide import human_apply_guide
 from .service import CareerService
 from workspace_core import UserFacingError, to_jsonable
 
@@ -281,6 +282,7 @@ def create_career_router(
             "interview_coach": capabilities["interview_coach"],
             "calendar_export": capabilities["calendar_export"],
             "stage_search": capabilities["stage_search"],
+            "ats_guide": capabilities["ats_guide"],
         }
 
     @router.post("/api/career/cv/analyze")
@@ -515,6 +517,23 @@ def create_career_router(
     @router.get("/api/career/jobs/{job_id}/prep")
     async def job_prep(job_id: str) -> Any:
         return await local(lambda: service.get_job_prep(job_id))
+
+    @router.get("/api/career/ats-guide/{job_id}")
+    async def ats_guide(job_id: str) -> Any:
+        """Guide humain d'application : local, sans requête sortante, sans envoi."""
+
+        def build() -> dict[str, Any]:
+            stored_job = service.get_job(job_id)
+            guide = human_apply_guide(stored_job).to_dict()
+            return {
+                "job_id": stored_job.get("id", job_id),
+                "company": stored_job.get("company", ""),
+                "title": stored_job.get("title", ""),
+                **guide,
+                "automated_submission": False,
+            }
+
+        return await local(build)
 
     @router.get("/api/career/jobs/{job_id}/summary")
     async def job_summary(
