@@ -87,17 +87,28 @@ def _load_24h():
 
 
 def _running_workers():
-    out = subprocess.run(["ps", "-ax", "-o", "etime=,command="], capture_output=True, text=True, timeout=10).stdout
+    out = subprocess.run(["ps", "-ax", "-o", "pid=,etime=,command="], capture_output=True, text=True, timeout=10).stdout
     import re as _re
     rows = []
     for line in out.splitlines():
-        m = _re.search(r"\s*(\d+):\d+:\d+\s+(.*)", line)  # etime H:MM:SS
-        if m and "opencode run --auto" in m.group(2):
-            h = int(m.group(1))
-            o = _re.search(r"--title Worker-(cvboost-\d+)-", m.group(2))
-            mdl = _re.search(r"-m (\S+)", m.group(2))
-            rows.append(dict(start=h * 3600, mission=o.group(1) if o else "?",
-                             model=mdl.group(1) if mdl else "?"))
+        if "opencode run --auto" not in line:
+            continue
+        o = _re.search(r"--title Worker-cvboost-(\d+)-", line)
+        mdl = _re.search(r"-m (\S+)", line)
+        et = _re.search(r"^\s*\d+\s+(\S+)", line)
+        if not o:
+            continue
+        secs = 0
+        if et:
+            t = et.group(1)
+            if "-" in t:
+                d, t = t.split("-"); secs += int(d) * 86400
+            parts = t.split(":")
+            if len(parts) == 3:
+                secs += int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+            elif len(parts) == 2:
+                secs += int(parts[0]) * 60 + int(parts[1])
+        rows.append(dict(start=secs, mission=o.group(1), model=mdl.group(1) if mdl else "?"))
     return rows
 
 
