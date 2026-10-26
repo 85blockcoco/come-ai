@@ -175,7 +175,16 @@ def ranking_key(job: dict[str, Any], match: dict[str, Any]) -> tuple[Any, ...]:
     digest = hashlib.sha256(json.dumps(job, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
     status = (job.get("qualification") or {}).get("target_status")
     eligibility_order = {"conforming": 0, "to_verify": 1, "non_conforming": 2}.get(status, 0)
-    return (eligibility_order, -(int(match["score"]) if match.get("score") is not None else 0),
+    # SPEC-043 : une offre marquée NON ÉLIGIBLE par le vérificateur
+    # d'éligibilité (career.eligibility) sort du classement par défaut —
+    # elle reste visible en fin de liste pour apprendre pourquoi.  Sans
+    # annotation « eligibility », aucun changement d'ordre.
+    from .eligibility import VERDICT_ORDER, VERDICT_TO_VERIFY
+    eligibility_verdict = job.get("eligibility")
+    verdict_order = VERDICT_ORDER.get(
+        eligibility_verdict.get("verdict"), VERDICT_ORDER[VERDICT_TO_VERIFY]
+    ) if isinstance(eligibility_verdict, dict) else 0
+    return (eligibility_order, verdict_order, -(int(match["score"]) if match.get("score") is not None else 0),
             (match.get("education_access") or {}).get("priority_rank", 2),
             str(job.get("company") or "").casefold(), str(job.get("source_name") or ""),
             str(job.get("source_id") or ""), canonical_url(job.get("official_url")), digest)

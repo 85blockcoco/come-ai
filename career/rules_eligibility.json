@@ -1,0 +1,39 @@
+{
+  "schema": "eligibility_rules",
+  "version": 1,
+  "profile_approved": false,
+  "rules": {
+    "contract": {
+      "enabled": true,
+      "accepted": ["internship", "apprenticeship"]
+    },
+    "duration": {
+      "enabled": true,
+      "minimum_months": 3
+    },
+    "education": {
+      "enabled": true,
+      "profile_level": "",
+      "profile_fields": []
+    },
+    "work_authorization": {
+      "enabled": true,
+      "status": "unknown",
+      "work_permits": [],
+      "visa_sponsorship_needed": null
+    },
+    "location": {
+      "enabled": true,
+      "countries": [],
+      "excluded_countries": ["FR"],
+      "excluded_cities": [],
+      "work_modes": []
+    },
+    "languages": {
+      "enabled": true,
+      "profile_levels": {}
+    }
+  },
+  "updated_at": "",
+  "notes": "Tickets remplis par la personne, jamais devinés. profile_approved=true débloque le verdict ÉLIGIBLE. work_permits : codes ISO-2 (ex. \"DE\") ou régions fermées (\"EU\", \"EEA\"). visa_sponsorship_needed : true / false / null (= non rempli). profile_level : bac, bac+2, bac+3, bac+4, bac+5, doctorat. work_modes : onsite, hybrid, remote. profile_levels : {\"anglais\": \"c1\", ...} (niveaux CECRL ou native)."
+}
