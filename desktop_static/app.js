@@ -284,6 +284,8 @@
           : null,
         el("button", { class: "chip green", type: "button", title: "Préparer le dossier (CV+lettre+checklist)",
           onclick: (event) => { event.stopPropagation(); showApplyKit(item.job_id, item.title); } }, "préparer"),
+        el("button", { class: "chip", type: "button", title: "Guide de candidature (plateforme ATS)",
+          onclick: (event) => { event.stopPropagation(); showAtsGuide(item.job_id, item.title); } }, "guide"),
         el("button", { class: "chip green", type: "button", title: "Réponses types copiables",
           onclick: (event) => { event.stopPropagation(); showQuickAnswers(item.job_id, item.title); } }, "réponses"),
         el("button", { class: "chip", type: "button", title: "Marquer envoyé (confirmation humaine)",
@@ -578,6 +580,31 @@
           c.note ? el("span", { class: "quick-label" }, c.note) : null,
         ))),
       kit.deep_link ? el("a", { class: "ghost-btn", href: kit.deep_link, target: "_blank", rel: "noopener", style: "margin-top:12px;display:inline-flex" }, "Ouvrir le formulaire officiel ↗") : null,
+      el("button", { class: "ghost-btn", type: "button", onclick: () => overlay.remove(), style: "margin-top:12px" }, "Fermer"),
+    );
+    overlay.append(box);
+    document.body.append(overlay);
+  }
+
+  async function showAtsGuide(jobId, title) {
+    let g;
+    try { g = await api(`/api/career/ats-guide/${jobId}`); }
+    catch (e) { alert(`Guide indisponible : ${e.message}`); return; }
+    const overlay = el("div", { class: "modal-overlay", onclick: (ev) => { if (ev.target === overlay) overlay.remove(); } });
+    const box = el("div", { class: "card modal-box" },
+      el("div", { class: "section-title", style: "margin-top:0" }, el("h2", {}, `Guide ATS — ${g.title || title || "offre"}`), el("span", { class: "hint" }, `${g.platform || "custom"} · ${g.estimated_minutes || "?"} min`)),
+      el("div", { class: "offer-tags", style: "margin-bottom:10px" },
+        g.needs_account ? el("span", { class: "chip amber" }, "compte requis") : el("span", { class: "chip green" }, "pas de compte"),
+        el("span", { class: "chip violet" }, `${(g.steps || []).length} étapes`),
+      ),
+      el("div", { class: "quick-list" }, (g.steps || []).map((st, i) =>
+        el("div", { class: "quick-row", style: "grid-template-columns: 28px minmax(0,1fr)" },
+          el("span", { class: "action-rank" }, String(i + 1)),
+          el("div", {}, el("div", { class: "quick-value" }, st.title || st.name || `Étape ${i + 1}`),
+            st.fields?.length ? el("div", { class: "quick-label" }, `champs : ${st.fields.join(", ")}`) : null,
+            st.tips ? el("div", { class: "note tight", style: "margin-top:4px" }, st.tips) : null),
+        ))),
+      g.apply_url ? el("a", { class: "ghost-btn", href: g.apply_url, target: "_blank", rel: "noopener", style: "margin-top:12px;display:inline-flex" }, "Ouvrir le formulaire officiel ↗") : null,
       el("button", { class: "ghost-btn", type: "button", onclick: () => overlay.remove(), style: "margin-top:12px" }, "Fermer"),
     );
     overlay.append(box);
