@@ -147,6 +147,16 @@ class ResetPayload(BaseModel):
     confirmation: str = Field(min_length=1, max_length=100)
 
 
+class TranslationDetectPayload(BaseModel):
+    text: str = Field(default="", max_length=20_000)
+
+
+class TranslationBuildPayload(BaseModel):
+    variant_id: str = Field(min_length=1, max_length=40)
+    target_lang: str = Field(min_length=2, max_length=5, pattern="^(en|de|es|fr)$")
+    arena_available: bool = False
+
+
 class ProfileTextImportPayload(BaseModel):
     source_kind: str = Field(default="linkedin_text", min_length=2, max_length=40)
     text: str = Field(min_length=1, max_length=100_000)
@@ -816,14 +826,9 @@ def create_career_router(
         return {"deleted": True}
 
     # --- Translation variants (SPEC-033) -------------------------------------
-
-    class TranslationDetectPayload(BaseModel):
-        text: str = Field(default="", max_length=20_000)
-
-    class TranslationBuildPayload(BaseModel):
-        variant_id: str = Field(min_length=1, max_length=40)
-        target_lang: str = Field(min_length=2, max_length=5, pattern="^(en|de|es|fr)$")
-        arena_available: bool = False
+    # Payload models live at module level (see top of file): with
+    # ``from __future__ import annotations`` FastAPI cannot resolve nested
+    # classes and would treat ``payload`` as a required query parameter.
 
     @router.post("/api/career/translation-variants/detect")
     async def translation_detect(payload: TranslationDetectPayload) -> Any:
@@ -838,21 +843,16 @@ def create_career_router(
 
     @router.post("/api/career/translation-variants/build", status_code=201)
     async def translation_build(payload: TranslationBuildPayload) -> Any:
+        import dataclasses
+
         from career.translation_variants import build_variant
 
-        report = await local(
-            lambda: build_variant(
-                payload.variant_id,
-                payload.target_lang,
-                arena_available=payload.arena_available,
-            )
-        )
-        return {
-            "offer_lang": report.offer_lang,
-            "mode": report.mode,
-            "translated_fields": report.translated_fields,
-            "untranslated": report.untranslated,
-        }
+        report = await local(lambda: dataclasses.asdict(build_variant(
+            payload.variant_id,
+            payload.target_lang,
+            arena_available=payload.arena_available,
+        )))
+        return report
 
     return router
 

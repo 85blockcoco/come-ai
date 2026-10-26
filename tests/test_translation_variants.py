@@ -233,3 +233,38 @@ def test_lexicon_is_immutable() -> None:
     lexicon = load_lexicon("en")
     with pytest.raises(AttributeError):
         lexicon.lang = "fr"  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# REST smoke tests — endpoints served through create_app()
+# ---------------------------------------------------------------------------
+
+class _FakeAgent:
+    def provider_status(self) -> dict[str, object]:
+        return {}
+
+    def ask(self, message: str, *, allow_writes: bool) -> dict[str, object]:
+        return {"answer": "sans appel fournisseur", "tool_events": [], "provider": "Faux modèle"}
+
+
+def test_rest_smoke_detect_and_build(tmp_path: Path) -> None:
+    from fastapi.testclient import TestClient
+
+    from come_ai_web import create_app
+
+    client = TestClient(create_app(tmp_path, agent_override=_FakeAgent()))
+    detect = client.post(
+        "/api/career/translation-variants/detect",
+        json={"text": SYNTHETIC_OFFER_EN},
+    )
+    assert detect.status_code == 200
+    assert detect.json()["detected_lang"] == "en"
+
+    build = client.post(
+        "/api/career/translation-variants/build",
+        json={"variant_id": "m_a", "target_lang": "en", "arena_available": False},
+    )
+    assert build.status_code == 201
+    body = build.json()
+    assert body["mode"] == "lexicon"
+    assert body["offer_lang"] in {"en", "de", "es", "fr"}

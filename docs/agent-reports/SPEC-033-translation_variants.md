@@ -49,3 +49,23 @@ Couverture :
 - Arena (SPEC-017) non implémentée — le chemin `mode="arena"` existe mais redirige vers le lexique aujourd'hui (tous les champs sont repris ; aucun champ n'est laissé non traduit).
 - Le lexique couvre les termes de variante uniquement, pas le contenu complet du CV/lettre (le générateur de kit `application_studio.py` produit déjà du contenu multilingue via `_factual_sections` — ce module complète la couche variante).
 - Aucune donnée réelle n'a été utilisée — uniquement des fixtures synthétiques.
+
+## Suite — audit 26/10/2026 (smoke REST)
+
+Audit des endpoints REST : les routes `/api/career/translation-variants/detect`
+et `/build` répondaient systématiquement 422.
+
+Causes corrigées :
+1. Les modèles `TranslationDetectPayload` / `TranslationBuildPayload` étaient
+   imbriqués dans `create_career_router()` ; avec `from __future__ import
+   annotations`, FastAPI ne les résout pas comme Body et exige un query param
+   `payload`. Déplacés au niveau module (comme `ResetPayload`).
+2. `local()` applique `to_jsonable`, qui stringifie les dataclasses — le
+   `VariantReport` revenait en `str`. Le handler sérialise désormais via
+   `dataclasses.asdict`.
+
+Ajout : `test_rest_smoke_detect_and_build` (detect 200 + build 201, mode lexicon).
+Résultats : `pytest tests/test_translation_variants.py` → 31 passed ; ruff clean.
+Suite complète : 3005 passed, 1 failed préexistant et hors périmètre
+(`test_evolution_web.py::test_evolution_candidate_result_has_direct_review_handoff`,
+échoue aussi sans mes modifications).
