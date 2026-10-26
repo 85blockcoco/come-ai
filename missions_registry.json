@@ -1685,7 +1685,8 @@
    "status": "done",
    "priority": "P0",
    "description": "Réponses types copiables pour formulaires d'offre",
-   "retry_of": null
+   "retry_of": null,
+   "push_verified": true
   },
   {
    "id": "83",
@@ -1792,6 +1793,12 @@
   }
  ],
  "execution_order": [
+  [
+   "81",
+   "82",
+   "83",
+   "84"
+  ],
   [
    "85",
    "86",
