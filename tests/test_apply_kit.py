@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from datetime import date, timedelta
 
 import pytest
 from fastapi import FastAPI
@@ -102,6 +103,22 @@ def test_apply_kit_blocks_unfinished_document_placeholders():
     assert kit.readiness < 100
     assert kit.fact_checks["document_placeholders"]
     assert any("document" in reason.lower() for reason in kit.block_reasons)
+
+
+@pytest.mark.parametrize("days_left,expected_done", [(20, True), (-1, False)])
+def test_apply_kit_deadline_uses_the_canonical_job_status(days_left, expected_done):
+    job = verified_conforming_job(
+        requirements="Excel",
+        deadline_date=(date.today() + timedelta(days=days_left)).isoformat(),
+        deadline_status="open" if days_left >= 0 else "closed",
+    )
+    kit = build_apply_kit(
+        "synthetic-deadline", synthetic_profile(), job=job,
+        intake={"answers": {"target_roles": "Finance", "missions": "Analyse financière"}},
+    )
+    deadline = next(item for item in kit.checklist if item["id"] == "deadline")
+    assert deadline["done"] is expected_done
+    assert (kit.readiness == 100) is expected_done
 
 
 def test_apply_kit_incomplete(tmp_path: Path):

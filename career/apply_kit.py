@@ -17,7 +17,8 @@ from career.application_prep import prepare_application
 from career.application_studio import build_kit_texts, build_local_application_draft, scan_kit_placeholders
 from career.cv_fit import classify_variant
 from career.cv_variants import ALL_VARIANTS
-from career.models import clean_text
+from career.models import clean_text, deadline_state
+from workspace_core import UserFacingError
 
 
 @dataclass
@@ -46,6 +47,17 @@ _REQUIRED_PROFILE_FIELDS: tuple[str, ...] = (
     "experience",
     "skills",
 )
+
+
+def _deadline_status(job: Mapping[str, Any]) -> str:
+    raw = clean_text(job.get("deadline_date"), limit=32)
+    if not raw:
+        return "unknown"
+    try:
+        status = deadline_state(raw, "open")
+    except UserFacingError:
+        return "unknown"
+    return "passed" if status == "closed" else "upcoming"
 
 
 def _job_id_from(job_id: Any, job: Mapping | None) -> str:
@@ -175,10 +187,11 @@ def _readiness(
         block_reasons.append("La disponibilité de l'offre reste à vérifier.")
         score -= 10
 
-    if clean_text(job.get("deadline_status"), limit=40).lower() == "passed":
+    deadline_status = _deadline_status(job)
+    if deadline_status == "passed":
         block_reasons.append("La date limite de l'offre est dépassée.")
         score -= 25
-    elif not clean_text(job.get("deadline_date"), limit=32) or clean_text(job.get("deadline_status"), limit=40).lower() == "unknown":
+    elif deadline_status == "unknown":
         block_reasons.append("La date limite de l'offre reste à vérifier.")
         score -= 5
     if exports_ready is False:
@@ -254,7 +267,7 @@ def _checklist(
             {
                 "id": "deadline",
                 "label": "Date limite vérifiée",
-                "done": source_verified and clean_text(job.get("deadline_status"), limit=40).lower() in {"upcoming", "urgent"},
+                "done": source_verified and _deadline_status(job) == "upcoming",
                 "note": deadline,
             }
         )
