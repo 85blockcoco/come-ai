@@ -1,4 +1,4 @@
-# RAPPORT CODEX — 2026-10-26 17:48 CET
+# RAPPORT CODEX — 2026-10-26 17:24 CET
 
 ## 1. Livré (avec preuve)
 | Commit | Contenu (1 ligne) | Fichiers | Tests verts (nom test) | Durée |
@@ -18,7 +18,7 @@
 ## 3. Performances mesurées
 | Métrique | Avant | Après | Comment mesuré |
 |---|---|---|---|
-| `/api/career/application-pipeline` — serveur de référence partagé | 3,378 s (mesure précédente consignée) | 11,73 s; **PAS ATTEINT** (contrat < 3 s) | `time curl -sf http://127.0.0.1:8765/api/career/application-pipeline -o /dev/null`; exécuté 2026-10-26 à 17:44 CET, curl code retour 0; serveur partagé, non modifié |
+| `/api/career/application-pipeline` — serveur de référence partagé | 3,378 s (mesure précédente consignée) | 21,20 s; **PAS ATTEINT** (contrat < 3 s) | `time curl -sf http://127.0.0.1:8765/api/career/application-pipeline -o /dev/null`; lancé 2026-10-26 17:23:54 CET, terminé 17:24:15 CET, curl code retour 0; serveur partagé, non modifié |
 | Pipeline candidate isolée — 1 000 offres synthétiques | sans mesure appariée avant ce lot | 2,058 / 1,021 / 1,336 s; médiane 1,336 s | trois requêtes HTTP au serveur candidat isolé, DB temporaire et données synthétiques; ce résultat n'est pas le test de référence du serveur partagé |
 | Réouverture de l'Apply Kit | pas de mesure antérieure | seconde requête 0,643 s | TestClient FastAPI, DB temporaire, profil/offre synthétiques, suivi local idempotent |
 
@@ -32,7 +32,7 @@
 - Publier SPEC-046 et raccorder les parcours UI du kit et de la confirmation d'envoi; préserver la demande d'approbation humaine avant toute déclaration d'envoi.
 
 ## 6. Risques / blocages
-- Le seuil de référence `< 3 s` est **PAS ATTEINT**: 11,73 s sur le process partagé au port 8765. Ne pas redémarrer ce process: il appartient au checkout partagé concurrent.
+- Le seuil de référence `< 3 s` est **PAS ATTEINT**: 21,20 s sur le process partagé au port 8765. Ne pas redémarrer ce process: il appartient au checkout partagé concurrent.
 - Les mesures isolées de candidate ne prouvent pas que le serveur de référence satisfait le contrat.
 - SPEC-046 n'était pas publiée sur `origin` au fetch de 17:45 CET. SPEC-044, 045 et 047 ont été revues; les livrables backend intégrés ne démontrent pas un parcours UI complet.
 - Le backend ne soumet aucune candidature automatiquement. Les offres de test sont synthétiques; aucune donnée personnelle réelle n'a été utilisée.
