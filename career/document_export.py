@@ -11,6 +11,8 @@ import html
 import os
 import re
 import tempfile
+import zipfile
+
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
@@ -116,6 +118,25 @@ def _discard_temp(temporary: Path, descriptor: int) -> None:
     temporary.unlink(missing_ok=True)
 
 
+def _normalize_docx_archive(path: Path) -> None:
+    """Make the DOCX byte-for-byte reproducible.
+
+    python-docx copies the archive timestamp of every ZIP entry from the
+    current clock. Two exports of identical content therefore differ even
+    though no visible byte changed. Rewriting the archive with a fixed
+    timestamp keeps the OPC structure intact and makes integrity hashes
+    meaningful (SPEC-007, job ``deterministic-docx``).
+    """
+    with zipfile.ZipFile(path) as source:
+        entries = [(info.filename, source.read(info.filename)) for info in source.infolist()]
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as target:
+        for name, payload in entries:
+            info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o600 << 16
+            target.writestr(info, payload)
+
+
 def write_docx(*, markdown: str, title: str, language: str, target: Path) -> None:
     """Write a clean, editable DOCX with no external or executable content."""
     from docx import Document
@@ -204,6 +225,7 @@ def write_docx(*, markdown: str, title: str, language: str, target: Path) -> Non
         os.close(descriptor)
         descriptor = -1
         document.save(temporary)
+        _normalize_docx_archive(temporary)
         _commit_temp(temporary, descriptor, target)
     except Exception:
         _discard_temp(temporary, descriptor)

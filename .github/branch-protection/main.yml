@@ -1,0 +1,42 @@
+# Protection de la branche main — source de vérité (SPEC-007)
+#
+# Ce fichier est la documentation exécutable de la protection attendue.
+# Il est appliqué par .github/branch-protection/apply.sh via l'API GitHub.
+#
+# IMPORTANT : chaque contexte listé ici doit correspondre au nom d'un job
+# de .github/workflows/ci.yml. Un contexte sans job reste « expected » pour
+# toujours et bloque tous les merges.
+branch: main
+protection:
+  required_status_checks:
+    strict: true
+    contexts:
+      - ruff
+      - pytest
+      - javascript-tests
+      - browser-e2e
+      - migrations-check
+      - secrets-scan
+      - privacy-check
+      - no-auto-apply
+      - provenance-check
+      - deterministic-docx
+      - smoke-test
+  enforce_admins: true
+  required_pull_request_reviews:
+    dismissal_restrictions:
+      users: []
+      teams: []
+      apps: []
+    dismiss_stale_reviews: true
+    require_code_owner_reviews: false
+    required_approving_review_count: 1
+    require_last_push_approval: true
+  restrictions: null
+  required_linear_history: true
+  allow_force_pushes: false
+  allow_deletions: false
+  block_creations: false
+  required_conversation_resolution: true
+  lock_branch: false
+  allow_fork_syncing: false

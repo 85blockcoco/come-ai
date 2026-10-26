@@ -1,0 +1,13 @@
+{
+  "name": "come-ai-career-ui-guards",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Garde-fous JavaScript de l'UI Career, sans dépendance npm (SPEC-007).",
+  "scripts": {
+    "test": "node scripts/js_smoke.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "company": "Banque de Démo",
+  "title": "Stagiaire M&A (démo)",
+  "source_name": "manual",
+  "source_id": "REF-DEMO-E2E-001",
+  "official_url": "https://careers.example.test/jobs/e2e-001",
+  "job_family": "M&A / Investment Banking",
+  "city": "Paris",
+  "country": "France",
+  "deadline_date": "2027-03-31",
+  "start_date": "2027-02-01",
+  "end_date": "2027-05-31",
+  "duration_months": 4,
+  "source_status": "open",
+  "requirements": "Modélisation LBO avancée et valorisation.",
+  "description_original": "Offre entièrement synthétique pour les tests E2E, aucune entreprise réelle."
+}

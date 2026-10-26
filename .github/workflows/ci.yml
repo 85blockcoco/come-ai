@@ -1,5 +1,10 @@
-# CI Côme AI — suite hors ligne complète (aucune clé requise).
-# Active dès qu'un remote GitHub est rattaché : le dépôt n'en a pas encore.
+# CI Côme AI — 11 contrôles requis par la protection de main (SPEC-007).
+#
+# Le dépôt n'utilise ni uv ni npm comme gestionnaires de dépendances :
+#   * Python est installé depuis requirements-v3.txt (pip) ;
+#   * les garde-fous JavaScript utilisent uniquement Node (aucun paquet npm).
+# Les noms de jobs ci-dessous sont EXACTEMENT les contextes requis dans
+# .github/branch-protection/main.yml. Les renommer casserait la protection.
 name: CI
 
 on:
@@ -8,28 +13,123 @@ on:
   pull_request:
     branches: [main]
 
-jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install ruff
-        run: pip install "ruff>=0.9,<1"
-      - name: Lint
-        run: ruff check .
+permissions:
+  contents: read
 
-  tests:
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ruff:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install dependencies
-        run: |
-          pip install -r requirements-v3.txt
-      - name: Run offline test suite
-        run: python -m pytest -q
+      - run: pip install "ruff>=0.9,<1"
+      - run: ruff check .
+
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-v3.txt
+      - run: python -m pytest -q --tb=short
+
+  javascript-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      # Aucune dépendance npm : le script ne charge que les modules Node natifs.
+      - run: npm test
+
+  browser-e2e:
+    runs-on: ubuntu-latest
+    env:
+      E2E_REQUIRE_BROWSER: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-v3.txt "playwright>=1.40,<2"
+      - run: python -m playwright install --with-deps chromium
+      - run: python -m pytest -q tests/e2e/ --tb=short
+
+  migrations-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m career.migrations check
+
+  secrets-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          extra_args: --only-verified
+
+  privacy-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m career.privacy check
+
+  no-auto-apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m career.no_auto_apply check
+
+  provenance-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m career.provenance check
+
+  deterministic-docx:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install "python-docx>=1.1,<2"
+      - run: python -m career.docx check-deterministic
+
+  smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-v3.txt
+      - run: python -m pytest -q tests/smoke/ --tb=short
