@@ -111,6 +111,7 @@ from .exploration import (
     ranking_key,
 )
 from .offer_qualification import qualify_offer
+from .quick_answers import build_answer_pack, normalize_lang
 from .scoring import classify_job_family, score_job
 from workspace_core import UserFacingError, extract_text, safe_error
 from .profile_import import (
@@ -2120,6 +2121,29 @@ class CareerService:
         )
         self._prep_cache.add(job_id)
         return analysis
+
+    def get_quick_answers(self, job_id: str, lang: str = "fr") -> dict[str, Any]:
+        """Copyable answers for one offer's external form, from stored facts only.
+
+        No value is invented: missing profile facts come back as
+        ``confidence="missing"`` with an empty value, for the person to
+        complete the form field themselves.
+        """
+        normalized_lang = normalize_lang(lang)
+        job = self.get_job(job_id)
+        profile = self.get_profile()
+        preferences = self.get_preferences()
+        answers = build_answer_pack(profile, job, preferences, lang=normalized_lang)
+        return {
+            "job_id": job_id,
+            "lang": normalized_lang,
+            "answers": [answer.to_dict() for answer in answers],
+            "automatic_submission": False,
+            "disclaimer": (
+                "Réponses types copiables, générées uniquement depuis tes données locales ; "
+                "les réponses manquantes sont à compléter par toi, aucune valeur n’est inventée."
+            ),
+        }
 
     def get_application_sprint(self, *, limit: int = 12) -> dict[str, Any]:
         """Prioritise a bounded batch for local preparation, without sending.

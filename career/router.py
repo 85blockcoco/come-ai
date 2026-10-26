@@ -564,6 +564,10 @@ def create_career_router(
         await local(lambda: service.delete_job(job_id))
         return {"deleted": True}
 
+    @router.get("/api/career/quick-answers/{job_id}")
+    async def job_quick_answers(job_id: str, lang: str = Query(default="fr", max_length=8)) -> Any:
+        return await local(lambda: service.get_quick_answers(job_id, lang=lang))
+
     @router.get("/api/career/application-drafts")
     async def application_drafts() -> Any:
         return await local(lambda: {"application_drafts": service.list_application_drafts()})
