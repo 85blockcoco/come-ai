@@ -11,6 +11,9 @@
     jobs: null,
     overview: null,
     missions: null,
+    dataSettled: false,
+    notifFilter: "all",
+    notifOpen: false,
     filter: "",
     tracker: null,
     chat: [],
@@ -56,6 +59,46 @@
       throw new Error(detail);
     }
     return response.json();
+  }
+
+  /* ---------- Notifications : mémoire locale ---------- */
+
+  // Lu/masqué reste sur ce Mac, dans le navigateur : le serveur ne journalise
+  // aucune lecture et aucune notification n’est envoyée à l’extérieur.
+  const NOTIF_STORAGE_KEY = "nage.notifications.v1";
+  const NOTIF_MEMORY_LIMIT = 300;
+
+  const cleanIds = (value) => (Array.isArray(value)
+    ? value.filter((id) => typeof id === "string" && id).slice(-NOTIF_MEMORY_LIMIT)
+    : []);
+
+  function readNotifMemory() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(NOTIF_STORAGE_KEY) || "{}");
+      return { read: cleanIds(raw.read), dismissed: cleanIds(raw.dismissed) };
+    } catch {
+      return { read: [], dismissed: [] };
+    }
+  }
+
+  const notifMemory = readNotifMemory();
+
+  function persistNotifMemory() {
+    try {
+      localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify({
+        read: cleanIds(notifMemory.read),
+        dismissed: cleanIds(notifMemory.dismissed),
+      }));
+    } catch { /* stockage indisponible : la session reste utilisable */ }
+  }
+
+  function rememberNotification(bucket, id) {
+    if (!id) return;
+    const list = notifMemory[bucket];
+    if (list.includes(id)) return;
+    list.push(id);
+    while (list.length > NOTIF_MEMORY_LIMIT) list.shift();
+    persistNotifMemory();
   }
 
   /* ---------- Navigation ---------- */
@@ -112,6 +155,7 @@
       }),
     );
     const failed = results.filter((r) => r.status === "rejected").length;
+    state.dataSettled = true;
     setStatus(failed === 0 ? "online" : failed >= results.length ? "offline" : "pending",
       failed === 0 ? "Local · 127.0.0.1" : `${results.length - failed}/${results.length} sources`);
     renderBadges();
@@ -127,6 +171,7 @@
         renderBadges();
         render(state.view);
       }));
+      state.dataSettled = true;
       renderBadges();
       render(state.view);
     } finally {
@@ -150,6 +195,8 @@
     badge.textContent = String(active);
     const workers = state.missions?.workers ?? 0;
     $("#fleetPulse").hidden = workers <= 0;
+    renderNotificationBadge();
+    if (state.notifOpen) renderNotifications();
   }
 
   /* ---------- Rendu ---------- */
@@ -157,6 +204,7 @@
   function render(view) {
     if (view === "today") renderToday();
     else if (view === "applications") renderApplications();
+    else if (view === "tracking") renderTracking();
     else if (view === "offers") renderOffers();
     else if (view === "assistant") renderAssistant();
     else if (view === "missions") renderMissions();
@@ -554,6 +602,363 @@
     );
   }
 
+  /* ---------- Centre de notifications ---------- */
+
+  const NOTIF_BUCKETS = {
+    followup_due: "followups",
+    deadline_soon: "deadlines",
+    deadline_passed: "deadlines",
+    receipt_unknown: "dossiers",
+    interview_prep: "dossiers",
+  };
+
+  const NOTIF_EMPTY = {
+    all: ["Aucune notification", "Les relances dues et échéances à traiter apparaîtront ici."],
+    followups: ["Aucune relance due", "Les relances à venir restent visibles dans Suivi."],
+    deadlines: ["Aucune échéance proche", "Les dates limites à trois jours ou moins apparaissent ici."],
+    dossiers: ["Aucun dossier en attente", "Réceptions à vérifier et entretiens à préparer."],
+  };
+
+  const NOTIF_POST_SUBMISSION = new Set([
+    "submitted", "submitted_confirmed", "receipt_unknown", "response_received",
+    "interview", "offer_received", "rejected", "refused", "withdrawn",
+  ]);
+  const NOTIF_SEVERITY_RANK = { critical: 0, due: 1, urgent: 2, info: 3 };
+
+  function notificationDay(value) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || ""));
+    return match ? `${match[1]}-${match[2]}-${match[3]}` : "";
+  }
+
+  function notificationDelta(day) {
+    if (!day) return null;
+    const [year, month, dateNumber] = day.split("-").map(Number);
+    const due = new Date(year, month - 1, dateNumber);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return Math.round((due.getTime() - today.getTime()) / 86_400_000);
+  }
+
+  function notificationWho(item) {
+    return String(item.company || item.title || "cette candidature");
+  }
+
+  // Projection locale : uniquement les données déjà chargées (tracker + pipeline).
+  // Aucun appel réseau supplémentaire, aucune relance envoyée.
+  function buildNotifications() {
+    const items = [];
+    const trackerItems = Array.isArray(state.tracker?.items) ? state.tracker.items : [];
+    for (const row of trackerItems) {
+      if (!row || typeof row !== "object" || row.status !== "due") continue;
+      const dueDate = notificationDay(row.follow_up_due_date || row.follow_up_due);
+      const delta = notificationDelta(dueDate);
+      const overdue = Boolean(row.overdue) || (delta !== null && delta < 0);
+      const waiting = Number(row.days_waiting);
+      const detail = ["Candidature envoyée"];
+      if (Number.isFinite(waiting)) detail.push(`il y a ${Math.max(0, waiting)} j`);
+      if (dueDate) detail.push(`relance prévue le ${dueDate}`);
+      if (delta !== null && delta < 0) detail.push(`en retard de ${Math.abs(delta)} j`);
+      if (delta === 0) detail.push("relance due aujourd’hui");
+      const identifier = String(row.application_id || row.job_id || items.length);
+      items.push({
+        id: `followup:${identifier}:${dueDate || "unknown"}`,
+        kind: "followup_due",
+        severity: overdue ? "critical" : "due",
+        title: `Relancer ${notificationWho(row)}`,
+        detail: detail.join(" · "),
+        company: String(row.company || ""),
+        job_id: String(row.job_id || ""),
+        official_url: String(row.official_url || ""),
+        due_date: dueDate,
+        days_delta: delta,
+        action: { kind: "copy_followup", label: "Copier la relance" },
+        requires_human_action: true,
+      });
+    }
+
+    const pipelineItems = Array.isArray(state.pipeline?.pipeline) ? state.pipeline.pipeline : [];
+    for (const row of pipelineItems) {
+      if (!row || typeof row !== "object") continue;
+      const tracking = String(row.tracking_stage || "");
+      const jobId = String(row.job_id || "");
+      const deadlineStatus = String(row.deadline_status || "");
+      const dueDate = notificationDay(row.deadline_date);
+      const declaredDelta = Number(row.days_until_deadline);
+      const delta = Number.isFinite(declaredDelta) ? declaredDelta : notificationDelta(dueDate);
+      if (!NOTIF_POST_SUBMISSION.has(tracking) && (deadlineStatus === "urgent" || deadlineStatus === "passed")) {
+        const passed = deadlineStatus === "passed";
+        const when = delta === null ? "" : delta < 0
+          ? `dépassée depuis ${Math.abs(delta)} j`
+          : delta === 0 ? "aujourd’hui" : `dans ${delta} j`;
+        items.push({
+          id: `deadline:${jobId || items.length}:${dueDate || "unknown"}`,
+          kind: passed ? "deadline_passed" : "deadline_soon",
+          severity: passed ? "critical" : "urgent",
+          title: `${passed ? "Échéance dépassée" : "Échéance proche"} — ${notificationWho(row)}`,
+          detail: passed
+            ? "Vérifie si l’offre accepte encore des candidatures avant de préparer un dépôt."
+            : `Date limite ${dueDate || "proche"}${when ? ` (${when})` : ""} · dossier à finaliser.`,
+          company: String(row.company || ""),
+          job_id: jobId,
+          official_url: String(row.official_url || ""),
+          due_date: dueDate,
+          days_delta: delta,
+          action: {
+            kind: row.official_url ? "open_offer" : "open_applications",
+            label: row.official_url ? "Ouvrir l’offre" : "Ouvrir le dossier",
+          },
+          requires_human_action: true,
+        });
+      }
+      const actionCode = String(row.next_action_code || "");
+      const detail = String(row.next_action_detail || "");
+      if (actionCode === "confirm_receipt") {
+        items.push({
+          id: `receipt:${jobId || items.length}`,
+          kind: "receipt_unknown",
+          severity: "info",
+          title: `Réception à vérifier — ${notificationWho(row)}`,
+          detail: detail || "Contrôle manuellement le portail ou l’accusé de réception avant toute relance.",
+          company: String(row.company || ""),
+          job_id: jobId,
+          official_url: String(row.official_url || ""),
+          due_date: "",
+          days_delta: null,
+          action: { kind: "open_applications", label: "Ouvrir le dossier" },
+          requires_human_action: true,
+        });
+      } else if (actionCode === "prepare_interview") {
+        items.push({
+          id: `interview:${jobId || items.length}`,
+          kind: "interview_prep",
+          severity: "info",
+          title: `Entretien à préparer — ${notificationWho(row)}`,
+          detail: detail || "Relis l’offre et prépare tes preuves avant l’entretien.",
+          company: String(row.company || ""),
+          job_id: jobId,
+          official_url: String(row.official_url || ""),
+          due_date: "",
+          days_delta: null,
+          action: { kind: "open_applications", label: "Ouvrir le dossier" },
+          requires_human_action: true,
+        });
+      }
+    }
+
+    items.sort((left, right) => (
+      (NOTIF_SEVERITY_RANK[left.severity] ?? 9) - (NOTIF_SEVERITY_RANK[right.severity] ?? 9)
+      || String(left.due_date || "9999-12-31").localeCompare(String(right.due_date || "9999-12-31"))
+      || String(left.title || "").localeCompare(String(right.title || ""))
+      || String(left.id).localeCompare(String(right.id))
+    ));
+    return items;
+  }
+
+  function notificationItems() {
+    return buildNotifications().slice(0, 50);
+  }
+
+  function dismissedNotificationIds() {
+    return new Set(notifMemory.dismissed);
+  }
+
+  function activeNotificationItems() {
+    const dismissed = dismissedNotificationIds();
+    return notificationItems().filter((item) => !dismissed.has(item.id));
+  }
+
+  function visibleNotificationItems() {
+    return activeNotificationItems().filter((item) =>
+      state.notifFilter === "all" || NOTIF_BUCKETS[item.kind] === state.notifFilter);
+  }
+
+  function unreadNotificationItems() {
+    const read = new Set(notifMemory.read);
+    return activeNotificationItems().filter((item) => !read.has(item.id));
+  }
+
+  function renderNotificationBadge() {
+    const button = $("#notifBtn");
+    const badge = $("#notifBadge");
+    if (!button || !badge) return;
+    const unread = unreadNotificationItems().length;
+    badge.hidden = unread === 0;
+    badge.textContent = unread > 99 ? "99+" : String(unread);
+    button.setAttribute(
+      "aria-label",
+      unread ? `Centre de notifications, ${unread} non lue${unread > 1 ? "s" : ""}` : "Centre de notifications",
+    );
+    button.classList.toggle("has-unread", unread > 0);
+  }
+
+  function notificationWhen(item) {
+    const delta = item.days_delta;
+    if (typeof delta !== "number") return item.due_date ? `date ${item.due_date}` : "";
+    if (delta < 0) return `en retard de ${Math.abs(delta)} j`;
+    if (delta === 0) return "aujourd’hui";
+    if (delta === 1) return "demain";
+    return `dans ${delta} j`;
+  }
+
+  function announceNotification(text) {
+    const status = $("#notifStatus");
+    if (status) status.textContent = text;
+  }
+
+  function toggleNotificationPanel(force) {
+    const panel = $("#notifPanel");
+    const button = $("#notifBtn");
+    if (!panel || !button) return;
+    const open = typeof force === "boolean" ? force : panel.hidden;
+    state.notifOpen = open;
+    panel.hidden = !open;
+    button.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) {
+      renderNotifications();
+      $("#notifClose").focus();
+    } else {
+      button.focus();
+    }
+  }
+
+  function notificationRow(item) {
+    const read = notifMemory.read.includes(item.id);
+    const severity = ["critical", "due", "urgent", "info"].includes(item.severity) ? item.severity : "info";
+    const when = notificationWhen(item);
+    const actionLabel = item.action?.label;
+    return el("div", {
+      class: `notif-row${read ? "" : " unread"}`,
+      "data-severity": severity,
+      "data-id": item.id,
+      onclick: (event) => {
+        if (event.target.closest("button")) return;
+        markNotificationRead(item.id);
+      },
+    },
+      el("span", { class: "notif-sev", "aria-hidden": "true" }),
+      el("div", { class: "notif-body" },
+        el("strong", {},
+          read ? null : el("span", { class: "unread-dot", "aria-hidden": "true" }),
+          item.title || "Notification"),
+        item.detail ? el("p", {}, item.detail) : null,
+        when ? el("span", { class: "notif-meta" }, when) : null,
+      ),
+      el("div", { class: "notif-actions" },
+        actionLabel
+          ? el("button", {
+              class: "notif-action",
+              type: "button",
+              onclick: (event) => { event.stopPropagation(); runNotificationAction(item); },
+            }, actionLabel)
+          : null,
+        el("button", {
+          class: "notif-dismiss",
+          type: "button",
+          title: "Masquer cette notification",
+          "aria-label": `Masquer : ${item.title || "notification"}`,
+          onclick: (event) => { event.stopPropagation(); dismissNotification(item); },
+        }, "×"),
+      ),
+    );
+  }
+
+  function renderNotifications() {
+    const host = $("#notifList");
+    if (!host) return;
+    const footer = $("#notifFoot");
+    const readAll = $("#notifReadAll");
+    for (const tab of document.querySelectorAll(".notif-tab")) {
+      const on = tab.dataset.notifFilter === state.notifFilter;
+      tab.classList.toggle("on", on);
+      tab.setAttribute("aria-selected", on ? "true" : "false");
+    }
+
+    const trackerReady = state.tracker !== null;
+    const pipelineReady = state.pipeline !== null;
+    if (!trackerReady && !pipelineReady) {
+      const unavailable = state.dataSettled;
+      host.replaceChildren(el("div", { class: "notif-empty" },
+        el("strong", {}, unavailable ? "Centre indisponible" : "Chargement…"),
+        el("span", {}, unavailable
+          ? "Les données locales de suivi ne sont pas lisibles pour le moment."
+          : "lecture des données locales")));
+      if (footer) footer.textContent = unavailable
+        ? "Réessaie avec Actualiser ; aucune relance n’a été envoyée."
+        : "Aucune donnée n’est envoyée à l’extérieur.";
+      if (readAll) readAll.disabled = true;
+      return;
+    }
+
+    const visible = visibleNotificationItems();
+    const unread = unreadNotificationItems();
+    if (readAll) readAll.disabled = visible.every((item) => notifMemory.read.includes(item.id));
+    if (!visible.length) {
+      const [title, detail] = NOTIF_EMPTY[state.notifFilter] || NOTIF_EMPTY.all;
+      host.replaceChildren(el("div", { class: "notif-empty" },
+        el("strong", {}, title), el("span", {}, detail)));
+    } else {
+      host.replaceChildren(...visible.map(notificationRow));
+    }
+    if (footer) {
+      const total = activeNotificationItems().length;
+      footer.textContent = `${visible.length} affichée${visible.length > 1 ? "s" : ""} · `
+        + `${unread.length} non lue${unread.length > 1 ? "s" : ""} · ${total} au total · `
+        + "relances et dépôts restent manuels.";
+    }
+  }
+
+  function markNotificationRead(id) {
+    if (!id || notifMemory.read.includes(id)) return;
+    rememberNotification("read", id);
+    renderNotificationBadge();
+    renderNotifications();
+  }
+
+  function markAllNotificationsRead() {
+    const visible = visibleNotificationItems();
+    let changed = false;
+    for (const item of visible) {
+      if (notifMemory.read.includes(item.id)) continue;
+      rememberNotification("read", item.id);
+      changed = true;
+    }
+    if (changed) announceNotification(`${visible.length} notification${visible.length > 1 ? "s" : ""} marquée${visible.length > 1 ? "s" : ""} comme lue${visible.length > 1 ? "s" : ""}.`);
+    renderNotificationBadge();
+    renderNotifications();
+  }
+
+  function dismissNotification(item) {
+    if (!item?.id) return;
+    rememberNotification("dismissed", item.id);
+    rememberNotification("read", item.id);
+    announceNotification("Notification masquée sur ce Mac.");
+    renderNotificationBadge();
+    renderNotifications();
+  }
+
+  function runNotificationAction(item) {
+    markNotificationRead(item.id);
+    const action = item.action || {};
+    if (action.kind === "copy_followup") {
+      const trackerItem = (state.tracker?.items || []).find((row) => row.job_id === item.job_id);
+      if (trackerItem?.followup_draft) {
+        copyText(trackerItem.followup_draft);
+        announceNotification("Relance copiée dans le presse-papiers. Aucun envoi automatique.");
+      } else {
+        toggleNotificationPanel(false);
+        setView("tracking");
+        announceNotification("Ouverture de Suivi : brouillon de relance indisponible.");
+      }
+      return;
+    }
+    if (action.kind === "open_offer" && item.official_url) {
+      window.open(item.official_url, "_blank", "noopener");
+      return;
+    }
+    toggleNotificationPanel(false);
+    setView(action.kind === "open_tracking" ? "tracking" : "applications");
+  }
+
   async function showApplyKit(jobId, title) {
     let kit;
     try { kit = await api(`/api/career/apply-kit/${jobId}`, { method: "POST", body: "{}" }); }
@@ -637,6 +1042,30 @@
   $("#searchInput").addEventListener("input", (event) => {
     state.filter = event.target.value;
     renderOffers();
+  });
+
+  $("#notifBtn").addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleNotificationPanel();
+  });
+  $("#notifClose").addEventListener("click", () => toggleNotificationPanel(false));
+  $("#notifReadAll").addEventListener("click", markAllNotificationsRead);
+  for (const tab of document.querySelectorAll(".notif-tab")) {
+    tab.addEventListener("click", () => {
+      state.notifFilter = tab.dataset.notifFilter || "all";
+      renderNotifications();
+    });
+  }
+  document.addEventListener("click", (event) => {
+    const panel = $("#notifPanel");
+    const button = $("#notifBtn");
+    if (!panel || panel.hidden) return;
+    if (panel.contains(event.target) || button.contains(event.target)) return;
+    toggleNotificationPanel(false);
+  });
+  document.addEventListener("keydown", (event) => {
+    const panel = $("#notifPanel");
+    if (event.key === "Escape" && panel && !panel.hidden) toggleNotificationPanel(false);
   });
 
   const initial = (location.hash || "#today").slice(1);

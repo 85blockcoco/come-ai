@@ -73,6 +73,11 @@
             <p id="viewSubtitle">Chargement de ton espace…</p>
           </div>
           <div class="topbar-actions">
+            <button class="bell-btn" id="notifBtn" type="button" aria-label="Centre de notifications"
+              aria-haspopup="dialog" aria-expanded="false" aria-controls="notifPanel" title="Centre de notifications">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6a1.4 1.4 0 011.4 1.4v.5a6 6 0 014.6 5.8v3.4l1.8 2.5a.9.9 0 01-.7 1.4H4.9a.9.9 0 01-.7-1.4l1.8-2.5v-3.4a6 6 0 014.6-5.8V4A1.4 1.4 0 0112 2.6zM9.4 19.2h5.2a2.6 2.6 0 01-5.2 0z"/></svg>
+              <em class="notif-badge" id="notifBadge" hidden>0</em>
+            </button>
             <label class="search" id="searchBox" hidden>
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.8l-.3-.3a6.5 6.5 0 10-.7.7l.3.3v.8l5 5 1.5-1.5-5-5zm-6 0a4.5 4.5 0 110-9 4.5 4.5 0 010 9z"/></svg>
               <input id="searchInput" type="search" placeholder="Filtrer…" autocomplete="off">
@@ -83,6 +88,29 @@
             </button>
           </div>
         </header>
+
+        <span class="sr-only" id="notifStatus" role="status" aria-live="polite"></span>
+
+        <section class="notif-panel" id="notifPanel" role="dialog" aria-labelledby="notifTitle" hidden>
+          <header class="notif-head">
+            <div>
+              <h2 id="notifTitle">Notifications</h2>
+              <p id="notifSubtitle">relances dues · échéances · dossiers</p>
+            </div>
+            <button class="icon-btn" id="notifClose" type="button" aria-label="Fermer le centre de notifications" title="Fermer">×</button>
+          </header>
+          <div class="notif-tools">
+            <div class="notif-tabs" role="tablist" aria-label="Filtrer les notifications">
+              <button class="notif-tab on" type="button" role="tab" data-notif-filter="all" aria-selected="true">Tout</button>
+              <button class="notif-tab" type="button" role="tab" data-notif-filter="followups" aria-selected="false">Relances</button>
+              <button class="notif-tab" type="button" role="tab" data-notif-filter="deadlines" aria-selected="false">Échéances</button>
+              <button class="notif-tab" type="button" role="tab" data-notif-filter="dossiers" aria-selected="false">Dossiers</button>
+            </div>
+            <button class="link-btn" id="notifReadAll" type="button" title="Marquer toutes les notifications affichées comme lues">Tout lu</button>
+          </div>
+          <div class="notif-list" id="notifList"></div>
+          <footer class="notif-foot" id="notifFoot">Chargement des notifications locales…</footer>
+        </section>
 
         <div class="scroll" id="scroll">
           <section class="view" id="view-today"></section>
