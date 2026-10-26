@@ -54,8 +54,29 @@ def relaunch_mapping() -> dict[str, str]:
     return mapping
 
 
+def _last_origin_commit(branch: str) -> str:
+    try:
+        out = subprocess.run(["git", "ls-remote", "--heads", "origin", branch],
+                             capture_output=True, text=True, timeout=20).stdout
+        return out.split()[0][:7] if out.strip() else "absente"
+    except Exception:
+        return "?"
+
+
+def _pipeline_latency() -> str:
+    try:
+        t0 = time.time()
+        code = subprocess.run(["curl", "-sf", "-o", "/dev/null", "-m", "30",
+                               "http://127.0.0.1:8765/api/career/application-pipeline"],
+                              capture_output=True, timeout=35).returncode
+        dt = time.time() - t0
+        return f"{int(dt)}s" if code == 0 else "erreur"
+    except Exception:
+        return "?"
+
+
 def write_report() -> None:
-    """Rapport flotte régulier : workers, modèles, avancement, derniers résultats."""
+    """Rapport flotte régulier avec indicateurs (KPI) : effet panneau de supervision."""
     from collections import Counter
     reg = json.load(open(ROOT / "missions_registry.json", encoding="utf-8"))
     counts = Counter(m["status"] for m in reg["missions"])
@@ -71,12 +92,41 @@ def write_report() -> None:
     except Exception:
         pass
     heures = time.strftime("%Y-%m-%d %H:%M")
+    # /24 h results: success rate + average duration of OK
+    ok = fail = 0
+    durs = []
+    total_results = 0
+    try:
+        for path in (ROOT / "messages/results").glob("*.json"):
+            total_results += 1
+            d = json.loads(path.read_text(encoding="utf-8"))
+            status_w = (d.get("worker_result") or {}).get("status")
+            if status_w == "done":
+                ok += 1
+            elif status_w:
+                fail += 1
+            if status_w == "done" and d.get("duration_sec"):
+                durs.append(float(d["duration_sec"]))
+    except Exception:
+        pass
+    total = ok + fail
+    taux = f"{ok}/{total} ({round(100*ok/max(total,1))} %)" if total else "n/d"
+    moy = f"{round(sum(durs)/len(durs))}s" if durs else "n/d"
+    d_today = sum(1 for m in reg["missions"] if m.get("status") == "done" and str(m.get("done_at","")).startswith(time.strftime("%Y-%m-%d")))
+    p0 = [m["id"] for m in reg["missions"] if str(m.get("priority","")) == "P0" and m["status"] == "pending"]
     lines = [
         f"# Rapport flotte — {heures}",
         "",
-        f"- Missions : {dict(counts)}",
-        f"- Workers actifs : {len(workers)}",
-        "- Agents utilisés : " + ", ".join(f"{w}→{m}" for w, m in workers) if workers else "- Agents utilisés : aucun",
+        "## Indicateurs",
+        f"- Missions : done={counts.get('done',0)} pending={counts.get('pending',0)} failed={counts.get('failed',0)} · livrées aujourd'hui={d_today}",
+        f"- Taux OK (historique résultats) : {taux} · durée moyenne OK : {moy}",
+        f"- Workers actifs : {len(workers)} · charge : {round(__import__('os').getloadavg()[0])}",
+        f"- Missions P0 restantes : {','.join(p0) if p0 else 'aucune'}",
+        f"- API application-pipeline : {_pipeline_latency()} (objectif Codex : < 3 s)",
+        f"- Codex origin : {_last_origin_commit('codex/v3-stable-consolidation')}",
+        "",
+        "## workers",
+        "\n".join(f"- {w} → {m}" for w, m in workers) if workers else "- aucun worker actif",
         "",
     ]
     recent = sorted((ROOT / "messages/results").glob("*.json"), key=lambda p: p.stat().st_mtime)[-8:]
