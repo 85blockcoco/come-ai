@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .countries import DEFAULT_COUNTRIES_EXCLUDE, canonical_country_codes
 from .models import (
     COUNTRY_LABELS,
     DEFAULT_GEO_EXCLUDED_COUNTRIES,
@@ -181,10 +182,13 @@ def default_brief() -> dict[str, Any]:
         "cities": [],
         "excluded_countries": [],
         "excluded_cities": [],
+        # Countries a connector must never return.  The person never wants
+        # French postings, so the default excludes France at the source.
+        "countries_exclude": list(DEFAULT_COUNTRIES_EXCLUDE),
         "require_known_location": False,
         "start_date": "",
         "duration_months": None,
-        "contract_types": ["stage", "cdd", "cdi", "vie"],
+        "contract_types": ["stage"],
         "start_months": [1, 2, 3],
         "minimum_stage_duration_months": 6,
         "education_preference": "bachelor_m1_then_m2",
@@ -241,6 +245,47 @@ def _ranking_values(value: Any) -> dict[str, float]:
     return ranking
 
 
+def _countries_exclude(payload: dict[str, Any]) -> list[str]:
+    """Countries a connector must never return, as canonical ISO codes.
+
+    Three inputs are read, in this order:
+
+    * ``countries_exclude`` — the explicit list, written in ISO codes.  An
+      empty list turns the filter off: it is the only way for a French
+      posting to reach the person.
+    * ``excluded_countries`` — the older free-text list the interface still
+      edits.  An emptied list means the person removed every country
+      exclusion, so the source filter must follow instead of silently
+      keeping the default.
+    * neither — France stays excluded, the one country this product never
+      offers.  A country the person explicitly asks for is not excluded.
+
+    The list is resolved once, here, so every connector reads the same
+    countries and no wording is interpreted twice.
+    """
+    if "countries_exclude" in payload and payload.get("countries_exclude") is not None:
+        raw = payload.get("countries_exclude")
+        if not isinstance(raw, list):
+            raise UserFacingError("Les pays exclus par défaut doivent être une liste.")
+        if len(raw) > 20:
+            raise UserFacingError("Les pays exclus par défaut contiennent trop d’éléments (maximum 20).")
+        return list(canonical_country_codes(raw))
+    if "excluded_countries" in payload:
+        raw_legacy = payload.get("excluded_countries") or []
+        if not isinstance(raw_legacy, list):
+            raise UserFacingError("Les pays exclus doivent être une liste.")
+        if not raw_legacy:
+            # An emptied list is an explicit choice: no country is excluded,
+            # and a French posting may reach the person again.
+            return []
+        legacy = list(canonical_country_codes(raw_legacy))
+        # A list that names no known country keeps the default instead of
+        # silently disabling the filter.
+        return legacy or list(DEFAULT_COUNTRIES_EXCLUDE)
+    wanted = set(canonical_country_codes(payload.get("countries") or []))
+    return [code for code in DEFAULT_COUNTRIES_EXCLUDE if code not in wanted]
+
+
 def validate_brief(payload: Any) -> dict[str, Any]:
     """Validate and normalize a stage-search brief once, without presumption."""
     if payload is None:
@@ -271,7 +316,7 @@ def validate_brief(payload: Any) -> dict[str, Any]:
         if not 1 <= duration <= 24:
             raise UserFacingError("La durée recherchée doit être comprise entre 1 et 24 mois.")
     contract_types: list[str] = []
-    for item in _string_list(payload.get("contract_types", ["stage", "cdd", "cdi", "vie"]),
+    for item in _string_list(payload.get("contract_types", ["stage"]),
                              "Les types de contrat", max_items=4, max_length=20):
         canonical = item.strip().casefold()
         if canonical not in CONTRACT_TYPES:
@@ -336,6 +381,7 @@ def validate_brief(payload: Any) -> dict[str, Any]:
         "excluded_cities": _string_list(
             payload.get("excluded_cities", []), "Les villes exclues", max_items=20, max_length=120
         ),
+        "countries_exclude": _countries_exclude(payload),
         "require_known_location": require_known_location,
         "start_date": start_text,
         "duration_months": duration,
@@ -368,7 +414,7 @@ def brief_is_configured(brief: dict[str, Any]) -> bool:
             clean_text(brief.get("duration_months")),
             clean_text(brief.get("study_level"), limit=120),
             brief.get("languages"),
-            brief.get("contract_types", ["stage", "cdd", "cdi", "vie"]) != ["stage", "cdd", "cdi", "vie"],
+            brief.get("contract_types", ["stage"]) != ["stage"],
             brief.get("start_months", [1, 2, 3]) != [1, 2, 3],
             brief.get("minimum_stage_duration_months", 6) != 6,
         ]
@@ -382,6 +428,7 @@ def vocabulary() -> dict[str, Any]:
         "contract_types": [{"key": key, "label": label} for key, label in CONTRACT_TYPES.items()],
         "months": [{"value": value, "label": label} for value, label in MONTHS],
         "quarter_months": [1, 2, 3],
+        "default_countries_exclude": list(DEFAULT_COUNTRIES_EXCLUDE),
         "ranking_criteria": [
             {"key": key, "label": label} for key, label in RANKING_CRITERIA.items()
         ],
@@ -568,12 +615,32 @@ def score_brief_match(brief: dict[str, Any], job: dict[str, Any]) -> dict[str, A
         wanted_start = parse_date(start_text, "La date de début recherchée")
         job_start = parse_date(job.get("start_date"), "La date de début de l’offre")
         job_end = parse_date(job.get("end_date"), "La date de fin de l’offre")
+        start_fact = None
+        if not job_start:
+            # Use only explicit, uncontradicted source evidence. A month-level
+            # fact may meet an earliest-date criterion on day 1 of that month;
+            # it cannot establish a later day in the same month.
+            from .offer_dates import extract_offer_dates
+
+            facts = [fact for fact in extract_offer_dates(job) if fact.fact_type == "start"]
+            usable = [fact for fact in facts if not fact.contradictions and fact.confidence != "ambiguous"]
+            if len(usable) == 1:
+                start_fact = usable[0]
+                value = start_fact.value
+                if value.get("year") and value.get("month"):
+                    from datetime import date
+
+                    job_start = date(int(value["year"]), int(value["month"]), int(value.get("day") or 1))
         if job_start and wanted_start:
-            if job_start >= wanted_start:
+            if start_fact and start_fact.precision != "day" and job_start == wanted_start and wanted_start.day != 1:
+                components.append(_component("dates", 8, 15, status="review", reason=f"La source indique « {start_fact.quote} » : le jour exact reste à vérifier."))
+                unknowns.append("Jour exact de début non précisé par la source.")
+            elif job_start >= wanted_start:
+                reason = (f"Début annoncé selon la source : « {start_fact.quote} » (mois/année)." if start_fact else f"Début annoncé le {job_start.isoformat()}.")
                 components.append(
-                    _component("dates", 15, 15, status="match", reason=f"Début annoncé le {job_start.isoformat()}.")
+                    _component("dates", 15, 15, status="match", reason=reason)
                 )
-                reasons.append(f"Début annoncé le {job_start.isoformat()}.")
+                reasons.append(reason)
             elif job_end and job_end >= wanted_start:
                 components.append(
                     _component(
@@ -588,6 +655,10 @@ def score_brief_match(brief: dict[str, Any], job: dict[str, Any]) -> dict[str, A
                 components.append(
                     _component("dates", 0, 15, status="no_match", reason="Le stage se termine avant ta date de début.")
                 )
+        elif start_fact and not start_fact.value.get("year"):
+            reason = f"La source indique « {start_fact.quote} », sans année : début à vérifier."
+            components.append(_component("dates", 8, 15, status="review", reason=reason))
+            unknowns.append("Année de début non renseignée par la source.")
         elif job_end and wanted_start:
             status = "review" if job_end >= wanted_start else "no_match"
             points = 8 if status == "review" else 0
@@ -602,7 +673,7 @@ def score_brief_match(brief: dict[str, Any], job: dict[str, Any]) -> dict[str, A
             )
             if status != "review":
                 unknowns.append("La fin annoncée précède ta date de début.")
-        else:
+        elif not job_start and not job_end:
             components.append(
                 _component("dates", 0, 15, status="unknown", reason="Les dates du stage ne sont pas renseignées.")
             )

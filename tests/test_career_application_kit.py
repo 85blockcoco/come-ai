@@ -424,11 +424,32 @@ def _route_paths() -> list[str]:
 
 
 def test_no_submission_or_email_route_exists() -> None:
-    """Preuve statique : aucune route n'envoie de courriel ni de candidature."""
+    """Preuve statique : aucune route n'envoie de courriel ni de candidature.
+
+    Seule exception assumée (SPEC-047) : le préfixe ``/api/career/send-confirmation``
+    enregistre la *déclaration* d'un envoi que la personne a déjà effectué
+    elle-même — il ne transmet rien (ni courriel, ni candidature, ni relance ;
+    la relance reste un brouillon local à copier).
+    """
     paths = _route_paths()
     forbidden = re.compile(r"send|mail|smtp|transmit|auto-submit|autosubmit|autoapp")
-    offending = [path for path in paths if forbidden.search(path.lower())]
+    declared_send_prefix = "/api/career/send-confirmation"
+    offending = [
+        path
+        for path in paths
+        if forbidden.search(path.lower()) and not path.lower().startswith(declared_send_prefix)
+    ]
     assert offending == [], f"routes d'envoi interdites détectées : {offending}"
+    # SPEC-047 : « send » n'apparaît que sur les routes de déclaration d'un
+    # envoi manuel déjà fait — liste fermée, aucune route d'envoi réel.
+    declared_send_routes = sorted(path for path in paths if path.startswith(declared_send_prefix))
+    assert declared_send_routes == sorted(
+        [
+            "/api/career/send-confirmation/{job_id}",
+            "/api/career/send-confirmation/{job_id}",
+            "/api/career/send-confirmation/{job_id}/followup",
+        ]
+    ), f"routes de confirmation inattendues : {declared_send_routes}"
     assert "/api/career/application-kits" in paths
     assert not any(path.endswith("/submit") for path in paths)
 

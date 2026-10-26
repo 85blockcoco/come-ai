@@ -171,7 +171,10 @@ def test_greenhouse_connector_is_fixed_host_bounded_and_sanitises_html(
                 "id": 42,
                 "title": "M&A Off-Cycle Intern",
                 "absolute_url": "https://boards.greenhouse.io/example/jobs/42",
-                "location": {"name": "Paris, France"},
+                # Published in the United Kingdom: connectors exclude France
+                # on the source side, so a French fixture never reaches the
+                # assertions below.
+                "location": {"name": "London, United Kingdom"},
                 "content": "<p>Analyse <strong>financière</strong></p><script>alert('x')</script><ul><li>Excel</li></ul>",
             }
         ]
@@ -183,8 +186,8 @@ def test_greenhouse_connector_is_fixed_host_bounded_and_sanitises_html(
 
     assert len(transport.endpoints) == 2
     assert all(endpoint == "https://boards-api.greenhouse.io/v1/boards/example/jobs?content=true" for endpoint, _ in transport.endpoints)
-    assert result.jobs[0]["city"] == "Paris"
-    assert result.jobs[0]["country"] == "France"
+    assert result.jobs[0]["city"] == "London"
+    assert result.jobs[0]["country"] == "United Kingdom"
     assert "alert" not in result.jobs[0]["description_original"]
     assert "<" not in result.jobs[0]["description_original"]
     assert "Analyse" in result.jobs[0]["description_original"]
@@ -1236,6 +1239,50 @@ def test_career_routes_are_local_and_do_not_break_v3(tmp_path: Path) -> None:
     assert calendar_export.content.startswith(b"BEGIN:VCALENDAR\r\n")
     assert client.request("DELETE", "/api/career/data", json={"confirmation": "not enough"}).status_code == 400
     assert client.request("DELETE", "/api/career/data", json={"confirmation": DELETE_CONFIRMATION}).json() == {"deleted": True}
+
+
+def test_http_job_import_derives_neutral_facts_without_trusting_client_verification(tmp_path: Path) -> None:
+    client = TestClient(create_app(tmp_path, agent_override=FakeAgent()))
+    payload = manual_job(
+        source_name="greenhouse",
+        source_id="synthetic-jan-2027",
+        official_url="https://careers.example.test/jobs/synthetic-jan-2027",
+        job_family="M&A / Investment Banking",
+        city="London",
+        country="United Kingdom",
+        start_date="",
+        end_date="",
+        duration_months=6,
+        employment_type="Internship",
+        description_original=(
+            "Synthetic finance internship. Starting January 2027 for six months. "
+            "The internship starts in February 2027."
+        ),
+    )
+    # This endpoint must ignore caller supplied derived trust and recompute it.
+    payload["qualification"] = {"verification_status": "verified", "target_status": "conforming"}
+
+    response = client.post("/api/career/jobs/import", json=payload)
+
+    assert response.status_code == 201
+    job = response.json()
+    facts = job["qualification_facts"]
+    assert facts["start_month"] == 1
+    assert facts["duration_min_months"] == 6
+    assert facts["provenance"]["start_month"]["quote"] == "Starting January 2027"
+    temporal_starts = [fact for fact in facts["temporal_facts"] if fact["fact_type"] == "start"]
+    assert len(temporal_starts) == 2
+    assert all(fact["contradictions"] for fact in temporal_starts)
+    assert {fact["quote"] for fact in temporal_starts} == {
+        "Starting January 2027", "starts in February 2027"
+    }
+    assert any(fact["fact_type"] == "duration_exact" and fact["quote"] == "for six months"
+               for fact in facts["temporal_facts"])
+    assert not job["start_date"]  # a month-only statement never becomes a day
+    assert job["qualification_snapshot_current"] is True
+    assert facts["verification_status"] != "verified"
+    assert job["source_verified"] is False
+    assert job["official_source_trust"]["status"] == "contradictory"
 
 
 def test_discovery_routes_use_an_injected_offline_connector_and_keep_exports_private(tmp_path: Path) -> None:

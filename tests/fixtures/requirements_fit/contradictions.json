@@ -1,0 +1,193 @@
+{
+  "note": "Cas synthétiques — contradictions explicites entre le profil approuvé et l'offre.",
+  "cases": [
+    {
+      "id": "contradiction-experience-négation-de-fait",
+      "offer": {
+        "id": "off-contradiction-01",
+        "requirements": "3 ans d experience en gestion d equipe",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "experience",
+            "value": "Aucune experience de gestion d equipe",
+            "quote": "Aucune expérience de gestion d'équipe dans mon parcours",
+            "negated": true
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "3 ans d experience en gestion d equipe",
+        "category": "experience",
+        "modality": "mandatory",
+        "verdict": "contradicted",
+        "reason_contains": "absence"
+      }
+    },
+    {
+      "id": "contradiction-langue-négation-de-fait",
+      "offer": {
+        "id": "off-contradiction-02",
+        "requirements": "Anglais",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "langues",
+            "value": "Pas d anglais",
+            "quote": "Pas d'anglais",
+            "negated": true
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Anglais",
+        "category": "langues",
+        "modality": "mandatory",
+        "verdict": "contradicted"
+      }
+    },
+    {
+      "id": "contradiction-outil-négation-de-fait",
+      "offer": {
+        "id": "off-contradiction-03",
+        "requirements": "Maitrise de VBA",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "outils",
+            "value": "Aucune experience de VBA",
+            "quote": "Aucune expérience de VBA",
+            "negated": true
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Maitrise de VBA",
+        "category": "outils",
+        "modality": "mandatory",
+        "verdict": "contradicted"
+      }
+    },
+    {
+      "id": "contradiction-mobilité-sur-site-contre-télétravail",
+      "offer": {
+        "id": "off-contradiction-04",
+        "requirements": "Poste sur site a Paris",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "mobilite",
+            "value": "Teletravail",
+            "quote": "Télétravail uniquement"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Poste sur site a Paris",
+        "category": "mobilite",
+        "modality": "mandatory",
+        "verdict": "contradicted"
+      }
+    },
+    {
+      "id": "contradiction-mobilité-télétravail-contre-sur-site",
+      "offer": {
+        "id": "off-contradiction-05",
+        "requirements": "Poste en teletravail",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "mobilite",
+            "value": "Sur site",
+            "quote": "Sur site uniquement"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Poste en teletravail",
+        "category": "mobilite",
+        "modality": "mandatory",
+        "verdict": "contradicted"
+      }
+    },
+    {
+      "id": "contradiction-diplomation-trop-tardive",
+      "offer": {
+        "id": "off-contradiction-06",
+        "requirements": "Diplome obtenu avant septembre 2026",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "diplomation",
+            "value": "2027",
+            "quote": "Diplômé en 2027"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Diplome obtenu avant septembre 2026",
+        "category": "diplomation",
+        "modality": "mandatory",
+        "verdict": "contradicted"
+      }
+    },
+    {
+      "id": "mobilité-sur-site-ou-télétravail-sans-contradiction",
+      "offer": {
+        "id": "off-contradiction-07",
+        "requirements": "Sur site ou teletravail",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "mobilite",
+            "value": "Teletravail",
+            "quote": "Télétravail uniquement"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Sur site ou teletravail",
+        "category": "mobilite",
+        "modality": "mandatory",
+        "verdict": "to_verify"
+      }
+    },
+    {
+      "id": "dispo-immédiat-profil-immédiat-approuvé",
+      "offer": {
+        "id": "off-contradiction-08",
+        "requirements": "Disponible immediatement",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "dispo",
+            "value": "Disponible immediatement",
+            "quote": "Disponible immédiatement, sans préavis"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Disponible immediatement",
+        "category": "dispo",
+        "modality": "mandatory",
+        "verdict": "supported"
+      }
+    }
+  ]
+}

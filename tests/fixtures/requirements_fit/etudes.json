@@ -1,0 +1,308 @@
+{
+  "note": "Cas synthétiques — aucune offre réelle, aucune entreprise réelle, aucune personne réelle, aucun réseau.",
+  "cases": [
+    {
+      "id": "etudes-master2-obligatoire-master2-approuve",
+      "offer": {
+        "id": "off-etudes-01",
+        "requirements": "Master 2 en finance",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "etudes",
+            "value": "Master 2 en finance",
+            "quote": "Master 2 en finance, Mention bien, 2026"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Master 2 en finance",
+        "category": "etudes",
+        "modality": "mandatory",
+        "verdict": "supported"
+      }
+    },
+    {
+      "id": "etudes-master2-obligatoire-master1-approuve",
+      "offer": {
+        "id": "off-etudes-02",
+        "requirements": "Master 2 en finance",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "etudes",
+            "value": "Master 1 en finance",
+            "quote": "Master 1 en finance, en cours, 2026"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Master 2 en finance",
+        "category": "etudes",
+        "modality": "mandatory",
+        "verdict": "unsupported",
+        "reason_contains": "inférieur"
+      }
+    },
+    {
+      "id": "etudes-master-apprécié-bachelor-ne-rejette-jamais",
+      "offer": {
+        "id": "off-etudes-03",
+        "requirements": "Master 2 appreciated",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "etudes",
+            "value": "Bachelor en finance",
+            "quote": "Bachelor en finance, 2024"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Master 2 appreciated",
+        "category": "etudes",
+        "modality": "preferred",
+        "verdict": "to_verify",
+        "reason_contains": "ne rejette jamais"
+      }
+    },
+    {
+      "id": "etudes-master-apprécié-master2-approuvé",
+      "offer": {
+        "id": "off-etudes-04",
+        "requirements": "Master 2 appreciated",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "etudes",
+            "value": "Master 2 en finance",
+            "quote": "Master 2 en finance, 2026"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Master 2 appreciated",
+        "category": "etudes",
+        "modality": "preferred",
+        "verdict": "supported"
+      }
+    },
+    {
+      "id": "etudes-licence-obligatoire-sans-fait-approuvé",
+      "offer": {
+        "id": "off-etudes-05",
+        "requirements": "Licence en economie",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "tech",
+            "value": "Excel",
+            "quote": "Excel"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Licence en economie",
+        "category": "etudes",
+        "modality": "mandatory",
+        "verdict": "to_verify",
+        "reason_contains": "Aucune formation approuvée"
+      }
+    },
+    {
+      "id": "etudes-bac5-obligatoire-bac-approuvé",
+      "offer": {
+        "id": "off-etudes-06",
+        "requirements": "Bac+5 requis",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "etudes",
+            "value": "Bac",
+            "quote": "Baccalauréat général, 2022"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Bac+5 requis",
+        "category": "etudes",
+        "modality": "mandatory",
+        "verdict": "unsupported"
+      }
+    },
+    {
+      "id": "etudes-master2-obligatoire-domaine-différent",
+      "offer": {
+        "id": "off-etudes-07",
+        "requirements": "Master 2 en finance",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "etudes",
+            "value": "Master 2 en data science",
+            "quote": "Master 2 en data science, 2026"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Master 2 en finance",
+        "category": "etudes",
+        "modality": "mandatory",
+        "verdict": "to_verify",
+        "reason_contains": "domaine non couvert"
+      }
+    },
+    {
+      "id": "etudes-licence-obligatoire-bachelor-approuvé",
+      "offer": {
+        "id": "off-etudes-08",
+        "requirements": "Licence en economie",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "etudes",
+            "value": "Bachelor of Economics",
+            "quote": "Bachelor of Economics, 2024"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Licence en economie",
+        "category": "etudes",
+        "modality": "mandatory",
+        "verdict": "supported"
+      }
+    },
+    {
+      "id": "etudes-master2-avec-année-reste-niveau-diplôme",
+      "offer": {
+        "id": "off-etudes-09",
+        "requirements": "Master 2 obtenu en 2026",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "etudes",
+            "value": "Master 2 en finance",
+            "quote": "Master 2 en finance, 2026"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Master 2 obtenu en 2026",
+        "category": "etudes",
+        "modality": "mandatory",
+        "verdict": "supported"
+      }
+    },
+    {
+      "id": "diplomation-date-compatible",
+      "offer": {
+        "id": "off-diplomation-01",
+        "requirements": "Diplome obtenu avant septembre 2026",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "diplomation",
+            "value": "2026-06-30",
+            "quote": "Diplôme obtenu en juin 2026"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Diplome obtenu avant septembre 2026",
+        "category": "diplomation",
+        "modality": "mandatory",
+        "verdict": "supported"
+      }
+    },
+    {
+      "id": "diplomation-date-trop-tardive",
+      "offer": {
+        "id": "off-diplomation-02",
+        "requirements": "Diplome obtenu avant septembre 2026",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "diplomation",
+            "value": "2027-06-30",
+            "quote": "Diplôme obtenu en juin 2027"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Diplome obtenu avant septembre 2026",
+        "category": "diplomation",
+        "modality": "mandatory",
+        "verdict": "contradicted"
+      }
+    },
+    {
+      "id": "diplomation-absent-du-profil",
+      "offer": {
+        "id": "off-diplomation-03",
+        "requirements": "Diplome obtenu avant septembre 2026",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "etudes",
+            "value": "Master 2 en finance",
+            "quote": "Master 2 en finance, 2026"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Diplome obtenu avant septembre 2026",
+        "category": "diplomation",
+        "modality": "mandatory",
+        "verdict": "to_verify"
+      }
+    },
+    {
+      "id": "diplomation-date-explicite",
+      "offer": {
+        "id": "off-diplomation-04",
+        "requirements": "Date de diplomation : septembre 2026",
+        "description_original": ""
+      },
+      "profile": {
+        "facts": [
+          {
+            "category": "diplomation",
+            "value": "Juin 2026",
+            "quote": "Diplômé en juin 2026"
+          }
+        ]
+      },
+      "expected": {
+        "requirement_text": "Date de diplomation : septembre 2026",
+        "category": "diplomation",
+        "modality": "mandatory",
+        "verdict": "supported"
+      }
+    }
+  ]
+}

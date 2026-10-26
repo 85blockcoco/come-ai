@@ -104,12 +104,23 @@ def create_developer_router(service_factory: Callable[[], DeveloperWorkshop]) ->
         browser_local = (origin and hmac.compare_digest(origin, expected_origin)) or fetch_site == "same-origin"
         if origin and not hmac.compare_digest(origin, expected_origin):
             raise HTTPException(403, "Cet atelier n'est accessible que depuis cette application locale.")
-        result["workshop_token"] = workshop.token if browser_local else ""
+        if not browser_local:
+            # A local script may probe this bootstrap endpoint, but it must not
+            # receive source paths, reports, diffs, or persisted candidate IDs.
+            return {
+                "available": True,
+                "version": result["version"],
+                "remote_model_used": False,
+                "automatic_application": False,
+                "workshop_token": "",
+            }
+        result["workshop_token"] = workshop.token
         return result
 
     @router.get("/evolution")
-    async def evolution_overview() -> dict[str, Any]:
-        return await action(lambda: service_factory().evolution().overview())
+    async def evolution_overview(request: Request) -> dict[str, Any]:
+        workshop = authorise(request)
+        return await action(lambda: workshop.evolution().overview())
 
     @router.post("/evolution/settings")
     async def evolution_settings(payload: EvolutionSettingsRequest, request: Request) -> dict[str, Any]:
@@ -126,8 +137,9 @@ def create_developer_router(service_factory: Callable[[], DeveloperWorkshop]) ->
         return await action(lambda: workshop.evolution().engine.store.add_task(**payload.model_dump()))
 
     @router.get("/evolution/runs/{run_id}")
-    async def evolution_run_detail(run_id: str) -> dict[str, Any]:
-        return await action(lambda: service_factory().evolution().engine.store.get_run(run_id))
+    async def evolution_run_detail(run_id: str, request: Request) -> dict[str, Any]:
+        workshop = authorise(request)
+        return await action(lambda: workshop.evolution().engine.store.get_run(run_id))
 
     @router.post("/evolution/run")
     async def evolution_run(payload: EvolutionRunRequest, request: Request) -> dict[str, Any]:
@@ -149,8 +161,9 @@ def create_developer_router(service_factory: Callable[[], DeveloperWorkshop]) ->
         return await action(lambda: workshop.start_diagnostics(payload.candidate_id))
 
     @router.get("/jobs/{job_id}")
-    async def job(job_id: str) -> dict[str, Any]:
-        return await action(lambda: service_factory().job(job_id))
+    async def job(job_id: str, request: Request) -> dict[str, Any]:
+        workshop = authorise(request)
+        return await action(lambda: workshop.job(job_id))
 
     @router.post("/exports")
     async def export_project(request: Request) -> dict[str, Any]:
@@ -162,8 +175,9 @@ def create_developer_router(service_factory: Callable[[], DeveloperWorkshop]) ->
         return await action(lambda: workshop.export_issue(**payload.model_dump()))
 
     @router.get("/artifacts/{artifact_id}")
-    async def artifact(artifact_id: str) -> FileResponse:
-        path = await action(lambda: service_factory().artifact_path(artifact_id))
+    async def artifact(artifact_id: str, request: Request) -> FileResponse:
+        workshop = authorise(request)
+        path = await action(lambda: workshop.artifact_path(artifact_id))
         return FileResponse(path, filename=path.name, media_type="application/zip")
 
     @router.post("/candidates/patch")
@@ -179,8 +193,9 @@ def create_developer_router(service_factory: Callable[[], DeveloperWorkshop]) ->
         return await action(lambda: workshop.patches.stage_files(payload.files))
 
     @router.get("/candidates/{candidate_id}")
-    async def preview(candidate_id: str) -> dict[str, Any]:
-        return await action(lambda: service_factory().patches.preview(candidate_id))
+    async def preview(candidate_id: str, request: Request) -> dict[str, Any]:
+        workshop = authorise(request)
+        return await action(lambda: workshop.patches.preview(candidate_id))
 
     @router.post("/candidates/{candidate_id}/apply")
     async def apply(candidate_id: str, payload: ConfirmRequest, request: Request) -> dict[str, Any]:

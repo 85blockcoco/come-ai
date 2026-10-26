@@ -20,18 +20,28 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from html.parser import HTMLParser
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from workspace_core import UserFacingError
 
 from .models import canonical_url, clean_text, normalized_text
+from .countries import (
+    DEFAULT_COUNTRIES_EXCLUDE,
+    canonical_country_codes,
+    canonicalize_country,
+    country_from_source,
+)
 from .scoring import classify_job_family
 from .stage_search import default_brief, score_brief_match, validate_brief
 from .exploration import classify_internship, criteria_admit
 from .offer_qualification import qualify_offer
+from .source_fields import attach_source_material
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from .job_deduplication import DedupReport
 
 
 GREENHOUSE_HOST = "boards-api.greenhouse.io"
@@ -86,6 +96,11 @@ class DiscoveryPayload:
     excluded_count: int = 0
     relevant_count: int = 0
     filtered_criteria_count: int = 0
+    # Offers dropped because their country is excluded, counted per country.
+    # They are part of ``excluded_count``: an excluded country is a
+    # non-conforming offer, not a malformed one.
+    country_excluded_count: int = 0
+    excluded_by_country: dict[str, int] = field(default_factory=dict)
 
 
 def parse_greenhouse_board_token(value: Any) -> str:
@@ -331,6 +346,14 @@ class GreenhouseJobBoardConnector:
 
     def __init__(self, transport: GreenhouseTransport | None = None) -> None:
         self.transport = transport or UrllibGreenhouseTransport()
+        self._last_metrics: dict[str, Any] = {
+            "raw_count": 0,
+            "filtered_count": 0,
+            "excluded_count": 0,
+            "country_excluded_count": 0,
+            "excluded_by_country": {},
+        }
+        self._last_error: str | None = None
 
     def discover(self, board: GreenhouseBoard) -> DiscoveryPayload:
         """Compatibility entry point: deterministic, preference-free selection."""
@@ -339,6 +362,7 @@ class GreenhouseJobBoardConnector:
     def discover_ranked(
         self, board: GreenhouseBoard, *, selection_brief: dict[str, Any] | None = None,
         internships_only: bool = False, deadline: float | None = None,
+        countries_exclude: list[str] | tuple[str, ...] | None = None,
     ) -> DiscoveryPayload:
         """Score the whole admissible feed before keeping its best 150 jobs.
 
@@ -353,9 +377,22 @@ class GreenhouseJobBoardConnector:
                 if remaining <= 0:
                     raise PublicSourceError("Le budget de recherche est atteint ; cette source n’a pas été relancée.", code="budget")
                 payload = self.transport.get_json(board.endpoint, min(GREENHOUSE_TIMEOUT_SECONDS, remaining))
-                return self._normalise(board, payload, selection_brief=brief, internships_only=internships_only)
+                result = self._normalise(
+                    board, payload, selection_brief=brief, internships_only=internships_only,
+                    countries_exclude=countries_exclude,
+                )
+                self._last_metrics = {
+                    "raw_count": result.raw_count,
+                    "filtered_count": result.invalid_count + result.filtered_criteria_count,
+                    "excluded_count": result.excluded_count,
+                    "country_excluded_count": result.country_excluded_count,
+                    "excluded_by_country": dict(result.excluded_by_country),
+                }
+                self._last_error = None
+                return result
             except PublicSourceError as caught:
                 error = caught
+                self._last_error = caught.code or "error"
                 if not caught.retryable or attempt:
                     raise
                 # One small retry accommodates temporary 429/503/network
@@ -365,16 +402,32 @@ class GreenhouseJobBoardConnector:
         raise error
 
     def discover_internships(
-        self, board: GreenhouseBoard, *, selection_brief: dict[str, Any], deadline: float | None = None
+        self, board: GreenhouseBoard, *, selection_brief: dict[str, Any], deadline: float | None = None,
+        countries_exclude: list[str] | tuple[str, ...] | None = None,
     ) -> DiscoveryPayload:
         """Explorer entry point: classify and admit before the per-source cap."""
         return self.discover_ranked(board, selection_brief=selection_brief,
-                                    internships_only=True, deadline=deadline)
+                                    internships_only=True, deadline=deadline,
+                                    countries_exclude=countries_exclude)
+
+    def health_check(self) -> dict[str, Any]:
+        """Factual counters of the last read; no offer is ever invented here."""
+        metrics = self._last_metrics
+        return {
+            "provider": "greenhouse",
+            "last_error": self._last_error,
+            "raw_count": int(metrics.get("raw_count", 0)),
+            "filtered_count": int(metrics.get("filtered_count", 0)),
+            "excluded_count": int(metrics.get("excluded_count", 0)),
+            "country_excluded_count": int(metrics.get("country_excluded_count", 0)),
+            "excluded_by_country": dict(metrics.get("excluded_by_country", {})),
+        }
 
     @staticmethod
     def _normalise(
         board: GreenhouseBoard, payload: Any, *, selection_brief: dict[str, Any] | None = None,
         internships_only: bool = False,
+        countries_exclude: list[str] | tuple[str, ...] | None = None,
     ) -> DiscoveryPayload:
         if not isinstance(payload, dict) or not isinstance(payload.get("jobs"), list):
             raise PublicSourceError("Greenhouse a renvoyé un format d’offres inattendu.", code="invalid_payload")
@@ -386,12 +439,17 @@ class GreenhouseJobBoardConnector:
                 code="too_many_rows",
             )
         brief = validate_brief(selection_brief) if selection_brief is not None else default_brief()
+        excluded_codes = set(canonical_country_codes(
+            countries_exclude if countries_exclude is not None else brief.get("countries_exclude")
+        ))
+        excluded_by_country: dict[str, int] = {}
         evaluated_count = invalid_count = 0
         confirmed_count = uncertain_count = excluded_count = relevant_count = filtered_criteria_count = 0
+        country_excluded_count = 0
 
         def candidates():
             nonlocal evaluated_count, invalid_count, confirmed_count, uncertain_count, excluded_count
-            nonlocal relevant_count, filtered_criteria_count
+            nonlocal relevant_count, filtered_criteria_count, country_excluded_count
             for raw in raw_jobs:
                 if not isinstance(raw, dict):
                     invalid_count += 1
@@ -411,6 +469,15 @@ class GreenhouseJobBoardConnector:
                     continue
                 location = raw.get("location") if isinstance(raw.get("location"), dict) else {}
                 city, country = _location_parts(location.get("name"), preserve_multi_locations=internships_only)
+                # A board may state the country structurally (``office.country_code``)
+                # instead of inside the location wording.  The structural code wins:
+                # it is a published fact, while the location string is prose.
+                office = location.get("office") if isinstance(location.get("office"), dict) else {}
+                country_canonical = canonicalize_country(
+                    office.get("country_code") or location.get("country_code")
+                )
+                if not country_canonical:
+                    country_canonical = country_from_source(country)
                 description = source_html_to_text(raw.get("content"))
                 job = {
                     "company": board.company,
@@ -420,6 +487,7 @@ class GreenhouseJobBoardConnector:
                     "official_url": official_url,
                     "city": city,
                     "country": country,
+                    "country_canonical": country_canonical,
                     # ``updated_at`` is source maintenance metadata, not a
                     # posting or internship date.  We deliberately leave the
                     # calendar unknown unless the ATS exposes it structurally.
@@ -437,7 +505,18 @@ class GreenhouseJobBoardConnector:
                     "description_original": description,
                     "job_family": classify_job_family(title, description),
                 }
+                job = attach_source_material(job, "greenhouse", raw, description=description)
                 evaluated_count += 1
+                if country_canonical and country_canonical in excluded_codes:
+                    # The country is excluded on the source side: the offer is
+                    # dropped before it can enter the local database or
+                    # consume one of the retained places.
+                    country_excluded_count += 1
+                    excluded_count += 1
+                    excluded_by_country[country_canonical] = (
+                        excluded_by_country.get(country_canonical, 0) + 1
+                    )
+                    continue
                 match = score_brief_match(brief, job)
                 if internships_only:
                     classification = classify_internship(job)
@@ -445,6 +524,7 @@ class GreenhouseJobBoardConnector:
                         {**job, "source_verified": True},
                         allowed_contract_types=brief.get("contract_types"),
                         allowed_start_months=brief.get("start_months"),
+                        required_start_date=brief.get("start_date"),
                         minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
                         excluded_countries=brief.get("excluded_countries"),
                         excluded_cities=brief.get("excluded_cities"),
@@ -506,4 +586,54 @@ class GreenhouseJobBoardConnector:
             excluded_count=excluded_count,
             relevant_count=relevant_count,
             filtered_criteria_count=filtered_criteria_count,
+            country_excluded_count=country_excluded_count,
+            excluded_by_country=excluded_by_country,
         )
+
+
+def discover_stage_offers(
+    connectors: dict[str, Any],
+    sources: list[dict[str, Any]],
+    *,
+    selection_brief: dict[str, Any] | None = None,
+    countries_exclude: list[str] | tuple[str, ...] | None = None,
+    deadline: float | None = None,
+) -> tuple[list[dict[str, Any]], "DedupReport"]:
+    """Read every configured source, deduplicate, and return merged offers.
+
+    This is the single entry point of the internship explorer.  The excluded
+    countries are forwarded to each connector, which applies them on its own
+    side of the boundary: an excluded country is never materialised here and
+    never reaches the local database.  ``countries_exclude`` defaults to
+    France, the one country the person never wants.
+
+    Every connector returns its own offer records; the same offer published on
+    several boards becomes a single merged offer, keeping the trace of its
+    sources.
+    """
+    excluded = list(DEFAULT_COUNTRIES_EXCLUDE) if countries_exclude is None else list(countries_exclude)
+    brief = validate_brief(selection_brief) if selection_brief is not None else default_brief()
+    offers: list[dict[str, Any]] = []
+    for source in sources:
+        provider = clean_text(source.get("provider"), limit=40)
+        connector = connectors.get(provider)
+        if connector is None or not callable(getattr(connector, "discover_internships", None)):
+            continue
+        if provider == "greenhouse":
+            descriptor: Any = GreenhouseBoard(
+                id=clean_text(source.get("id"), limit=160),
+                company=clean_text(source.get("company"), limit=240),
+                board_token=parse_greenhouse_board_token(source.get("board_token")),
+            )
+        else:
+            descriptor = source
+        payload = connector.discover_internships(
+            descriptor, selection_brief=brief, deadline=deadline, countries_exclude=excluded
+        )
+        for job in getattr(payload, "jobs", ()):  # a connector returns a bounded tuple
+            offers.append(job)
+    # Imported lazily: the deduplication module is only needed when several
+    # sources are merged, and it must not slow down the import of discovery.
+    from .job_deduplication import deduplicate_offers
+
+    return deduplicate_offers(offers)

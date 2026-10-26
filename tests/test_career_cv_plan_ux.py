@@ -10,12 +10,15 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 
 import pytest
+
+from career.application_prep import reconcile_cv_plan_with_requirements_fit
 
 ROOT = Path(__file__).resolve().parents[1]
 CV_PLAN_JS = ROOT / "career_static" / "cv_plan.js"
@@ -32,6 +35,44 @@ def _node() -> str:
         if Path(candidate).is_file():
             return candidate
     pytest.skip("Node absent: JavaScript behavioural guards not executable on this host")
+
+
+def test_exact_cross_source_repeats_share_one_cv_action_and_coverage_count() -> None:
+    preparation = {
+        "offer_intelligence": {
+            "requirements_by_id": {
+                "req-1": {"id": "req-1", "source_field": "requirements", "locator": "line:1", "text": "Excel required."},
+                "req-2": {"id": "req-2", "source_field": "description_original", "locator": "line:4", "text": "Excel required."},
+                "req-3": {"id": "req-3", "source_field": "description_original", "locator": "line:5", "text": "Fluent English required."},
+            }
+        },
+        "cv_action_plan": [
+            {"id": "action-1", "requirement_id": "req-1", "requirement": "Excel required."},
+            {"id": "action-2", "requirement_id": "req-2", "requirement": "Excel required."},
+            {"id": "action-3", "requirement_id": "req-3", "requirement": "Fluent English required."},
+        ],
+        "cv_coverage": {},
+    }
+    fits = {
+        "fits": [
+            {"requirement_id": "req-1", "requirement_text": "Excel required.", "modality": "mandatory", "category": "tech", "verdict": "supported"},
+            {"requirement_id": "req-2", "requirement_text": "Excel required.", "modality": "mandatory", "category": "tech", "verdict": "supported"},
+            {"requirement_id": "req-3", "requirement_text": "Fluent English required.", "modality": "mandatory", "category": "langues", "verdict": "to_verify"},
+        ]
+    }
+
+    reconcile_cv_plan_with_requirements_fit(preparation, fits)
+
+    assert len(preparation["cv_action_plan"]) == 2
+    repeated = preparation["cv_action_plan"][0]
+    assert repeated["requirement_ids"] == ["req-1", "req-2"]
+    assert [ref["source_field"] for ref in repeated["source_references"]] == [
+        "requirements",
+        "description_original",
+    ]
+    assert preparation["cv_coverage"]["requirements_total"] == 2
+    assert preparation["cv_coverage"]["supported"] == 1
+    assert preparation["cv_coverage"]["to_verify"] == 1
 
 
 def _run_node_script(script: str) -> None:
@@ -282,6 +323,11 @@ assert.strictEqual(cvPlanRank({ status: "supported", evidence_quality: "needs_qu
 assert.strictEqual(cvPlanRank({ status: "needs_evidence", modality: "preferred" }), 3);
 assert.strictEqual(cvPlanRank({ blocking: true }), 0);
 assert.strictEqual(cvPlanRank({ source: "cv_structure", status: "supported" }), 2);
+assert.strictEqual(
+  cvPlanItemFilterKey({ status: "needs_evidence", filter: "verify", evidence_quality: "partial" }),
+  "blocking",
+  "un élément classé comme blocage factuel reste visible dans le filtre Bloquants",
+);
 const counts = cvPlanCountByFilter(entries);
 assert.deepStrictEqual(counts, { all: 5, highlight: 2, verify: 2, blocking: 1 });
 '''.replace("PREP", fixture_prep())
@@ -343,16 +389,16 @@ assert.match(improvementRow.textContent, /Amélioration/);
 assert.match(improvementRow.textContent, /ajoute un résultat chiffré uniquement si tu peux le prouver/);
 // La ligne de couverture explique la mesure documentaire et exclut la probabilité.
 const summaryMatch = nodes.find((node) => matchesClass(node, "cv-plan-summary"));
-assert.match(summaryMatch.textContent, /2\/5 exigences détectées sont étayées par ton profil/);
-assert.match(summaryMatch.textContent, /couverture documentaire 40 %/);
+assert.match(summaryMatch.textContent, /2\/5 exigences appuyées par des preuves suffisantes/);
+assert.match(summaryMatch.textContent, /40 % confirmées/);
 assert.match(summaryMatch.textContent, /langue cible en/);
 const disclaimer = nodes.find((node) => node.textContent === "Ce n’est pas une probabilité d’embauche : c’est un contrôle des preuves actuellement présentes dans ton profil.");
 assert(disclaimer, "l’avertissement non-probabiliste est affiché");
 // Explication dépliable de la couverture documentaire.
 const help = nodes.find((node) => node.tag === "details");
 assert(help, "l’aide à la couverture est repliable");
-assert.match(help.textContent, /retrouvées mot pour mot/);
-assert.match(help.textContent, /jamais inventée/);
+assert.match(help.textContent, /preuve approuvée/);
+assert.match(help.textContent, /ne compte jamais comme une exigence satisfaite/);
 assert.strictEqual(networkRequests.length, 0);
 '''.replace("PREP", fixture_prep())
     _run_node_script(script)
@@ -549,12 +595,16 @@ def test_no_cloud_or_native_dialogs_in_the_module() -> None:
     assert "var(--" in css, "les styles du plan réutilisent les tokens existants"
     assert "@media (max-width: 760px)" in css, "viewport étroit géré"
     index = INDEX_HTML.read_text(encoding="utf-8")
-    assert 'href="/career-static/cv_plan.css"' in index
+    cv_css = re.search(r'href="/career-static/cv_plan\.css\?v=([^"]+)"', index)
+    cv_script = re.search(r'<script src="/career-static/cv_plan\.js\?v=([^"]+)" defer></script>', index)
+    career_script = re.search(r'<script src="/career-static/career\.js\?v=([^"]+)" defer></script>', index)
+    assert cv_css and cv_script and career_script
+    assert cv_css.group(1) == cv_script.group(1) == career_script.group(1)
     # Régression : en mode local, la ligne de consentement cloud ne doit pas être
     # rendue (la règle .studio-consent a plus de poids que [hidden] sans ce correctif).
     assert ".studio-consent[hidden]" in (ROOT / "career_static" / "career.css").read_text(encoding="utf-8")
-    script_position = index.index('<script src="/career-static/cv_plan.js" defer></script>')
-    career_position = index.index('<script src="/career-static/career.js" defer></script>')
+    script_position = index.index(cv_script.group(0))
+    career_position = index.index(career_script.group(0))
     assert script_position < career_position, "cv_plan.js s'exécute avant l'accroche career.js"
     # Navigation inchangée : les sept onglets existants, aucun ajout ni retrait.
     for view in ("dashboard", "discover", "stagehunter", "applications", "interviews", "profile", "settings"):

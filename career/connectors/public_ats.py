@@ -20,11 +20,13 @@ import urllib.request
 from typing import Any, Callable, Protocol
 
 from ..discovery import DiscoveryPayload, PublicSourceError, _location_parts, source_html_to_text
+from ..countries import canonical_country_codes, country_from_source
 from ..exploration import EXPLORATION_MAX_RESULTS, criteria_admit, ranking_key, classify_internship
 from ..offer_qualification import qualify_offer
 from ..scoring import classify_job_family
 from ..stage_search import default_brief, score_brief_match, validate_brief
 from ..models import clean_text
+from ..source_fields import attach_source_material
 
 
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
@@ -112,6 +114,14 @@ class PublicATSConnector:
         self.page_size = max(1, min(PAGE_SIZE, int(page_size)))
         self.max_results = max(1, min(EXPLORATION_MAX_RESULTS, int(max_results)))
         self._last_request_at = 0.0
+        self._last_metrics: dict[str, Any] = {
+            "raw_count": 0,
+            "filtered_count": 0,
+            "excluded_count": 0,
+            "country_excluded_count": 0,
+            "excluded_by_country": {},
+        }
+        self._last_error: str | None = None
 
     @staticmethod
     def _identifier(source: dict[str, Any], *keys: str) -> str:
@@ -149,7 +159,8 @@ class PublicATSConnector:
         raise NotImplementedError
 
     def discover_internships(self, source: dict[str, Any], *, selection_brief: dict[str, Any],
-                             deadline: float | None = None) -> DiscoveryPayload:
+                             deadline: float | None = None,
+                             countries_exclude: list[str] | tuple[str, ...] | None = None) -> DiscoveryPayload:
         if not self.enabled:
             raise PublicSourceError("Ce connecteur est désactivé par défaut.", code="connector_disabled")
         if not isinstance(source, dict) or source.get("provider") != self.provider:
@@ -161,8 +172,13 @@ class PublicATSConnector:
             raise PublicSourceError("Une source officielle vérifiée est requise avant toute consultation.",
                                     code="unverified_source")
         brief = validate_brief(selection_brief) if selection_brief else default_brief()
+        excluded_codes = set(canonical_country_codes(
+            countries_exclude if countries_exclude is not None else brief.get("countries_exclude")
+        ))
+        excluded_by_country: dict[str, int] = {}
         pages = self._pages(source, deadline=deadline)
         raw_count = evaluated = invalid = confirmed = uncertain = excluded = relevant = filtered = 0
+        country_excluded = 0
         ranked: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
         for page in pages:
             items = self._raw_items(page)
@@ -179,11 +195,22 @@ class PublicATSConnector:
                     invalid += 1
                     continue
                 evaluated += 1
+                country_canonical = country_from_source(job.get("country"))
+                if country_canonical and country_canonical in excluded_codes:
+                    # The excluded country is filtered on the source side: the
+                    # offer never becomes a local record.
+                    country_excluded += 1
+                    excluded += 1
+                    excluded_by_country[country_canonical] = (
+                        excluded_by_country.get(country_canonical, 0) + 1
+                    )
+                    continue
                 classification = classify_internship(job)
                 qualification = qualify_offer(
                     job,
                     allowed_contract_types=brief.get("contract_types"),
                     allowed_start_months=brief.get("start_months"),
+                    required_start_date=brief.get("start_date"),
                     minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
                     excluded_countries=brief.get("excluded_countries"),
                     excluded_cities=brief.get("excluded_cities"),
@@ -208,13 +235,35 @@ class PublicATSConnector:
                 job["internship_classification"] = classification
                 ranked.append((ranking_key(job, match), {"job": job, "match": match}))
         selected = heapq.nsmallest(self.max_results, ranked, key=lambda item: item[0])
+        self._last_metrics = {
+            "raw_count": raw_count,
+            "filtered_count": invalid + filtered,
+            "excluded_count": excluded,
+            "country_excluded_count": country_excluded,
+            "excluded_by_country": excluded_by_country,
+        }
         return DiscoveryPayload(
             jobs=tuple(item[1]["job"] for item in selected), verified_at=self.clock(),
             truncated=relevant > self.max_results, raw_count=raw_count,
             evaluated_count=evaluated, invalid_count=invalid, confirmed_count=confirmed,
             uncertain_count=uncertain, excluded_count=excluded, relevant_count=relevant,
             filtered_criteria_count=filtered,
+            country_excluded_count=country_excluded,
+            excluded_by_country=excluded_by_country,
         )
+
+    def health_check(self) -> dict[str, Any]:
+        """Factual counters of the last read; no offer is ever invented here."""
+        metrics = self._last_metrics
+        return {
+            "provider": self.provider,
+            "last_error": self._last_error,
+            "raw_count": int(metrics.get("raw_count", 0)),
+            "filtered_count": int(metrics.get("filtered_count", 0)),
+            "excluded_count": int(metrics.get("excluded_count", 0)),
+            "country_excluded_count": int(metrics.get("country_excluded_count", 0)),
+            "excluded_by_country": dict(metrics.get("excluded_by_country", {})),
+        }
 
     def _normalise_one(self, source: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:
         raise NotImplementedError
@@ -256,9 +305,10 @@ class LeverConnector(PublicATSConnector):
 
     def _normalise_one(self, source: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:
         categories = raw.get("categories") if isinstance(raw.get("categories"), dict) else {}
-        return _common_job(self.provider, source, raw.get("id"), raw.get("text"),
+        job = _common_job(self.provider, source, raw.get("id"), raw.get("text"),
                            raw.get("hostedUrl"), raw.get("applyUrl"), raw.get("descriptionPlain"),
                            categories.get("location"), raw.get("country"), categories.get("commitment"), "")
+        return attach_source_material(job, self.provider, raw, description=job["description_original"])
 
 
 class AshbyConnector(PublicATSConnector):
@@ -292,9 +342,10 @@ class AshbyConnector(PublicATSConnector):
         country = postal.get("addressCountry")
         job_url = raw.get("jobUrl")
         fallback_id = urllib.parse.urlsplit(str(job_url or "")).path.rstrip("/").rsplit("/", 1)[-1]
-        return _common_job(self.provider, source, raw.get("id") or fallback_id, raw.get("title"),
+        job = _common_job(self.provider, source, raw.get("id") or fallback_id, raw.get("title"),
                            job_url, raw.get("applyUrl"), raw.get("descriptionPlain"),
                            location, country, raw.get("employmentType"), raw.get("publishedAt"))
+        return attach_source_material(job, self.provider, raw, description=job["description_original"])
 
 
 class SmartRecruitersConnector(PublicATSConnector):
@@ -339,10 +390,11 @@ class SmartRecruitersConnector(PublicATSConnector):
         # The documented list response's `ref` is an official API detail URL;
         # a human apply link is used when a source supplies one directly.
         official_url = raw.get("applyUrl") or raw.get("ref")
-        return _common_job(self.provider, source, raw.get("id"), raw.get("name"), official_url,
+        job = _common_job(self.provider, source, raw.get("id"), raw.get("name"), official_url,
                            raw.get("applyUrl"), raw.get("description"), location.get("city"),
                            location.get("country"), contract.get("label"), raw.get("releasedDate"),
                            company_name=company.get("name"))
+        return attach_source_material(job, self.provider, raw, description=job["description_original"])
 
 
 def _common_job(provider: str, source: dict[str, Any], job_id: Any, title: Any, official_url: Any,
@@ -368,6 +420,7 @@ def _common_job(provider: str, source: dict[str, Any], job_id: Any, title: Any, 
         except ValueError:
             # A malformed vendor timestamp is not an application date fact.
             posted = ""
+    country_text = clean_text(country or country_from_location, limit=120)
     return {
         "company": clean_text(company_name or source.get("company"), limit=240),
         "title": title_text,
@@ -376,7 +429,8 @@ def _common_job(provider: str, source: dict[str, Any], job_id: Any, title: Any, 
         "official_url": url,
         "apply_url": clean_text(apply_url, limit=2_000),
         "city": city,
-        "country": clean_text(country or country_from_location, limit=120),
+        "country": country_text,
+        "country_canonical": country_from_source(country_text),
         "posted_date": posted,
         "deadline_date": "",
         "start_date": "",

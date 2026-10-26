@@ -1,0 +1,221 @@
+{
+  "label": "Synthetic trust cases for career/source_trust.py. No live URL is contacted, no real offer is copied: every employer, board token and path is invented.",
+  "cases": [
+    {
+      "id": "syn-01",
+      "case": "greenhouse_official",
+      "url": "https://job-boards.greenhouse.io/acme-corp/jobs/4217",
+      "employer_hint": "Acme Corp",
+      "expected_status": "verified",
+      "expected_provider": "greenhouse",
+      "expected_canonical_host": "job-boards.greenhouse.io",
+      "expected_employer_match": "confirmed",
+      "expected_registry_evidence": "registry:greenhouse:acme-corp"
+    },
+    {
+      "id": "syn-02",
+      "case": "lever_official",
+      "url": "https://jobs.lever.co/acme-corp/2f3a-4b1c",
+      "employer_hint": "Acme Corp",
+      "expected_status": "verified",
+      "expected_provider": "lever",
+      "expected_canonical_host": "jobs.lever.co",
+      "expected_employer_match": "confirmed",
+      "expected_registry_evidence": "registry:lever:acme-corp"
+    },
+    {
+      "id": "syn-03",
+      "case": "ashby_official",
+      "url": "https://jobs.ashbyhq.com/acme-corp/9d1e",
+      "employer_hint": "Acme",
+      "expected_status": "verified",
+      "expected_provider": "ashby",
+      "expected_canonical_host": "jobs.ashbyhq.com",
+      "expected_employer_match": "confirmed",
+      "expected_registry_evidence": "registry:ashby:acme-corp"
+    },
+    {
+      "id": "syn-04",
+      "case": "smartrecruiters_official",
+      "url": "https://jobs.smartrecruiters.com/AcmeCorp/743999",
+      "employer_hint": "Acme Corp",
+      "expected_status": "verified",
+      "expected_provider": "smartrecruiters",
+      "expected_canonical_host": "jobs.smartrecruiters.com",
+      "expected_employer_match": "confirmed",
+      "expected_registry_evidence": "registry:smartrecruiters:AcmeCorp"
+    },
+    {
+      "id": "syn-05",
+      "case": "employer_careers_page",
+      "url": "https://careers.acme-corp.com/jobs/finance-intern",
+      "employer_hint": "Acme Corp",
+      "expected_status": "unverified",
+      "expected_provider": "employer",
+      "expected_canonical_host": "careers.acme-corp.com",
+      "expected_employer_match": "unknown",
+      "expected_registry_evidence": null
+    },
+    {
+      "id": "syn-06",
+      "case": "lookalike_domain",
+      "url": "https://greenhouse-jobs.acme.test/acme-corp/jobs/1",
+      "expected_status": "unverified",
+      "expected_provider": "unknown",
+      "expected_canonical_host": "greenhouse-jobs.acme.test",
+      "expected_employer_match": "unknown",
+      "expected_registry_evidence": null
+    },
+    {
+      "id": "syn-07",
+      "case": "deceptive_subdomain",
+      "url": "https://boards.greenhouse.io.acme.test/acme-corp/jobs/1",
+      "expected_status": "contradictory",
+      "expected_provider": "greenhouse",
+      "expected_canonical_host": "boards.greenhouse.io.acme.test",
+      "expected_employer_match": "unknown",
+      "expected_registry_evidence": null
+    },
+    {
+      "id": "syn-08",
+      "case": "shortened_url",
+      "url": "https://bit.ly/3xY2zAcme",
+      "expected_status": "unverified",
+      "expected_provider": "unknown",
+      "expected_canonical_host": "bit.ly",
+      "expected_employer_match": "unknown",
+      "expected_registry_evidence": null
+    },
+    {
+      "id": "syn-09",
+      "case": "missing_url",
+      "url": "",
+      "expected_status": "missing",
+      "expected_provider": null,
+      "expected_canonical_host": null,
+      "expected_employer_match": "unknown",
+      "expected_registry_evidence": null
+    },
+    {
+      "id": "syn-10",
+      "case": "known_provider_wrong_employer",
+      "url": "https://boards.greenhouse.io/other-corp/jobs/1",
+      "employer_hint": "Acme Corp",
+      "expected_status": "contradictory",
+      "expected_provider": "greenhouse",
+      "expected_canonical_host": "boards.greenhouse.io",
+      "expected_employer_match": "mismatch",
+      "expected_registry_evidence": null
+    },
+    {
+      "id": "syn-11",
+      "case": "redirect_resolved",
+      "url": "https://bit.ly/3xY2zAcme",
+      "employer_hint": "Acme Corp",
+      "redirect_key": "https://bit.ly/3xY2zAcme",
+      "expected_status": "verified",
+      "expected_provider": "greenhouse",
+      "expected_canonical_host": "job-boards.greenhouse.io",
+      "expected_employer_match": "confirmed",
+      "expected_registry_evidence": "registry:greenhouse:acme-corp"
+    },
+    {
+      "id": "syn-12",
+      "case": "metadata_official_without_proof",
+      "url": "https://careers.acme-corp.example/jobs/1",
+      "declared_provider": "greenhouse",
+      "expected_status": "unverified",
+      "expected_provider": "employer",
+      "expected_canonical_host": "careers.acme-corp.example",
+      "expected_employer_match": "unknown",
+      "expected_registry_evidence": null
+    },
+    {
+      "id": "syn-13",
+      "case": "known_ats_without_employer_hint",
+      "url": "https://boards.greenhouse.io/acme-corp/jobs/1",
+      "expected_status": "unverified",
+      "expected_provider": "greenhouse",
+      "expected_canonical_host": "boards.greenhouse.io",
+      "expected_employer_match": "unknown",
+      "expected_registry_evidence": null
+    },
+    {
+      "id": "syn-14",
+      "case": "employer_domain_hint_mismatch",
+      "url": "https://careers.other-corp.com/jobs/1",
+      "employer_hint": "Acme Corp",
+      "expected_status": "contradictory",
+      "expected_provider": "employer",
+      "expected_canonical_host": "careers.other-corp.com",
+      "expected_employer_match": "mismatch",
+      "expected_registry_evidence": null
+    },
+    {
+      "id": "syn-15",
+      "case": "plain_http_link",
+      "url": "http://careers.acme-corp.com/jobs/1",
+      "employer_hint": "Acme Corp",
+      "expected_status": "unverified",
+      "expected_provider": "employer",
+      "expected_canonical_host": "careers.acme-corp.com",
+      "expected_employer_match": "unknown",
+      "expected_registry_evidence": null
+    },
+    {
+      "id": "syn-16",
+      "case": "credentials_in_url",
+      "url": "https://user:pass@careers.acme-corp.com/jobs/1",
+      "employer_hint": "Acme Corp",
+      "expected_status": "missing",
+      "expected_provider": null,
+      "expected_canonical_host": null,
+      "expected_employer_match": "unknown",
+      "expected_registry_evidence": null
+    },
+    {
+      "id": "syn-17",
+      "case": "unusable_scheme",
+      "url": "javascript:alert(1)",
+      "expected_status": "missing",
+      "expected_provider": null,
+      "expected_canonical_host": null,
+      "expected_employer_match": "unknown",
+      "expected_registry_evidence": null
+    },
+    {
+      "id": "syn-18",
+      "case": "vendor_domain_board_host",
+      "url": "https://custom.greenhouse.io/acme-corp/jobs/1",
+      "employer_hint": "Acme Corp",
+      "expected_status": "verified",
+      "expected_provider": "greenhouse",
+      "expected_canonical_host": "custom.greenhouse.io",
+      "expected_employer_match": "confirmed",
+      "expected_registry_evidence": "registry:greenhouse:acme-corp"
+    },
+    {
+      "id": "syn-19",
+      "case": "declared_provider_conflict",
+      "url": "https://jobs.lever.co/acme-corp/2f3a-4b1c",
+      "employer_hint": "Acme Corp",
+      "declared_provider": "greenhouse",
+      "expected_status": "contradictory",
+      "expected_provider": "lever",
+      "expected_canonical_host": "jobs.lever.co",
+      "expected_employer_match": "confirmed",
+      "expected_registry_evidence": null
+    },
+    {
+      "id": "syn-20",
+      "case": "opaque_board_token",
+      "url": "https://jobs.lever.co/company/3f2a9b8c-1111-2222-3333-444455556666/9d1e-4c2f",
+      "employer_hint": "Acme Corp",
+      "expected_status": "unverified",
+      "expected_provider": "lever",
+      "expected_canonical_host": "jobs.lever.co",
+      "expected_employer_match": "unknown",
+      "expected_registry_evidence": null
+    }
+  ]
+}

@@ -16,7 +16,7 @@ def _payload(*, month: int = 1, quote: str = "starting January 2027") -> dict:
         "title": "Investment Banking Intern",
         "source_name": "greenhouse",
         "source_id": "synthetic-1",
-        "official_url": "https://example.test/jobs/synthetic-1",
+        "official_url": "https://boards.greenhouse.io/synthetic-bank/jobs/synthetic-1",
         "description_original": f"Internship {quote} for six months.",
         "source_verified": True,
         "qualification": {
@@ -27,6 +27,11 @@ def _payload(*, month: int = 1, quote: str = "starting January 2027") -> dict:
             "duration_max_months": 6,
             "verification_status": "verified",
             "target_status": "conforming",
+            "source_provenance": [
+                {"source_name": "greenhouse", "source_id": "synthetic-1", "official_url": "https://boards.greenhouse.io/synthetic-bank/jobs/synthetic-1", "trust": "verified", "is_representative": True},
+                {"source_name": "employer", "source_id": "synthetic-2", "official_url": "https://careers.synthetic-bank.test/jobs/1", "trust": "unverified", "is_representative": False},
+            ],
+            "source_conflicts": {"city": {"greenhouse": "London", "employer": "Remote"}},
             "missing_fields": ["jour de début vérifiable"],
             "reasons": ["Stage confirmé sur la source vérifiée."],
             "provenance": {
@@ -67,6 +72,8 @@ def test_import_does_not_mutate_payload_or_invent_exact_dates(tmp_path) -> None:
     assert facts["duration_min_months"] == 6
     assert facts["contract_type"] == "internship"
     assert facts["provenance"]["start_month"]["quote"] == "starting January 2027"
+    assert len(facts["source_provenance"]) == 2
+    assert facts["source_conflicts"]["city"]["employer"] == "Remote"
 
 
 def test_new_snapshot_schema_is_additive_and_versioned(tmp_path) -> None:
@@ -84,6 +91,32 @@ def test_new_snapshot_schema_is_additive_and_versioned(tmp_path) -> None:
         "source_fingerprint",
         "updated_at",
     } <= columns
+
+
+def test_v7_migration_creates_private_backup_and_preserves_jobs(tmp_path) -> None:
+    service = CareerService(tmp_path)
+    created = service.import_job(_payload())
+    with sqlite3.connect(service.db_path) as connection:
+        connection.execute("DROP TABLE job_qualification_snapshots")
+        connection.execute("PRAGMA user_version = 7")
+
+    migrated = CareerService(tmp_path)
+
+    with sqlite3.connect(migrated.db_path) as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
+        assert connection.execute(
+            "SELECT company FROM jobs WHERE id = ?", (created["id"],)
+        ).fetchone()[0] == "Synthetic Bank"
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+    assert "job_qualification_snapshots" in tables
+    backups = list(migrated.backups_dir.glob("career-before-v7-to-v8-*.sqlite3"))
+    assert len(backups) == 1
+    assert backups[0].stat().st_mode & 0o077 == 0
 
 
 def test_repeated_import_refreshes_snapshot_but_preserves_user_source_fields(tmp_path) -> None:
@@ -183,3 +216,34 @@ def test_manual_claim_does_not_create_persisted_source_verification(tmp_path) ->
     stored = service.import_job(payload)
     assert stored["qualification_snapshot_current"] is False
     assert stored["source_verified"] is False
+    assert stored["official_source_trust"]["status"] == "verified"
+
+
+def test_unverified_same_source_refresh_does_not_downgrade_verified_snapshot(tmp_path) -> None:
+    service = CareerService(tmp_path)
+    trusted = _payload()
+    trusted.update(
+        source_name="greenhouse",
+        source_id="synthetic-verified",
+        official_url="https://boards.greenhouse.io/synthetic-bank/jobs/synthetic-verified",
+        source_verified=True,
+        start_date="2027-01-05",
+        duration_months=6,
+        employment_type="Internship",
+        language="English",
+        country="United Kingdom",
+        city="London",
+    )
+    trusted["qualification"] = qualify_offer(trusted).to_dict()
+    saved = service.import_job(trusted)
+    assert saved["source_verified"] is True
+
+    unverified = dict(trusted)
+    unverified.pop("source_verified")
+    unverified["qualification"] = qualify_offer(unverified).to_dict()
+    refreshed = service.import_job(unverified)
+
+    assert refreshed["id"] == saved["id"]
+    assert refreshed["qualification_snapshot_current"] is True
+    assert refreshed["source_verified"] is True
+    assert refreshed["qualification_facts"]["verification_status"] == "verified"

@@ -92,6 +92,19 @@ def test_talent_com_maps_synthetic_postings_to_common_contract(fixtures):
         assert job["employment_type"] in {"Internship", "Stage"}
 
 
+def test_talent_com_preserves_published_fields(fixtures):
+    connector = TalentComConnector(
+        fetch=FixtureFetch([build_talent_com_html(fixtures["talent_com"])]),
+        clock=lambda: "2026-10-20T01:00:00Z",
+    )
+    result = connector.discover_internships(source("talent_com"), selection_brief=default_brief())
+    job = result.jobs[0]
+    fields = job["source_fields"]["talent_com"]
+    assert fields["contract_type"] == "Internship"
+    assert fields["location"] == "Brussels, Belgium"
+    assert fields["url"] == "https://www.talent.com/job/financial-analyst-intern-brussels"
+
+
 def test_talent_com_refuses_until_valid_source(fixtures):
     connector = TalentComConnector()
     unverified = {"provider": "talent_com", "company": "Synthetic Finance", "board_token": "synthetic-board"}
@@ -119,9 +132,11 @@ def test_talent_com_health_check_returns_metrics():
     assert set(health.keys()) == {
         "last_ok", "last_error", "consecutive_failures",
         "raw_offers", "valid_offers", "finance_offers",
-        "stage_offers", "conforming_offers", "to_verify_offers"
+        "stage_offers", "conforming_offers", "to_verify_offers",
+        "raw_count", "filtered_count", "excluded_count", "excluded_by_country"
     }
-    assert all(isinstance(v, (bool, int, str, type(None))) for v in health.values())
+    assert all(isinstance(v, (bool, int, str, type(None), dict)) for v in health.values())
+    assert isinstance(health["excluded_by_country"], dict)
 
 
 def test_talent_com_france_exclusion(fixtures):

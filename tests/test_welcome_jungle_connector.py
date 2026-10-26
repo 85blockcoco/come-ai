@@ -92,6 +92,19 @@ def test_welcome_jungle_maps_synthetic_postings_to_common_contract(fixtures):
         assert job["employment_type"] in {"Internship", "Stage"}
 
 
+def test_welcome_jungle_preserves_published_fields(fixtures):
+    connector = WelcomeJungleConnector(
+        fetch=FixtureFetch([build_welcome_jungle_html(fixtures["welcome_jungle"])]),
+        clock=lambda: "2026-10-20T01:00:00Z",
+    )
+    result = connector.discover_internships(source("welcome_jungle"), selection_brief=default_brief())
+    job = next(item for item in result.jobs if item["title"] == "M&A Internship - London")
+    fields = job["source_fields"]["welcome_jungle"]
+    assert fields["contract_type"] == "Internship"
+    assert fields["location"] == "London, United Kingdom"
+    assert fields["url"] == "https://www.welcometothejungle.com/fr/companies/goldman-sachs/jobs/m-a-internship-london"
+
+
 def test_welcome_jungle_html_normalized_before_education_evidence(fixtures):
     raw = [dict(fixtures["welcome_jungle"][0])]
     raw[0]["description"] = (
@@ -137,9 +150,11 @@ def test_welcome_jungle_health_check_returns_metrics():
     assert set(health.keys()) == {
         "last_ok", "last_error", "consecutive_failures",
         "raw_offers", "valid_offers", "finance_offers",
-        "stage_offers", "conforming_offers", "to_verify_offers"
+        "stage_offers", "conforming_offers", "to_verify_offers",
+        "raw_count", "filtered_count", "excluded_count", "excluded_by_country"
     }
-    assert all(isinstance(v, (bool, int, str, type(None))) for v in health.values())
+    assert all(isinstance(v, (bool, int, str, type(None), dict)) for v in health.values())
+    assert isinstance(health["excluded_by_country"], dict)
 
 
 def test_welcome_jungle_france_exclusion(fixtures):

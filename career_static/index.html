@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
     <title>Côme AI Career — espace local</title>
-    <link rel="stylesheet" href="/career-static/career.css" />
-    <link rel="stylesheet" href="/career-static/cv_plan.css" />
+    <link rel="stylesheet" href="/career-static/career.css?v=codex-v3-20261025-rc10" />
+    <link rel="stylesheet" href="/career-static/cv_plan.css?v=codex-v3-20261025-rc10" />
   </head>
   <body>
     <a class="skip-link" href="#career-main">Aller au contenu Career</a>
@@ -384,29 +384,35 @@
                 <div id="stagehunter-contract-types" class="stagehunter-domains"></div>
               </fieldset>
               <fieldset>
-                <legend>Mois de début possibles</legend>
+                <legend>Mois de début acceptés</legend>
                 <label class="stagehunter-domain"><input id="stagehunter-quarter-one" type="checkbox" /> Premier trimestre (janvier à mars)</label>
                 <div id="stagehunter-start-months" class="stagehunter-domains"></div>
+                <p class="fixed-period-note">Tous les mois sont acceptés par défaut à partir de la date cible. Décoche ceux qui ne te conviennent pas.</p>
               </fieldset>
               <div class="form-row two-columns">
+                <label>Début au plus tôt<input id="stagehunter-start-date" type="date" /></label>
                 <label>Durée minimale requise pour un stage (mois)<input id="stagehunter-min-stage-duration" type="number" min="1" max="24" inputmode="numeric" /></label>
-                <p class="fixed-period-note">Une offre sans date de début ou sans durée connue reste « à vérifier » ; elle ne sera pas déclarée conforme.</p>
               </div>
-              <fieldset>
-                <legend>Domaines de la finance</legend>
-                <div id="stagehunter-domains" class="stagehunter-domains"></div>
-              </fieldset>
-              <label>Autres métiers financiers (facultatif)
+              <p class="fixed-period-note">Une date ou une durée inconnue reste « à vérifier ». Les offres qui commencent avant la date cible ou durent moins longtemps sont écartées.</p>
+              <p class="stagehunter-defaults-note">Par défaut : finance dans tous les domaines, offres à partir du 1<sup>er</sup> janvier 2027, stages de six mois minimum. France et Paris sont exclus ; un lieu inconnu reste à vérifier. Tu peux modifier tous ces critères.</p>
+              <details class="stagehunter-advanced">
+                <summary>Affiner ma recherche <span>domaines, lieux, profil et classement</span></summary>
+                <div class="stagehunter-advanced-content form-stack">
+                  <fieldset>
+                    <legend>Domaines de la finance</legend>
+                    <div id="stagehunter-domains" class="stagehunter-domains"></div>
+                  </fieldset>
+                  <label>Autres métiers financiers (facultatif)
                 <input id="stagehunter-other-domains" maxlength="1500" placeholder="Ex. dette privée, fonds de dette…" />
-              </label>
-              <label>Métiers / intitulés visés (facultatif)
+                  </label>
+                  <label>Métiers / intitulés visés (facultatif)
                 <input id="stagehunter-roles" maxlength="2500" placeholder="Ex. stagiaire M&A, analyste junior…" />
-              </label>
-              <div class="form-row two-columns">
+                  </label>
+                  <div class="form-row two-columns">
                 <label>Pays recherchés (facultatif)<input id="stagehunter-countries" maxlength="1500" placeholder="Ex. Royaume-Uni, Allemagne, Singapour" /></label>
                 <label>Villes recherchées (facultatif)<input id="stagehunter-cities" maxlength="1500" placeholder="Ex. Londres, Francfort, Singapour" /></label>
-              </div>
-              <fieldset>
+                  </div>
+                  <fieldset>
                 <legend>Exclusions géographiques strictes</legend>
                 <div class="form-row two-columns">
                   <label>Pays exclus<input id="stagehunter-excluded-countries" maxlength="1500" value="France" /></label>
@@ -414,40 +420,30 @@
                 </div>
                 <label class="stagehunter-domain"><input id="stagehunter-require-known-location" type="checkbox" checked /> Garder « à vérifier » toute offre dont le pays est inconnu</label>
                 <p class="fixed-period-note">Par défaut, aucune offre située en France ou à Paris n’est recommandée.</p>
-              </fieldset>
-              <div class="form-row two-columns">
+                  </fieldset>
+                  <div class="form-row two-columns">
                 <label>Niveau d’études déclaré<input id="stagehunter-level" maxlength="120" placeholder="Ex. Bac+5, Master 2…" /></label>
                 <label>Langues déclarées<input id="stagehunter-languages" maxlength="1000" placeholder="Ex. anglais C1, français natif…" /></label>
-              </div>
-              <label>Préférence sur le niveau demandé dans les offres
+                  </div>
+                  <label>Préférence sur le niveau demandé dans les offres
                 <select id="stagehunter-education-preference">
                   <option value="bachelor_m1_then_m2">Bachelor / Master 1 en priorité, Master 2 aussi</option>
                   <option value="any">Tous les niveaux, sans préférence</option>
                 </select>
-              </label>
-              <p class="fixed-period-note">Cette préférence départage les offres de pertinence équivalente. Elle ne déclare aucun diplôme à ta place et n’exclut pas les offres M2. Un niveau absent ou « Master » non précisé reste à vérifier.</p>
-              <label>Contraintes (facultatif)
+                  </label>
+                  <p class="fixed-period-note">Cette préférence départage les offres de pertinence équivalente. Elle ne déclare aucun diplôme à ta place et n’exclut pas les offres M2. Un niveau absent ou « Master » non précisé reste à vérifier.</p>
+                  <label>Contraintes (facultatif)
                 <textarea id="stagehunter-constraints" rows="2" maxlength="2000" placeholder="Ex. mobilité sur Paris uniquement…"></textarea>
-              </label>
-              <fieldset>
+                  </label>
+                  <fieldset>
                 <legend>Préférences de classement (poids de 0,5 à 2)</legend>
                 <div id="stagehunter-ranking" class="stagehunter-ranking"></div>
-              </fieldset>
+                  </fieldset>
+                </div>
+              </details>
               <button class="primary-button" type="submit">Enregistrer mes critères</button>
             </form>
             <p id="stagehunter-brief-note" class="fixed-period-note"></p>
-          </section>
-
-          <section class="panel stagehunter-pipeline-panel">
-            <div class="panel-heading">
-              <div>
-                <p class="eyebrow">Cycle complet</p>
-                <h3>Offre → qualification → CV adapté → kit → suivi</h3>
-              </div>
-              <button id="stagehunter-pipeline-refresh" class="secondary-button" type="button">Actualiser</button>
-            </div>
-            <p class="fixed-period-note">Vue locale dérivée des données existantes. Aucun envoi automatique.</p>
-            <div id="stagehunter-pipeline" class="stagehunter-pipeline" aria-live="polite" hidden></div>
           </section>
 
           <section class="panel">
@@ -456,6 +452,7 @@
             <p class="fixed-period-note">Explore les sources publiques vérifiées sans ajouter d’entreprise. Les offres sont qualifiées selon les types de contrat et les mois que tu as sélectionnés ; les stages doivent respecter la durée minimale connue. Les informations manquantes restent « à vérifier ». Tes critères et ton profil restent sur ton Mac.</p>
             <div class="job-actions" role="group" aria-label="Mode de recherche de stages">
               <button id="stagehunter-explore" class="primary-button" type="button">Explorer les stages</button>
+              <button id="stagehunter-explore-cancel" class="secondary-button" type="button" hidden>Arrêter la recherche</button>
               <button id="stagehunter-my-companies" class="secondary-button" type="button">Mes entreprises</button>
             </div>
             <div id="stagehunter-progress" class="stagehunter-progress" aria-live="polite" hidden>
@@ -463,16 +460,17 @@
                 <strong id="stagehunter-progress-label">Préparation de la recherche…</strong>
                 <span id="stagehunter-progress-percent">0 %</span>
               </div>
-              <div id="stagehunter-progress-bar" class="stagehunter-progress-track" role="progressbar" aria-label="Progression estimée de la recherche" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div id="stagehunter-progress-bar" class="stagehunter-progress-track" role="progressbar" aria-label="Progression réelle de la recherche : étapes terminées côté serveur" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
                 <span class="stagehunter-progress-fill"></span>
               </div>
-              <p id="stagehunter-progress-detail">Progression estimée : les sources répondent à des vitesses différentes. Le nombre exact de sources sera affiché à la fin.</p>
+              <p id="stagehunter-progress-detail">La progression affichée vient du serveur : chaque étape annoncée est une étape réellement terminée.</p>
             </div>
             <p id="stagehunter-explore-status" class="fixed-period-note" aria-live="polite">Aucune entreprise à configurer pour explorer. Enregistre tes critères, puis lance la recherche.</p>
             <details id="stagehunter-explore-report" hidden>
               <summary>Sources, résultats et limites de cette exploration</summary>
               <div id="stagehunter-explore-sources" class="form-stack"></div>
               <p id="stagehunter-explore-coverage" class="fixed-period-note"></p>
+              <div id="stagehunter-source-coverage" class="stagehunter-source-coverage" aria-live="polite" hidden></div>
             </details>
             <details id="stagehunter-personal-boards">
               <summary>Mes entreprises : suivre les boards choisis par moi</summary>
@@ -560,6 +558,18 @@
               <button class="secondary-button" type="button" data-view-action="applications">Ouvrir le suivi détaillé</button>
             </div>
           </section>
+
+          <section class="panel stagehunter-pipeline-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Vue d’ensemble</p>
+                <h3>Suivre le cycle complet</h3>
+              </div>
+              <button id="stagehunter-pipeline-refresh" class="secondary-button" type="button">Actualiser</button>
+            </div>
+            <p class="fixed-period-note">Résumé local du parcours et des prochaines actions. Les dépôts restent manuels.</p>
+            <div id="stagehunter-pipeline" class="stagehunter-pipeline" aria-live="polite" hidden></div>
+          </section>
         </section>
 
         <section id="view-profile" class="career-view" tabindex="-1" hidden aria-labelledby="profile-title">
@@ -604,7 +614,8 @@
                   <select id="application-draft-job" required><option value="">Choisir une offre…</option></select>
                 </label>
                 <label>Langue du dossier
-                  <select id="application-draft-language">
+                  <select id="application-draft-language" required>
+                    <option value="">Choisir la langue du dossier…</option>
                     <option value="fr">Français</option>
                     <option value="en">English</option>
                     <option value="it">Italiano</option>
@@ -732,7 +743,8 @@
         <span>Côme AI Career fonctionne localement par défaut : OCR macOS, profil, pertinence, candidatures et coach textuel. Les boards publics ne sont lus qu’après ton clic ; aucun dépôt de candidature n’est automatisé.</span>
       </footer>
     </div>
-    <script src="/career-static/cv_plan.js" defer></script>
-    <script src="/career-static/career.js" defer></script>
+    <script src="/career-static/cv_plan.js?v=codex-v3-20261025-rc10" defer></script>
+    <script src="/career-static/js/exploration-progress.js?v=codex-v3-20261025-rc10" defer></script>
+    <script src="/career-static/career.js?v=codex-v3-20261025-rc10" defer></script>
   </body>
 </html>

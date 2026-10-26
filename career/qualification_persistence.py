@@ -33,6 +33,10 @@ _FACT_FIELDS = (
     "official_url",
     "verification_status",
     "target_status",
+    "temporal_facts",
+    "source_provenance",
+    "source_conflicts",
+    "dedup_reasons",
 )
 
 
@@ -42,6 +46,67 @@ def _bounded_scalar(value: Any) -> str | int | float | bool | None:
     return clean_text(value, limit=2_000)
 
 
+def _bounded_temporal_facts(value: Any) -> list[dict[str, Any]]:
+    """Keep a bounded, allow-listed copy of temporal evidence from offer text."""
+    if not isinstance(value, (list, tuple)):
+        return []
+    allowed = {
+        "fact_type", "value", "precision", "source_field", "quote", "start_offset",
+        "end_offset", "confidence", "contradictions", "fact_id", "lang",
+    }
+    facts: list[dict[str, Any]] = []
+    for item in value[:200]:
+        if not isinstance(item, dict):
+            continue
+        bounded: dict[str, Any] = {}
+        for key in allowed:
+            raw = item.get(key)
+            if key == "value" and isinstance(raw, dict):
+                bounded[key] = {
+                    clean_text(name, limit=80): _bounded_scalar(field_value)
+                    for name, field_value in list(raw.items())[:8]
+                    if isinstance(name, str)
+                }
+            elif key == "contradictions" and isinstance(raw, (list, tuple)):
+                bounded[key] = [clean_text(entry, limit=200) for entry in raw[:40] if isinstance(entry, str)]
+            elif key in {"start_offset", "end_offset"}:
+                bounded[key] = raw if type(raw) is int and raw >= 0 else 0
+            elif key in {"fact_type", "precision", "source_field", "quote", "confidence", "fact_id", "lang"}:
+                bounded[key] = clean_text(raw, limit=1_000 if key == "quote" else 160)
+        if bounded.get("fact_type") and bounded.get("quote"):
+            facts.append(bounded)
+    return facts
+
+
+def _bounded_source_provenance(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    fields = ("source_name", "source_id", "official_url", "trust", "is_representative")
+    result = []
+    for item in value[:25]:
+        if not isinstance(item, dict):
+            continue
+        result.append({
+            key: (bool(item.get(key)) if key == "is_representative" else clean_text(item.get(key), limit=2_000 if key == "official_url" else 240))
+            for key in fields
+        })
+    return result
+
+
+def _bounded_source_conflicts(value: Any) -> dict[str, dict[str, str]]:
+    if not isinstance(value, dict):
+        return {}
+    result: dict[str, dict[str, str]] = {}
+    for field, entries in list(value.items())[:20]:
+        if not isinstance(entries, dict):
+            continue
+        result[clean_text(field, limit=80)] = {
+            clean_text(source, limit=160): clean_text(text, limit=300)
+            for source, text in list(entries.items())[:10]
+        }
+    return result
+
+
 def normalize_qualification_snapshot(
     qualification: dict[str, Any], source_payload: dict[str, Any]
 ) -> dict[str, Any]:
@@ -49,11 +114,28 @@ def normalize_qualification_snapshot(
     if not isinstance(qualification, dict):
         raise TypeError("qualification must be an object")
 
-    facts = {
-        field: _bounded_scalar(qualification.get(field))
-        for field in _FACT_FIELDS
-        if qualification.get(field) not in (None, "")
-    }
+    facts: dict[str, Any] = {}
+    for field in _FACT_FIELDS:
+        value = qualification.get(field)
+        if field == "temporal_facts":
+            temporal = _bounded_temporal_facts(value)
+            if temporal:
+                facts[field] = temporal
+        elif field == "source_provenance":
+            provenance_items = _bounded_source_provenance(value)
+            if provenance_items:
+                facts[field] = provenance_items
+        elif field == "source_conflicts":
+            conflicts = _bounded_source_conflicts(value)
+            if conflicts:
+                facts[field] = conflicts
+        elif field == "dedup_reasons":
+            if isinstance(value, (list, tuple)):
+                reasons = [clean_text(item, limit=200) for item in value[:20]]
+                if reasons:
+                    facts[field] = [item for item in reasons if item]
+        elif value not in (None, ""):
+            facts[field] = _bounded_scalar(value)
     raw_provenance = qualification.get("provenance")
     provenance: dict[str, dict[str, Any]] = {}
     if isinstance(raw_provenance, dict):

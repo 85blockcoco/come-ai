@@ -39,6 +39,27 @@ class VisualBlock:
     page: int = 0
 
 
+# Known section headers (uppercase in the source)
+SECTION_HEADERS = frozenset({
+    "experience",
+    "education",
+    "skills",
+    "languages",
+    "projects",
+    "certifications",
+    "expérience",
+    "formation",
+    "compétences",
+    "langues",
+    "projets",
+})
+
+
+def _is_section_header(text: str) -> bool:
+    t = text.strip().casefold()
+    return t.upper() == text.strip() and t in SECTION_HEADERS
+
+
 def reconstruct_reading_order(
     blocks: list[VisualBlock], *, line_tolerance: float = 6.0
 ) -> str:
@@ -61,28 +82,25 @@ def reconstruct_reading_order(
         lines: list[str] = []
         for band in bands:
             ordered = sorted(band, key=lambda block: block.x0)
-            first_text = ordered[0].text.strip()
-            if (
-                len(ordered) > 1
-                and first_text.upper() == first_text
-                and first_text.casefold()
-                in {
-                    "experience",
-                    "education",
-                    "skills",
-                    "languages",
-                    "projects",
-                    "certifications",
-                    "expérience",
-                    "formation",
-                    "compétences",
-                    "langues",
-                    "projets",
-                }
-            ):
-                lines.append(first_text)
-                lines.append(" ".join(block.text.strip() for block in ordered[1:]))
+            # Check each block in the band for section headers
+            header_blocks = [b for b in ordered if _is_section_header(b.text)]
+            if header_blocks:
+                # Emit each section header on its own line
+                for hb in header_blocks:
+                    lines.append(hb.text.strip())
+                # Remaining non-header blocks in this band
+                content_blocks = [b for b in ordered if not _is_section_header(b.text)]
+                if content_blocks:
+                    parts: list[str] = []
+                    previous: VisualBlock | None = None
+                    for block in content_blocks:
+                        if previous is not None and block.x0 - previous.x1 > 45:
+                            parts.append("|")
+                        parts.append(block.text.strip())
+                        previous = block
+                    lines.append(" ".join(parts))
                 continue
+            # No section headers in this band: normal left-to-right reconstruction
             parts: list[str] = []
             previous: VisualBlock | None = None
             for block in ordered:
@@ -99,9 +117,15 @@ def _extract_positioned_page(page: object, page_number: int) -> str:
     blocks: list[VisualBlock] = []
     page_height = float(getattr(page, "mediabox").height)
 
-    def visitor(text: str, _cm: object, tm: list[float], _font: object, size: float) -> None:
-        x0 = float(tm[4])
-        base_top = page_height - float(tm[5])
+    def visitor(text: str, cm: list[float], tm: list[float], _font: object, size: float) -> None:
+        # Transform the text origin into page coordinates. Layouts commonly
+        # flip or translate the current transformation matrix while tm stays
+        # positive, so interpreting tm[5] alone reverses top-down documents.
+        a, b, c, d, e, f = (float(value) for value in cm[:6])
+        text_x, text_y = float(tm[4]), float(tm[5])
+        x0 = a * text_x + c * text_y + e
+        baseline_y = b * text_x + d * text_y + f
+        base_top = page_height - baseline_y
         for line_index, raw_line in enumerate(text.splitlines()):
             cleaned = raw_line.strip()
             if not cleaned:

@@ -12,7 +12,7 @@ the person lacks it.
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Mapping
 
 from .models import clean_text, normalized_text
 
@@ -161,6 +161,13 @@ _CHECKS: tuple[dict[str, Any], ...] = (
 )
 
 
+def _is_unknown_sentinel(text: str) -> bool:
+    return normalized_text(text).strip(" .:;-") in {
+        "unknown", "inconnu", "inconnue", "not specified", "unspecified",
+        "not provided", "non precise", "non renseigne", "non renseignee",
+    }
+
+
 def _tokens(text: str) -> list[str]:
     return [
         token
@@ -189,6 +196,11 @@ def extract_requirements(job: dict[str, Any]) -> list[dict[str, str]]:
     def add(text: Any, source: str) -> None:
         statement = clean_text(text, limit=MAX_TEXT_LENGTH)
         if len(statement) < 4:
+            return
+        # API defaults and imported records often use a sentinel for an
+        # absent requirement. It is metadata, not employer evidence and must
+        # never become a profile match or a CV action.
+        if _is_unknown_sentinel(statement):
             return
         if any(statement.casefold() == existing["text"].casefold() for existing in items):
             return
@@ -232,14 +244,11 @@ def extract_requirements(job: dict[str, Any]) -> list[dict[str, str]]:
             if len(items) >= MAX_REQUIREMENTS:
                 break
     languages = clean_text(job.get("languages_required"), limit=400)
-    if languages:
+    if languages and not _is_unknown_sentinel(languages):
         add(f"Langues requises : {languages}", "languages_required")
     eligibility = clean_text(job.get("eligibility_requirement"), limit=400)
-    if eligibility:
+    if eligibility and not _is_unknown_sentinel(eligibility):
         add(f"Éligibilité : {eligibility}", "eligibility_requirement")
-    role_level = clean_text(job.get("role_level"), limit=200)
-    if role_level:
-        add(f"Niveau visé : {role_level}", "role_level")
     return items
 
 
@@ -277,14 +286,134 @@ def _find_evidence(profile: dict[str, Any], tokens: list[str]) -> tuple[str, str
     return field, excerpt, hits
 
 
+def _canonical_requirements(intelligence: Mapping[str, Any] | None) -> list[dict[str, Any]]:
+    """Return the canonical requirement records carried by a snapshot.
+
+    The snapshot is the single contract shared by the explorer, the detailed
+    view, the matching panel, the CV preparation, the cover letter and the
+    application checklist.  When it is present, the preparation panel reads
+    the very same records — and therefore the very same identifiers.
+
+    A statement flagged as an injection attempt is **never** a requirement:
+    it stays visible as flagged evidence in the snapshot, but it is excluded
+    here so that it can never become an action item, a CV gap or a quoted
+    sentence of the cover letter.
+    """
+    if not isinstance(intelligence, Mapping):
+        return []
+    records = intelligence.get("requirements")
+    if not isinstance(records, (list, tuple)):
+        return []
+    canonical: list[dict[str, Any]] = []
+    for record in records:
+        if not isinstance(record, Mapping):
+            continue
+        if bool(record.get("injection_suspect")):
+            continue
+        identifier = clean_text(record.get("id"), limit=80)
+        text = clean_text(record.get("text"), limit=MAX_TEXT_LENGTH)
+        source_field = clean_text(record.get("source_field"), limit=80)
+        if not identifier or not text:
+            continue
+        if source_field == "role_level":
+            continue
+        if _is_unknown_sentinel(text):
+            continue
+        canonical.append(
+            {
+                "id": identifier,
+                "text": text,
+                "source": clean_text(record.get("source_field"), limit=80) or "description_original",
+                "source_field": source_field or "description_original",
+                "locator": clean_text(record.get("locator"), limit=80),
+                "modality": clean_text(record.get("modality"), limit=40) or "unknown",
+                "category": clean_text(record.get("category"), limit=40) or "other",
+            }
+        )
+    return canonical
+
+
+def _injection_suspect_ids(intelligence: Mapping[str, Any] | None) -> list[str]:
+    """Return the identifiers of the statements excluded as injection attempts."""
+    if not isinstance(intelligence, Mapping):
+        return []
+    records = intelligence.get("requirements")
+    if not isinstance(records, (list, tuple)):
+        return []
+    identifiers: list[str] = []
+    for record in records:
+        if not isinstance(record, Mapping):
+            continue
+        if not bool(record.get("injection_suspect")):
+            continue
+        identifier = clean_text(record.get("id"), limit=80)
+        if identifier and identifier not in identifiers:
+            identifiers.append(identifier)
+    return identifiers
+
+
+def _intelligence_block(
+    intelligence: Mapping[str, Any] | None,
+    canonical: list[dict[str, Any]],
+    matched_requirement_ids: list[str],
+    unverified_requirement_ids: list[str],
+) -> dict[str, Any]:
+    """Return the shared identifiers exposed by the preparation panel."""
+    if not isinstance(intelligence, Mapping):
+        return {}
+    return {
+        "job_id": clean_text(intelligence.get("job_id"), limit=80),
+        "schema_version": int(intelligence.get("schema_version") or 1),
+        "source_hash": clean_text(intelligence.get("source_hash"), limit=64),
+        "requirement_ids": [record["id"] for record in canonical],
+        "requirements_by_id": {record["id"]: record for record in canonical},
+        "matched_requirement_ids": list(matched_requirement_ids),
+        "unverified_requirement_ids": list(unverified_requirement_ids),
+        "to_verify_requirement_ids": list(unverified_requirement_ids),
+        # The statements refused as injection attempts are listed, never
+        # silently dropped: they are visible, they are not requirements.
+        "injection_suspect_ids": _injection_suspect_ids(intelligence),
+        "missing": [
+            {
+                "field": clean_text(item.get("field"), limit=120),
+                "label": clean_text(item.get("label"), limit=160),
+                "status": clean_text(item.get("status"), limit=40) or "to_verify",
+                "reason": clean_text(item.get("reason"), limit=500),
+            }
+            for item in intelligence.get("missing") or []
+            if isinstance(item, Mapping)
+        ],
+        "contradictions": [
+            {
+                "id": clean_text(item.get("id"), limit=80),
+                "topic": clean_text(item.get("topic"), limit=80),
+                "kind": clean_text(item.get("kind"), limit=80),
+            }
+            for item in intelligence.get("contradictions") or []
+            if isinstance(item, Mapping)
+        ],
+    }
+
+
 def prepare_application(
     profile: dict[str, Any] | None,
     intake: dict[str, Any] | None,
     job: dict[str, Any],
+    *,
+    intelligence: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Build the factual preparation panel for one stored offer."""
+    """Build the factual preparation panel for one stored offer.
+
+    ``intelligence`` is the versioned offer-intelligence snapshot of the
+    offer.  When it is provided, the panel reads the canonical requirement
+    records it carries, so every screen shows the same requirement with the
+    same identifier.  Without it, the historical local extraction is used.
+    """
     profile = profile or {}
     intake = intake or {}
+    if intelligence is None and isinstance(job.get("offer_intelligence"), Mapping):
+        intelligence = job["offer_intelligence"]
+    canonical = _canonical_requirements(intelligence)
     # Guided-intake answers are the person's own declared facts and may be
     # quoted alongside the profile, but contact data never is.
     intake_answers = intake.get("answers") if isinstance(intake.get("answers"), dict) else {}
@@ -294,20 +423,37 @@ def prepare_application(
         if extra:
             working_profile["experience"] = f"{working_profile['experience']}\n{extra}".strip()
 
-    requirements = extract_requirements(job)
+    if isinstance(intelligence, Mapping):
+        requirements = [
+            {
+                "text": record["text"],
+                "source": record["source"],
+                "requirement_id": record["id"],
+                "modality": record["modality"],
+                "category": record["category"],
+            }
+            for record in canonical
+        ]
+    else:
+        requirements = extract_requirements(job)
     profile_blob = normalized_text(_profile_text(working_profile))
 
     matched: list[dict[str, Any]] = []
+    matched_requirement_ids: list[str] = []
     unverified: list[dict[str, Any]] = []
+    unverified_requirement_ids: list[str] = []
     for requirement in requirements:
         tokens = _tokens(requirement["text"])
+        requirement_id = clean_text(requirement.get("requirement_id"), limit=80)
         if not tokens or not profile_blob:
             unverified.append(
                 {
                     "requirement": requirement["text"],
                     "note": "Non trouvé dans ton profil : aucun élément comparable n’y figure (vérifie, complète ou ajuste si pertinent).",
+                    **({"requirement_id": requirement_id} if requirement_id else {}),
                 }
             )
+            unverified_requirement_ids.append(requirement_id)
             continue
         evidence = _find_evidence(working_profile, tokens)
         if evidence:
@@ -318,16 +464,21 @@ def prepare_application(
                     "profile_field": field,
                     "evidence": excerpt,
                     "matched_on": hits,
+                    **({"requirement_id": requirement_id} if requirement_id else {}),
                 }
             )
+            matched_requirement_ids.append(requirement_id)
         else:
             unverified.append(
                 {
                     "requirement": requirement["text"],
                     "note": "Non trouvé dans ton profil : aucun élément comparable n’y figure (vérifie, complète ou ajuste si pertinent).",
+                    **({"requirement_id": requirement_id} if requirement_id else {}),
                 }
             )
+            unverified_requirement_ids.append(requirement_id)
     matched = matched[:MAX_MATCHED]
+    matched_requirement_ids = matched_requirement_ids[:MAX_MATCHED]
 
     cv_action_plan: list[dict[str, Any]] = []
     for index, item in enumerate(matched[:MAX_CV_ACTIONS], start=1):
@@ -344,6 +495,7 @@ def prepare_application(
                 "section": section,
                 "offer_reference": f"Exigence détectée n°{index}",
                 "profile_reference": f"Profil local · {section}",
+                "requirement_id": matched_requirement_ids[index - 1] if index - 1 < len(matched_requirement_ids) else "",
                 "requirement": requirement,
                 "profile_evidence": evidence,
                 "matched_on": list(item.get("matched_on") or []),
@@ -374,6 +526,7 @@ def prepare_application(
                 "section": "À déterminer",
                 "offer_reference": f"Exigence détectée non étayée n°{index}",
                 "profile_reference": "Aucune preuve trouvée dans le profil local",
+                "requirement_id": unverified_requirement_ids[index - 1] if index - 1 < len(unverified_requirement_ids) else "",
                 "requirement": requirement,
                 "profile_evidence": "",
                 "matched_on": [],
@@ -484,6 +637,9 @@ def prepare_application(
             "last_verified_at": clean_text(job.get("last_verified_at"), limit=40),
         },
         "requirements": requirements,
+        "offer_intelligence": _intelligence_block(
+            intelligence, canonical, matched_requirement_ids, unverified_requirement_ids
+        ),
         "source_excerpt": clean_text(job.get("description_original"), limit=MAX_SOURCE_EXCERPT),
         "matched_elements": matched,
         "unverified_elements": unverified,
@@ -500,9 +656,174 @@ def prepare_application(
     }
 
 
+def reconcile_cv_plan_with_requirements_fit(
+    preparation: dict[str, Any], requirements_fit: Mapping[str, Any]
+) -> None:
+    """Make the CV plan agree with canonical, evidence-aware fit verdicts.
+
+    The text-match plan is useful for locating profile passages, but a token
+    overlap alone cannot prove that a full offer requirement is satisfied.
+    When canonical fit data is available, use its verdict for the coverage
+    summary and downgrade partial, unsupported, or contradictory matches.
+    """
+    raw_fits = requirements_fit.get("fits")
+    if not isinstance(raw_fits, list):
+        return
+    fits_by_id = {
+        clean_text(fit.get("requirement_id"), limit=120): fit
+        for fit in raw_fits
+        if isinstance(fit, Mapping) and clean_text(fit.get("requirement_id"), limit=120)
+    }
+
+    # A board may repeat the exact same requirement in a structured field and
+    # in its free-text description. Keep every canonical fit and citation in
+    # ``requirements_fit`` / ``offer_intelligence``; collapse only the user
+    # facing CV actions and coverage when wording, category, modality and
+    # verdict are identical. Translations, different categories, and divergent
+    # verdicts remain separate.
+    intelligence = preparation.get("offer_intelligence")
+    records_by_id = (
+        intelligence.get("requirements_by_id", {})
+        if isinstance(intelligence, Mapping)
+        else {}
+    )
+    groups: list[dict[str, Any]] = []
+    groups_by_key: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    group_by_requirement_id: dict[str, dict[str, Any]] = {}
+    for fit in raw_fits:
+        if not isinstance(fit, Mapping):
+            continue
+        requirement_id = clean_text(fit.get("requirement_id"), limit=120)
+        text = clean_text(fit.get("requirement_text"), limit=400)
+        identity = normalized_text(text)
+        if not identity:
+            identity = f"id:{requirement_id}" if requirement_id else f"row:{len(groups)}"
+        key = (
+            identity,
+            clean_text(fit.get("category"), limit=80),
+            clean_text(fit.get("modality"), limit=40),
+            clean_text(fit.get("verdict"), limit=40),
+        )
+        group = groups_by_key.get(key)
+        if group is None:
+            group = dict(fit)
+            group["requirement_ids"] = []
+            group["source_references"] = []
+            groups_by_key[key] = group
+            groups.append(group)
+        if requirement_id and requirement_id not in group["requirement_ids"]:
+            group["requirement_ids"].append(requirement_id)
+            record = records_by_id.get(requirement_id) if isinstance(records_by_id, Mapping) else None
+            record = record if isinstance(record, Mapping) else {}
+            group["source_references"].append(
+                {
+                    "requirement_id": requirement_id,
+                    "source_field": clean_text(record.get("source_field"), limit=80),
+                    "locator": clean_text(record.get("locator"), limit=80),
+                    "text": clean_text(record.get("text") or text, limit=400),
+                }
+            )
+            group_by_requirement_id[requirement_id] = group
+
+    plan = preparation.get("cv_action_plan")
+    if isinstance(plan, list):
+        reconciled_plan: list[dict[str, Any]] = []
+        plan_by_group: dict[int, dict[str, Any]] = {}
+        for item in plan:
+            if not isinstance(item, dict):
+                continue
+            requirement_id = clean_text(item.get("requirement_id"), limit=120)
+            group = group_by_requirement_id.get(requirement_id)
+            if group is not None:
+                group_key = id(group)
+                existing_item = plan_by_group.get(group_key)
+                if existing_item is not None:
+                    existing_item["requirement_ids"] = list(group["requirement_ids"])
+                    existing_item["source_references"] = list(group["source_references"])
+                    continue
+                item["requirement_ids"] = list(group["requirement_ids"])
+                item["source_references"] = list(group["source_references"])
+                plan_by_group[group_key] = item
+            else:
+                reconciled_plan.append(item)
+            if group is not None:
+                reconciled_plan.append(item)
+            fit = fits_by_id.get(requirement_id)
+            verdict = clean_text(fit.get("verdict"), limit=40) if fit else ""
+            if verdict not in {"to_verify", "unsupported", "contradicted"}:
+                continue
+            requirement = clean_text(fit.get("requirement_text") or item.get("requirement"), limit=300)
+            evidence = clean_text(fit.get("profile_evidence") or item.get("profile_evidence"), limit=300)
+            reason = clean_text(fit.get("reason"), limit=500)
+            item["status"] = "needs_evidence"
+            item["filter"] = "blocking" if verdict in {"unsupported", "contradicted"} else "verify"
+            item["action_type"] = "do_not_overstate"
+            item["action_label"] = (
+                "Ne pas présenter comme conforme"
+                if verdict in {"unsupported", "contradicted"}
+                else "Vérifier la couverture complète"
+            )
+            item["profile_reference"] = (
+                "Écart établi par le profil approuvé"
+                if verdict in {"unsupported", "contradicted"}
+                else "Preuve partielle à vérifier dans le profil approuvé"
+            )
+            item["profile_evidence"] = evidence
+            item["evidence_quality"] = "partial" if evidence else "missing"
+            item["blocking_note"] = (
+                "Le profil prouve un niveau ou un fait différent de l’exigence. Tu peux uniquement décrire la preuve existante telle quelle ; ne la reformule pas comme si elle satisfaisait l’exigence."
+                if verdict in {"unsupported", "contradicted"}
+                else "Le profil contient un élément lié à l’exigence, mais il ne prouve pas encore tous ses éléments. N’affiche pas l’exigence complète comme acquise."
+            )
+            item["suggested_change"] = (
+                f"Exigence : « {requirement} ». "
+                + (f"Preuve approuvée : « {evidence} ». " if evidence else "Aucune preuve complète n’est enregistrée. ")
+                + (f"{reason} " if reason else "")
+                + "Présente seulement les faits prouvés et vérifie l’écart avant de préparer le dossier."
+            )
+            item["why"] = reason or item.get("why", "")
+        preparation["cv_action_plan"] = reconciled_plan
+
+    coverage = preparation.get("cv_coverage")
+    if not isinstance(coverage, dict):
+        return
+    applicable_fits = [
+        fit for fit in groups
+        if isinstance(fit, Mapping) and fit.get("verdict") != "not_applicable"
+    ]
+    if not applicable_fits:
+        return
+    counts = {
+        verdict: sum(1 for fit in applicable_fits if fit.get("verdict") == verdict)
+        for verdict in ("supported", "to_verify", "unsupported", "contradicted")
+    }
+    total = len(applicable_fits)
+    coverage.update(
+        requirements_total=total,
+        supported=counts["supported"],
+        to_verify=counts["to_verify"],
+        unsupported=counts["unsupported"],
+        contradicted=counts["contradicted"],
+        coverage_percent=round(counts["supported"] / total * 100),
+        label="Exigences appuyées par des preuves suffisantes",
+        disclaimer=(
+            "Le taux compte les exigences dont la preuve approuvée a été jugée suffisante par la comparaison locale. "
+            "Une preuve partielle, insuffisante ou absente ne compte pas comme conforme."
+        ),
+    )
+
+
 def summarize_offer(job: dict[str, Any]) -> dict[str, Any]:
     """Local, deterministic, factual summary of one offer (no model, no network)."""
-    requirements = extract_requirements(job)
+    intelligence = job.get("offer_intelligence")
+    canonical = _canonical_requirements(intelligence if isinstance(intelligence, Mapping) else None)
+    if isinstance(intelligence, Mapping):
+        requirements = [
+            {"text": record["text"], "source": record["source"], "requirement_id": record["id"]}
+            for record in canonical
+        ]
+    else:
+        requirements = extract_requirements(job)
     qualification = job.get("qualification_facts")
     qualification = qualification if isinstance(qualification, dict) else {}
     contract_type = clean_text(qualification.get("contract_type"), limit=120) or "unknown"
@@ -530,6 +851,9 @@ def summarize_offer(job: dict[str, Any]) -> dict[str, Any]:
         "qualification_provenance": dict(qualification.get("provenance") or {}),
         "missions": [clean_text(r.get("text"), limit=300) for r in requirements],
         "prerequisites_count": len(requirements),
+        "requirement_ids": [
+            clean_text(r.get("requirement_id"), limit=80) for r in requirements if r.get("requirement_id")
+        ],
         "official_url": clean_text(job.get("official_url"), limit=2_000),
         "uncertainty": [
             "Résumé local déterministe ; aucune invention. Les champs absents restent inconnus."

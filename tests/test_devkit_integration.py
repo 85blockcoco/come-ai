@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 import time
 import zipfile
 from pathlib import Path
@@ -41,12 +42,15 @@ def test_http_export_issue_and_test_gated_patch_preserve_private_files(tmp_path:
             anonymous = client.get("/api/devkit/status")
             assert anonymous.status_code == 200
             assert anonymous.json()["workshop_token"] == ""
+            assert "source_files" not in anonymous.json()
+            assert "latest_report" not in anonymous.json()
             headers = {"X-Workshop-Token": token}
             assert client.post("/api/devkit/exports", json={}).status_code == 403
             assert client.post("/api/devkit/exports", json={}, headers={**headers, "Origin": "https://example.invalid"}).status_code == 403
             exported = client.post("/api/devkit/exports", json={}, headers=headers)
             assert exported.status_code == 200, exported.text
-            download = client.get(exported.json()["download_url"])
+            assert client.get(exported.json()["download_url"]).status_code == 403
+            download = client.get(exported.json()["download_url"], headers=headers)
             from io import BytesIO
             with zipfile.ZipFile(BytesIO(download.content)) as archive:
                 assert "source/calculator.py" in archive.namelist()
@@ -59,6 +63,10 @@ def test_http_export_issue_and_test_gated_patch_preserve_private_files(tmp_path:
             assert staged.status_code == 200, staged.text
             candidate = staged.json()["candidate_id"]
             assert "+    return a + b" in staged.json()["diff"]
+            assert client.get(f"/api/devkit/candidates/{candidate}").status_code == 403
+            assert client.get(f"/api/devkit/candidates/{candidate}", headers=headers).status_code == 200
+            assert client.get("/api/devkit/evolution").status_code == 403
+            assert client.get("/api/devkit/evolution", headers=headers).status_code == 200
             assert "return a - b" in (root / "calculator.py").read_text()
             apply_url = f"/api/devkit/candidates/{candidate}/apply"
             assert client.post(apply_url, json={"confirmed": True}, headers=headers).status_code == 400
@@ -67,15 +75,17 @@ def test_http_export_issue_and_test_gated_patch_preserve_private_files(tmp_path:
                 # Simulated runner metadata; this test checks transport and
                 # gating, while diagnostics tests exercise the real sandbox.
                 assert kwargs["require_sandbox"] is True
+                assert kwargs["python_executable"] == Path(sys.executable)
                 return {"schema_version": 1, "status": "passed", "sandbox_used": True, "tests_executed": 1, "pytest_receipt_verified": True,
                         "source_fingerprint": source_fingerprint(project_root), "checks": [{"name": "pytest", "status": "passed", "output": "1 passed"}]}
 
             monkeypatch.setattr("devkit.service.run_diagnostics", fake_diagnostics)
             job = client.post("/api/devkit/diagnostics", json={"candidate_id": candidate}, headers=headers)
             assert job.status_code == 200
+            assert client.get(f"/api/devkit/jobs/{job.json()['job_id']}").status_code == 403
             deadline = time.monotonic() + 3
             while time.monotonic() < deadline:
-                status = client.get(f"/api/devkit/jobs/{job.json()['job_id']}").json()
+                status = client.get(f"/api/devkit/jobs/{job.json()['job_id']}", headers=headers).json()
                 if status["status"] in {"completed", "failed"}:
                     break
                 time.sleep(0.01)
@@ -124,6 +134,22 @@ def test_out_of_scope_proposal_is_refused_before_staging(tmp_path: Path) -> None
         propose_in_isolation(root, root / ".devkit", OutOfScopeReviewer(), title="Somme", description="Corriger addition", selected_files=["calculator.py"])
     assert PatchWorkspace(root, root / ".devkit").list_candidates() == []
     assert not (root / "other.py").exists()
+
+
+def test_devkit_report_reads_reject_cross_site_and_invalid_tokens(tmp_path: Path) -> None:
+    root = fixture_project(tmp_path)
+    app = create_app(root)
+    try:
+        with TestClient(app) as client:
+            status = client.get("/api/devkit/status", headers={"Origin": "http://testserver"}).json()
+            headers = {"X-Workshop-Token": status["workshop_token"]}
+            assert client.get("/api/devkit/evolution", headers={**headers, "Origin": "https://example.invalid"}).status_code == 403
+            assert client.get("/api/devkit/evolution", headers={"X-Workshop-Token": "wrong"}).status_code == 403
+            assert client.get("/api/devkit/jobs/unknown").status_code == 403
+            assert client.get("/api/devkit/evolution/runs/unknown").status_code == 403
+            assert client.get("/api/devkit/artifacts/unknown").status_code == 403
+    finally:
+        app.state.runtime.task_runner.stop(wait=True, timeout=1)
 
 
 def test_cli_refuses_symbolic_storage_and_tolerates_corrupt_previous_report(tmp_path: Path, capsys: pytest.CaptureFixture) -> None:

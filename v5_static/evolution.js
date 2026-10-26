@@ -1,19 +1,58 @@
 "use strict";
 (() => {
   const n = (id) => document.getElementById(id);
-  let token = null, running = false, pollTimer = null;
+  let token = null, running = false, pollTimer = null, activeJobId = null, refreshInProgress = false;
   async function request(path, data) {
-    const response = await fetch(`/api/devkit${path}`, data === undefined ? {} : {method: "POST", headers: {"Content-Type": "application/json", "X-Workshop-Token": token || ""}, body: JSON.stringify(data)});
+    const options = {headers: {"X-Workshop-Token": token || ""}};
+    if (data !== undefined) { options.method = "POST"; options.headers["Content-Type"] = "application/json"; options.body = JSON.stringify(data); }
+    const response = await fetch(`/api/devkit${path}`, options);
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.detail || "Le cycle n’a pas pu être lancé.");
     return result;
   }
   function show(value) { n("evolutionMessage").textContent = value; }
+  function renderRunResult(result) {
+    n("evolutionDetails").hidden = false;
+    n("evolutionDetails").textContent = JSON.stringify(result, null, 2);
+    const review = n("evolutionCandidateReview"); review.replaceChildren();
+    const candidateId = typeof result.candidate_id === "string" ? result.candidate_id : "";
+    if (candidateId) {
+      const button = document.createElement("button"); button.type = "button"; button.className = "secondary-button";
+      button.textContent = "Examiner le correctif proposé";
+      button.addEventListener("click", () => {
+        document.querySelector('[data-view-target="developerView"]').click();
+        window.dispatchEvent(new CustomEvent("devkit:open-candidate", {detail: {candidateId}}));
+      });
+      review.append(button);
+    }
+  }
   function busy(value) { running = value; n("evolutionRun").disabled = value; n("evolutionDemo").disabled = value; }
+  function resumeActiveEvolution(base) {
+    const active = (base.active_jobs || []).find((job) =>
+      job.kind === "evolution" && ["queued", "running"].includes(job.status)
+    );
+    if (!active) {
+      if (activeJobId) {
+        clearTimeout(pollTimer);
+        activeJobId = null;
+        busy(false);
+      }
+      return;
+    }
+    if (activeJobId === active.job_id) return;
+    clearTimeout(pollTimer);
+    activeJobId = active.job_id;
+    busy(true);
+    show(active.message || "Reprise du cycle de développement en cours…");
+    void poll(active.job_id);
+  }
   async function refresh() {
+    if (refreshInProgress) return;
+    refreshInProgress = true;
     try {
       const base = await request("/status"); token = base.workshop_token;
       const data = await request("/evolution");
+      resumeActiveEvolution(base);
       const settings = data.settings || {}, provider = data.provider || {}, dashboard = data.dashboard || {}, metrics = dashboard.metrics || {};
       n("evolutionState").textContent = running ? "Cycle en cours" : provider.configured ? "Configuré · disponibilité à vérifier" : "Configuration nécessaire";
       n("evolutionProvider").textContent = `${provider.provider_id || settings.provider} · ${provider.model_id || settings.model} · ${provider.reason || "Quota non communiqué."}`;
@@ -33,28 +72,41 @@
         n("evolutionBacklog").append(row);
       }
       n("evolutionHistory").replaceChildren();
-      for (const run of data.runs || []) { const button = document.createElement("button"); button.className = "text-button"; button.textContent = `${run.created_at} · ${run.model} · ${run.status}`; button.addEventListener("click", async () => { try { const result = await request(`/evolution/runs/${encodeURIComponent(run.run_id)}`); n("evolutionDetails").hidden = false; n("evolutionDetails").textContent = JSON.stringify(result, null, 2); } catch (error) { show(error.message); } }); n("evolutionHistory").append(button); }
+      for (const run of data.runs || []) { const button = document.createElement("button"); button.className = "text-button"; button.textContent = `${run.created_at} · ${run.model} · ${run.status}`; button.addEventListener("click", async () => { try { const result = await request(`/evolution/runs/${encodeURIComponent(run.run_id)}`); renderRunResult(result); } catch (error) { show(error.message); } }); n("evolutionHistory").append(button); }
       n("evolutionResources").textContent = JSON.stringify({catalogue: data.catalogue, usage: data.usage, independent_review: "En attente : aucun second modèle automatiquement invoqué", scheduling: false, automatic_deployment: false}, null, 2);
     } catch (error) { show(error.message); }
+    finally { refreshInProgress = false; }
   }
   async function poll(id) {
     try {
       const job = await request(`/jobs/${encodeURIComponent(id)}`); show(job.message);
       if (["completed", "failed"].includes(job.status)) {
-        busy(false); clearTimeout(pollTimer);
-        const result = job.report || {}; n("evolutionDetails").hidden = false; n("evolutionDetails").textContent = JSON.stringify(result, null, 2);
+        activeJobId = null; busy(false); clearTimeout(pollTimer);
+        const result = job.report || {}; renderRunResult(result);
         n("evolutionActivity").textContent = `${result.demo ? "Démonstration isolée" : "Cycle"} · ${result.status || job.status} · ${result.reason || job.message}`;
         await refresh(); return;
       }
       pollTimer = setTimeout(() => poll(id), 1200);
-    } catch (error) { busy(false); show(error.message); }
+    } catch (error) { activeJobId = null; busy(false); show(error.message); }
   }
   async function start(demo, taskId = null) {
     if (running) return;
-    try { if (!token) await refresh(); busy(true); const job = await request("/evolution/run", {task_id: taskId, demo, max_requests: 2, max_attempts: 2}); poll(job.job_id); }
-    catch (error) { busy(false); show(error.message); }
+    try {
+      if (!token) await refresh();
+      if (running) return;
+      busy(true);
+      const job = await request("/evolution/run", {task_id: taskId, demo, max_requests: 2, max_attempts: 2});
+      activeJobId = job.job_id;
+      poll(job.job_id);
+    }
+    catch (error) { activeJobId = null; busy(false); show(error.message); }
   }
-  document.querySelector('[data-view-target="developerView"]').addEventListener("click", refresh);
+  const developerTab = document.querySelector('[data-view-target="developerView"]');
+  developerTab.addEventListener("click", refresh);
+  window.addEventListener("hashchange", () => {
+    if (window.location.hash === "#v5/developerView") refresh();
+  });
+  if (window.location.hash === "#v5/developerView") refresh();
   n("evolutionRun").addEventListener("click", () => start(false)); n("evolutionDemo").addEventListener("click", () => start(true));
   n("evolutionStop").addEventListener("click", async () => { try { show((await request("/evolution/stop", {})).message); } catch (error) { show(error.message); } });
   n("evolutionSettings").addEventListener("submit", async (event) => {

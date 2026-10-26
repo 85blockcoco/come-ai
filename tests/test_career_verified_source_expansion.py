@@ -95,6 +95,6 @@ def test_live_report_keeps_only_bounded_public_job_facts() -> None:
 def test_live_check_explicitly_selects_every_finance_domain() -> None:
     brief = live_finance_brief()
     assert set(brief["domains"]) == set(STAGE_DOMAINS)
-    assert brief["contract_types"] == ["stage", "cdd", "cdi", "vie"]
+    assert brief["contract_types"] == ["stage"]
     assert brief["start_months"] == [1, 2, 3]
     assert brief["minimum_stage_duration_months"] == 6

@@ -19,9 +19,9 @@ import urllib.parse
 import uuid
 from contextlib import contextmanager
 from dataclasses import replace
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any, Iterator, Mapping
 
 from .models import (
     AVAILABILITY_STATES,
@@ -37,6 +37,7 @@ from .models import (
     deadline_state,
     dedup_key,
     parse_date,
+    scoped_normalized_text_cache,
     utc_now,
     validate_choice,
 )
@@ -63,8 +64,33 @@ from .application_dashboard import (
     RECEIPT_FILTER_VALUES,
     build_dashboard_payload,
 )
-from .application_prep import prepare_application, summarize_offer
+from .action_center import build_application_action_center
+from .application_prep import (
+    prepare_application,
+    reconcile_cv_plan_with_requirements_fit,
+    summarize_offer,
+)
 from .application_sprint import MAX_SPRINT_CANDIDATES, MAX_SPRINT_ITEMS, build_application_sprint
+from .requirements_fit import analyze_fit
+from .source_trust import check_trust, status_label as source_trust_label
+from .quick_answers import SUPPORTED_LANGS, build_answer_pack
+from .send_confirmation import (
+    FOLLOWUP_RECORDED_EVENT_TYPE,
+    SEND_CONFIRMATION_EVENT_TYPE,
+    STAGES_AT_OR_AFTER_SENT,
+    TRACKER_HONESTY_NOTE,
+    MAX_TRACKER_APPLICATIONS,
+    SendConfirmationError,
+    SendEvidence,
+    build_followup_draft,
+    evidence_fingerprint,
+    evidence_payload,
+    latest_followup_on,
+    latest_send_evidence,
+    send_record_from_payload,
+    send_record_to_dict,
+    validate_evidence,
+)
 from .cv_fit import (
     PipelineItem,
     classify_variant,
@@ -111,8 +137,17 @@ from .exploration import (
     ranking_key,
 )
 from .offer_qualification import qualify_offer
+from .offer_intelligence import (
+    align_display_requirements,
+    build_snapshot,
+    snapshot_summary,
+)
+from . import offer_intelligence_store
+from . import source_material_store
 from .scoring import classify_job_family, score_job
+from .source_coverage import CoverageRunNotFound, compute_metrics
 from workspace_core import UserFacingError, extract_text, safe_error
+from .cv_quality.parser import extract_text_from_file
 from .profile_import import (
     ALLOWED_PROFILE_SUFFIXES,
     MAX_PROFILE_IMPORT_BYTES,
@@ -151,6 +186,20 @@ def _attach_qualification_presentation(match: dict[str, Any], qualification: dic
         else:
             match["label"] = "Informations obligatoires à vérifier"
     return match
+
+
+def _requirement_ids_of(job: dict[str, Any]) -> list[str]:
+    """Return the requirement identifiers of the current snapshot of an offer.
+
+    The explorer, the detailed view, the matching panel and the preparation
+    panel all read this list: a requirement keeps one identifier everywhere.
+    """
+    summary = job.get("offer_intelligence_summary")
+    if not isinstance(summary, dict):
+        return []
+    return [str(item) for item in summary.get("requirement_ids") or []]
+
+
 DELETE_CONFIRMATION = "SUPPRIMER MES DONNÉES CAREER"
 PROFILE_EDITABLE_FIELDS = (
     "display_name",
@@ -524,6 +573,10 @@ class CareerService:
                 "TEXT NOT NULL DEFAULT ''",
             )
             self._seed_defaults(connection)
+            # The versioned offer-intelligence snapshot lives beside the offers,
+            # never as a new column on the offers themselves.
+            offer_intelligence_store.ensure_schema(connection)
+            source_material_store.ensure_schema(connection)
         try:
             os.chmod(self.db_path, 0o600)
         except OSError:
@@ -969,8 +1022,18 @@ class CareerService:
             ocr_pages = 0
             ocr_warnings: list[str] = []
             try:
-                text = extract_text(destination).strip()
-            except UserFacingError:
+                if suffix == ".md":
+                    # The quality parser intentionally accepts only PDF,
+                    # DOCX, and TXT. Preserve Markdown support from the
+                    # profile-import contract through the local text reader.
+                    text = extract_text(destination).strip()
+                else:
+                    # PDFs use coordinate-aware Canva reading order; DOCX/TXT
+                    # retain the same local quality parser for extraction.
+                    doc_input = extract_text_from_file(destination)
+                    text = doc_input.text.strip()
+                    extraction_method = f"cv_quality_{doc_input.filetype}"
+            except (UserFacingError, ValueError, FileNotFoundError):
                 # A scanned PDF often raises the same user-facing extraction
                 # error as a text-less PDF. It is safe to try on-device OCR
                 # only for the private file just uploaded by this endpoint.
@@ -1558,11 +1621,17 @@ class CareerService:
             profile = self._row_dict(connection.execute("SELECT * FROM candidate_profile WHERE id = 1").fetchone())
             intake_row = connection.execute("SELECT * FROM career_intake WHERE id = 1").fetchone()
             job_row = connection.execute("SELECT * FROM jobs WHERE id = ?", (identifier,)).fetchone()
+            snapshot = offer_intelligence_store.load_snapshot(connection, identifier)
         if not job_row:
             raise UserFacingError("Cette offre Career n’existe pas.")
         if not intake_row:
             raise UserFacingError("Le mini-entretien Career local est indisponible.")
-        return profile, self._serialize_intake_row(intake_row), dict(job_row), normalized_language
+        job = dict(job_row)
+        if snapshot:
+            # The CV and the cover letter quote the same canonical
+            # requirements as every other screen of the workspace.
+            job["offer_intelligence"] = snapshot
+        return profile, self._serialize_intake_row(intake_row), job, normalized_language
 
     def create_application_draft(
         self,
@@ -1926,6 +1995,12 @@ class CareerService:
         brief["excluded_countries"] = ["France"]
         brief["excluded_cities"] = ["Paris"]
         brief["require_known_location"] = True
+        if not raw:
+            # This product is configured for the current user's stated goal:
+            # internships from January 2027 onward. Every month after that
+            # date remains eligible unless the person narrows the month list.
+            brief["start_date"] = "2027-01-01"
+            brief["start_months"] = list(range(1, 13))
         # A stored brief can become invalid without any action from the person
         # (a vocabulary entry removed by an update, a manual database edit…).
         # A read must never fail hard and lock the whole tab: fall back to an
@@ -1946,6 +2021,8 @@ class CareerService:
                 brief["excluded_countries"] = ["France"]
                 brief["excluded_cities"] = ["Paris"]
                 brief["require_known_location"] = True
+                brief["start_date"] = "2027-01-01"
+                brief["start_months"] = list(range(1, 13))
                 stored_brief_invalid = True
         return {
             "brief": brief,
@@ -1954,8 +2031,8 @@ class CareerService:
             "vocabulary": stage_search_vocabulary(),
             "search_terms": search_terms_for(brief.get("domains", [])),
             "disclaimer": (
-                "Critères enregistrés localement. Par défaut : Stage, CDD, CDI et VIE, "
-                "tous les domaines financiers, débuts de janvier à mars et stages d’au moins six mois. "
+                "Critères enregistrés localement. Par défaut : stages uniquement, "
+                "tous les domaines financiers, débuts à partir du 1er janvier 2027 et stages d’au moins six mois. "
                 "France et Paris sont exclus ; un pays inconnu reste à vérifier. Modifie les cases selon ta recherche."
             ),
         }
@@ -1973,11 +2050,19 @@ class CareerService:
             self._audit(connection, "stage_search_updated", "preferences", "stage_search")
         return self.get_stage_search()
 
-    def list_stage_matches(self) -> dict[str, Any]:
+    def list_stage_matches(
+        self,
+        *,
+        _scoring_context: dict[str, Any] | None = None,
+        _include_recommendation_scores: bool = True,
+    ) -> dict[str, Any]:
         """Rank every stored offer against the brief, with the reason for each score."""
         payload = self.get_stage_search()
         brief = payload["brief"]
-        jobs = self.list_jobs()
+        jobs = self.list_jobs(
+            _scoring_context=_scoring_context,
+            _include_scoring=_include_recommendation_scores,
+        )
         matches: list[dict[str, Any]] = []
         if payload["configured"]:
             for job in jobs:
@@ -1986,13 +2071,21 @@ class CareerService:
                     job,
                     allowed_contract_types=brief.get("contract_types"),
                     allowed_start_months=brief.get("start_months"),
+                    required_start_date=brief.get("start_date"),
                     minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
                     excluded_countries=brief.get("excluded_countries"),
                     excluded_cities=brief.get("excluded_cities"),
                     require_known_location=brief.get("require_known_location", True),
                 ).to_dict()
                 _attach_qualification_presentation(stage_match, qualification)
-                matches.append({"job": job, "stage_match": stage_match, "qualification": qualification})
+                matches.append({
+                    "job": job,
+                    "stage_match": stage_match,
+                    "qualification": qualification,
+                    # The matching panel points at the very same requirement
+                    # identifiers as the explorer and the detailed view.
+                    "requirement_ids": _requirement_ids_of(job),
+                })
             # Break ties by source identity, never a random database ID or
             # import/update time: the same postings have the same ordering
             # after a board reorders its feed or the application restarts.
@@ -2015,12 +2108,14 @@ class CareerService:
                     job,
                     allowed_contract_types=brief.get("contract_types"),
                     allowed_start_months=brief.get("start_months"),
+                    required_start_date=brief.get("start_date"),
                     minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
                     excluded_countries=brief.get("excluded_countries"),
                     excluded_cities=brief.get("excluded_cities"),
                     require_known_location=brief.get("require_known_location", True),
                 ).to_dict()
                 matches.append({"job": job, "stage_match": None, "qualification": qualification,
+                                "requirement_ids": _requirement_ids_of(job),
                                 "education_access": score_brief_match(brief, job)["education_access"]})
         payload["matches"] = matches
         return payload
@@ -2059,14 +2154,75 @@ class CareerService:
             )
         return analyze_cv(document)
 
-    def get_job_prep(self, job_id: str) -> dict[str, Any]:
+    def get_job_prep(
+        self,
+        job_id: str,
+        *,
+        _scoring_context: dict[str, Any] | None = None,
+        _cv_analysis: Any | None = None,
+        _job: dict[str, Any] | None = None,
+        _qualification: dict[str, Any] | None = None,
+        _include_requirements_fit: bool = True,
+    ) -> dict[str, Any]:
         """Factual preparation panel for one offer; no model, no invention."""
-        job = self.get_job(job_id)
-        context = self._scoring_context()
+        context = _scoring_context if _scoring_context is not None else self._scoring_context()
+        job = (
+            dict(_job)
+            if isinstance(_job, dict)
+            else self.get_job(job_id, scoring_context=context)
+        )
         profile = context.get("profile") or {}
-        analysis = prepare_application(profile, context.get("intake") or {}, job)
-        cv_analysis = self._current_cv_analysis()
-        qualification = qualify_offer(job).to_dict()
+        analysis = prepare_application(
+            profile,
+            context.get("intake") or {},
+            job,
+            intelligence=job.get("offer_intelligence"),
+        )
+        # Keep the preparation card aligned with the canonical offer serializer.
+        # prepare_application intentionally returns a compact offer object, so
+        # attach the locally reconstructed source trust and qualification facts
+        # needed by the UI instead of letting it display a generic fallback.
+        prep_job = dict(analysis.get("job") or {})
+        for field in (
+            "qualification_facts",
+            "official_source_trust",
+            "official_source_trust_label",
+            "source_verified",
+        ):
+            if field in job:
+                prep_job[field] = job[field]
+        analysis["job"] = prep_job
+        if _include_requirements_fit:
+            approved_profile_facts = []
+            for field, category in (
+                ("education", "etudes"),
+                ("experience", "experience"),
+                ("skills", "tech"),
+                ("languages", "langues"),
+            ):
+                value = clean_text(profile.get(field), limit=20_000)
+                if value:
+                    approved_profile_facts.append({
+                        "category": category,
+                        "value": value,
+                        "quote": value,
+                        "status": "approved",
+                        "source": "career_profile",
+                    })
+            # These fields are only present after a person has saved them in
+            # the local editable Career profile. Do not inspect pending OCR.
+            analysis["requirements_fit"] = analyze_fit(
+                job, {"facts": approved_profile_facts}
+            ).to_dict()
+            reconcile_cv_plan_with_requirements_fit(
+                analysis, analysis["requirements_fit"]
+            )
+        cv_analysis = _cv_analysis if _cv_analysis is not None else self._current_cv_analysis()
+        qualification = (
+            dict(_qualification)
+            if isinstance(_qualification, dict)
+            else qualify_offer(job).to_dict()
+        )
         fit_job = {
             **job,
             **analysis,
@@ -2114,14 +2270,47 @@ class CareerService:
                     "mandatory_pct": coverage.mandatory_pct,
                     "preferred_pct": coverage.preferred_pct,
                 },
-                "gaps": [serialize_gap(gap) for gap in gaps],
+                "gaps": self._gaps_with_requirement_ids(gaps, job),
                 "automatic_submission": False,
             }
         )
         self._prep_cache.add(job_id)
         return analysis
 
+    @staticmethod
+    def _gaps_with_requirement_ids(
+        gaps: list[Any], job: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        """Attach the canonical requirement identifier to every CV gap.
+
+        The gap keeps its own wording; the identifier is the one of the
+        versioned snapshot, so the matching panel points at the very same
+        requirement as the explorer, the detailed view, the cover letter and
+        the application checklist.  A gap without a canonical counterpart
+        simply has no identifier: none is ever invented.
+        """
+        payload = [serialize_gap(gap) for gap in gaps]
+        snapshot = job.get("offer_intelligence")
+        if not isinstance(snapshot, Mapping):
+            return payload
+        aligned = align_display_requirements(
+            [{"text": str(item.get("requirement") or "")} for item in payload],
+            snapshot,
+        )
+        for gap, entry in zip(payload, aligned):
+            identifier = entry.get("requirement_id")
+            if identifier:
+                gap["requirement_id"] = identifier
+        return payload
+
     def get_application_sprint(self, *, limit: int = 12) -> dict[str, Any]:
+        # Ranking and preparation normalize many of the same short job and
+        # criteria strings. Keep these results only for this local operation;
+        # profile and CV text is never retained in a process-wide cache.
+        with scoped_normalized_text_cache():
+            return self._build_application_sprint(limit=limit)
+
+    def _build_application_sprint(self, *, limit: int) -> dict[str, Any]:
         """Prioritise a bounded batch for local preparation, without sending.
 
         This deliberately composes the canonical matching and preparation
@@ -2129,34 +2318,89 @@ class CareerService:
         rules from the individual Career screens.
         """
         bounded_limit = max(1, min(MAX_SPRINT_ITEMS, int(limit or 12)))
-        matches = self.list_stage_matches().get("matches") or []
+        # Share the same profile/preferences snapshot across ranking and
+        # preparation. This keeps a sprint internally consistent if profile
+        # settings change while it is being assembled and avoids rereading it.
+        scoring_context = self._scoring_context()
+        stage_search = self.list_stage_matches(_scoring_context=scoring_context)
+        matches = stage_search.get("matches") or []
         eligible_matches = [
             match
             for match in matches
             if (match.get("stage_match") or {}).get("qualification_status") != "non_conforming"
         ][:MAX_SPRINT_CANDIDATES]
+        # All candidates in one sprint share the same approved profile and CV.
+        # Load those facts once instead of reopening SQLite and reparsing the
+        # current CV for every candidate.
+        cv_analysis = self._current_cv_analysis()
+        candidate_ids = [
+            str(match["job"]["id"])
+            for match in eligible_matches
+            if isinstance(match.get("job"), dict) and match["job"].get("id")
+        ]
+        snapshots: dict[str, dict[str, Any]] = {}
+        if candidate_ids:
+            placeholders = ",".join("?" for _ in candidate_ids)
+            with self._lock, self._connection() as connection:
+                rows = connection.execute(
+                    "SELECT job_id, snapshot_json FROM job_offer_intelligence_snapshots "
+                    f"WHERE is_current = 1 AND job_id IN ({placeholders})",
+                    candidate_ids,
+                ).fetchall()
+            for row in rows:
+                try:
+                    snapshot = json.loads(row["snapshot_json"] or "{}")
+                except (TypeError, ValueError):
+                    snapshot = {}
+                if isinstance(snapshot, dict):
+                    snapshots[str(row["job_id"])] = snapshot
         preparations = {
-            str(match["job"]["id"]): self.get_job_prep(str(match["job"]["id"]))
+            str(match["job"]["id"]): self.get_job_prep(
+                str(match["job"]["id"]),
+                _scoring_context=scoring_context,
+                _cv_analysis=cv_analysis,
+                _job={
+                    **match["job"],
+                    "offer_intelligence": snapshots.get(str(match["job"]["id"])),
+                },
+                _qualification=match.get("qualification"),
+                _include_requirements_fit=False,
+            )
             for match in eligible_matches
             if isinstance(match.get("job"), dict) and match["job"].get("id")
         }
-        context = self._scoring_context()
         return build_application_sprint(
             matches,
             preparations,
             self.list_applications(),
             limit=bounded_limit,
-            profile=context.get("profile") or {},
-            criteria=self.get_stage_search().get("brief") or {},
+            profile=scoring_context.get("profile") or {},
+            criteria=stage_search.get("brief") or {},
         )
 
     def get_application_pipeline(self) -> dict[str, Any]:
         """Return a read-only, derived view of the complete local workflow."""
 
-        jobs = self.list_jobs()
+        # Matching normalizes the same brief terms, locations, and contract
+        # labels for every offer. Keep those short strings only for this one
+        # synchronous read; the cache is reset in a finally block and never
+        # retains profile or offer text across requests.
+        with scoped_normalized_text_cache():
+            return self._build_application_pipeline()
+
+    def _build_application_pipeline(self) -> dict[str, Any]:
+        """Build the pipeline while its request-scoped text cache is active."""
+
         drafts = self.list_application_drafts()
         applications = self.list_applications()
-        matches = self.list_stage_matches().get("matches") or []
+        # Stage matches already carry the serialized local jobs. Reuse them
+        # here instead of listing and serializing every offer twice.
+        matches = self.list_stage_matches(_include_recommendation_scores=False).get("matches") or []
+        jobs = [
+            match["job"]
+            for match in matches
+            if isinstance(match.get("job"), dict) and match["job"].get("id")
+        ]
         sprint_queue = [
             {
                 "job_id": str((match.get("job") or {}).get("id") or ""),
@@ -2177,6 +2421,7 @@ class CareerService:
         sprint_by_job = {item["job_id"]: item for item in sprint_queue}
         draft_by_job = {str(item.get("job_id")): item for item in drafts}
         app_by_job = {str(item.get("job_id")): item for item in applications}
+        jobs_by_id = {str(item.get("id")): item for item in jobs}
         job_context = {
             str(job["id"]): {
                 "qualification_facts_json": "1"
@@ -2236,8 +2481,7 @@ class CareerService:
                 item.company.casefold(),
             )
         )
-        return {
-            "pipeline": [
+        serialized = [
                 {
                     "job_id": item.job_id,
                     "company": item.company,
@@ -2249,11 +2493,22 @@ class CareerService:
                     "tracking_stage": item.tracking_stage,
                     "readiness": item.readiness,
                     "match_score": item.match_score,
+                    "application_id": clean_text(
+                        app_by_job.get(item.job_id, {}).get("id"), limit=80
+                    ) or None,
+                    "official_url": clean_text(
+                        jobs_by_id.get(item.job_id, {}).get("official_url"), limit=2_000
+                    ),
+                    "source_verified": bool(
+                        jobs_by_id.get(item.job_id, {}).get("source_verified")
+                    ),
+                    "deadline_date": clean_text(
+                        jobs_by_id.get(item.job_id, {}).get("deadline_date"), limit=32
+                    ),
                 }
                 for item in items
-            ],
-            "automatic_submission": False,
-        }
+            ]
+        return build_application_action_center(serialized)
 
     def get_job_summary(
         self,
@@ -2481,6 +2736,7 @@ class CareerService:
                 {**job, "source_verified": bool(reference.get("verified_at"))},
                 allowed_contract_types=brief.get("contract_types"),
                 allowed_start_months=brief.get("start_months"),
+                required_start_date=brief.get("start_date"),
                 minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
                 excluded_countries=brief.get("excluded_countries"),
                 excluded_cities=brief.get("excluded_cities"),
@@ -2513,6 +2769,17 @@ class CareerService:
                 "registry": list(self._exploration_registry()), "limits": self._exploration_limits(),
                 "disclaimer": "Sources publiques uniquement. Résultats du dernier parcours, reclassés localement ; aucune candidature envoyée."
                 + (" Tes critères ont changé : relance l’exploration pour couvrir les sources avec ces critères." if changed else "")}
+
+    def get_stage_source_coverage(self, run_id: str | None = None) -> dict[str, Any]:
+        """Return exact synthetic/live metrics for the latest local exploration."""
+        current = self.get_exploration().get("run_id", "")
+        requested = clean_text(run_id, limit=160) or clean_text(current, limit=160)
+        if not requested:
+            raise UserFacingError("Aucune exploration locale n’est disponible à mesurer.")
+        try:
+            return compute_metrics(requested, base_dir=self.base_dir).to_dict()
+        except CoverageRunNotFound as error:
+            raise UserFacingError(str(error)) from error
 
     def explore_internships(self, *, force: bool = False) -> dict[str, Any]:
         """Explicit read-only exploration; works with zero personal boards.
@@ -2613,6 +2880,7 @@ class CareerService:
                         {**job, "source_verified": bool(result.verified_at)},
                         allowed_contract_types=brief.get("contract_types"),
                         allowed_start_months=brief.get("start_months"),
+                        required_start_date=brief.get("start_date"),
                         minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
                         excluded_countries=brief.get("excluded_countries"),
                         excluded_cities=brief.get("excluded_cities"),
@@ -3158,6 +3426,49 @@ class CareerService:
             snapshot | {"job_id": job_id, "updated_at": utc_now()},
         )
 
+    @staticmethod
+    def _offer_intelligence_qualification(job: dict[str, Any]) -> dict[str, Any]:
+        """Return the source-attributed qualification of one offer.
+
+        The criteria of the person (contract types, excluded countries, minimum
+        duration) are deliberately neutral here: the snapshot describes the
+        offer, not the match between the offer and a brief.
+        """
+        try:
+            return qualify_offer(job).to_dict()
+        except (TypeError, ValueError):
+            return {}
+
+    @classmethod
+    def _store_offer_intelligence(
+        cls,
+        connection: sqlite3.Connection,
+        job: dict[str, Any],
+        *,
+        now: str,
+    ) -> dict[str, Any]:
+        """Derive and version the intelligence snapshot of one offer.
+
+        An unchanged source keeps its version and its identifiers; a changed
+        source creates a new version and retires the previous one, which stays
+        in the history but is never presented as the current analysis.
+        """
+        snapshot = build_snapshot(
+            job,
+            cls._offer_intelligence_qualification(job),
+            clock=lambda: now,
+        )
+        return offer_intelligence_store.store_snapshot(connection, snapshot, now=now)
+
+    def _store_source_material(
+        self, connection: sqlite3.Connection, job_id: str, payload: Mapping[str, Any], *, now: str
+    ) -> None:
+        """Reject only oversized/unusable source metadata, never the offer."""
+        try:
+            source_material_store.store_current(connection, job_id, payload, now=now)
+        except (TypeError, ValueError):
+            self._audit(connection, "source_material_rejected", "job", job_id)
+
     def import_job(self, payload: dict[str, Any], *, availability: dict[str, Any] | None = None,
                    preserve_unknown_source_fields: bool = False) -> dict[str, Any]:
         current_availability = availability or self._current_availability_values()
@@ -3215,8 +3526,33 @@ class CareerService:
                     job | {"id": job_id, "updated_at": now, "last_verified_at": now},
                 )
                 self._audit(connection, "job_refreshed_without_duplicate", "job", job_id)
-                if qualification is not None:
+                store_qualification = qualification is not None
+                if store_qualification:
+                    saved_snapshot = connection.execute(
+                        "SELECT facts_json, source_fingerprint FROM job_qualification_snapshots WHERE job_id = ?",
+                        (job_id,),
+                    ).fetchone()
+                    if saved_snapshot is not None:
+                        try:
+                            saved_facts = json.loads(saved_snapshot["facts_json"] or "{}")
+                        except (TypeError, ValueError, json.JSONDecodeError):
+                            saved_facts = {}
+                        incoming_fingerprint = normalize_qualification_snapshot({}, payload)["source_fingerprint"]
+                        if (
+                            isinstance(saved_facts, dict)
+                            and saved_facts.get("verification_status") == "verified"
+                            and qualification.get("verification_status") != "verified"
+                            and saved_snapshot["source_fingerprint"] == incoming_fingerprint
+                        ):
+                            # A same-text manual/API refresh cannot downgrade
+                            # an official qualification. Changed source text
+                            # gets a new, unverified snapshot and fails the
+                            # current-source fingerprint check as expected.
+                            store_qualification = False
+                if store_qualification:
                     self._store_qualification_snapshot(connection, job_id, qualification, payload)
+                self._store_offer_intelligence(connection, {**job, "id": job_id}, now=now)
+                self._store_source_material(connection, job_id, payload, now=now)
                 created = False
             else:
                 job_id = f"job_{uuid.uuid4().hex}"
@@ -3242,6 +3578,8 @@ class CareerService:
                 self._audit(connection, f"job_imported_{audit_source}", "job", job_id)
                 if qualification is not None:
                     self._store_qualification_snapshot(connection, job_id, qualification, payload)
+                self._store_offer_intelligence(connection, {**job, "id": job_id}, now=now)
+                self._store_source_material(connection, job_id, payload, now=now)
                 created = True
         result = self.get_job(job_id)
         result["created"] = created
@@ -3318,7 +3656,9 @@ class CareerService:
             "description_original": clean_text(payload.get("description_original"), limit=30_000),
         }
 
-    def get_job(self, job_id: str) -> dict[str, Any]:
+    def get_job(
+        self, job_id: str, *, scoring_context: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         with self._lock, self._connection() as connection:
             row = connection.execute(
                 """
@@ -3339,9 +3679,99 @@ class CareerService:
                 """,
                 (job_id,),
             ).fetchone()
-        if not row:
-            raise UserFacingError("Cette offre Career n’existe pas.")
-        return self._serialize_job(row, self._scoring_context())
+            if not row:
+                raise UserFacingError("Cette offre Career n’existe pas.")
+            context = scoring_context if scoring_context is not None else self._scoring_context()
+            result = self._serialize_job(row, context)
+            self._attach_offer_intelligence(connection, result, full=True)
+            self._attach_source_material(connection, result)
+        return result
+
+    @staticmethod
+    def _attach_source_material(connection: sqlite3.Connection, result: dict[str, Any]) -> None:
+        """Expose the exact, attributed source fields as unverified material."""
+        snapshot = source_material_store.load_current(connection, str(result.get("id") or ""))
+        result["source_material"] = snapshot
+
+    @staticmethod
+    def _attach_offer_intelligence(
+        connection: sqlite3.Connection,
+        result: dict[str, Any],
+        *,
+        full: bool = False,
+    ) -> None:
+        """Attach the current intelligence snapshot of one offer.
+
+        The explorer only receives the compact summary: it points at the very
+        same identifiers as the detailed view, it never recomputes them.
+        """
+        job_id = str(result.get("id") or "")
+        current = offer_intelligence_store.load_current(connection, job_id)
+        if current is None:
+            result["offer_intelligence"] = None
+            result["offer_intelligence_summary"] = None
+            result["offer_intelligence_version"] = None
+            result["offer_intelligence_current"] = False
+            return
+        result["offer_intelligence_summary"] = snapshot_summary(current["snapshot"])
+        result["offer_intelligence_version"] = current["version"]
+        result["offer_intelligence_current"] = True
+        if full:
+            result["offer_intelligence"] = current["snapshot"]
+        else:
+            result["offer_intelligence"] = None
+
+    def get_offer_intelligence(self, job_id: str) -> dict[str, Any]:
+        """Return the current intelligence snapshot of one offer, with its history."""
+        job = self.get_job(job_id)
+        with self._lock, self._connection() as connection:
+            history = offer_intelligence_store.load_history(connection, job_id)
+        return {
+            "job_id": job_id,
+            "snapshot": job.get("offer_intelligence"),
+            "summary": job.get("offer_intelligence_summary"),
+            "version": job.get("offer_intelligence_version"),
+            "history": history,
+        }
+
+    def get_quick_answers(self, job_id: str, lang: str = "fr") -> dict[str, Any]:
+        """SPEC-045 — réponses types copiables calculées depuis les données locales.
+
+        Zéro invention : une information absente donne une réponse ``missing``
+        à valeur vide, à compléter par la personne.  Aucune donnée ne quitte
+        l'espace local et rien n'est soumis automatiquement.
+        """
+        normalized_lang = clean_text(lang, limit=8).lower() or "fr"
+        if normalized_lang not in SUPPORTED_LANGS:
+            raise UserFacingError("La langue demandée doit être fr ou en.")
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM jobs WHERE id = ?",
+                (clean_text(job_id, limit=80),),
+            ).fetchone()
+            if not row:
+                raise UserFacingError("Cette offre Career n’existe pas.")
+            job = self._row_dict(row)
+            profile = self._row_dict(
+                connection.execute("SELECT * FROM candidate_profile WHERE id = 1").fetchone()
+            )
+            preference_rows = connection.execute(
+                "SELECT kind, item_key, label, enabled, priority, scope "
+                "FROM preference_items ORDER BY kind, priority DESC, label"
+            ).fetchall()
+            settings = {
+                setting["setting_key"]: setting["setting_value"]
+                for setting in connection.execute(
+                    "SELECT setting_key, setting_value FROM career_settings"
+                ).fetchall()
+            }
+        preferences = self._serialize_preferences(preference_rows, settings)
+        answers = build_answer_pack(profile=profile, job=job, preferences=preferences, lang=normalized_lang)
+        return {
+            "job_id": str(job.get("id") or ""),
+            "lang": normalized_lang,
+            "answers": [answer.to_dict() for answer in answers],
+        }
 
     def list_jobs(
         self,
@@ -3352,6 +3782,8 @@ class CareerService:
         source_status: str = "",
         shortlisted: bool | None = None,
         calendar_status: str = "",
+        _scoring_context: dict[str, Any] | None = None,
+        _include_scoring: bool = True,
     ) -> list[dict[str, Any]]:
         clauses = ["1 = 1"]
         params: list[Any] = []
@@ -3396,20 +3828,52 @@ class CareerService:
         """
         with self._lock, self._connection() as connection:
             rows = connection.execute(statement, params).fetchall()
-        context = self._scoring_context()
-        jobs = [self._serialize_job(row, context) for row in rows]
+            summaries: dict[str, dict[str, Any]] = {}
+            versions: dict[str, int] = {}
+            for item in connection.execute(
+                "SELECT job_id, version, summary_json FROM job_offer_intelligence_snapshots "
+                "WHERE is_current = 1"
+            ).fetchall():
+                identifier = str(item["job_id"])
+                versions[identifier] = int(item["version"] or 0)
+                try:
+                    payload = json.loads(item["summary_json"] or "{}")
+                except (TypeError, ValueError):
+                    payload = {}
+                summaries[identifier] = payload if isinstance(payload, dict) else {}
+            source_material = source_material_store.load_current_all(connection)
+        context = _scoring_context
+        if _include_scoring and context is None:
+            context = self._scoring_context()
+        jobs = [
+            self._serialize_job(row, context, include_scoring=_include_scoring)
+            for row in rows
+        ]
+        for job in jobs:
+            # The explorer shows the identifiers of the current snapshot: it
+            # never recomputes a requirement on its own. The summary is the
+            # very same document as the detailed view, while source material
+            # stays a separately labelled set of publisher-provided fields.
+            identifier = str(job.get("id") or "")
+            summary = summaries.get(identifier)
+            job["offer_intelligence_summary"] = summary
+            job["offer_intelligence"] = None
+            job["offer_intelligence_current"] = identifier in versions
+            job["offer_intelligence_version"] = versions.get(identifier)
+            job["source_material"] = source_material.get(identifier)
         source_rank = {"open": 0, "unknown": 1, "closed": 2}
-        jobs.sort(
-            key=lambda job: (
-                bool(job["scoring"].get("blocking_constraints")),
-                not bool(job["scoring"].get("is_recommendable")),
-                -int(job["scoring"].get("score", 0)),
-                source_rank.get(str(job.get("source_status")), 3),
-                not bool(job.get("deadline_date")),
-                str(job.get("deadline_date") or "9999-12-31"),
-                str(job.get("updated_at") or ""),
+        if _include_scoring:
+            jobs.sort(
+                key=lambda job: (
+                    bool(job["scoring"].get("blocking_constraints")),
+                    not bool(job["scoring"].get("is_recommendable")),
+                    -int(job["scoring"].get("score", 0)),
+                    source_rank.get(str(job.get("source_status")), 3),
+                    not bool(job.get("deadline_date")),
+                    str(job.get("deadline_date") or "9999-12-31"),
+                    str(job.get("updated_at") or ""),
+                )
             )
-        )
         return jobs
 
     def _scoring_context(self) -> dict[str, Any]:
@@ -3432,7 +3896,13 @@ class CareerService:
             "intake": self._serialize_intake_row(intake_row) if intake_row else {},
         }
 
-    def _serialize_job(self, row: sqlite3.Row, context: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _serialize_job(
+        self,
+        row: sqlite3.Row,
+        context: dict[str, Any] | None = None,
+        *,
+        include_scoring: bool = True,
+    ) -> dict[str, Any]:
         result = dict(row)
         qualification_row = {
             "qualification_schema_version": result.pop("qualification_schema_version", None),
@@ -3446,12 +3916,22 @@ class CareerService:
         result["qualification_facts"] = decode_qualification_snapshot(qualification_row)
         snapshot_current = snapshot_matches_current_source(result)
         result["qualification_snapshot_current"] = snapshot_current
+        source_trust = check_trust(
+            result.get("official_url") or "",
+            employer_hint=result.get("company") or "",
+            declared_provider=result.get("source_name") or "",
+            clock=lambda: clean_text(result.get("last_verified_at") or result.get("updated_at"), limit=40)
+            or "unknown",
+        ).to_dict()
+        result["official_source_trust"] = source_trust
+        result["official_source_trust_label"] = source_trust_label(source_trust["status"])
         # Trust is reconstructed only from a current, source-attributed
         # snapshot or from a job tied to a discovery source after a successful
         # feed read. A manual import cannot become verified by claiming a flag.
         result["source_verified"] = bool(
             result.get("official_url")
             and result.get("last_verified_at")
+            and source_trust["status"] == "verified"
             and (
                 (
                     snapshot_current
@@ -3463,10 +3943,11 @@ class CareerService:
         result["shortlisted"] = bool(result["shortlisted"])
         result["calendar_reasons"] = json.loads(result.pop("calendar_reasons_json") or "[]")
         result["deadline_status"] = deadline_state(result.get("deadline_date"), result.get("source_status", "unknown"))
-        context = context or self._scoring_context()
-        result["scoring"] = score_job(
-            context.get("profile"), context.get("preferences"), context.get("intake"), result
-        )
+        if include_scoring:
+            context = context or self._scoring_context()
+            result["scoring"] = score_job(
+                context.get("profile"), context.get("preferences"), context.get("intake"), result
+            )
         application_id = result.pop("application_id", None)
         stage = result.pop("application_stage", None)
         receipt = result.pop("application_receipt_status", None)
@@ -3662,6 +4143,11 @@ class CareerService:
                     continue
                 job_row = connection.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
                 jobs_by_id[job_id] = dict(job_row) if job_row else {}
+            # The checklist reads the very same snapshot as the other screens.
+            for job_id in list(jobs_by_id):
+                snapshot = offer_intelligence_store.load_snapshot(connection, job_id)
+                if snapshot:
+                    jobs_by_id[job_id]["offer_intelligence"] = snapshot
         context = self._scoring_context()
         return build_dashboard_payload(
             [dict(row) for row in application_rows],
@@ -3845,6 +4331,309 @@ class CareerService:
         return self.get_application(application_id)
 
     # ------------------------------------------------------------------
+    # SPEC-047 — Confirmation d'envoi humaine + relance optimale
+    #
+    # L'envoi n'est jamais simulé ni déclenché ici : la personne effectue le
+    # dépôt manuel (déjà encadré par l'approbation explicite de l'offre) puis
+    # déclare ce dépôt via ``record_send``. Le tracking passe alors à
+    # « envoyée » (stage ``submitted``), et uniquement alors. La preuve
+    # déclarée vit dans le journal ``application_events`` (event_type
+    # ``send_confirmation``) : aucun changement de schéma, l'état reste
+    # rejouable. Une relance déjà faite (``followup_recorded``) décale la
+    # prochaine échéance de sept jours ouvrés. Rien n'est jamais transmis :
+    # la relance reste un brouillon local à copier.
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _send_events(connection: sqlite3.Connection, application_id: str) -> list[dict[str, Any]]:
+        rows = connection.execute(
+            """
+            SELECT id, event_type, detail, created_at FROM application_events
+            WHERE application_id = ? ORDER BY created_at ASC, rowid ASC
+            """,
+            (application_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def _send_record_response(
+        self,
+        *,
+        job_id: str,
+        application_id: str,
+        created: bool,
+        note: str | None = None,
+    ) -> dict[str, Any]:
+        """Reconstruit la réponse complète (record + brouillon) depuis le journal."""
+        with self._lock, self._connection() as connection:
+            events = self._send_events(connection, application_id)
+            application = connection.execute(
+                "SELECT stage, receipt_status, confirmation_reference FROM applications WHERE id = ?",
+                (application_id,),
+            ).fetchone()
+            job = connection.execute(
+                "SELECT company, title FROM jobs WHERE id = ?", (job_id,)
+            ).fetchone()
+        if application is None or job is None:
+            raise UserFacingError("Cette candidature Career n’existe pas.")
+        send = latest_send_evidence(events)
+        if send is None:
+            raise UserFacingError("Aucun envoi déclaré pour cette offre.")
+        evidence_note = send[1].get("note")
+        last_followup = latest_followup_on(events)
+        record = send_record_from_payload(job_id, send[1], last_followup_on=last_followup)
+        if record is None:
+            raise UserFacingError("L'envoi déclaré est illisible : enregistre-le à nouveau.")
+        draft = build_followup_draft(
+            title=str(job["title"]),
+            company=str(job["company"]),
+            channel=record.channel,
+            sent_at=record.sent_at,
+            reference=str(application["confirmation_reference"] or ""),
+        )
+        return {
+            "record": send_record_to_dict(record, note=evidence_note if note is None else note),
+            "job_id": job_id,
+            "application_id": application_id,
+            "created": created,
+            "stage": str(application["stage"]),
+            "receipt_status": str(application["receipt_status"]),
+            "followup_done_on": last_followup.isoformat() if last_followup else None,
+            "followup_draft": draft,
+            "honesty": TRACKER_HONESTY_NOTE,
+        }
+
+    def record_send(
+        self,
+        job_id: str,
+        evidence: SendEvidence,
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Enregistre l'envoi déclaré par la personne (dépôt manuel effectué).
+
+        Idempotent : la même preuve ne duplique ni l'historique ni l'état ;
+        une preuve différente met l'envoi déclaré à jour en place. Le stage ne
+        passe à ``submitted`` que si aucune étape postérieure n'est atteinte.
+        """
+        current = now or datetime.now(timezone.utc)
+        if current.tzinfo is None:
+            current = current.replace(tzinfo=timezone.utc)
+        try:
+            validate_evidence(evidence, now=current)
+        except SendConfirmationError as error:
+            raise UserFacingError(str(error)) from error
+        identifier = clean_text(job_id, limit=80)
+        if not identifier:
+            raise UserFacingError("Indique l'offre concernée par la confirmation d'envoi.")
+        detail = json.dumps(evidence_payload(evidence), ensure_ascii=False)
+        fingerprint = evidence_fingerprint(evidence)
+        now_iso = utc_now()
+        with self._lock, self._connection() as connection:
+            job = connection.execute("SELECT id FROM jobs WHERE id = ?", (identifier,)).fetchone()
+            if not job:
+                raise UserFacingError("Cette offre Career n’existe pas.")
+            application = connection.execute(
+                "SELECT id, stage, approval_granted FROM applications WHERE job_id = ?",
+                (identifier,),
+            ).fetchone()
+            if not application:
+                raise UserFacingError(
+                    "Aucune candidature suivie pour cette offre : crée d'abord le suivi local "
+                    "avant de confirmer un envoi."
+                )
+            application_id = str(application["id"])
+            if not application["approval_granted"]:
+                raise UserFacingError(
+                    "Approuve d’abord le dépôt manuel pour cette offre avant d’enregistrer son envoi."
+                )
+            existing = latest_send_evidence(self._send_events(connection, application_id))
+            created = False
+            if existing is None:
+                created = True
+                connection.execute(
+                    """
+                    INSERT INTO application_events (id, application_id, job_id, event_type, detail, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        f"event_{uuid.uuid4().hex}",
+                        application_id,
+                        identifier,
+                        SEND_CONFIRMATION_EVENT_TYPE,
+                        detail,
+                        now_iso,
+                    ),
+                )
+            elif json.dumps(existing[1], sort_keys=True, ensure_ascii=False) != fingerprint:
+                # Double envoi : mise à jour de l'envoi déclaré, sans dupliquer
+                # l'historique — le journal garde exactement un envoi.
+                connection.execute(
+                    "UPDATE application_events SET detail = ? WHERE id = ?",
+                    (detail, existing[0]),
+                )
+            if application["stage"] not in STAGES_AT_OR_AFTER_SENT:
+                connection.execute(
+                    """
+                    UPDATE applications SET stage = 'submitted', receipt_status = 'unknown', updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (now_iso, application_id),
+                )
+                self._application_event(
+                    connection,
+                    application_id,
+                    identifier,
+                    "stage_updated",
+                    "Envoi déclaré manuellement par la personne (confirmation d'envoi).",
+                )
+            self._audit(connection, "send_confirmation_recorded", "application", application_id)
+        return self._send_record_response(
+            job_id=identifier, application_id=application_id, created=created
+        )
+
+    def record_followup_done(
+        self,
+        job_id: str,
+        *,
+        done_on: date | None = None,
+        note: str = "",
+    ) -> dict[str, Any]:
+        """Déclare une relance déjà faite ; la prochaine échéance repart à +7 jours ouvrés."""
+        identifier = clean_text(job_id, limit=80)
+        if not identifier:
+            raise UserFacingError("Indique l'offre concernée par la relance.")
+        followed_up_on = done_on or date.today()
+        now_iso = utc_now()
+        with self._lock, self._connection() as connection:
+            application = connection.execute(
+                "SELECT id FROM applications WHERE job_id = ?", (identifier,)
+            ).fetchone()
+            if not application:
+                raise UserFacingError("Cette candidature Career n’existe pas.")
+            application_id = str(application["id"])
+            if latest_send_evidence(self._send_events(connection, application_id)) is None:
+                raise UserFacingError(
+                    "Enregistre d'abord l'envoi déclaré avant de noter une relance."
+                )
+            events = self._send_events(connection, application_id)
+            if latest_followup_on(events) == followed_up_on:
+                return self._send_record_response(
+                    job_id=identifier, application_id=application_id, created=False
+                )
+            connection.execute(
+                """
+                INSERT INTO application_events (id, application_id, job_id, event_type, detail, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    f"event_{uuid.uuid4().hex}",
+                    application_id,
+                    identifier,
+                    FOLLOWUP_RECORDED_EVENT_TYPE,
+                    json.dumps({"done_on": followed_up_on.isoformat()}, ensure_ascii=False),
+                    now_iso,
+                ),
+            )
+            self._audit(connection, "followup_recorded", "application", application_id)
+        return self._send_record_response(
+            job_id=identifier, application_id=application_id, created=False
+        )
+
+    def get_send_record(self, job_id: str) -> dict[str, Any]:
+        """Lit l'envoi déclaré d'une offre : record, échéance, brouillon de relance."""
+        identifier = clean_text(job_id, limit=80)
+        if not identifier:
+            raise UserFacingError("Indique l'offre dont lire la confirmation d'envoi.")
+        with self._lock, self._connection() as connection:
+            application = connection.execute(
+                "SELECT id FROM applications WHERE job_id = ?", (identifier,)
+            ).fetchone()
+        if not application:
+            raise UserFacingError("Cette candidature Career n’existe pas.")
+        return self._send_record_response(
+            job_id=identifier, application_id=str(application["id"]), created=False
+        )
+
+    def build_followup_draft(self, job_id: str) -> str:
+        """Brouillon de relance court et prêt à copier, en français."""
+        return str(self.get_send_record(job_id)["followup_draft"])
+
+    def apply_tracker(self) -> dict[str, Any]:
+        """Suivi des candidatures envoyées sans réponse, priorisées par échéance.
+
+        Lecture pure : seules les candidatures dont le tracking porte un envoi
+        déclaré et aucun stade de réponse entrent dans la liste ; l'ordre est
+        l'échéance de relance croissante, puis le titre. Aucune relance n'est
+        envoyée — chaque entrée porte un brouillon local à copier.
+        """
+        today = date.today()
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT a.id AS application_id, a.job_id, a.stage, a.receipt_status,
+                       a.confirmation_reference, j.company, j.title, j.city, j.official_url
+                FROM applications a JOIN jobs j ON a.job_id = j.id
+                WHERE a.stage IN ('submitted', 'submitted_confirmed')
+                ORDER BY a.updated_at DESC, a.id ASC
+                LIMIT ?
+                """,
+                (MAX_TRACKER_APPLICATIONS,),
+            ).fetchall()
+            items: list[dict[str, Any]] = []
+            for row in rows:
+                events = self._send_events(connection, str(row["application_id"]))
+                send = latest_send_evidence(events)
+                if send is None:
+                    continue
+                record = send_record_from_payload(
+                    str(row["job_id"]), send[1], last_followup_on=latest_followup_on(events)
+                )
+                if record is None:
+                    continue
+                due_day = record.follow_up_due.date()
+                draft = build_followup_draft(
+                    title=str(row["title"] or ""),
+                    company=str(row["company"] or ""),
+                    channel=record.channel,
+                    sent_at=record.sent_at,
+                    reference=str(row["confirmation_reference"] or ""),
+                )
+                items.append(
+                    {
+                        "job_id": str(row["job_id"]),
+                        "application_id": str(row["application_id"]),
+                        "title": str(row["title"] or "Offre sans intitulé"),
+                        "company": str(row["company"] or ""),
+                        "city": str(row["city"] or ""),
+                        "official_url": str(row["official_url"] or ""),
+                        "stage": str(row["stage"]),
+                        "receipt_status": str(row["receipt_status"]),
+                        "channel": record.channel,
+                        "sent_at": record.sent_at.isoformat(),
+                        "follow_up_due": record.follow_up_due.isoformat(),
+                        "follow_up_due_date": due_day.isoformat(),
+                        "days_waiting": max((today - record.sent_at.date()).days, 0),
+                        "status": "due" if due_day <= today else "upcoming",
+                        "overdue": due_day < today,
+                        "followup_draft": draft,
+                        "is_email": False,
+                    }
+                )
+        items.sort(key=lambda item: (item["follow_up_due_date"], item["title"].casefold()))
+        due_items = [item for item in items if item["status"] == "due"]
+        return {
+            "generated_at": utc_now(),
+            "today": today.isoformat(),
+            "items": items,
+            "totals": {
+                "sent_without_response": len(items),
+                "due": len(due_items),
+                "overdue": sum(1 for item in items if item["overdue"]),
+            },
+            "honesty": TRACKER_HONESTY_NOTE,
+        }
+
+    # ------------------------------------------------------------------
     # Local application kit (CVBOOST-05)
     #
     # One explicit user action opens a pre-filled kit for ONE tracked offer:
@@ -3879,11 +4668,23 @@ class CareerService:
 
         This reuses the deterministic preparation fact-checker: a requirement
         is "non trouvé dans ton profil" until the profile itself proves it.
-        The kit never claims it is satisfied.
+        The kit never claims it is satisfied.  Each line keeps the canonical
+        identifier of the requirement, the one every other screen uses.
         """
         prep = prepare_application(profile or {}, intake or {}, job)
+        intelligence = prep.get("offer_intelligence")
+        intelligence = intelligence if isinstance(intelligence, dict) else {}
+        by_id = intelligence.get("requirements_by_id")
+        by_id = by_id if isinstance(by_id, dict) else {}
+        by_text = {
+            str(record.get("text") or ""): str(identifier)
+            for identifier, record in by_id.items()
+            if isinstance(record, dict)
+        }
         return [
             {
+                "requirement_id": clean_text(item.get("requirement_id"), limit=80)
+                or by_text.get(clean_text(item.get("requirement"), limit=300), ""),
                 "requirement": clean_text(item.get("requirement"), limit=300),
                 "note": clean_text(item.get("note"), limit=300),
             }
@@ -4071,6 +4872,9 @@ class CareerService:
                 """,
                 (identifier,),
             ).fetchall()
+            # The letter and the fact-checker of the kit read the same snapshot
+            # as the explorer, the detailed view and the preparation panel.
+            snapshot = offer_intelligence_store.load_snapshot(connection, job_id)
         kit_language = normalize_language(str(draft_row["language"])) if draft_row else normalized_language
         job = {
             "id": job_id,
@@ -4082,8 +4886,12 @@ class CareerService:
             "reference": clean_text(application["source_id"], limit=200),
             "deadline_date": clean_text(application["deadline_date"], limit=32),
         }
+        kit_job = dict(job_row) if job_row else dict(job)
+        if snapshot:
+            kit_job["offer_intelligence"] = snapshot
+            job["offer_intelligence_summary"] = snapshot_summary(snapshot)
         intake = self._serialize_intake_row(intake_row) if intake_row else {"answers": {}}
-        kit_texts = build_kit_texts(profile, intake, job, kit_language)
+        kit_texts = build_kit_texts(profile, intake, kit_job, kit_language)
         # Each saved edit is an event row storing a partial JSON delta; they
         # replay in order so the possible last save wins per field only.
         edits: dict[str, str] = {}
@@ -4091,7 +4899,7 @@ class CareerService:
             edits.update(self._kit_content_edits(str(row["detail"])))
         kit_texts.update(edits)
         draft = self._serialize_application_draft(draft_row, include_content=True) if draft_row else None
-        unverified = self._kit_unverified_requirements(profile, intake, dict(job_row) if job_row else job)
+        unverified = self._kit_unverified_requirements(profile, intake, kit_job)
         return {
             "application": {
                 "id": identifier,
