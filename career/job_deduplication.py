@@ -175,6 +175,24 @@ def canonicalize_url(url: str) -> str:
     raw = _clean_text(url, 2_000)
     if not raw:
         return ""
+    # ATS connectors usually provide already-canonical HTTPS URLs. Return
+    # those directly without the comparatively expensive URL parser; unusual
+    # schemes, ports, query strings and fragments still use the full path.
+    if raw.startswith("https://") and "?" not in raw and "#" not in raw:
+        remainder = raw[8:]
+        slash = remainder.find("/")
+        hostname = remainder if slash < 0 else remainder[:slash]
+        path = "/" if slash < 0 else remainder[slash:]
+        if (
+            hostname
+            and hostname.isascii()
+            and hostname == hostname.lower()
+            and not hostname.startswith("www.")
+            and all(character.isalnum() or character in ".-" for character in hostname)
+            and (path == "/" or (not path.endswith("/") and "//" not in path))
+            and all(character.isalnum() or character in "/-._~%:@!$&'()*+,;=" for character in path)
+        ):
+            return raw if slash >= 0 else raw + "/"
     parsed = urllib.parse.urlsplit(raw)
     if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
         return raw
@@ -650,6 +668,7 @@ def _specific_tokens(canonical_title: str) -> set[str]:
     }
 
 
+@lru_cache(maxsize=8192)
 def _digit_signature(title: str) -> str:
     """Return the digits carried by a title ("2027", "h1 2027"…).
 
@@ -1635,23 +1654,27 @@ def _cluster_records(
                 ):
                     continue
                 merge(left, right, "identical_title")
-        for left, right in _candidate_pairs(indexes, records):
-            if union.find(left) == union.find(right):
-                continue
-            if records[left].title == records[right].title:
-                # Already handled by the pre-pass above.
-                continue
-            if not _same_location(
-                records[left].city, records[left].country,
-                records[right].city, records[right].country,
-            ):
-                continue
-            if not _titles_can_match(records[left], records[right]):
-                continue
-            decision = _match_records(records[left], records[right], text_similarity)
-            if not decision["matches"]:
-                continue
-            merge(left, right, decision["reasons"][0])
+        # The exact-title pre-pass above has already resolved every pair when
+        # this bucket contains only one canonical title. Building blocking
+        # postings in that case repeats work without adding any candidates.
+        if len(by_title) > 1:
+            for left, right in _candidate_pairs(indexes, records):
+                if union.find(left) == union.find(right):
+                    continue
+                if records[left].title == records[right].title:
+                    # Already handled by the pre-pass above.
+                    continue
+                if not _same_location(
+                    records[left].city, records[left].country,
+                    records[right].city, records[right].country,
+                ):
+                    continue
+                if not _titles_can_match(records[left], records[right]):
+                    continue
+                decision = _match_records(records[left], records[right], text_similarity)
+                if not decision["matches"]:
+                    continue
+                merge(left, right, decision["reasons"][0])
 
     clusters: dict[int, list[int]] = {}
     for record in records:

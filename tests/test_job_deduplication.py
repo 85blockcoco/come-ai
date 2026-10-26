@@ -422,6 +422,8 @@ def test_a_translation_is_never_merged_on_a_few_common_words_only():
 # ---------------------------------------------------------------------------
 
 def test_canonicalize_url():
+    assert canonicalize_url("https://example.com/jobs/1") == "https://example.com/jobs/1"
+    assert canonicalize_url("https://example.com") == "https://example.com/"
     assert canonicalize_url("http://www.Example.com/jobs/1?utm_source=x") == "https://example.com/jobs/1"
     assert canonicalize_url("https://example.com/jobs/1/") == "https://example.com/jobs/1"
     assert canonicalize_url("https://example.com/jobs//1") == "https://example.com/jobs/1"
