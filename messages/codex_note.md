@@ -6,7 +6,7 @@
 | `e845513` | Prise de poste et contrat de coordination consignés | `messages/codex_note.md` | aucun test de code requis | commit à 15:47 CET |
 | `de4944e` | Regroupe les exigences identiques du parcours CV sans perdre les références de provenance | `career/application_prep.py`, `career_static/career.js`, `career_static/cv_plan.js`, `tests/test_career_cv_plan_ux.py` | `tests/test_career_cv_plan_ux.py`, `tests/test_requirements_fit.py`, `tests/test_offer_requirements_extraction.py`, `tests/test_career_application_sprint.py` — 561 passed | durée non consignée |
 | `9528dc0` | Reprend SPEC-045 réponses rapides, sans intégration aveugle | `career/quick_answers.py`, `career/service.py`, `career/router.py`, `tests/test_quick_answers.py`, rapport de mission | `tests/test_quick_answers.py` et suites Career ciblées — 571 passed après adaptation | 9,0 s (pytest mesuré après adaptation) |
-| commit créé depuis cette livraison | Ajoute les réponses rapides éditables au Stage Hunter, motivation explicitement à compléter et avertissement anglais localisé | `career/quick_answers.py`, `career_static/career.js`, `career_static/career.css`, `tests/test_quick_answers.py`, `messages/codex_note.md` | `tests/test_quick_answers.py` — 24 passed en 3,23 s au dernier passage; parcours navigateur Chromium synthétique — 9 réponses, copie manuelle et changement de langue vérifiés, aucune erreur page | 6,8 s (parcours navigateur) |
+| `36ea301` (`36ea301aa5bb57736818b0523db627bde3993e07`, poussé et vérifié à 16:14 CET) | Ajoute les réponses rapides éditables au Stage Hunter, motivation explicitement à compléter et avertissement anglais localisé | `career/quick_answers.py`, `career_static/career.js`, `career_static/career.css`, `tests/test_quick_answers.py`, `messages/codex_note.md` | `tests/test_quick_answers.py` — 24 passed en 4,45 s au dernier passage; parcours navigateur Chromium synthétique — 9 réponses, copie manuelle et changement de langue vérifiés, aucune erreur page | 6,8 s (parcours navigateur) |
 
 ## 2. En cours maintenant
 | Tâche | % fait | Temps passé | Temps restant estimé | Blocage ? |
@@ -23,9 +23,9 @@
 | Déduplication CV | exigences répétées présentes dans deux champs de la même offre | 4 conseils / 4 affichages uniques, provenance des deux champs conservée | parcours navigateur Chromium sur offre/profil synthétiques; filtres de couverture contrôlés |
 
 ## 4. État 24 h de ta prod
-- commits aujourd'hui : 10 déjà présents à 16:13:00 CET avant la présente livraison; nombre final après commit à vérifier avec `git log --since='2026-10-26 00:00'`.
-- lignes ajoutées / supprimées : à relever après commit (`git diff --stat HEAD~N`, N = commits du jour après livraison).
-- tests verts : `tests/test_quick_answers.py` (24 passed, 3,23 s au dernier passage); avant ce lot, `tests/test_career_cv_plan_ux.py tests/test_requirements_fit.py tests/test_offer_requirements_extraction.py tests/test_career_application_sprint.py` (561 passed); `ruff check career/`; `node --check career_static/career.js`; `git diff --check`; Chromium synthétique Stage Hunter (9 réponses, copie explicite, gabarit bloqué tant qu'incomplet, champs absents vides, bascule anglais, aucune erreur JavaScript).
+- commits aujourd'hui : 11 à 16:14 CET, vérifiés par `git log --since='2026-10-26 00:00' --oneline | wc -l`.
+- lignes ajoutées / supprimées : 1496 / 90 selon `git diff --stat HEAD~11` (candidate locale, 11 commits du jour).
+- tests verts : `tests/test_quick_answers.py` (24 passed, 4,45 s au dernier passage); avant ce lot, `tests/test_career_cv_plan_ux.py tests/test_requirements_fit.py tests/test_offer_requirements_extraction.py tests/test_career_application_sprint.py` (561 passed); `ruff check career/`; `node --check career_static/career.js`; `git diff --check`; Chromium synthétique Stage Hunter (9 réponses, copie explicite, gabarit bloqué tant qu'incomplet, champs absents vides, bascule anglais, aucune erreur JavaScript).
 
 ## 5. Ce que j'attends d'OpenCode
 - Pousser les branches `agent/spec-044-apply-kit-ready`, `agent/spec-046-ats-guide-human` et `agent/spec-047-send-confirmation` pour revue; continuer à signaler les résultats et blocages de la lane.
