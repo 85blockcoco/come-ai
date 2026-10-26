@@ -37,6 +37,7 @@ from .models import (
     deadline_state,
     dedup_key,
     parse_date,
+    scoped_normalized_text_cache,
     utc_now,
     validate_choice,
 )
@@ -2272,6 +2273,13 @@ class CareerService:
         return payload
 
     def get_application_sprint(self, *, limit: int = 12) -> dict[str, Any]:
+        # Ranking and preparation normalize many of the same short job and
+        # criteria strings. Keep these results only for this local operation;
+        # profile and CV text is never retained in a process-wide cache.
+        with scoped_normalized_text_cache():
+            return self._build_application_sprint(limit=limit)
+
+    def _build_application_sprint(self, *, limit: int) -> dict[str, Any]:
         """Prioritise a bounded batch for local preparation, without sending.
 
         This deliberately composes the canonical matching and preparation

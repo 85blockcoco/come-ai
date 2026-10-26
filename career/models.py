@@ -5,9 +5,11 @@ from __future__ import annotations
 import re
 import unicodedata
 import urllib.parse
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import date, datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import Any, Iterator
 
 from workspace_core import UserFacingError
 
@@ -192,9 +194,39 @@ def clean_text(value: Any, *, limit: int = 10_000) -> str:
 
 
 def normalized_text(value: Any) -> str:
-    text = unicodedata.normalize("NFKD", clean_text(value).lower())
+    text = clean_text(value).lower()
+    cache = _NORMALIZED_TEXT_CACHE.get()
+    if cache is not None and len(text) <= 256:
+        if text in cache:
+            return cache[text]
+        normalized = _normalize_clean_text(text)
+        if len(cache) < 4_096:
+            cache[text] = normalized
+        return normalized
+    return _normalize_clean_text(text)
+
+
+def _normalize_clean_text(text: str) -> str:
+    text = unicodedata.normalize("NFKD", text)
     text = "".join(character for character in text if not unicodedata.combining(character))
     return re.sub(r"[^a-z0-9]+", " ", text).strip()
+
+
+_NORMALIZED_TEXT_CACHE: ContextVar[dict[str, str] | None] = ContextVar(
+    "career_normalized_text_cache", default=None
+)
+
+
+@contextmanager
+def scoped_normalized_text_cache() -> Iterator[None]:
+    """Cache repeated short normalizations only for one local operation."""
+    cache: dict[str, str] = {}
+    token = _NORMALIZED_TEXT_CACHE.set(cache)
+    try:
+        yield
+    finally:
+        _NORMALIZED_TEXT_CACHE.reset(token)
+        cache.clear()
 
 
 def canonical_country_code(value: Any) -> str:

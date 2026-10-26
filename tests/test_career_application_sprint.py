@@ -6,6 +6,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from career import models
 from career.application_sprint import build_application_sprint
 from career.service import CareerService
 from come_ai_web import create_app
@@ -279,6 +280,27 @@ def test_application_sprint_reuses_profile_and_cv_analysis_for_candidates(
 
     assert len(result["queue"]) == 4
     assert calls == {"scoring_context": 1, "cv_analysis": 1, "get_job": 0}
+
+
+def test_sprint_text_normalization_cache_is_short_lived_and_bounded(monkeypatch) -> None:
+    original = models._normalize_clean_text
+    normalized_inputs: list[str] = []
+
+    def count_normalizations(value: str) -> str:
+        normalized_inputs.append(value)
+        return original(value)
+
+    monkeypatch.setattr(models, "_normalize_clean_text", count_normalizations)
+    with models.scoped_normalized_text_cache():
+        assert models.normalized_text("Été") == "ete"
+        assert models.normalized_text("Été") == "ete"
+        long_value = "a" * 257
+        models.normalized_text(long_value)
+        models.normalized_text(long_value)
+
+    assert normalized_inputs == ["été", long_value, long_value]
+    assert models.normalized_text("Été") == "ete"
+    assert normalized_inputs == ["été", long_value, long_value, "été"]
 
 
 def test_application_sprint_ui_contract_is_present() -> None:
