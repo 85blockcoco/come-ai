@@ -1,0 +1,14 @@
+{
+  "status": "done",
+  "files_created": [
+    "career/faq_mining.py",
+    "tests/test_faq_mining.py",
+    "tests/fixtures/faq_offers_synthetic.json",
+    "docs/agent-reports/SPEC-031-faq_mining.md",
+    "career/router.py",
+    "career/service.py"
+  ],
+  "output": "Module SPEC-031 de minage FAQ sectorielle livré avec endpoints REST, fixture synthétique et tests.",
+  "logs": "pytest -q tests/test_faq_mining.py → 12 passed\nruff check career/faq_mining.py career/router.py career/service.py tests/test_faq_mining.py → All checks passed\npy_compile → OK",
+  "error": null
+}
