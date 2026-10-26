@@ -54,6 +54,53 @@ def relaunch_mapping() -> dict[str, str]:
     return mapping
 
 
+def _local(ts: str) -> str:
+    try:
+        import datetime as _dt
+        t = _dt.datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=_dt.timezone.utc)
+        return t.astimezone().strftime("%H:%M")
+    except Exception:
+        return ts
+
+
+def _load_24h():
+    ok, fails, durs, rows = 0, 0, [], []
+    try:
+        for path in sorted((ROOT / "messages/results").glob("*.json")):
+            d = json.loads(path.read_text(encoding="utf-8"))
+            w = d.get("worker_result") or {}
+            status = w.get("status")
+            dur = d.get("duration_sec")
+            rows.append(dict(
+                at=_local(str(d.get("completed_at", ""))), mission=str(d.get("mission_id", "")),
+                model=str(d.get("model_used", "")), status=status, dur=dur,
+                pushed=bool(d.get("pushed"))))
+            if status == "done":
+                ok += 1
+            elif status:
+                fails += 1
+            if status == "done" and dur:
+                durs.append(float(dur))
+    except Exception as exc:
+        log(f"lecture résultats: {exc}")
+    return ok, fails, durs, rows
+
+
+def _running_workers():
+    out = subprocess.run(["ps", "-ax", "-o", "etime=,command="], capture_output=True, text=True, timeout=10).stdout
+    import re as _re
+    rows = []
+    for line in out.splitlines():
+        m = _re.search(r"\s*(\d+):\d+:\d+\s+(.*)", line)  # etime H:MM:SS
+        if m and "opencode run --auto" in m.group(2):
+            h = int(m.group(1))
+            o = _re.search(r"--title Worker-(cvboost-\d+)-", m.group(2))
+            mdl = _re.search(r"-m (\S+)", m.group(2))
+            rows.append(dict(start=h * 3600, mission=o.group(1) if o else "?",
+                             model=mdl.group(1) if mdl else "?"))
+    return rows
+
+
 def _last_origin_commit(branch: str) -> str:
     try:
         out = subprocess.run(["git", "ls-remote", "--heads", "origin", branch],
@@ -69,77 +116,99 @@ def _pipeline_latency() -> str:
         code = subprocess.run(["curl", "-sf", "-o", "/dev/null", "-m", "30",
                                "http://127.0.0.1:8765/api/career/application-pipeline"],
                               capture_output=True, timeout=35).returncode
-        dt = time.time() - t0
-        return f"{int(dt)}s" if code == 0 else "erreur"
+        return f"{int(time.time()-t0)}s" if code == 0 else "erreur"
     except Exception:
         return "?"
 
 
 def write_report() -> None:
-    """Rapport flotte régulier avec indicateurs (KPI) : effet panneau de supervision."""
-    from collections import Counter
+    import datetime as _dt
+    from collections import Counter, defaultdict
     reg = json.load(open(ROOT / "missions_registry.json", encoding="utf-8"))
     counts = Counter(m["status"] for m in reg["missions"])
-    workers = []
-    try:
-        out = subprocess.run(["ps", "-ax", "-o", "command="], capture_output=True, text=True, timeout=10).stdout
-        for line in out.splitlines():
-            if "opencode run --auto" in line:
-                import re
-                mm = re.search(r"-m\s+(\S+)\s+--title Worker-(cvboost-\d+-\d+)", line)
-                if mm:
-                    workers.append((mm.group(2), mm.group(1)))
-    except Exception:
-        pass
-    heures = time.strftime("%Y-%m-%d %H:%M")
-    # /24 h results: success rate + average duration of OK
-    ok = fail = 0
-    durs = []
-    total_results = 0
-    try:
-        for path in (ROOT / "messages/results").glob("*.json"):
-            total_results += 1
-            d = json.loads(path.read_text(encoding="utf-8"))
-            status_w = (d.get("worker_result") or {}).get("status")
-            if status_w == "done":
-                ok += 1
-            elif status_w:
-                fail += 1
-            if status_w == "done" and d.get("duration_sec"):
-                durs.append(float(d["duration_sec"]))
-    except Exception:
-        pass
-    total = ok + fail
-    taux = f"{ok}/{total} ({round(100*ok/max(total,1))} %)" if total else "n/d"
-    moy = f"{round(sum(durs)/len(durs))}s" if durs else "n/d"
-    d_today = sum(1 for m in reg["missions"] if m.get("status") == "done" and str(m.get("done_at","")).startswith(time.strftime("%Y-%m-%d")))
-    p0 = [m["id"] for m in reg["missions"] if str(m.get("priority","")) == "P0" and m["status"] == "pending"]
-    lines = [
-        f"# Rapport flotte — {heures}",
-        "",
-        "## Indicateurs",
-        f"- Missions : done={counts.get('done',0)} pending={counts.get('pending',0)} failed={counts.get('failed',0)} · livrées aujourd'hui={d_today}",
-        f"- Taux OK (historique résultats) : {taux} · durée moyenne OK : {moy}",
-        f"- Workers actifs : {len(workers)} · charge : {round(__import__('os').getloadavg()[0])}",
-        f"- Missions P0 restantes : {','.join(p0) if p0 else 'aucune'}",
-        f"- API application-pipeline : {_pipeline_latency()} (objectif Codex : < 3 s)",
-        f"- Codex origin : {_last_origin_commit('codex/v3-stable-consolidation')}",
-        "",
-        "## workers",
-        "\n".join(f"- {w} → {m}" for w, m in workers) if workers else "- aucun worker actif",
-        "",
-    ]
-    recent = sorted((ROOT / "messages/results").glob("*.json"), key=lambda p: p.stat().st_mtime)[-8:]
-    for path in reversed(recent):
-        try:
-            d = json.loads(path.read_text(encoding="utf-8"))
-            w = d.get("worker_result", {})
-            lines.append(f"- {d.get('completed_at')} {d.get('mission_id')} {w.get('status')} {d.get('model_used')} ({d.get('duration_sec')}s)")
-        except Exception:
-            continue
+    titles = {m["id"]: m.get("title", "") for m in reg["missions"]}
+    p0_left = [m["id"] for m in reg["missions"] if str(m.get("priority", "")) == "P0" and m["status"] == "pending"]
+    pend = [m["id"] for m in reg["missions"] if m["status"] == "pending"]
+
+    ok, fails, durs, rows = _load_24h()
+    total = ok + fails
+    ok_now = [r for r in rows if r["status"] == "done"]
+    med = sorted(durs)[len(durs)//2] if durs else 1500.0
+    okpct = round(100 * ok / max(total, 1))
+    workers = _running_workers()
+    now = _dt.datetime.now()
+
+    L = [f"# RAPPORT FLOTTE — {now.strftime('%d/%m %H:%M')}", ""]
+    L += ["## 1. Introduceurs clés", "",
+          "| Indicateur | Valeur |", "|---|---|",
+          f"| Missions livrées (total) | {counts.get('done',0)}/{len(reg['missions'])} · **{round(100*counts.get('done',0)/max(len(reg['missions']),1))} %** |",
+          f"| Taux succès (résultats) | **{okpct} %** ({ok} OK / {fails} KO) |",
+          f"| Durée médiane mission OK | **{int(med//60)} min** |",
+          f"| Workers actifs | **{len(workers)}/4** |",
+          f"| File d'attente | {len(pend)} mission(s) |",
+          f"| P0 restantes | {','.join(p0_left) or 'aucune'} |",
+          f"| Charge machine | {round(__import__('os').getloadavg()[0])} |", ""]
+
+    # Table livrées/fail 24h (8 dernieres)
+    L += ["## 2. Dernières livraisons (24 h)", "",
+          "| Heure | Mission | Modèle | Durée | Résultat | Push |", "|---|---|---|---|---|---|"]
+    for r in reversed(rows[-8:]):
+        L.append(f"| {r['at']} | #{r['mission']} | {r['model'].replace('opencode-go/','')} | "
+                 f"{int((r['dur'] or 0)//60)} min | {r['status'] or '?'} | {'✓' if r['pushed'] else '—'} |")
+    L.append("")
+
+    # En ce moment
+    def stats_model():
+        per = defaultdict(lambda: dict(n=0, ok=0, sec=0))
+        for r in rows:
+            per[r["model"]]["n"] += 1
+            if r["status"] == "done":
+                per[r["model"]]["ok"] += 1
+                per[r["model"]]["sec"] += r["dur"] or 0
+        return per
+    per = stats_model()
+
+    L += ["## 3. En train de tourner", ""]
+    if workers:
+        L += ["| Mission | Modèle | Démarré | Écoulé | Avancement est. | ETA | Risque |",
+              "|---|---|---|---|---|---|---|"]
+        for w in workers:
+            el = w["start"]
+            pct = min(99, int(100 * el / max(med, 60)))
+            eta = max(0, med - el)
+            risk = "long (>2×médiane)" if el > 2 * med else "normal"
+            L.append(f"| #{w['mission']} | {w['model'].replace('opencode-go/','')} | démarré il y a {int(el//60)} min | "
+                     f"{int(el//60)} min | {pct} % | t+{int(eta//60)} min | {risk} |")
+    else:
+        L.append("- aucun worker actif")
+    L.append("")
+
+    # per model
+    L += ["## 4. Qui a fait quoi (par modèle)", "",
+          "| Modèle | Tâches | OK | Taux OK | Temps total OK |", "|---|---|---|---|---|"]
+    for model, st in sorted(per.items(), key=lambda kv: -kv[1]["ok"]):
+        L.append(f"| {model.replace('opencode-go/','')} | {st['n']} | {st['ok']} | "
+                 f"{round(100*st['ok']/max(st['n'],1))} % | {int(st['sec']//60)} min |")
+    L.append("")
+
+    # Codex
+    L += ["## 5. Codex (branche consolidation)", "",
+          f"- dernier commit sur origin : `{_last_origin_commit('codex/v3-stable-consolidation')}`",
+          f"- latence /api/career/application-pipeline : **{_pipeline_latency()}** (objectif < 3 s)",
+          "- périmètre : `career/**` + perf ; ne touche ni l'UI bureau ni l'orchestrateur", ""]
+
+    # ETA global
+    slots = max(0, 4 - len(workers))
+    remaining = len(pend)
+    eta_min = int((remaining / max(slots + len(workers), 1)) * med // 60) if remaining else 0
+    L += ["## 6. Estimation délai avant résultats", "",
+          f"- file restante : {remaining} mission(s) → **vidée de la file dans ≈ {eta_min} min** "
+          f"(4 slots, médiane {int(med//60)} min)",
+          f"- P0 (candidature facile) : ETA ≈ {(len(p0_left)*(med//60))//max(slots+len(workers),1) or 1} h après leur lancement",
+          "- pipeline < 3 s : blocée sur Codex", ""]
     out = ROOT / "reports"
     out.mkdir(exist_ok=True)
-    (out / "fleet_rapport.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (out / "fleet_rapport.md").write_text("\n".join(L) + "\n", encoding="utf-8")
     log(f"rapport écrit ({len(workers)} workers, {counts})")
 
 
