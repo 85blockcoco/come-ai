@@ -1,7 +1,9 @@
+from collections import Counter
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+import career.models as career_models
 from career.service import CareerService
 from come_ai_web import create_app
 
@@ -65,6 +67,47 @@ def test_pipeline_reuses_the_single_stage_match_job_snapshot(tmp_path: Path, mon
 
     assert calls == 1
     assert len(pipeline["pipeline"]) == 5
+
+
+def test_pipeline_scopes_short_text_normalization_cache(tmp_path: Path, monkeypatch) -> None:
+    service = CareerService(tmp_path, curated_sources=())
+    service.update_stage_search(service.get_stage_search()["brief"])
+    for index in range(5):
+        service.import_job(
+            {
+                "company": f"Synthetic Bank {index}",
+                "title": "Corporate Finance Intern",
+                "job_family": "Corporate Finance",
+                "official_url": f"https://careers.example.test/pipeline-normalization-{index}",
+                "city": "London",
+                "country": "United Kingdom",
+                "employment_type": "Internship",
+                "start_date": "2027-01-04",
+                "end_date": "2027-07-04",
+                "duration_months": 6,
+                "description_original": "Synthetic corporate finance internship.",
+                "requirements": "Financial modelling",
+                "source_status": "open",
+            }
+        )
+
+    expected = service.get_application_pipeline()
+    counts: Counter[str] = Counter()
+    original = career_models._normalize_clean_text
+
+    def count_normalizations(value: str) -> str:
+        counts[value] += 1
+        return original(value)
+
+    monkeypatch.setattr(career_models, "_normalize_clean_text", count_normalizations)
+    actual = service.get_application_pipeline()
+
+    assert actual == expected
+    assert counts["corporate finance"] == 1
+    # The per-operation cache must be gone after the request; this next call
+    # has to normalize the value again instead of retaining profile text.
+    career_models.normalized_text("corporate finance")
+    assert counts["corporate finance"] == 2
 
 
 def test_pipeline_frontend_contract_exists() -> None:

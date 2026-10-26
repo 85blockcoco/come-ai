@@ -2375,6 +2375,16 @@ class CareerService:
     def get_application_pipeline(self) -> dict[str, Any]:
         """Return a read-only, derived view of the complete local workflow."""
 
+        # Matching normalizes the same brief terms, locations, and contract
+        # labels for every offer. Keep those short strings only for this one
+        # synchronous read; the cache is reset in a finally block and never
+        # retains profile or offer text across requests.
+        with scoped_normalized_text_cache():
+            return self._build_application_pipeline()
+
+    def _build_application_pipeline(self) -> dict[str, Any]:
+        """Build the pipeline while its request-scoped text cache is active."""
+
         drafts = self.list_application_drafts()
         applications = self.list_applications()
         # Stage matches already carry the serialized local jobs. Reuse them
