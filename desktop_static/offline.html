@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <meta name="description" content="NAGE — page de secours hors-ligne.">
+    <title>NAGE // hors-ligne</title>
+    <link rel="icon" href="/app-static/icon.png">
+    <link rel="stylesheet" href="/app-static/app.css">
+  </head>
+  <body class="offline-page">
+    <main class="offline-card" role="main">
+      <span class="offline-mark" aria-hidden="true">NAGE</span>
+      <h1>Hors-ligne</h1>
+      <p>
+        Le serveur local (<code>127.0.0.1</code>) est injoignable. La coquille de
+        l’application est disponible en cache, mais aucune nouvelle donnée ne peut
+        être chargée pour l’instant.
+      </p>
+      <p class="offline-hint">
+        Relance le serveur local, puis rouvre l’application. Les données déjà
+        consultées restent dans le cache de ce navigateur — aucune donnée n’est
+        envoyée à l’extérieur.
+      </p>
+      <a class="offline-retry" href="/app">Réessayer</a>
+    </main>
+  </body>
+</html>

@@ -708,3 +708,58 @@ a.inline-link:hover { background: var(--nag-accent-soft); }
 .quick-row { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.4fr) auto auto; gap: 8px; align-items: center; padding: 9px 11px; border: 1px solid var(--line); border-radius: var(--radius); background: #020a06; }
 .quick-label { color: var(--mute); font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; }
 .quick-value { color: var(--green-2); font-size: 11.5px; word-break: break-word; }
+
+/* SPEC-050 — indicateur hors-ligne + page de secours */
+.offline-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 7px 16px;
+  border-bottom: 1px solid var(--amber);
+  background: #1a1708;
+  color: var(--amber);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+.offline-banner strong { letter-spacing: 0.14em; text-transform: uppercase; }
+body:has(.offline-banner:not([hidden])) .window { height: calc(100vh - 30px); margin-top: 30px; }
+
+.offline-page { display: grid; place-items: center; min-height: 100vh; padding: 24px; background: var(--bg); }
+.offline-card {
+  width: min(560px, 100%);
+  padding: 28px;
+  border: 1px solid var(--line-hard);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--soft);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+.offline-card h1 { margin: 14px 0 10px; color: var(--text); font-size: 22px; letter-spacing: 0.05em; }
+.offline-card code { color: var(--green-2); }
+.offline-mark { display: inline-block; color: var(--green); font-size: 11px; letter-spacing: 0.28em; }
+.offline-hint { color: var(--mute); }
+.offline-retry {
+  display: inline-block;
+  margin-top: 14px;
+  padding: 9px 16px;
+  border: 1px solid var(--green-dim);
+  border-radius: 8px;
+  background: var(--green-deep);
+  color: var(--green-2);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.1em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+.offline-retry:hover { border-color: var(--green); color: var(--text); }

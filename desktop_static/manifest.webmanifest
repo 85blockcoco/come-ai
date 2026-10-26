@@ -1,0 +1,27 @@
+{
+  "name": "NAGE — machine de candidatures",
+  "short_name": "NAGE",
+  "description": "Machine locale de candidatures : offres, dossiers, assistant et missions, avec cache hors-ligne.",
+  "lang": "fr",
+  "dir": "ltr",
+  "start_url": "/app",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#050705",
+  "theme_color": "#050705",
+  "icons": [
+    {
+      "src": "/app-static/icon.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/app-static/icon.png",
+      "sizes": "1024x1024",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -16,6 +16,7 @@
     chat: [],
     chatMode: "offline",
     sending: false,
+    offlineData: false,
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -47,6 +48,11 @@
       credentials: "same-origin",
       ...options,
     });
+    if (response.headers.get("X-Nage-Offline") === "1") {
+      state.offlineData = true;
+      showOfflineBanner(true, "Hors-ligne — dernières données servies depuis le cache local.");
+      setStatus("offline", "Hors-ligne · cache local");
+    }
     if (!response.ok) {
       let detail = `HTTP ${response.status}`;
       try {
@@ -100,20 +106,30 @@
 
   async function loadAll() {
     setStatus("pending", "Connexion…");
+    state.offlineData = false;
     // Rendu progressif : chaque source s'affiche dès qu'elle arrive (l'API
     // pipeline peut prendre ~13 s ; inutile de bloquer tout l'écran).
     const results = await Promise.allSettled(
       Object.values(loaders).map(async (load) => {
         try { await load(); }
         catch (e) { console.error("LOADER_FAIL:", e.message); throw e; }
-        setStatus("online", "Local · 127.0.0.1");
+        if (!state.offlineData) setStatus("online", "Local · 127.0.0.1");
         renderBadges();
         render(state.view);
       }),
     );
     const failed = results.filter((r) => r.status === "rejected").length;
-    setStatus(failed === 0 ? "online" : failed >= results.length ? "offline" : "pending",
-      failed === 0 ? "Local · 127.0.0.1" : `${results.length - failed}/${results.length} sources`);
+    if (failed >= results.length) {
+      setStatus("offline", "Serveur local injoignable");
+      showOfflineBanner(true, "Serveur local injoignable — affichage des dernières données en cache.");
+    } else if (state.offlineData) {
+      setStatus("offline", "Hors-ligne · cache local");
+    } else if (failed > 0) {
+      setStatus("pending", `${results.length - failed}/${results.length} sources`);
+    } else {
+      setStatus("online", "Local · 127.0.0.1");
+      showOfflineBanner(false);
+    }
     renderBadges();
     render(state.view);
   }
@@ -121,12 +137,14 @@
   async function refresh() {
     const button = $("#refreshBtn");
     button.disabled = true;
+    state.offlineData = false;
     try {
       await Promise.allSettled(Object.values(loaders).map(async (load) => {
         await load();
         renderBadges();
         render(state.view);
       }));
+      if (navigator.onLine && !state.offlineData) showOfflineBanner(false);
       renderBadges();
       render(state.view);
     } finally {
@@ -138,6 +156,33 @@
     const dot = $("#statusDot");
     dot.className = `status-dot ${kind}`;
     $("#statusText").textContent = text;
+  }
+
+  function showOfflineBanner(visible, text) {
+    const banner = $("#offlineBanner");
+    if (!banner) return;
+    if (typeof text === "string") $("#offlineBannerText").textContent = text;
+    banner.hidden = !visible;
+  }
+
+  function syncConnectivity() {
+    if (navigator.onLine) {
+      showOfflineBanner(false);
+      setStatus("pending", "Reconnexion…");
+      loadAll();
+      return;
+    }
+    showOfflineBanner(true, "Hors-ligne — dernières données conservées dans ce navigateur.");
+    setStatus("offline", "Hors-ligne · cache local");
+  }
+
+  function registerServiceWorker() {
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.register("/sw.js", { scope: "/" })
+      .then((registration) => {
+        if (registration.waiting) registration.waiting.postMessage({ type: "SKIP_WAITING" });
+      })
+      .catch((error) => console.warn("SW_FAIL:", error.message));
   }
 
   function renderBadges() {
@@ -638,6 +683,10 @@
     state.filter = event.target.value;
     renderOffers();
   });
+  window.addEventListener("online", syncConnectivity);
+  window.addEventListener("offline", syncConnectivity);
+  window.addEventListener("load", registerServiceWorker);
+  if (!navigator.onLine) syncConnectivity();
 
   const initial = (location.hash || "#today").slice(1);
   setView(VIEWS[initial] ? initial : "today");

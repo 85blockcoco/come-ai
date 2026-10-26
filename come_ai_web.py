@@ -503,6 +503,22 @@ def create_app(
     async def desktop_homepage() -> FileResponse:
         return FileResponse(DESKTOP_STATIC_DIR / "index.html", media_type="text/html; charset=utf-8")
 
+    @app.get("/sw.js", include_in_schema=False)
+    async def desktop_service_worker() -> FileResponse:
+        """SPEC-050 : le worker doit vivre à la racine pour contrôler `/app` et `/api`."""
+        return FileResponse(
+            DESKTOP_STATIC_DIR / "sw.js",
+            media_type="application/javascript; charset=utf-8",
+            headers={"Service-Worker-Allowed": "/", "Cache-Control": "no-store"},
+        )
+
+    @app.get("/app.webmanifest", include_in_schema=False)
+    async def desktop_manifest() -> FileResponse:
+        return FileResponse(
+            DESKTOP_STATIC_DIR / "manifest.webmanifest",
+            media_type="application/manifest+json; charset=utf-8",
+        )
+
     @app.get("/v5")
     async def v5_homepage() -> FileResponse:
         """The new unified local shell; V3 remains available at `/`."""
@@ -510,7 +526,9 @@ def create_app(
 
     @app.get("/api/app/missions")
     async def app_missions() -> dict:
-        import json as _json, os as _os, subprocess as _sp
+        import json as _json
+        import os as _os
+        import subprocess as _sp
         from pathlib import Path as _P
         def snapshot():
             try:

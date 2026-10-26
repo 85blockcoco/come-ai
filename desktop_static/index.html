@@ -5,13 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="dark">
     <meta name="description" content="NAGE — machine locale de candidatures : offres, dossiers, assistant, missions.">
+    <meta name="theme-color" content="#050705">
     <title>NAGE // machine de candidatures</title>
     <link rel="icon" href="/app-static/icon.png">
+    <link rel="apple-touch-icon" href="/app-static/icon.png">
+    <link rel="manifest" href="/app.webmanifest">
     <link rel="stylesheet" href="/app-static/app.css">
   </head>
   <body>
     <div class="ambient ambient-a" aria-hidden="true"></div>
     <div class="ambient ambient-b" aria-hidden="true"></div>
+
+    <div class="offline-banner" id="offlineBanner" role="status" aria-live="polite" hidden>
+      <strong>Hors-ligne</strong>
+      <span id="offlineBannerText">Serveur local injoignable — affichage des dernières données en cache.</span>
+    </div>
 
     <div class="window">
       <aside class="sidebar">
