@@ -4121,6 +4121,39 @@ class CareerService:
             ),
         }
 
+    def application_artifact_path(self, application_id: str, kind: str) -> Path:
+        """Return one generated kit artifact for a tracked application.
+
+        The path is always re-derived from the application's own job and latest
+        draft variant, then confined to the local kits directory. A caller can
+        therefore never request an arbitrary file through this endpoint.
+        """
+        if kind not in {"cv", "cover_letter", "prep_sheet"}:
+            raise UserFacingError("Ce document du kit n’est pas reconnu.")
+        identifier = clean_text(application_id, limit=80)
+        with self._lock, self._connection() as connection:
+            application = connection.execute(
+                "SELECT job_id FROM applications WHERE id = ?", (identifier,)
+            ).fetchone()
+            if not application:
+                raise UserFacingError("Cette candidature Career n’existe pas.")
+            draft = connection.execute(
+                """
+                SELECT variant FROM application_drafts WHERE job_id = ?
+                ORDER BY created_at DESC, application_drafts.rowid DESC LIMIT 1
+                """,
+                (str(application["job_id"]),),
+            ).fetchone()
+        variant = clean_text(draft["variant"], limit=40) if draft else "m_a"
+        generated = self._generate_targeted_kit_files(str(application["job_id"]), variant or "m_a")
+        path = Path(str(generated["artifacts"][kind])).resolve()
+        kits_root = (self.base_dir / "output" / "career" / "kits").resolve()
+        if kits_root != path.parent and kits_root not in path.parents:
+            raise UserFacingError("Ce document du kit n’est pas disponible.")
+        if not path.is_file():
+            raise UserFacingError("Ce document du kit n’est pas disponible.")
+        return path
+
     def update_kit_texts(self, application_id: str, texts: dict[str, Any]) -> dict[str, Any]:
         """Save one explicit edit of the kit texts as a JSON event row.
 

@@ -1,0 +1,9 @@
+# Synthetic profile — no modelling experience on purpose (anti-invention).
+display_name: "Alex Test (synthetic)"
+contact_email: "alex.test@example.test"
+education: "Licence Gestion, Université de test, 2025"
+experience: |
+  Stage en contrôle de gestion (synthetic, 2024) : suivi budgétaire et saisie comptable.
+skills: "Excel intermédiaire, comptabilité, analyse budgétaire"
+languages: "Français natif, anglais B2"
+eligibility: "unknown"

@@ -638,6 +638,24 @@ def create_career_router(
         texts = {"motivation_short": payload.motivation_short, "availability": payload.availability}
         return await local(lambda: service.update_kit_texts(application_id, texts))
 
+    @router.get("/api/career/applications/{application_id}/artifacts/{kind}")
+    async def download_application_artifact(application_id: str, kind: str) -> FileResponse:
+        """Download one generated kit file (CV, letter or preparation sheet)."""
+        path = await run_in_threadpool(
+            lambda: service.application_artifact_path(application_id, kind)
+        )
+        media_types = {
+            "cv": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "cover_letter": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "prep_sheet": "text/markdown; charset=utf-8",
+        }
+        return FileResponse(
+            path,
+            filename=path.name,
+            media_type=media_types[kind],
+            headers={"Cache-Control": "no-store"},
+        )
+
     @router.patch("/api/career/application-drafts/{draft_id}")
     async def update_application_draft(draft_id: str, payload: ApplicationDraftEditPayload) -> Any:
         return await local(

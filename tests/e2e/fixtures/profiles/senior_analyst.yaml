@@ -1,0 +1,11 @@
+# Synthetic profile — no real person, no real employer.
+display_name: "Camille Test (synthetic)"
+contact_email: "camille.test@example.test"
+education: "Master 2 Finance, Université de test, 2026"
+experience: |
+  Stage en fusions-acquisitions (synthetic, 2025) : modélisation financière DCF,
+  évaluation par comparables, rédaction de notes de deal rationale.
+  Stage en contrôle de gestion (synthetic, 2024) : reporting mensuel et analyse d'écarts.
+skills: "Modélisation financière, valuation, M&A, Excel avancé, PowerPoint"
+languages: "Français natif, anglais C1"
+eligibility: "compatible"
