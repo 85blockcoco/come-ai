@@ -242,6 +242,16 @@ class CVAnalyzeResponse(BaseModel):
     provenance: dict[str, Any]
 
 
+class SectorFaqPayload(BaseModel):
+    """Offers to mine; ``None`` means "use the locally stored offers"."""
+
+    offers: list[dict[str, Any]] | None = Field(default=None, max_length=200)
+    profile: dict[str, Any] | None = None
+    sector: str = Field(default="", max_length=160)
+    top_n: int = Field(default=20, ge=1, le=100)
+    max_questions: int = Field(default=8, ge=1, le=20)
+
+
 def create_career_router(
     service: CareerService,
     *,
@@ -281,6 +291,7 @@ def create_career_router(
             "interview_coach": capabilities["interview_coach"],
             "calendar_export": capabilities["calendar_export"],
             "stage_search": capabilities["stage_search"],
+            "faq_mining": capabilities["faq_mining"],
         }
 
     @router.post("/api/career/cv/analyze")
@@ -722,6 +733,36 @@ def create_career_router(
     async def delete_interview_session(session_id: str) -> dict[str, bool]:
         await local(lambda: service.delete_interview_session(session_id))
         return {"deleted": True}
+
+    # --- SPEC-031: sector FAQ mining ----------------------------------------
+    # Both routes are read-only computations.  The POST variant uses the
+    # offers/profile supplied by the caller; the GET variant mines the local
+    # Career database and never fetches a board or calls a model.
+    @router.post("/api/career/faq-mine")
+    async def mine_sector_faq_endpoint(payload: SectorFaqPayload) -> Any:
+        return await local(
+            lambda: service.mine_sector_faq(
+                payload.offers,
+                payload.profile,
+                sector=payload.sector or None,
+                top_n=payload.top_n,
+                max_questions=payload.max_questions,
+            )
+        )
+
+    @router.get("/api/career/faq-mine")
+    async def mine_sector_faq_from_jobs(
+        sector: str = Query(default="", max_length=160),
+        top_n: int = Query(default=20, ge=1, le=100),
+        max_questions: int = Query(default=8, ge=1, le=20),
+    ) -> Any:
+        return await local(
+            lambda: service.mine_sector_faq(
+                sector=sector or None,
+                top_n=top_n,
+                max_questions=max_questions,
+            )
+        )
 
     @router.get("/api/career/export/{export_format}")
     async def export_applications(export_format: str) -> FileResponse:

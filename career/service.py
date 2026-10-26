@@ -4530,7 +4530,54 @@ class CareerService:
                 "local_only": True,
                 "invented_facts": False,
             },
+            "faq_mining": {
+                "enabled": True,
+                "ai_required": False,
+                "local_only": True,
+                "deterministic": True,
+                "invented_facts": False,
+            },
         }
+
+    def mine_sector_faq(
+        self,
+        offers: Any = None,
+        profile: Any = None,
+        *,
+        sector: Any = None,
+        top_n: int = 20,
+        max_questions: int = 8,
+    ) -> list[dict[str, Any]]:
+        """Mine sector FAQ(s) from explicit offers or the local Career data.
+
+        This is a deterministic read: it never calls a connector, a model or
+        the network.  ``None`` means "use what is stored locally"; an explicit
+        empty list stays empty so a caller can test an empty sector.
+        """
+        from .faq_mining import mine_all_sector_faqs, mine_sector_faq as build_sector_faq
+
+        if offers is None:
+            offers = self.list_jobs()
+        if profile is None:
+            profile = self.get_profile()
+        if sector:
+            faq = build_sector_faq(
+                offers,
+                profile,
+                sector=str(sector),
+                top_n=top_n,
+                max_questions=max_questions,
+            )
+            return [faq.as_dict()]
+        return [
+            faq.as_dict()
+            for faq in mine_all_sector_faqs(
+                offers,
+                profile,
+                top_n=top_n,
+                max_questions=max_questions,
+            )
+        ]
 
     def export_deadline_calendar(self) -> Path:
         """Write a private, inert ``.ics`` file for actionable deadlines.
