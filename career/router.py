@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+from datetime import date
 from pathlib import Path
 from typing import Any, Callable
 
@@ -13,6 +14,7 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
+from .send_confirmation import SendEvidence, parse_sent_datetime
 from .profile_import import MAX_PROFILE_IMPORT_BYTES
 from .service import CareerService
 from workspace_core import UserFacingError, to_jsonable
@@ -131,6 +133,25 @@ class ReceiptPayload(BaseModel):
 
 
 class ReceiptUnknownPayload(BaseModel):
+    note: str = Field(default="", max_length=1_000)
+
+
+class SendConfirmationPayload(BaseModel):
+    """SPEC-047 — déclaration d'un envoi effectué manuellement par la personne.
+
+    Aucune soumission automatique n'existe : cet appel enregistre un dépôt que
+    la personne confirme avoir fait elle-même (site, e-mail ou portail).
+    """
+
+    channel: str = Field(pattern="^(website|email|portal)$")
+    sent_at: str = Field(min_length=10, max_length=64)
+    note: str = Field(default="", max_length=1_000)
+
+
+class FollowupDonePayload(BaseModel):
+    """SPEC-047 — déclaration d'une relance déjà faite (brouillon copié soi-même)."""
+
+    done_on: str = Field(default="", max_length=32)
     note: str = Field(default="", max_length=1_000)
 
 
@@ -697,6 +718,44 @@ def create_career_router(
     @router.post("/api/career/applications/{application_id}/checklist")
     async def application_checklist(application_id: str, payload: ApplicationChecklistPayload) -> Any:
         return await local(lambda: service.set_application_checklist(application_id, payload.checked))
+
+    # SPEC-047 : la confirmation d'envoi est une déclaration humaine — la
+    # personne effectue le dépôt manuel puis l'enregistre ici ; le module ne
+    # soumet jamais rien. La route de lecture du suivi de relance reste
+    # enregistrée avant les routes paramétrées de confirmation.
+    @router.get("/api/career/apply-tracker")
+    async def apply_tracker() -> Any:
+        return await local(service.apply_tracker)
+
+    @router.post("/api/career/send-confirmation/{job_id}", status_code=201)
+    async def record_send_confirmation(job_id: str, payload: SendConfirmationPayload) -> Any:
+        sent_at = parse_sent_datetime(payload.sent_at)
+        if sent_at is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Horodatage d'envoi illisible : attends un format ISO (ex. 2026-10-26T10:30:00+00:00).",
+            )
+        evidence = SendEvidence(channel=payload.channel, sent_at=sent_at, note=payload.note or None)
+        return await local(lambda: service.record_send(job_id, evidence))
+
+    @router.get("/api/career/send-confirmation/{job_id}")
+    async def send_confirmation_record(job_id: str) -> Any:
+        return await local(lambda: service.get_send_record(job_id))
+
+    @router.post("/api/career/send-confirmation/{job_id}/followup")
+    async def record_followup_done(job_id: str, payload: FollowupDonePayload) -> Any:
+        done_on = None
+        if payload.done_on.strip():
+            try:
+                done_on = date.fromisoformat(payload.done_on)
+            except ValueError as error:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Date de relance illisible : attends un format ISO (ex. 2026-10-26).",
+                ) from error
+        return await local(
+            lambda: service.record_followup_done(job_id, done_on=done_on, note=payload.note)
+        )
 
     @router.get("/api/career/interview-sessions")
     async def interview_sessions() -> Any:
