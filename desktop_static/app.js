@@ -282,6 +282,8 @@
         item.official_url
           ? el("a", { class: "chip violet", href: item.official_url, target: "_blank", rel: "noopener" }, "offre ↗")
           : null,
+        el("button", { class: "chip green", type: "button", title: "Préparer le dossier (CV+lettre+checklist)",
+          onclick: (event) => { event.stopPropagation(); showApplyKit(item.job_id, item.title); } }, "préparer"),
         el("button", { class: "chip green", type: "button", title: "Réponses types copiables",
           onclick: (event) => { event.stopPropagation(); showQuickAnswers(item.job_id, item.title); } }, "réponses"),
         el("button", { class: "chip", type: "button", title: "Marquer envoyé (confirmation humaine)",
@@ -550,6 +552,36 @@
       )) : emptyState("Aucun envoi confirmé", "Marque une candidature « envoyé » pour la suivre ici.")),
       el("p", { class: "note tight" }, t.honesty || "Sont listées les candidatures déclarées envoyées."),
     );
+  }
+
+  async function showApplyKit(jobId, title) {
+    let kit;
+    try { kit = await api(`/api/career/apply-kit/${jobId}`, { method: "POST", body: "{}" }); }
+    catch (e) { alert(`Dossier indisponible : ${e.message}`); return; }
+    const overlay = el("div", { class: "modal-overlay", onclick: (ev) => { if (ev.target === overlay) overlay.remove(); } });
+    const readiness = Number(kit.readiness || 0);
+    const box = el("div", { class: "card modal-box" },
+      el("div", { class: "section-title", style: "margin-top:0" }, el("h2", {}, `Dossier prêt — ${title || "offre"}`), el("span", { class: "hint" }, `readiness ${readiness} %`)),
+      (kit.block_reasons || []).length ? el("div", { class: "error-note" }, (kit.block_reasons || []).join(" · ")) : null,
+      el("div", { class: "grid kpi", style: "margin-top:10px" },
+        el("div", { class: "card kpi-card" }, el("div", { class: "kpi-top" }, el("span", { class: "kpi-label" }, "Readiness"), el("span", { class: "kpi-chip" }, "%")), el("div", { class: "kpi-value" }, String(readiness)), el("div", { class: "kpi-foot" }, "sur 100")),
+        el("div", { class: "card kpi-card" }, el("div", { class: "kpi-top" }, el("span", { class: "kpi-label" }, "Checklist"), el("span", { class: "kpi-chip" }, "✓")), el("div", { class: "kpi-value" }, `${(kit.checklist || []).filter((c) => c.done).length}/${(kit.checklist || []).length}`), el("div", { class: "kpi-foot" }, "items validés")),
+      ),
+      el("div", { class: "section-title" }, el("h2", {}, "Pièces à télécharger"), el("span", { class: "hint" }, "PDF + DOCX")),
+      el("div", { class: "offer-tags", style: "flex-wrap:wrap;gap:6px" },
+        Object.entries(kit.export_urls || {}).map(([k, u]) => el("a", { class: "chip green", href: u, target: "_blank", rel: "noopener" }, `${k} ↗`))),
+      el("div", { class: "section-title" }, el("h2", {}, "Checklist humaine"), el("span", { class: "hint" }, "à valider avant envoi")),
+      el("div", { class: "quick-list" }, (kit.checklist || []).map((c) =>
+        el("div", { class: "quick-row" },
+          el("span", { class: c.done ? "chip green" : "chip amber" }, c.done ? "ok" : "à faire"),
+          el("div", { class: "quick-value" }, c.label || c.id || "—"),
+          c.note ? el("span", { class: "quick-label" }, c.note) : null,
+        ))),
+      kit.deep_link ? el("a", { class: "ghost-btn", href: kit.deep_link, target: "_blank", rel: "noopener", style: "margin-top:12px;display:inline-flex" }, "Ouvrir le formulaire officiel ↗") : null,
+      el("button", { class: "ghost-btn", type: "button", onclick: () => overlay.remove(), style: "margin-top:12px" }, "Fermer"),
+    );
+    overlay.append(box);
+    document.body.append(overlay);
   }
 
   async function showQuickAnswers(jobId, title) {
