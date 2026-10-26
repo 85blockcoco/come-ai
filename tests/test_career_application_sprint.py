@@ -293,6 +293,9 @@ def test_application_sprint_ui_contract_is_present() -> None:
     assert "Vérifications groupées" in js
     assert "Ouvrir la source officielle" in js
     assert "Aucun envoi automatique" in html
+    assert "exigences étayées par le profil ${item.coverage_percent} %" in js
+    assert "Télécharger ${documentLabel} en ${formatLabel}" in js
+    assert '`${label} du ${kind === "cv" ? "CV" : "la lettre de motivation"}`' not in js
 
 
 def test_cv_import_review_displays_local_structural_diagnostic() -> None:

@@ -1813,7 +1813,9 @@ function draftDownloadLink(draft, kind, exportFormat) {
   const link = make("a", label, "secondary-button link-button");
   link.href = `/api/career/application-drafts/${encodeURIComponent(draft.id)}/download/${kind}/${exportFormat}`;
   link.download = "";
-  link.setAttribute("aria-label", `${label} du ${kind === "cv" ? "CV" : "la lettre de motivation"}`);
+  const documentLabel = kind === "cv" ? "le CV" : "la lettre de motivation";
+  const formatLabel = { docx: "Word", pdf: "PDF", html: "HTML", md: "Markdown" }[exportFormat];
+  link.setAttribute("aria-label", formatLabel ? `Télécharger ${documentLabel} en ${formatLabel}` : label);
   return link;
 }
 
@@ -3211,7 +3213,7 @@ function renderApplicationSprint(payload) {
     const card = make("article", "", `sprint-card ${item.readiness === "prepare_now" ? "is-ready" : "is-review"}`);
     card.append(make("p", `#${index + 1} · ${item.company}`, "sprint-card-company"));
     card.append(make("h4", item.title));
-    card.append(make("p", `${item.location} · langue ${item.language} · correspondance ${item.match_score}/100 · CV ${item.coverage_percent} %`, "sprint-card-meta"));
+    card.append(make("p", `${item.location} · langue ${item.language} · correspondance ${item.match_score}/100 · exigences étayées par le profil ${item.coverage_percent} %`, "sprint-card-meta"));
     card.append(chip(sprintReadinessLabel(item.readiness), item.readiness === "prepare_now" ? "good" : "warning"));
     if ((item.candidate_warnings || []).length) {
       const warnings = make("ul", "", "blocked-list");
