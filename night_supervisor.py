@@ -86,6 +86,52 @@ def kill_pytest_excess(limit: int = 6) -> None:
             pass
 
 
+def live_worker_orders() -> set[str]:
+    """Ordres actuellement pilotés par un process opencode vivant."""
+    orders = set()
+    for _, cmd in ps_table():
+        if "opencode run --auto" in cmd and "--title Worker-" in cmd:
+            tail = cmd.split("--title Worker-", 1)[1].strip()
+            tail = tail.split()[0] if tail else ""
+            if tail:
+                orders.add(tail)
+    return orders
+
+
+def cwd_of(pid: int) -> str:
+    try:
+        out = subprocess.run(["lsof", "-p", str(pid)], capture_output=True, text=True, timeout=15).stdout
+    except Exception:
+        return ""
+    for line in out.splitlines():
+        if " cwd " in line:
+            return line.split()[-1]
+    return ""
+
+
+def kill_orphan_pytest() -> None:
+    """Tue les pytest dont le worktree n'a plus de worker vivant.
+
+    Ce sont eux qui saturent la machine : un worker tué laisse ses suites
+    tourner indéfiniment (jusqu'à 6-8 pytest simultanés dans le même dossier).
+    """
+    live = live_worker_orders()
+    for pid, cmd in ps_table():
+        if "pytest" not in cmd or "python" not in cmd:
+            continue
+        cwd = cwd_of(pid)
+        marker = "AI-Excel-Agent-worker-cvboost-"
+        if marker not in cwd:
+            continue  # Codex ou autre: ne pas toucher
+        order = cwd.split(marker, 1)[1].split("/")[0]
+        if order not in live:
+            try:
+                os.kill(pid, 9)
+                log(f"pytest orphelin tué pid={pid} worktree={order}")
+            except Exception:
+                pass
+
+
 def snapshot() -> None:
     reg = json.load(open(ROOT / "missions_registry.json", encoding="utf-8"))
     counts: dict[str, int] = {}
@@ -107,6 +153,7 @@ def main() -> None:
         try:
             keep_components_alive()
             kill_disk_scans()
+            kill_orphan_pytest()
             kill_pytest_excess()
             if time.time() - last_state >= STATE_EVERY:
                 snapshot()
