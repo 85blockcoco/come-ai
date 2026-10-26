@@ -204,6 +204,13 @@ class ApplicationKitPayload(BaseModel):
     variant: str = Field(default="m_a", pattern="^(m_a|markets|corporate_finance)$")
 
 
+class ApplyKitPayload(BaseModel):
+    """Optional locale and CV variant for the one-call local dossier."""
+
+    language: str = Field(default="fr", pattern="^(fr|en|it|de)$")
+    variant: str | None = Field(default=None, pattern="^(m_a|markets|corporate_finance)$")
+
+
 class ApplicationKitTextsPayload(BaseModel):
     """Edited kit texts; each field stays optional so saves can be partial."""
 
@@ -609,6 +616,13 @@ def create_career_router(
         lang: str = Query(default="fr", pattern="^(fr|en)$"),
     ) -> Any:
         return await local(lambda: service.get_quick_answers(job_id, lang=lang))
+
+    @router.post("/api/career/apply-kit/{job_id}")
+    async def apply_kit(job_id: str, payload: ApplyKitPayload | None = None) -> Any:
+        """Build a local dossier; the route never sends an application."""
+        language = payload.language if payload is not None else "fr"
+        variant = payload.variant if payload is not None else None
+        return await local(lambda: service.build_apply_kit(job_id, language, variant))
 
     @router.get("/api/career/jobs/{job_id}/summary")
     async def job_summary(

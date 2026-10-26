@@ -3734,6 +3734,54 @@ class CareerService:
             "history": history,
         }
 
+    def build_apply_kit(
+        self,
+        job_id: str,
+        language: str = "fr",
+        variant: str | None = None,
+    ) -> dict[str, Any]:
+        """Prepare a local, human-reviewed dossier for one saved offer."""
+        identifier = clean_text(job_id, limit=80)
+        if not identifier:
+            raise UserFacingError("Indique l'offre à préparer.")
+        normalized_language = clean_text(language, limit=8).lower() or "fr"
+        if normalized_language not in {"fr", "en", "it", "de"}:
+            raise UserFacingError("La langue du dossier doit être fr, en, it ou de.")
+        if variant is not None:
+            self._variant_config(variant)
+
+        job = self.get_job(identifier)
+        brief_payload = self.get_stage_search()
+        brief = brief_payload.get("brief") if isinstance(brief_payload, dict) else {}
+        brief = brief if isinstance(brief, dict) else {}
+        # Reuse the same source-attributed qualification contract and the
+        # person's current Stage Hunter criteria used by the match screen.
+        job["apply_qualification"] = qualify_offer(
+            job,
+            allowed_contract_types=brief.get("contract_types"),
+            allowed_start_months=brief.get("start_months"),
+            required_start_date=brief.get("start_date"),
+            minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
+            excluded_countries=brief.get("excluded_countries"),
+            excluded_cities=brief.get("excluded_cities"),
+            require_known_location=brief.get("require_known_location", True),
+        ).to_dict()
+
+        from dataclasses import asdict
+
+        from career.apply_kit import build_apply_kit
+
+        kit = build_apply_kit(
+            identifier,
+            self.get_profile(),
+            job=job,
+            intake=self.get_intake(),
+            service=self,
+            variant=variant,
+            language=normalized_language,
+        )
+        return asdict(kit)
+
     def get_quick_answers(self, job_id: str, lang: str = "fr") -> dict[str, Any]:
         """SPEC-045 — réponses types copiables calculées depuis les données locales.
 
