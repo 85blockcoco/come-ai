@@ -17,6 +17,7 @@ from starlette.datastructures import UploadFile
 from .exploration_service import ExplorationService
 from .send_confirmation import SendEvidence, parse_sent_datetime
 from .profile_import import MAX_PROFILE_IMPORT_BYTES
+from .ats_guide import human_apply_guide
 from .offer_dates import extract_offer_dates
 from .offer_qualification import qualify_offer
 from .service import CareerService
@@ -326,6 +327,7 @@ def create_career_router(
             "interview_coach": capabilities["interview_coach"],
             "calendar_export": capabilities["calendar_export"],
             "stage_search": capabilities["stage_search"],
+            "ats_guide": capabilities["ats_guide"],
         }
 
     @router.post("/api/career/cv/analyze")
@@ -626,6 +628,23 @@ def create_career_router(
         lang: str = Query(default="fr", pattern="^(fr|en)$"),
     ) -> Any:
         return await local(lambda: service.get_quick_answers(job_id, lang=lang))
+
+    @router.get("/api/career/ats-guide/{job_id}")
+    async def ats_guide(job_id: str) -> Any:
+        """Guide humain d'application : local, sans requête sortante, sans envoi."""
+
+        def build() -> dict[str, Any]:
+            stored_job = service.get_job(job_id)
+            guide = human_apply_guide(stored_job).to_dict()
+            return {
+                "job_id": stored_job.get("id", job_id),
+                "company": stored_job.get("company", ""),
+                "title": stored_job.get("title", ""),
+                **guide,
+                "automated_submission": False,
+            }
+
+        return await local(build)
 
     @router.get("/api/career/jobs/{job_id}/summary")
     async def job_summary(
