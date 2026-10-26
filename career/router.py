@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import os
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse
@@ -14,6 +14,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
 from .profile_import import MAX_PROFILE_IMPORT_BYTES
+from .send_confirmation import SendEvidence, parse_sent_at
 from .service import CareerService
 from workspace_core import UserFacingError, to_jsonable
 
@@ -114,6 +115,18 @@ class StageSearchPayload(BaseModel):
 
 class ApplicationCreatePayload(BaseModel):
     job_id: str = Field(min_length=8, max_length=80)
+
+
+class SendConfirmationPayload(BaseModel):
+    """Ce que la personne déclare avoir envoyé elle-même (SPEC-047)."""
+
+    channel: Literal["website", "email", "portal"]
+    sent_at: str = Field(min_length=10, max_length=64)
+    note: str = Field(default="", max_length=1_000)
+
+
+class FollowUpPayload(BaseModel):
+    note: str = Field(default="", max_length=1_000)
 
 
 class ApplicationStagePayload(BaseModel):
@@ -651,6 +664,35 @@ def create_career_router(
     # CVBOOST-09 : cette route de lecture doit rester enregistrée avant la
     # route paramétrée /applications/{application_id} pour ne jamais être
     # interprétée comme un identifiant de candidature.
+    # SPEC-047 : confirmation humaine d'envoi + relance. La lecture du
+    # tracker est enregistrée avant la route paramétrée /applications/…
+    # du même esprit ; ce sont toutefois des chemins distincts.
+    @router.post("/api/career/send-confirmation/{job_id}", status_code=201)
+    async def send_confirmation(job_id: str, payload: SendConfirmationPayload) -> Any:
+        return await local(
+            lambda: service.record_send(
+                job_id,
+                SendEvidence(
+                    channel=payload.channel,
+                    sent_at=parse_sent_at(payload.sent_at),
+                    note=payload.note or None,
+                ),
+            )
+        )
+
+    @router.post("/api/career/send-confirmation/{job_id}/followup")
+    async def record_followup(job_id: str, payload: FollowUpPayload) -> Any:
+        return await local(lambda: service.record_followup(job_id, payload.note))
+
+    @router.get("/api/career/send-confirmation/{job_id}/draft")
+    async def followup_draft(job_id: str) -> Any:
+        draft = await local(lambda: service.send_followup_draft(job_id))
+        return {"automatic_send": False, "draft": draft}
+
+    @router.get("/api/career/apply-tracker")
+    async def apply_tracker() -> Any:
+        return await local(service.get_apply_tracker)
+
     @router.get("/api/career/applications/dashboard")
     async def applications_dashboard(
         stage: str = Query(default="", max_length=80),

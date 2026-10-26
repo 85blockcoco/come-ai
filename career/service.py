@@ -23,6 +23,15 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterator
 
+from .send_confirmation import (
+    SendConfirmationError,
+    SendEvidence,
+    build_followup_draft,
+    build_send_record,
+    compute_follow_up_due,
+    parse_sent_at,
+    prioritize_followups,
+)
 from .models import (
     AVAILABILITY_STATES,
     APPLICATION_STAGES,
@@ -392,6 +401,20 @@ class CareerService:
                         updated_at TEXT NOT NULL
                     );
 
+                    CREATE TABLE send_confirmations (
+                        job_id TEXT PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
+                        application_id TEXT NOT NULL DEFAULT '',
+                        sent_at TEXT NOT NULL,
+                        channel TEXT NOT NULL,
+                        note TEXT NOT NULL DEFAULT '',
+                        follow_up_due TEXT NOT NULL,
+                        followup_count INTEGER NOT NULL DEFAULT 0,
+                        last_followup_at TEXT NOT NULL DEFAULT '',
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    );
+                    CREATE INDEX send_confirmations_due_idx ON send_confirmations(follow_up_due);
+
                     CREATE TABLE applications (
                         id TEXT PRIMARY KEY,
                         job_id TEXT NOT NULL UNIQUE REFERENCES jobs(id) ON DELETE CASCADE,
@@ -751,6 +774,19 @@ class CareerService:
                 source_fingerprint TEXT NOT NULL DEFAULT '',
                 updated_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS send_confirmations (
+                job_id TEXT PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,
+                application_id TEXT NOT NULL DEFAULT '',
+                sent_at TEXT NOT NULL,
+                channel TEXT NOT NULL,
+                note TEXT NOT NULL DEFAULT '',
+                follow_up_due TEXT NOT NULL,
+                followup_count INTEGER NOT NULL DEFAULT 0,
+                last_followup_at TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS send_confirmations_due_idx ON send_confirmations(follow_up_due);
             """
         )
 
@@ -3843,6 +3879,223 @@ class CareerService:
             )
             self._audit(connection, "application_receipt_unknown", "application", application_id)
         return self.get_application(application_id)
+
+    # ------------------------------------------------------------------
+    # Confirmation d'envoi manuelle + relance optimale (CVBOOST-84)
+    #
+    # Aucune soumission automatique, jamais : this section records an envoi
+    # the person declared they completed themselves, then computes when a
+    # follow-up becomes appropriate.  The human confirms; the module records.
+    # ------------------------------------------------------------------
+
+    def record_send(self, job_id: str, evidence: SendEvidence) -> dict[str, Any]:
+        """Record one manually-completed send, idempotently.
+
+        Le stage ne passe à « envoyée » que parce que la personne confirme
+        elle-même l'envoi ici ; un envoi plus de 24 h dans le futur est une
+        erreur métier ; un double enregistrement met la ligne à jour sans
+        dupliquer l'historique.
+        """
+
+        clean_job = clean_text(job_id, limit=80)
+        try:
+            record = build_send_record(clean_job, evidence, now=parse_sent_at(utc_now()))
+        except SendConfirmationError as error:
+            raise UserFacingError(str(error)) from error
+        with self._lock, self._connection() as connection:
+            job = connection.execute("SELECT id FROM jobs WHERE id = ?", (clean_job,)).fetchone()
+            if not job:
+                raise UserFacingError("Cette offre Career n’existe pas.")
+            application = connection.execute(
+                "SELECT id, receipt_status, approval_granted FROM applications WHERE job_id = ?",
+                (clean_job,),
+            ).fetchone()
+            if not application:
+                raise UserFacingError(
+                    "Aucun suivi n’existe pour cette offre. Crée d’abord la candidature suivie."
+                )
+            policy_error = ""
+            if not application["approval_granted"]:
+                policy_error = (
+                    "Approuve d’abord le dépôt manuel pour cette offre avant "
+                    "d’enregistrer son envoi."
+                )
+            elif application["receipt_status"] == "confirmed":
+                policy_error = (
+                    "La réception de cette candidature est déjà confirmée ; "
+                    "aucun nouvel envoi ne peut être enregistré."
+                )
+            if policy_error:
+                raise UserFacingError(policy_error)
+            sent_at_iso = record.sent_at.isoformat()
+            due_iso = record.follow_up_due.isoformat()
+            existing = connection.execute(
+                "SELECT job_id FROM send_confirmations WHERE job_id = ?", (clean_job,)
+            ).fetchone()
+            is_first = existing is None
+            connection.execute(
+                """
+                INSERT INTO send_confirmations
+                    (job_id, application_id, sent_at, channel, note, follow_up_due,
+                     followup_count, last_followup_at, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, 0, '', ?, ?)
+                ON CONFLICT(job_id) DO UPDATE SET
+                    application_id = excluded.application_id,
+                    sent_at = excluded.sent_at,
+                    channel = excluded.channel,
+                    note = excluded.note,
+                    follow_up_due = excluded.follow_up_due,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    clean_job,
+                    str(application["id"]),
+                    sent_at_iso,
+                    record.channel,
+                    clean_text(evidence.note or "", limit=1_000),
+                    due_iso,
+                    utc_now(),
+                    utc_now(),
+                ),
+            )
+            connection.execute(
+                """
+                UPDATE applications SET stage = 'submitted', receipt_status = 'unknown', updated_at = ?
+                WHERE job_id = ?
+                """,
+                (utc_now(), clean_job),
+            )
+            if is_first:
+                # Historique : l'envoi initial crée une seule ligne d'événement ;
+                # une ré-confirmation met la ligne existante à jour sans en ajouter.
+                self._application_event(
+                    connection,
+                    str(application["id"]),
+                    clean_job,
+                    "send_recorded",
+                    json.dumps(
+                        {
+                            "channel": record.channel,
+                            "sent_at": sent_at_iso,
+                            "note": clean_text(evidence.note or "", limit=1_000),
+                        },
+                        ensure_ascii=False,
+                    ),
+                )
+            self._audit(connection, "application_send_recorded", "application", str(application["id"]))
+        return self._get_send_record(clean_job)
+
+    def record_followup(self, job_id: str, note: str = "") -> dict[str, Any]:
+        """Declare one follow-up the person just sent; replan the next one."""
+
+        clean_job = clean_text(job_id, limit=80)
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT job_id, application_id, sent_at, followup_count FROM send_confirmations WHERE job_id = ?",
+                (clean_job,),
+            ).fetchone()
+            if not row:
+                raise UserFacingError(
+                    "Aucun envoi enregistré pour cette offre ; la relance ne peut pas être datée."
+                )
+            now = parse_sent_at(utc_now())
+            holidays: tuple[date, ...] = ()
+            next_due = compute_follow_up_due(now, holidays)
+            connection.execute(
+                """
+                UPDATE send_confirmations SET followup_count = followup_count + 1,
+                    last_followup_at = ?, follow_up_due = ?, updated_at = ?
+                WHERE job_id = ?
+                """,
+                (now.isoformat(), next_due.isoformat(), utc_now(), clean_job),
+            )
+            self._application_event(
+                connection,
+                str(row["application_id"] or ""),
+                clean_job,
+                "followup_recorded",
+                clean_text(note, limit=1_000),
+            )
+            self._audit(connection, "application_followup_recorded", "application", clean_job)
+        return self._get_send_record(clean_job)
+
+    def send_followup_draft(self, job_id: str) -> str:
+        """Return a short, copy-ready French follow-up draft (never sent)."""
+
+        clean_job = clean_text(job_id, limit=80)
+        record = self._get_send_record(clean_job)
+        with self._connection() as connection:
+            job = connection.execute(
+                "SELECT title, company FROM jobs WHERE id = ?", (clean_job,)
+            ).fetchone()
+        if not job:
+            raise UserFacingError("Cette offre Career n’existe pas.")
+        return build_followup_draft(
+            title=str(job["title"]),
+            company=str(job["company"]),
+            channel=record.get("channel") or "",
+            sent_at=parse_sent_at(str(record["sent_at"])),
+            followup_count=int(record.get("followup_count") or 0),
+        )
+
+    def _get_send_record(self, job_id: str) -> dict[str, Any]:
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM send_confirmations WHERE job_id = ?", (job_id,)
+            ).fetchone()
+        if not row:
+            raise UserFacingError("Aucun envoi enregistré pour cette offre.")
+        record = self._row_dict(row)
+        record["is_sent"] = True
+        return record
+
+    def get_apply_tracker(self) -> dict[str, Any]:
+        """Sent applications without an answer, to follow up, due-date ordered."""
+
+        now = parse_sent_at(utc_now())
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT send_confirmations.job_id, jobs.company, jobs.title, jobs.city,
+                       jobs.country, applications.stage
+                FROM send_confirmations
+                JOIN jobs ON jobs.id = send_confirmations.job_id
+                LEFT JOIN applications ON applications.job_id = send_confirmations.job_id
+                """
+            ).fetchall()
+            details = [
+                self._row_dict(row_ref)
+                for row_ref in connection.execute("SELECT * FROM send_confirmations").fetchall()
+            ]
+        details_by_job = {str(detail["job_id"]): detail for detail in details}
+        answered_stages = {
+            "response_received", "interview", "offer_received", "rejected", "refused", "withdrawn",
+        }
+        candidates: list[dict[str, Any]] = []
+        for row in rows:
+            job_id = str(row["job_id"])
+            detail = details_by_job.get(job_id) or {}
+            stage = str(row["stage"] or "")
+            candidates.append(
+                {
+                    "job_id": job_id,
+                    "company": str(row["company"] or ""),
+                    "title": str(row["title"] or ""),
+                    "city": str(row["city"] or ""),
+                    "country": str(row["country"] or ""),
+                    "sent_at": detail.get("sent_at"),
+                    "channel": detail.get("channel"),
+                    "follow_up_due": detail.get("follow_up_due"),
+                    "followup_count": int(detail.get("followup_count") or 0),
+                    "response_received": stage in answered_stages,
+                }
+            )
+        prioritized = prioritize_followups(candidates, now=now)
+        return {
+            "automatic_followup": False,
+            "count": len(prioritized),
+            "items": prioritized,
+        }
 
     # ------------------------------------------------------------------
     # Local application kit (CVBOOST-05)
