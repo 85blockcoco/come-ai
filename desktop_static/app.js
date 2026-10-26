@@ -157,6 +157,7 @@
   function render(view) {
     if (view === "today") renderToday();
     else if (view === "applications") renderApplications();
+    else if (view === "tracking") renderTracking();
     else if (view === "offers") renderOffers();
     else if (view === "assistant") renderAssistant();
     else if (view === "missions") renderMissions();
@@ -628,11 +629,468 @@
     return el("div", { class: "empty" }, el("strong", {}, title), el("span", {}, detail));
   }
 
+  /* ---------- Palette de commandes + raccourcis clavier ---------- */
+
+  const VIEW_ORDER = ["today", "applications", "tracking", "offers", "assistant", "missions", "memory"];
+  const GO_KEYS = {
+    d: "today", a: "applications", s: "tracking", o: "offers",
+    c: "assistant", m: "missions", e: "memory",
+  };
+
+  const normalize = (value) => String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  function commandEntries() {
+    const nav = VIEW_ORDER.map((view, index) => ({
+      id: `nav-${view}`,
+      group: "Navigation",
+      label: VIEWS[view].title,
+      detail: VIEWS[view].subtitle,
+      key: `Alt+${index + 1}`,
+      search: `vue ${view} aller`,
+      run: () => setView(view),
+    }));
+    const actions = [
+      {
+        id: "action-refresh",
+        group: "Actions",
+        label: "Actualiser les données",
+        detail: "Recharge les sources locales sans rien envoyer",
+        key: "R",
+        search: "refresh recharger",
+        run: () => refresh(),
+      },
+      {
+        id: "action-filter",
+        group: "Actions",
+        label: "Filtrer les offres",
+        detail: "Ouvrir Offres et placer le curseur dans le filtre",
+        key: "/",
+        search: "recherche chercher",
+        run: () => { setView("offers"); focusFilter(); },
+      },
+      {
+        id: "action-shortcuts",
+        group: "Actions",
+        label: "Afficher les raccourcis clavier",
+        detail: "Toutes les combinaisons disponibles",
+        key: "?",
+        search: "aide help touches",
+        run: () => openShortcuts(),
+      },
+    ];
+    const dossiers = (state.pipeline?.pipeline ?? [])
+      .filter((item, index, all) => item.job_id
+        && item.progress_percent < 100
+        && all.findIndex((other) => other.job_id === item.job_id) === index)
+      .slice(0, 4)
+      .map((item) => ({
+        id: `dossier-${item.job_id}`,
+        group: "Dossiers en cours",
+        label: item.title || "Dossier",
+        detail: `${item.company || "—"} · ${item.next_action_label || "préparer le dossier"}`,
+        key: "",
+        search: "dossier preparer apply kit",
+        run: () => showApplyKit(item.job_id, item.title),
+      }));
+    const links = [
+      { id: "link-career", group: "Liens", label: "Ouvrir Career", detail: "Espace candidatures complet", key: "↗", search: "candidatures", run: () => window.open("/career", "_blank", "noopener") },
+      { id: "link-v5", group: "Liens", label: "Ouvrir V5", detail: "Mémoire, file de tâches, atelier", key: "↗", search: "memoire taches", run: () => window.open("/v5", "_blank", "noopener") },
+      { id: "link-v3", group: "Liens", label: "Ouvrir V3", detail: "Interface historique", key: "↗", search: "historique excel", run: () => window.open("/", "_blank", "noopener") },
+    ];
+    return [...nav, ...actions, ...dossiers, ...links];
+  }
+
+  function commandScore(command, query) {
+    if (!query) return 0;
+    const label = normalize(command.label);
+    if (label.startsWith(query)) return 0;
+    if (label.includes(query)) return 1;
+    const haystack = normalize(`${command.label} ${command.detail} ${command.group} ${command.search}`);
+    if (haystack.includes(query)) return 2;
+    let position = 0;
+    for (const char of query) {
+      position = haystack.indexOf(char, position);
+      if (position === -1) return -1;
+      position += 1;
+    }
+    return 3;
+  }
+
+  function filterCommands(entries, rawQuery) {
+    const query = normalize(String(rawQuery ?? "").trim());
+    return entries
+      .map((command, index) => ({ command, index, score: commandScore(command, query) }))
+      .filter((hit) => hit.score >= 0)
+      .sort((a, b) => a.score - b.score || a.index - b.index)
+      .map((hit) => hit.command);
+  }
+
+  function highlightLabel(label, rawQuery) {
+    const query = normalize(String(rawQuery ?? "").trim());
+    if (!query) return label;
+    const at = normalize(label).indexOf(query);
+    if (at === -1) return label;
+    return [
+      label.slice(0, at),
+      el("mark", {}, label.slice(at, at + query.length)),
+      label.slice(at + query.length),
+    ];
+  }
+
+  let paletteEl = null;
+  let paletteInput = null;
+  let paletteList = null;
+  let paletteStatus = null;
+  let paletteHits = [];
+  let paletteActive = 0;
+  let palettePreviousFocus = null;
+  let shortcutsEl = null;
+  let shortcutsPreviousFocus = null;
+  let shortcutsCloseButton = null;
+  let goPrefix = false;
+  let goTimer = 0;
+
+  function buildPalette() {
+    if (paletteEl) return;
+    paletteInput = el("input", {
+      id: "paletteInput",
+      type: "text",
+      role: "combobox",
+      autocomplete: "off",
+      spellcheck: "false",
+      placeholder: "Que veux-tu faire ?",
+      "aria-autocomplete": "list",
+      "aria-expanded": "true",
+      "aria-controls": "paletteList",
+      "aria-activedescendant": "",
+      "aria-label": "Rechercher une commande",
+    });
+    paletteList = el("div", {
+      id: "paletteList", class: "palette-list", role: "listbox", "aria-label": "Commandes disponibles",
+    });
+    paletteStatus = el("div", {
+      class: "visually-hidden", role: "status", "aria-live": "polite",
+    });
+    paletteEl = el("div", {
+      class: "modal-overlay palette-overlay",
+      id: "paletteOverlay",
+      hidden: true,
+      onclick: (event) => { if (event.target === paletteEl) closePalette(); },
+    },
+      el("div", {
+        class: "palette", role: "dialog", "aria-modal": "true", "aria-labelledby": "paletteTitle",
+      },
+        el("div", { class: "palette-head" },
+          el("span", { class: "palette-icon", html: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 3a3.5 3.5 0 013.4 4.4l4.7 4.7A3.5 3.5 0 1116 15l-4.7-4.7A3.5 3.5 0 119.5 3zm0 1.8a1.7 1.7 0 100 3.4 1.7 1.7 0 000-3.4zm7 10.4a1.7 1.7 0 100 3.4 1.7 1.7 0 000-3.4z"/></svg>' }),
+          el("h2", { id: "paletteTitle", class: "visually-hidden" }, "Palette de commandes"),
+          paletteInput,
+          el("kbd", { class: "palette-esc", "aria-hidden": "true" }, "esc"),
+        ),
+        paletteList,
+        paletteStatus,
+        el("div", { class: "palette-foot" },
+          el("span", {}, el("kbd", {}, "↑"), el("kbd", {}, "↓"), " naviguer"),
+          el("span", {}, el("kbd", {}, "↵"), " exécuter"),
+          el("span", {}, el("kbd", {}, "esc"), " fermer"),
+        ),
+      ),
+    );
+    paletteInput.addEventListener("input", () => {
+      paletteActive = 0;
+      renderPalette();
+    });
+    paletteInput.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowDown") { event.preventDefault(); movePalette(1); }
+      else if (event.key === "ArrowUp") { event.preventDefault(); movePalette(-1); }
+      else if (event.key === "Home") { event.preventDefault(); setPaletteActive(0); }
+      else if (event.key === "End") { event.preventDefault(); setPaletteActive(paletteHits.length - 1); }
+      else if (event.key === "Enter") { event.preventDefault(); runPaletteCommand(); }
+      else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closePalette(); }
+      else if (event.key === "Tab") { event.preventDefault(); }
+    });
+    document.body.append(paletteEl);
+  }
+
+  function renderPalette() {
+    if (!paletteEl || paletteEl.hidden) return;
+    paletteHits = filterCommands(commandEntries(), paletteInput.value);
+    if (paletteStatus) {
+      const count = paletteHits.length;
+      paletteStatus.textContent = count
+        ? `${count} commande${count > 1 ? "s" : ""} disponible${count > 1 ? "s" : ""}`
+        : "Aucune commande";
+    }
+    if (paletteActive >= paletteHits.length) paletteActive = 0;
+    paletteList.replaceChildren();
+    if (!paletteHits.length) {
+      paletteList.append(el("div", { class: "palette-empty" },
+        el("strong", {}, "Aucune commande"),
+        el("span", {}, "Essaie « offres », « actualiser » ou « raccourcis ».")));
+      paletteInput.setAttribute("aria-activedescendant", "");
+      return;
+    }
+    let group = "";
+    for (const [index, command] of paletteHits.entries()) {
+      if (command.group !== group) {
+        group = command.group;
+        paletteList.append(el("div", { class: "palette-group", role: "presentation" }, group));
+      }
+      paletteList.append(el("div", {
+        class: "palette-item",
+        id: `palette-option-${index}`,
+        role: "option",
+        "aria-selected": index === paletteActive ? "true" : "false",
+        onmousemove: () => { if (paletteActive !== index) setPaletteActive(index); },
+        onclick: () => { paletteActive = index; runPaletteCommand(); },
+      },
+        el("span", { class: "palette-glyph", "aria-hidden": "true" }, "›"),
+        el("div", { class: "palette-main" },
+          el("strong", {}, highlightLabel(command.label, paletteInput.value)),
+          el("small", {}, command.detail || ""),
+        ),
+        command.key ? el("kbd", { class: "palette-key" }, command.key) : null,
+      ));
+    }
+    setPaletteActive(paletteActive, false);
+  }
+
+  function setPaletteActive(index, scroll = true) {
+    if (!paletteHits.length) {
+      paletteActive = 0;
+      paletteInput?.setAttribute("aria-activedescendant", "");
+      return;
+    }
+    paletteActive = (index + paletteHits.length) % paletteHits.length;
+    for (const [position, node] of [...paletteList.querySelectorAll(".palette-item")].entries()) {
+      const selected = position === paletteActive;
+      node.setAttribute("aria-selected", selected ? "true" : "false");
+      node.classList.toggle("active", selected);
+    }
+    paletteInput?.setAttribute("aria-activedescendant", `palette-option-${paletteActive}`);
+    if (scroll) document.getElementById(`palette-option-${paletteActive}`)?.scrollIntoView({ block: "nearest" });
+  }
+
+  function movePalette(delta) {
+    setPaletteActive(paletteActive + delta);
+  }
+
+  function runPaletteCommand() {
+    const command = paletteHits[paletteActive];
+    if (!command) return;
+    closePalette();
+    try {
+      command.run();
+    } catch (error) {
+      console.error("PALETTE_RUN_FAIL:", error.message);
+    }
+  }
+
+  function openPalette(query = "") {
+    if (shortcutsEl && !shortcutsEl.hidden) closeShortcuts();
+    buildPalette();
+    if (!paletteEl.hidden && !query) {
+      paletteInput.focus();
+      return;
+    }
+    if (paletteEl.hidden) palettePreviousFocus = document.activeElement;
+    paletteEl.hidden = false;
+    document.body.classList.add("palette-open");
+    paletteInput.value = query;
+    paletteActive = 0;
+    renderPalette();
+    paletteInput.focus();
+  }
+
+  function closePalette() {
+    if (!paletteEl || paletteEl.hidden) return;
+    paletteEl.hidden = true;
+    document.body.classList.remove("palette-open");
+    const target = palettePreviousFocus;
+    palettePreviousFocus = null;
+    if (target instanceof HTMLElement && target.isConnected) target.focus();
+  }
+
+  function togglePalette() {
+    if (paletteEl && !paletteEl.hidden) closePalette();
+    else openPalette();
+  }
+
+  function shortcutRows() {
+    return [
+      {
+        title: "Général",
+        rows: [
+          ["⌘K / Ctrl+K", "Ouvrir ou fermer la palette"],
+          ["?", "Afficher les raccourcis clavier"],
+          ["Esc", "Fermer la fenêtre active"],
+          ["R", "Actualiser les données"],
+          ["/", "Filtrer les offres"],
+        ],
+      },
+      {
+        title: "Navigation directe",
+        rows: VIEW_ORDER.map((view, index) => [`Alt+${index + 1}`, VIEWS[view].title]),
+      },
+      {
+        title: "Séquences G",
+        rows: [
+          ["G puis D", "Aujourd’hui"],
+          ["G puis A", "Candidatures"],
+          ["G puis S", "Suivi"],
+          ["G puis O", "Offres"],
+          ["G puis C", "Terminal"],
+          ["G puis M", "Missions"],
+          ["G puis E", "Mémoire"],
+        ],
+      },
+    ];
+  }
+
+  function openShortcuts() {
+    if (paletteEl && !paletteEl.hidden) closePalette();
+    if (!shortcutsEl) {
+      shortcutsCloseButton = el("button", {
+        class: "ghost-btn", type: "button", onclick: () => closeShortcuts(),
+      }, "Fermer");
+      shortcutsEl = el("div", {
+        class: "modal-overlay",
+        id: "shortcutsOverlay",
+        hidden: true,
+        onclick: (event) => { if (event.target === shortcutsEl) closeShortcuts(); },
+      },
+        el("div", {
+          class: "card modal-box shortcuts-box",
+          role: "dialog",
+          "aria-modal": "true",
+          "aria-labelledby": "shortcutsTitle",
+        },
+          el("div", { class: "section-title", style: "margin-top:0" },
+            el("h2", { id: "shortcutsTitle" }, "Raccourcis clavier"),
+            el("span", { class: "hint" }, "aucune souris requise")),
+          el("div", { class: "shortcut-grid" }, shortcutRows().map((section) =>
+            el("div", { class: "shortcut-section" },
+              el("h3", {}, section.title),
+              el("dl", {}, section.rows.flatMap(([keys, label]) => [
+                el("dt", {}, el("kbd", {}, keys)),
+                el("dd", {}, label),
+              ])),
+            ))),
+          el("div", { class: "shortcut-actions" }, shortcutsCloseButton),
+        ),
+      );
+      shortcutsEl.addEventListener("keydown", (event) => {
+        if (event.key === "Tab") { event.preventDefault(); shortcutsCloseButton.focus(); }
+        else if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeShortcuts(); }
+      });
+      document.body.append(shortcutsEl);
+    }
+    if (shortcutsEl.hidden) shortcutsPreviousFocus = document.activeElement;
+    shortcutsEl.hidden = false;
+    shortcutsCloseButton.focus();
+  }
+
+  function closeShortcuts() {
+    if (!shortcutsEl || shortcutsEl.hidden) return;
+    shortcutsEl.hidden = true;
+    const target = shortcutsPreviousFocus;
+    shortcutsPreviousFocus = null;
+    if (target instanceof HTMLElement && target.isConnected) target.focus();
+  }
+
+  function overlayOpen() {
+    return Boolean(
+      (paletteEl && !paletteEl.hidden)
+      || (shortcutsEl && !shortcutsEl.hidden)
+      || document.querySelector(".modal-overlay:not([hidden])"),
+    );
+  }
+
+  function closeTopOverlay() {
+    if (paletteEl && !paletteEl.hidden) { closePalette(); return true; }
+    if (shortcutsEl && !shortcutsEl.hidden) { closeShortcuts(); return true; }
+    const overlays = document.querySelectorAll(".modal-overlay:not([hidden])");
+    if (overlays.length) { overlays[overlays.length - 1].remove(); return true; }
+    return false;
+  }
+
+  function focusFilter() {
+    const input = $("#searchInput");
+    if (!input) return;
+    requestAnimationFrame(() => { input.focus(); input.select(); });
+  }
+
+  function isTypingTarget(target) {
+    if (!(target instanceof Element)) return false;
+    const tag = target.tagName;
+    return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable;
+  }
+
+  document.addEventListener("keydown", (event) => {
+    if ((event.metaKey || event.ctrlKey) && !event.altKey && event.code === "KeyK") {
+      event.preventDefault();
+      togglePalette();
+      return;
+    }
+    if (event.key === "Escape" || event.code === "Escape") {
+      if (closeTopOverlay()) event.preventDefault();
+      return;
+    }
+    if (overlayOpen() || isTypingTarget(event.target)) return;
+    if (event.altKey && !event.metaKey && !event.ctrlKey && /^Digit[1-7]$/.test(event.code)) {
+      const view = VIEW_ORDER[Number(event.code.slice(5)) - 1];
+      if (view) { event.preventDefault(); setView(view); }
+      return;
+    }
+    if (event.metaKey || event.ctrlKey) return;
+    if (event.key === "/" || (event.code === "Slash" && !event.shiftKey)) {
+      event.preventDefault();
+      setView("offers");
+      focusFilter();
+      return;
+    }
+    if (event.key === "?" || (event.code === "Slash" && event.shiftKey)) {
+      event.preventDefault();
+      openShortcuts();
+      return;
+    }
+    if (goPrefix) {
+      const view = GO_KEYS[event.key.toLowerCase()];
+      goPrefix = false;
+      clearTimeout(goTimer);
+      if (view) { event.preventDefault(); setView(view); }
+      return;
+    }
+    if (event.key.toLowerCase() === "g" && !event.shiftKey) {
+      goPrefix = true;
+      clearTimeout(goTimer);
+      goTimer = setTimeout(() => { goPrefix = false; }, 1200);
+      return;
+    }
+    if (event.key.toLowerCase() === "r") {
+      event.preventDefault();
+      refresh();
+    }
+  });
+
+  window.__nagePalette = {
+    open: (query = "") => openPalette(query),
+    close: () => closePalette(),
+    isOpen: () => Boolean(paletteEl && !paletteEl.hidden),
+    commands: () => commandEntries().map(({ id, group, label }) => ({ id, group, label })),
+    filter: (query) => filterCommands(commandEntries(), query).map(({ id }) => id),
+    openShortcuts: () => openShortcuts(),
+    shortcutsOpen: () => Boolean(shortcutsEl && !shortcutsEl.hidden),
+  };
+
   /* ---------- Démarrage ---------- */
 
   for (const button of document.querySelectorAll(".nav-item")) {
     button.addEventListener("click", () => setView(button.dataset.view));
   }
+  $("#paletteBtn").addEventListener("click", () => openPalette());
   $("#refreshBtn").addEventListener("click", refresh);
   $("#searchInput").addEventListener("input", (event) => {
     state.filter = event.target.value;

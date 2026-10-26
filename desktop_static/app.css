@@ -708,3 +708,204 @@ a.inline-link:hover { background: var(--nag-accent-soft); }
 .quick-row { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.4fr) auto auto; gap: 8px; align-items: center; padding: 9px 11px; border: 1px solid var(--line); border-radius: var(--radius); background: #020a06; }
 .quick-label { color: var(--mute); font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; }
 .quick-value { color: var(--green-2); font-size: 11.5px; word-break: break-word; }
+
+/* ---------------- Palette de commandes ---------------- */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.palette-btn kbd {
+  margin-left: 2px;
+  padding: 1px 4px;
+  border: 1px solid var(--line-hard);
+  border-radius: 3px;
+  background: #02110a;
+  color: var(--mute);
+  font: inherit;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+.palette-btn:hover kbd { color: #01130a; border-color: #01130a; }
+
+/* L'attribut hidden doit gagner sur le display:grid de .modal-overlay. */
+.modal-overlay[hidden] { display: none; }
+
+.palette-overlay { align-items: start; padding-top: min(14vh, 120px); }
+
+.palette {
+  display: flex;
+  flex-direction: column;
+  width: min(620px, 100%);
+  max-height: min(70vh, 560px);
+  border: 1px solid var(--line-hard);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.66);
+  overflow: hidden;
+}
+
+.palette-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line-hard);
+}
+.palette-icon { display: grid; place-items: center; color: var(--green); }
+.palette-icon svg { width: 15px; height: 15px; fill: currentColor; }
+.palette-head input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--green-2);
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  outline: none;
+}
+.palette-head input::placeholder { color: #356b49; }
+
+.palette-esc,
+.palette-key,
+.palette-foot kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--line-hard);
+  border-radius: 3px;
+  background: #02110a;
+  color: var(--mute);
+  font-family: inherit;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+}
+
+.palette-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0 8px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-hard) transparent;
+}
+.palette-group {
+  padding: 11px 16px 5px;
+  color: var(--mute);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.palette-item {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+}
+.palette-item.active { background: var(--nag-accent-soft); border-left-color: var(--green); }
+.palette-glyph { color: var(--green); font-weight: 700; }
+.palette-main strong {
+  display: block;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+.palette-main small {
+  display: block;
+  margin-top: 2px;
+  color: var(--mute);
+  font-size: 10px;
+  line-height: 1.4;
+}
+.palette-main mark {
+  background: transparent;
+  color: var(--green);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.palette-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 26px 18px;
+  text-align: center;
+  color: var(--mute);
+  font-size: 11px;
+}
+.palette-empty strong { color: var(--soft); font-size: 12px; }
+.palette-foot {
+  display: flex;
+  gap: 14px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--line);
+  color: var(--mute);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.palette-foot span { display: flex; align-items: center; gap: 4px; }
+
+/* ---------------- Raccourcis clavier ---------------- */
+
+.shortcuts-box { width: min(760px, 100%); }
+.shortcut-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+  margin-top: 8px;
+}
+.shortcut-section h3 {
+  margin: 0 0 8px;
+  color: var(--green);
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.shortcut-section dl {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 7px 10px;
+  margin: 0;
+  align-items: baseline;
+}
+.shortcut-section dt { margin: 0; }
+.shortcut-section dd { margin: 0; color: var(--soft); font-size: 10.5px; line-height: 1.5; }
+.shortcut-section kbd {
+  display: inline-block;
+  padding: 2px 6px;
+  border: 1px solid var(--line-hard);
+  border-radius: 3px;
+  background: #02110a;
+  color: var(--green-2);
+  font-family: inherit;
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+.shortcut-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
+
+body.palette-open .window { filter: saturate(0.85) brightness(0.9); }
+
+@media (max-width: 900px) {
+  .palette-btn span,
+  .palette-btn kbd { display: none; }
+}
+
+@media (max-width: 720px) {
+  .palette-overlay { padding: 10px; padding-top: 8vh; }
+  .palette { max-height: 78vh; }
+  .palette-foot { flex-wrap: wrap; gap: 6px 12px; }
+  .palette-head { padding: 10px 12px; }
+  .palette-item { padding: 9px 12px; }
+}
