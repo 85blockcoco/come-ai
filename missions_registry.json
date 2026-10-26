@@ -557,8 +557,9 @@
         "31",
         "32"
       ],
-      "status": "pending",
-      "description": "Recette bout-en-bout: profil fictif approuvé → exploration → source vérifiée → qualification → dédup → matching → fiche → adaptation CV → lettre → checklist → suivi → relance → prépa entretien. Vérifs: client HTTP réel, navigateur réel, SQLite temp, redémarrage app, import répété, hors ligne, source partielle indisponible, offre contradictoire/expirée/sans date. Zéro candidature/envoi/cloud/donnée privée. Métriques distinctes: synthétiques, app-verified, live, qualité réelle non mesurée. Aucun score simulé mélangé métrique réelle."
+      "status": "failed",
+      "description": "Recette bout-en-bout: profil fictif approuvé → exploration → source vérifiée → qualification → dédup → matching → fiche → adaptation CV → lettre → checklist → suivi → relance → prépa entretien. Vérifs: client HTTP réel, navigateur réel, SQLite temp, redémarrage app, import répété, hors ligne, source partielle indisponible, offre contradictoire/expirée/sans date. Zéro candidature/envoi/cloud/donnée privée. Métriques distinctes: synthétiques, app-verified, live, qualité réelle non mesurée. Aucun score simulé mélangé métrique réelle.",
+      "retry_of": 1
     },
     {
       "id": "34",
@@ -724,8 +725,9 @@
       "dependencies": [
         "37"
       ],
-      "status": "pending",
-      "description": "Playwright : parcours offre→kit, profil incomplet→preuve→couverture, anti-invention, zéro envoi auto. Fixtures synthétiques, FastAPI isolé, captures échec, rapport HTML."
+      "status": "failed",
+      "description": "Playwright : parcours offre→kit, profil incomplet→preuve→couverture, anti-invention, zéro envoi auto. Fixtures synthétiques, FastAPI isolé, captures échec, rapport HTML.",
+      "retry_of": 1
     },
     {
       "id": "40",
@@ -1420,8 +1422,9 @@
       "dependencies": [
         "62"
       ],
-      "status": "pending",
-      "description": "Extracteur qui regroupe les attentes par secteur/famille de poste et produit une FAQ sectorielle : questions probables + éléments de réponse issus des preuves du profil."
+      "status": "failed",
+      "description": "Extracteur qui regroupe les attentes par secteur/famille de poste et produit une FAQ sectorielle : questions probables + éléments de réponse issus des preuves du profil.",
+      "retry_of": 1
     },
     {
       "id": "67",
@@ -1471,8 +1474,9 @@
       "dependencies": [
         "65"
       ],
-      "status": "pending",
-      "description": "Backup ZIP versionné (manifest + checksums) et restore avec validation de schéma + diff avant écrasement ; jamais d'écrasement sans confirmation explicite de l'appelant."
+      "status": "failed",
+      "description": "Backup ZIP versionné (manifest + checksums) et restore avec validation de schéma + diff avant écrasement ; jamais d'écrasement sans confirmation explicite de l'appelant.",
+      "retry_of": 1
     },
     {
       "id": "70",
@@ -1482,8 +1486,9 @@
       "dependencies": [
         "64"
       ],
-      "status": "pending",
-      "description": "Journal append-only des décisions (qui, quand, contexte, résultat) avec recherche/filtre et génération d'un rapport d'explication par décision."
+      "status": "failed",
+      "description": "Journal append-only des décisions (qui, quand, contexte, résultat) avec recherche/filtre et génération d'un rapport d'explication par décision.",
+      "retry_of": 1
     },
     {
       "id": "71",
@@ -1493,8 +1498,9 @@
       "dependencies": [
         "67"
       ],
-      "status": "pending",
-      "description": "Agrégateur hebdo : N candidatures envoyées, taux de réponse, temps par étape, comparaison à l'objectif fixé, top 3 actions recommandées pour la semaine suivante."
+      "status": "failed",
+      "description": "Agrégateur hebdo : N candidatures envoyées, taux de réponse, temps par étape, comparaison à l'objectif fixé, top 3 actions recommandées pour la semaine suivante.",
+      "retry_of": 1
     },
     {
       "id": "72",
@@ -1517,10 +1523,11 @@
         "29",
         "30"
       ],
-      "status": "pending",
+      "status": "failed",
       "branch": "",
       "merged_sha": "",
-      "completed_at": ""
+      "completed_at": "",
+      "retry_of": 1
     },
     {
       "id": "74",
@@ -1530,10 +1537,11 @@
       "dependencies": [
         "32"
       ],
-      "status": "pending",
+      "status": "failed",
       "branch": "",
       "merged_sha": "",
-      "completed_at": ""
+      "completed_at": "",
+      "retry_of": 1
     },
     {
       "id": "75",
@@ -1544,10 +1552,11 @@
         "31",
         "53"
       ],
-      "status": "pending",
+      "status": "failed",
       "branch": "",
       "merged_sha": "",
-      "completed_at": ""
+      "completed_at": "",
+      "retry_of": 1
     },
     {
       "id": "76",
@@ -1561,7 +1570,8 @@
       "status": "pending",
       "branch": "",
       "merged_sha": "",
-      "completed_at": ""
+      "completed_at": "",
+      "retry_of": 1
     },
     {
       "id": "77",
@@ -1576,7 +1586,8 @@
       "status": "pending",
       "branch": "",
       "merged_sha": "",
-      "completed_at": ""
+      "completed_at": "",
+      "retry_of": 1
     },
     {
       "id": "78",
@@ -1591,7 +1602,8 @@
       "status": "pending",
       "branch": "",
       "merged_sha": "",
-      "completed_at": ""
+      "completed_at": "",
+      "retry_of": 1
     },
     {
       "id": "79",
@@ -1620,6 +1632,46 @@
       "branch": "",
       "merged_sha": "",
       "completed_at": ""
+    },
+    {
+      "id": "81",
+      "title": "SPEC-044 — Postuler en un clic — dossier prêt par offre",
+      "branch": "agent/spec-044-apply-kit-ready",
+      "prompt_file": "docs/agent_missions/SPEC-044-APPLY_KIT_READY_PROMPT.md",
+      "dependencies": [],
+      "status": "pending",
+      "priority": "P0",
+      "description": "Postuler en un clic — dossier prêt par offre"
+    },
+    {
+      "id": "82",
+      "title": "SPEC-045 — Réponses types copiables pour formulaires d'offre",
+      "branch": "agent/spec-045-quick-answers",
+      "prompt_file": "docs/agent_missions/SPEC-045-QUICK_ANSWERS_PROMPT.md",
+      "dependencies": [],
+      "status": "pending",
+      "priority": "P0",
+      "description": "Réponses types copiables pour formulaires d'offre"
+    },
+    {
+      "id": "83",
+      "title": "SPEC-046 — Détection plateforme ATS + guide humain d'application",
+      "branch": "agent/spec-046-ats-guide-human",
+      "prompt_file": "docs/agent_missions/SPEC-046-ATS_GUIDE_PROMPT.md",
+      "dependencies": [],
+      "status": "pending",
+      "priority": "P0",
+      "description": "Détection plateforme ATS + guide humain d'application"
+    },
+    {
+      "id": "84",
+      "title": "SPEC-047 — Confirmation d'envoi manuelle + relance optimale",
+      "branch": "agent/spec-047-send-confirmation",
+      "prompt_file": "docs/agent_missions/SPEC-047-SEND_CONFIRMATION_PROMPT.md",
+      "dependencies": [],
+      "status": "pending",
+      "priority": "P0",
+      "description": "Confirmation d'envoi manuelle + relance optimale"
     }
   ],
   "execution_order": [
@@ -1779,5 +1831,6 @@
     "no_window_prompt": true,
     "no_auto_submission": true,
     "synthetic_fixtures_only": true
-  }
+  },
+  "update_at": "2026-10-26T15:35:00Z"
 }

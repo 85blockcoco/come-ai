@@ -274,6 +274,11 @@ def run_worker(worktree_path: str, prompt: str, order_id: str) -> dict:
             "opencode/nemotron-3.5-super-vl-free",
         ]
     model = os.environ.get("WORKER_MODEL")
+    # Pool personnalisé possible plusieurs modèles, séparés par des virgules.
+    custom_pool = os.environ.get("WORKER_POOL")
+    if custom_pool:
+        _FREE_POOL[:] = [m.strip() for m in custom_pool.split(",") if m.strip()]
+        model = None
     # Sélection du modèle de départ + retry auto sur les autres du pool si
     # quota/indisponibilité instantanée (429, "Model unavailable", ...).
     start_idx = 0

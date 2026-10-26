@@ -20,12 +20,80 @@ MAX_WORKERS = "4"
 POLL = 45
 STATE_EVERY = 600
 
-COMPONENTS = {
-    "orchestrator.py": f"MAX_WORKERS={MAX_WORKERS} python3 -u orchestrator.py >> orchestrator.log 2>&1",
-    "mission_driver.py": f"MAX_WORKERS={MAX_WORKERS} python3 -u mission_driver.py >> mission_driver.log 2>&1",
-    "guardian_anti_fake_done.py": "python3 -u guardian_anti_fake_done.py >> guardian.log 2>&1",
-    "watchdog_hangs.py": "python3 -u watchdog_hangs.py >> watchdog_hangs.log 2>&1",
-}
+REPORT_EVERY = 900  # rapport flotte toutes les 15 min
+
+
+def best_pool() -> str:
+    """Sélection DYNAMIQUE des meilleurs modèles à l'instant t (santé+score)."""
+    try:
+        import model_health as mh
+        pool = mh.pick_pool()
+        if pool:
+            return ",".join(pool[:6])
+    except Exception as exc:
+        log(f"pool dynamique indisponible: {exc}")
+    return "opencode-go/glm-5.3-flash"
+
+
+def component_cmd(script: str) -> str:
+    """Commande de relance avec la sélection modèle à l'instant t."""
+    env = f"MAX_WORKERS={MAX_WORKERS}"
+    if script == "orchestrator.py":
+        env += f' WORKER_POOL="{best_pool()}"'
+    return f"{env} python3 -u {script} >> {script.replace('.py', '.log')} 2>&1"
+
+
+def relaunch_mapping() -> dict[str, str]:
+    mapping = {
+        "orchestrator.py": component_cmd("orchestrator.py"),
+        "mission_driver.py": component_cmd("mission_driver.py"),
+        "guardian_anti_fake_done.py": "python3 -u guardian_anti_fake_done.py >> guardian.log 2>&1",
+    }
+    if Path(ROOT / "watchdog_hangs.py").exists():
+        mapping["watchdog_hangs.py"] = "python3 -u watchdog_hangs.py >> watchdog_hangs.log 2>&1"
+    return mapping
+
+
+def write_report() -> None:
+    """Rapport flotte régulier : workers, modèles, avancement, derniers résultats."""
+    from collections import Counter
+    reg = json.load(open(ROOT / "missions_registry.json", encoding="utf-8"))
+    counts = Counter(m["status"] for m in reg["missions"])
+    workers = []
+    try:
+        out = subprocess.run(["ps", "-ax", "-o", "command="], capture_output=True, text=True, timeout=10).stdout
+        for line in out.splitlines():
+            if "opencode run --auto" in line:
+                import re
+                mm = re.search(r"-m\s+(\S+)\s+--title Worker-(cvboost-\d+-\d+)", line)
+                if mm:
+                    workers.append((mm.group(2), mm.group(1)))
+    except Exception:
+        pass
+    heures = time.strftime("%Y-%m-%d %H:%M")
+    lines = [
+        f"# Rapport flotte — {heures}",
+        "",
+        f"- Missions : {dict(counts)}",
+        f"- Workers actifs : {len(workers)}",
+        "- Agents utilisés : " + ", ".join(f"{w}→{m}" for w, m in workers) if workers else "- Agents utilisés : aucun",
+        "",
+    ]
+    recent = sorted((ROOT / "messages/results").glob("*.json"), key=lambda p: p.stat().st_mtime)[-8:]
+    for path in reversed(recent):
+        try:
+            d = json.loads(path.read_text(encoding="utf-8"))
+            w = d.get("worker_result", {})
+            lines.append(f"- {d.get('completed_at')} {d.get('mission_id')} {w.get('status')} {d.get('model_used')} ({d.get('duration_sec')}s)")
+        except Exception:
+            continue
+    out = ROOT / "reports"
+    out.mkdir(exist_ok=True)
+    (out / "fleet_rapport.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    log(f"rapport écrit ({len(workers)} workers, {counts})")
+
+
+COMPONENTS = {}  # construit dynamiquement (best_pool) juste avant usage
 
 
 def log(msg: str) -> None:
@@ -54,9 +122,9 @@ def ps_table() -> list[tuple[int, str]]:
 
 
 def keep_components_alive() -> None:
-    for script, cmd in COMPONENTS.items():
+    for script, cmd in relaunch_mapping().items():
         if not pgrep(script):
-            log(f"relance {script}")
+            log(f"relance {script} avec WORKER_POOL={best_pool()[:40]}…")
             subprocess.Popen(cmd, shell=True, cwd=str(ROOT),
                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                              start_new_session=True)
@@ -229,9 +297,15 @@ def snapshot() -> None:
         fh.write(line + "\n")
 
 
+_last_report = 0.0
+
+
 def main() -> None:
-    log("superviseur de nuit démarré")
+    global _last_report
+    log("superviseur démarré (rapport toutes les 15 min)")
     last_state = 0.0
+    write_report()
+    _last_report = time.time()
     while True:
         try:
             keep_components_alive()
@@ -243,6 +317,9 @@ def main() -> None:
             if time.time() - last_state >= STATE_EVERY:
                 snapshot()
                 last_state = time.time()
+            if time.time() - _last_report >= REPORT_EVERY:
+                write_report()
+                _last_report = time.time()
         except Exception as exc:  # ne jamais mourir
             log(f"erreur superviseur: {exc}")
         time.sleep(POLL)

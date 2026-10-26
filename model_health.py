@@ -48,6 +48,9 @@ ALL_MODELS = [
 # (réponse réelle + latence). Les opencode-go/* se bloquent en attente d'API
 # (60 min à 0,2 % CPU, aucun fichier écrit) : exclus.
 VERIFIED_MODELS = [
+    # demandé par Côme le 26/10 (GLM 5.3 Flash "roule bien") — pool mixte :
+    # Go d'abord (choix utilisateur), puis gratuits quand ils reviennent de froid.
+    "opencode-go/glm-5.3-flash",
     "opencode/deepseek-v4.1-flash-free",
     "opencode/big-pickle",
     "opencode/mimo-v2.6-flash-free",
