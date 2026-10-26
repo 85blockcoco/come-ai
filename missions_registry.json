@@ -1476,7 +1476,7 @@
    ],
    "status": "pending",
    "description": "Backup ZIP versionné (manifest + checksums) et restore avec validation de schéma + diff avant écrasement ; jamais d'écrasement sans confirmation explicite de l'appelant.",
-   "retry_of": 2
+   "retry_of": 3
   },
   {
    "id": "70",
