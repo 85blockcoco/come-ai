@@ -649,9 +649,12 @@
     const items = [];
     const trackerItems = Array.isArray(state.tracker?.items) ? state.tracker.items : [];
     for (const row of trackerItems) {
-      if (!row || typeof row !== "object" || row.status !== "due") continue;
+      if (!row || typeof row !== "object") continue;
       const dueDate = notificationDay(row.follow_up_due_date || row.follow_up_due);
       const delta = notificationDelta(dueDate);
+      // La date est prioritaire sur le statut chargé : si l’app reste ouverte
+      // après minuit, une relance due aujourd’hui apparaît sans actualiser.
+      if (delta === null ? row.status !== "due" : delta > 0) continue;
       const overdue = Boolean(row.overdue) || (delta !== null && delta < 0);
       const waiting = Number(row.days_waiting);
       const detail = ["Candidature envoyée"];

@@ -76,6 +76,22 @@ node --check desktop_static/app.js
 → OK
 ```
 
+### Suite complète (contexte)
+
+```text
+.venv/bin/python -m pytest -q
+→ 3068 passed, 1 skipped, 1 failed
+```
+
+L’unique échec est **hors périmètre et pré-existant** :
+`tests/test_career_agent.py::test_local_storage_profile_preferences_and_persistence`
+attend 6 familles de préférences alors que le référentiel en expose 14. Le même
+test échoue sur `main` (`0f51b3f`) sans aucune modification de cette mission.
+
+`ruff check .` signale par ailleurs 3 erreurs pré-existantes dans
+`night_supervisor.py` (E702 + deux F841), fichier non touché ici. Le lint des
+fichiers de la mission est propre.
+
 ### Scénario CDP — Chrome headless
 
 Commande :
