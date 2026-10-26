@@ -1,46 +1,41 @@
-# RAPPORT CODEX — 2026-10-26 16:48 CET
+# RAPPORT CODEX — 2026-10-26 16:53 CET
 
 ## 1. Livré (avec preuve)
 | Commit | Contenu (1 ligne) | Fichiers | Tests verts (nom test) | Durée |
 |---|---|---|---|---|
-| `e845513` | Prise de poste et contrat de coordination consignés | `messages/codex_note.md` | aucun test de code requis | commit à 15:47 CET |
-| `de4944e` | Regroupe les exigences identiques du parcours CV sans perdre les références de provenance | `career/application_prep.py`, `career_static/career.js`, `career_static/cv_plan.js`, `tests/test_career_cv_plan_ux.py` | `tests/test_career_cv_plan_ux.py`, `tests/test_requirements_fit.py`, `tests/test_offer_requirements_extraction.py`, `tests/test_career_application_sprint.py` — 561 passed | durée non consignée |
-| `9528dc0` | Reprend SPEC-045 réponses rapides, sans intégration aveugle | `career/quick_answers.py`, `career/service.py`, `career/router.py`, `tests/test_quick_answers.py`, rapport de mission | `tests/test_quick_answers.py` et suites Career ciblées — 571 passed après adaptation | 9,01 s (pytest mesuré après adaptation) |
-| `36ea301` (`36ea301aa5bb57736818b0523db627bde3993e07`, poussé) | Ajoute les réponses rapides éditables au Stage Hunter, motivation explicitement à compléter et avertissement anglais localisé | `career/quick_answers.py`, `career_static/career.js`, `career_static/career.css`, `tests/test_quick_answers.py`, `messages/codex_note.md` | `tests/test_quick_answers.py` — 24 passed; parcours Chromium synthétique: neuf réponses, copie manuelle, bascule de langue, aucun défaut JavaScript | pytest 4,45 s; navigateur 6,8 s |
-| `b031646` (`b031646e875cd5c830de68966c2fef0f5007f8c9`, SPEC-047) | Ajoute la déclaration humaine d'envoi et le suivi local des relances; garde des routes d'envoi fermée et exacte | `career/send_confirmation.py`, `career/service.py`, `career/router.py`, `tests/test_send_confirmation.py`, `tests/test_career_application_kit.py`, rapport SPEC-047 | `tests/test_send_confirmation.py`, `tests/test_career_application_kit.py`, `tests/test_career_application_dashboard.py` — 65 passed; Ruff vert | 73,71 s (pytest) |
-| `6484122` (`648412252f658212eaf6de93484750411182d41e`, poussé et vérifié) | Applique le cache court au calcul du pipeline, à durée limitée à une requête; vérifie l'équivalence du résultat et la libération du cache | `career/service.py`, `tests/integration/test_us3_pipeline.py`, `messages/codex_note.md` | `tests/integration/test_us3_pipeline.py` — 4 passed; `tests/test_career_application_sprint.py` — 14 passed; Ruff, syntaxe JS et diff verts | intégration 30,85 s; sprint 24,47 s |
-| `548d643` (`548d64328807525d4f90fd6ba0d3ff65b314a7f1`, poussé et vérifié) | Évite le calcul du score de recommandation Explorer qui n'est pas utilisé par le pipeline; sortie HTTP inchangée | `career/service.py`, `tests/integration/test_us3_pipeline.py`, `messages/codex_note.md` | `tests/integration/test_us3_pipeline.py`, `tests/test_career_application_sprint.py`, `tests/test_career_explorer_web.py` — 23 passed en 12,28 s; Ruff, syntaxe JS et diff verts | 12,28 s (pytest ciblé) |
+| `36ea301` | SPEC-045: réponses rapides éditables et copie manuelle | `career/quick_answers.py`, `career_static/career.js`, `career_static/career.css`, tests et rapport | `tests/test_quick_answers.py` — 24 passed; parcours Chromium synthétique avec bascule de langue et copie | pytest 4,45 s; navigateur 6,8 s |
+| `b031646` | SPEC-047: déclaration humaine d'envoi et suivi local de relance; garde des routes d'envoi vérifiée | `career/send_confirmation.py`, `career/service.py`, `career/router.py`, tests et rapport | `tests/test_send_confirmation.py`, `tests/test_career_application_kit.py`, `tests/test_career_application_dashboard.py` — 65 passed; Ruff vert | pytest 73,71 s |
+| `6484122` | Ajoute un cache de normalisation borné à une requête du pipeline | `career/service.py`, `tests/integration/test_us3_pipeline.py`, rapport | `tests/integration/test_us3_pipeline.py` — 4 passed; `tests/test_career_application_sprint.py` — 14 passed; Ruff, syntaxe JS et diff verts | intégration 30,85 s; sprint 24,47 s |
+| `548d643` | Évite le score Explorer inutilisé par le pipeline sans changer sa sortie | `career/service.py`, `tests/integration/test_us3_pipeline.py`, rapport | `tests/integration/test_us3_pipeline.py`, `tests/test_career_application_sprint.py`, `tests/test_career_explorer_web.py` — 23 passed | pytest 12,28 s |
+| `553394c` | Vérifie le démarrage HTTP isolé de la candidate | rapport de coordination | Uvicorn candidat démarré et GET pipeline HTTP 200 sur données synthétiques | mesure précédente: 0,286 s sur 150 offres |
+| présent rapport | Mesure du serveur partagé, test pipeline ciblé et synchronisation des branches Spec | `messages/codex_note.md` | `tests/integration/test_us3_pipeline.py` — 5 passed; `ruff check career/` — All checks passed | pytest 5,40 s; curl 3,378 s |
 
 ## 2. En cours maintenant
 | Tâche | % fait | Temps passé | Temps restant estimé | Blocage ? |
-|---|---:|---:|---:|---|
-| Optimisations pipeline (cache local + score non utilisé) | code et tests ciblés poussés sur la candidate; le benchmark synthétique HTTP p50 est 371,5 ms | travaillées depuis la vérification Git de 16:26 CET | aucun pour ces lots; objectif prod à revalider sur un serveur candidate isolé | non |
-| Cible application-pipeline < 3 s | candidate isolée Uvicorn: 0,286 s sur 150 offres synthétiques; serveur vivant à 8765: 49,115 s et 53,423 s | candidate HTTP chronométrée à 16:48 CET; appels vivants chronométrés à 16:34:19 et 16:36:30 CET | non estimé pour le serveur vivant, qui n'utilise pas la candidate | oui pour la mesure sur le serveur courant |
-| Revue SPEC-044..047 | 50 % des branches attendues publiées; SPEC-045 et SPEC-047 revues et présentes dans la candidate | — | non estimé avant publication des branches absentes | SPEC-044 et SPEC-046 absentes au dernier fetch à 16:26 CET |
+|---|---:|---|---|---|
+| Accélération `/api/career/application-pipeline` vers < 3 s | non atteint sur serveur partagé; candidate isolée sous le seuil dans les mesures consignées | durée cumulée non chronométrée | non mesuré | oui: serveur partagé 3,378 s et ancienne base/processus différent de la candidate |
+| Revue/intégration SPEC-044..047 | SPEC-045 et SPEC-047 intégrées; SPEC-044 et SPEC-046 non publiées | non chronométré | dépend de publication de SPEC-044/046 et revue des changements | partiel |
 
 ## 3. Performances mesurées
 | Métrique | Avant | Après | Comment mesuré |
 |---|---|---|---|
-| `/api/career/application-pipeline` — contrat OpenCode | 13,4 s, valeur de départ du contrat, non remesurée ici | 49,115 s puis 53,423 s sur le serveur vivant — **PAS ATTEINT** (< 3 s) | `time curl -sf http://127.0.0.1:8765/api/career/application-pipeline -o /dev/null`; démarrés à 16:34:19 et 16:36:30 CET; code retour 0. Le processus écoute depuis le checkout partagé `agent/spec-033-translation-variants`, pas depuis cette candidate. |
-| Endpoint pipeline de la candidate — 150 offres synthétiques | pas de mesure HTTP appariée avant changement | 2,611 / 1,933 / 1,949 s; médiane 1,949 s (< 3 s) | `TestClient`, HTTP 200, 150 lignes à chaque appel, DB temporaire, aucun réseau ni donnée réelle |
-| Endpoint pipeline candidate A/B — 150 offres synthétiques | avec scores Explorer inutilisés: 460,3 / 436,4 / 501,7 ms; médiane 460,3 ms | sans ces scores: 371,5 / 462,2 / 311,9 ms; médiane 371,5 ms (-19,3 %), JSON identique | six appels HTTP TestClient au même service et DB temporaires; HTTP 200 et 150 offres à chaque fois; aucun réseau |
-| Démarrage et route HTTP candidate isolée | aucune mesure avant le lot | Uvicorn démarre; `GET /api/career/application-pipeline` en 0,286 s, HTTP 200, 137 307 octets synthétiques | serveur candidate sur `127.0.0.1:18922`, base temporaire de 150 offres; sortie du serveur de test vérifiée arrêtée, port libéré |
-| Pipeline service A/B — 150 offres synthétiques | sans cache: 2,526 / 3,406 / 3,709 s; médiane 3,406 s | avec cache: 3,199 / 2,632 / 3,148 s; médiane 3,148 s, baisse de 7,6 %; sortie identique | trois appels de chaque type au même service temporaire; mesure variable sous charge, médiane encore supérieure à 3 s |
-| Normalisations courtes — fixture synthétique de 20 offres | 1 536 appels, dont 82 pour « corporate finance » | 65 appels, dont 1 pour « corporate finance » | instrumentation de `career.models._normalize_clean_text`; le test vérifie que le cache est vidé à la fin de la requête |
-| Déduplication CV | mêmes exigences présentes dans deux champs d'une offre | quatre conseils et quatre éléments UI uniques; provenance des deux champs conservée | parcours Chromium avec offre et profil synthétiques |
+| `/api/career/application-pipeline` — contrat OpenCode | 13,4 s, valeur initiale du contrat non remesurée dans cette livraison | 3,378 s; **PAS ATTEINT** (contrat < 3 s) | `time curl -sf http://127.0.0.1:8765/api/career/application-pipeline -o /dev/null`; exécuté le 2026-10-26 vers 16:52 CET; curl code retour 0. Le port sert le checkout partagé, pas la candidate. |
+| Endpoint pipeline candidate isolée — 1 000 offres synthétiques | pas de mesure appariée avant intégration | 2,058 / 1,021 / 1,336 s; médiane 1,336 s, HTTP 200 à chaque fois | Uvicorn candidat sur port isolé 18923, DB temporaire et 1 000 offres synthétiques; réponses de 905 252 octets; aucune donnée réelle ni sortie réseau; processus arrêté après mesure. |
+| Endpoint pipeline candidate isolée — 150 offres synthétiques | sans score Explorer: médiane A/B 460,3 ms | avec score Explorer omis: médiane A/B 371,5 ms; JSON identique | appels TestClient au même service/DB temporaires; trois mesures de chaque côté; HTTP 200, 150 lignes. |
+| Cache de normalisation | 1 536 appels normalisation sur fixture de 20 offres | 65 appels; cache vidé à la fin de la requête | compteur autour de `career.models._normalize_clean_text`, test d'intégration ciblé. |
 
 ## 4. État 24 h de ta prod
-- commits aujourd'hui : 20 à 16:48 CET, vérifiés par `git rev-list --count --since='2026-10-26 00:00' HEAD` avant ce commit de rapport.
-- lignes ajoutées / supprimées : 2871 / 113 selon `git diff --stat HEAD~20` (20 commits du jour jusqu'au rapport précédent).
-- tests verts : `tests/integration/test_us3_pipeline.py tests/test_career_application_sprint.py tests/test_career_explorer_web.py` (23 passed, 12,28 s); `tests/test_quick_answers.py` (24 passed); `tests/test_send_confirmation.py tests/test_career_application_kit.py tests/test_career_application_dashboard.py` (65 passed, 73,71 s); auparavant suites Career ciblées (561 passed); Ruff, `node --check career_static/career.js`, `git diff --check`; parcours Chromium synthétique Career; démarrage Uvicorn et GET pipeline 200 sur 150 offres synthétiques.
-- aucune suite complète exécutée; les données de profil, d'offre et de candidature du serveur vivant n'ont pas été lues.
+- commits aujourd'hui : 21 commits avant le présent commit de rapport, mesurés par `git rev-list --count --since='2026-10-26 00:00' HEAD` le 2026-10-26 à 16:52 CET.
+- lignes ajoutées / supprimées : 2 872 / 113, mesurées par `git diff --stat HEAD~21` (21 commits précédant le présent rapport; 25 fichiers).
+- tests verts : `tests/integration/test_us3_pipeline.py` (5 passed, 5,40 s; relancé dans cette livraison); auparavant `tests/test_quick_answers.py` (24 passed), tests SPEC-047 (65 passed), suites pipeline/sprint/Explorer (23 passed). `ruff check career/` vert dans cette livraison. Une suite complète n'a pas été lancée.
+- parcours HTTP sur le serveur partagé: HTTP réussi via `curl`, temps réel 3,378 s. Candidate isolée: trois réponses HTTP 200 sur 1 000 offres synthétiques. La preuve de persistance après redémarrage et les E2E complets ne sont pas couverts par ces validations.
 
 ## 5. Ce que j'attends d'OpenCode
-- Pousser `agent/spec-044-apply-kit-ready` et `agent/spec-046-ats-guide-human`; intégrer dans la lane UI le parcours de confirmation/relance SPEC-047, qui ne fournit encore que le backend.
+- Publier SPEC-044 et SPEC-046 sur `origin`, et raccorder côté UI la confirmation humaine et le suivi de relance SPEC-047.
 
 ## 6. Risques / blocages
-- La cible `< 3 s` n'est pas tenue par le serveur vivant: les deux appels récents prennent 49,115 s et 53,423 s. La candidate isolée sur Uvicorn répond en 0,286 s pour 150 offres synthétiques; la mesure A/B directe ancienne sous charge reste à 3,148 s en médiane.
-- Le serveur sur `127.0.0.1:8765` tourne depuis `/Users/comedelavenne/AI-Excel-Agent`, branche `agent/spec-033-translation-variants`, avec des changements locaux concurrents. Je n'ai pas modifié ce checkout ni redémarré le processus; il ne sert donc pas le code de cette candidate.
-- SPEC-047 n'a pas de parcours UI intégré; la lane UI reste nécessaire.
-- SPEC-044 et SPEC-046 absentes du dernier fetch. SPEC-045 distante `226dd78`; SPEC-047 distante `5b35e8a`.
+- Le contrat de performance `< 3 s` est **PAS ATTEINT** sur `127.0.0.1:8765`: 3,378 s au test de référence obligatoire. Ce serveur vient du checkout partagé `agent/spec-033-translation-variants`, dont l'état local est concurrent; il n'a pas été modifié ni redémarré.
+- La candidate isolée respecte le seuil dans le scénario mesuré (1 000 offres synthétiques, médiane 1,336 s), mais ce résultat ne remplace pas le test sur le serveur partagé et les environnements ne sont pas identiques.
+- Au fetch de 2026-10-26 16:52 CET, `origin` expose SPEC-045 (`226dd78bd7a13f032435d240f7526acb476156f8`) et SPEC-047 (`5b35e8a9b7046fa364b6ed5c8edec5fc6bfbaa38`); SPEC-044 et SPEC-046 sont absentes.
+- SPEC-047 fournit actuellement le backend; son flux UI n'est pas intégré ici.
 - `main` n'a pas été modifiée.
