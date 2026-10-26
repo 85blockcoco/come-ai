@@ -160,6 +160,61 @@ def ensure_parallelism(min_workers: int = 3, cooldown: float = 300.0) -> None:
             pass
 
 
+def kill_stalled_workers(min_age_min: float = 12.0, min_cpu_s: float = 8.0) -> None:
+    """Tue les workers bloqués en attente d'API.
+
+    Symptôme observé : 55 min écoulées, 11 s de CPU cumulé, 0,2 % CPU, aucun
+    fichier écrit. Ces workers ne produiront jamais : ils consomment un slot.
+    """
+    for pid, cmd in ps_table():
+        if "opencode run --auto" not in cmd or "--title Worker-" not in cmd:
+            continue
+        try:
+            out = subprocess.run(["ps", "-o", "etime=,time=", "-p", str(pid)],
+                                 capture_output=True, text=True, timeout=10).stdout.strip()
+        except Exception:
+            continue
+        if not out:
+            continue
+        etime_s, _, cputime_s = out.partition(" ")
+        elapsed = _parse_etime(etime_s.strip())
+        used = _parse_cputime(cputime_s.strip())
+        if elapsed is not None and used is not None and elapsed > min_age_min * 60 and used < min_cpu_s:
+            order = cmd.split("--title Worker-", 1)[1].split()[0]
+            try:
+                os.kill(pid, 9)
+                log(f"worker figé tué pid={pid} order={order} ({elapsed/60:.0f} min, {used:.0f} s CPU)")
+            except Exception:
+                pass
+
+
+def _parse_etime(txt: str) -> float | None:
+    """'01:23:45' ou '12:34' ou '45' -> secondes."""
+    try:
+        if "-" in txt:
+            days, _, rest = txt.partition("-")
+            base = int(days) * 86400
+        else:
+            base, rest = 0, txt
+        parts = [int(x) for x in rest.split(":")]
+        while len(parts) < 3:
+            parts.insert(0, 0)
+        return base + parts[0] * 3600 + parts[1] * 60 + parts[2]
+    except Exception:
+        return None
+
+
+def _parse_cputime(txt: str) -> float | None:
+    """'0:11.49' -> secondes."""
+    try:
+        parts = txt.split(":")
+        while len(parts) < 3:
+            parts.insert(0, "0")
+        return int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
+    except Exception:
+        return None
+
+
 def snapshot() -> None:
     reg = json.load(open(ROOT / "missions_registry.json", encoding="utf-8"))
     counts: dict[str, int] = {}
@@ -181,6 +236,7 @@ def main() -> None:
         try:
             keep_components_alive()
             kill_disk_scans()
+            kill_stalled_workers()
             kill_orphan_pytest()
             kill_pytest_excess()
             ensure_parallelism()

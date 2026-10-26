@@ -44,6 +44,18 @@ ALL_MODELS = [
     "opencode-go/mimo-v2.5",
 ]
 
+# Seuls ces modèles sont utilisés par la flotte : ils ont été vérifiés un par un
+# (réponse réelle + latence). Les opencode-go/* se bloquent en attente d'API
+# (60 min à 0,2 % CPU, aucun fichier écrit) : exclus.
+VERIFIED_MODELS = [
+    "opencode/deepseek-v4.1-flash-free",
+    "opencode/big-pickle",
+    "opencode/mimo-v2.6-flash-free",
+    "opencode/nemotron-3.5-super-vl-free",
+    "google/gemma-4-26b-a4b-it",
+]
+ALL_MODELS = list(VERIFIED_MODELS)
+
 LIMIT_PAT = re.compile(r"429|quota|rate limit|limit|credit|insufficient|balance|exhaust|usage cap|billing", re.I)
 UNAVAIL_PAT = re.compile(r"unavailable|not found|error|failed|no such model", re.I)
 
@@ -170,11 +182,13 @@ def pick_pool(exclude_local_dormant=True):
     """Pool ordonné: meilleurs OK d'abord, puis cooling dont le cooldown est écoulé."""
     s = load_state()
     now = time.time()
-    ok = [(m, st) for m, st in s["models"].items() if st["verdict"] == "OK"]
+    ok = [(m, st) for m, st in s["models"].items()
+          if st["verdict"] == "OK" and m in VERIFIED_MODELS]
     ok.sort(key=lambda x: -x[1]["score"])
     pool = [m for m, _ in ok]
     for m, st in s["models"].items():
-        if st["verdict"] in ("LIMIT", "SLOW") and st.get("cooldown_until", 0) <= now:
+        if (st["verdict"] in ("LIMIT", "SLOW") and m in VERIFIED_MODELS
+                and st.get("cooldown_until", 0) <= now):
             pool.append(m)
     return pool
 
