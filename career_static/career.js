@@ -3456,8 +3456,42 @@ function renderVariantFitAnalysis(target, prep) {
   target.append(section);
 }
 
-function renderRequirementsFit(target, result) {
+function groupRequirementFitsForDisplay(result, offerIntelligence) {
+  const fits = Array.isArray(result?.fits) ? result.fits : [];
+  const records = offerIntelligence?.requirements_by_id || {};
+  const groups = new Map();
+  const normalize = (value) => String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  fits.forEach((fit, index) => {
+    const text = String(fit?.requirement_text || "").trim();
+    const identity = normalize(text) || `id:${fit?.requirement_id || index}`;
+    const key = JSON.stringify([identity, fit?.category || "", fit?.modality || "", fit?.verdict || ""]);
+    let group = groups.get(key);
+    if (!group) {
+      group = {...fit, source_references: []};
+      groups.set(key, group);
+    }
+    const id = String(fit?.requirement_id || "").trim();
+    const source = id && records[id] && typeof records[id] === "object" ? records[id] : {};
+    if (id && !group.source_references.some((reference) => reference.requirement_id === id)) {
+      group.source_references.push({
+        requirement_id: id,
+        source_field: String(source.source_field || ""),
+        locator: String(source.locator || ""),
+      });
+    }
+  });
+  return [...groups.values()];
+}
+
+function renderRequirementsFit(target, result, offerIntelligence) {
   if (!result || !Array.isArray(result.fits) || !result.fits.length) return;
+  const displayFits = groupRequirementFitsForDisplay(result, offerIntelligence);
   const labels = {
     supported:"appuyée par le profil approuvé",
     unsupported:"écart établi par le profil approuvé",
@@ -3472,16 +3506,26 @@ function renderRequirementsFit(target, result) {
   };
   const section = make("section", "", "stagehunter-prep-section requirements-fit");
   section.append(make("h4", "Exigences de l’offre ↔ profil approuvé"));
+  const count = (verdict) => displayFits.filter((fit) => fit.verdict === verdict).length;
   section.append(make(
     "p",
-    `${result.supported_count || 0} appuyées · ${result.to_verify_count || 0} à vérifier · ${result.unsupported_count || 0} écarts établis · ${result.contradicted_count || 0} contradictions. Ce résumé compare les exigences aux seuls champs enregistrés dans ton profil Career.`,
+    `${count("supported")} appuyées · ${count("to_verify")} à vérifier · ${count("unsupported")} écarts établis · ${count("contradicted")} contradictions. Les répétitions exactes sont regroupées ici ; leurs sources restent listées. Ce résumé compare les exigences aux seuls champs enregistrés dans ton profil Career.`,
     "scoring-disclaimer",
   ));
   const list = make("ul", "", "job-reasons");
-  result.fits.forEach((fit) => {
+  displayFits.forEach((fit) => {
     const item = make("li", "", `requirements-fit-item ${fit.verdict || "to_verify"}`);
     item.append(make("strong", `${categories[fit.category] || "Autre"} · ${labels[fit.verdict] || "à vérifier"}`));
     item.append(make("p", `Exigence source : « ${fit.requirement_text || "texte indisponible"} »`));
+    const sourceReferences = fit.source_references || [];
+    if (sourceReferences.length) {
+      const sourceNames = {requirements: "champ exigences", description_original: "description de l’offre"};
+      const references = sourceReferences.map((reference) => {
+        const sourceName = sourceNames[reference.source_field] || reference.source_field || "source conservée";
+        return `${sourceName}${reference.locator ? ` · ${reference.locator}` : ""}`;
+      });
+      item.append(make("p", `Provenance : ${references.join(" ; ")}`, "requirements-fit-provenance"));
+    }
     if (fit.profile_evidence) item.append(make("p", `Profil : « ${fit.profile_evidence} »`));
     if (fit.reason) item.append(make("p", fit.reason));
     list.append(item);
@@ -3518,7 +3562,7 @@ function renderStagePrep(prep) {
     target.append(warnings);
   }
   renderVariantFitAnalysis(target, prep);
-  renderRequirementsFit(target, prep.requirements_fit);
+  renderRequirementsFit(target, prep.requirements_fit, prep.offer_intelligence);
   const cvCoverage = prep.cv_coverage || {};
   if ((typeof renderCvPlanSection === "function") && ((prep.cv_action_plan || []).length || Number.isFinite(cvCoverage.requirements_total))) {
     const planSection = renderCvPlanSection(target, prep, job);

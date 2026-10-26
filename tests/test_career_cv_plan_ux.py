@@ -18,6 +18,8 @@ from pathlib import Path
 
 import pytest
 
+from career.application_prep import reconcile_cv_plan_with_requirements_fit
+
 ROOT = Path(__file__).resolve().parents[1]
 CV_PLAN_JS = ROOT / "career_static" / "cv_plan.js"
 CV_PLAN_CSS = ROOT / "career_static" / "cv_plan.css"
@@ -33,6 +35,44 @@ def _node() -> str:
         if Path(candidate).is_file():
             return candidate
     pytest.skip("Node absent: JavaScript behavioural guards not executable on this host")
+
+
+def test_exact_cross_source_repeats_share_one_cv_action_and_coverage_count() -> None:
+    preparation = {
+        "offer_intelligence": {
+            "requirements_by_id": {
+                "req-1": {"id": "req-1", "source_field": "requirements", "locator": "line:1", "text": "Excel required."},
+                "req-2": {"id": "req-2", "source_field": "description_original", "locator": "line:4", "text": "Excel required."},
+                "req-3": {"id": "req-3", "source_field": "description_original", "locator": "line:5", "text": "Fluent English required."},
+            }
+        },
+        "cv_action_plan": [
+            {"id": "action-1", "requirement_id": "req-1", "requirement": "Excel required."},
+            {"id": "action-2", "requirement_id": "req-2", "requirement": "Excel required."},
+            {"id": "action-3", "requirement_id": "req-3", "requirement": "Fluent English required."},
+        ],
+        "cv_coverage": {},
+    }
+    fits = {
+        "fits": [
+            {"requirement_id": "req-1", "requirement_text": "Excel required.", "modality": "mandatory", "category": "tech", "verdict": "supported"},
+            {"requirement_id": "req-2", "requirement_text": "Excel required.", "modality": "mandatory", "category": "tech", "verdict": "supported"},
+            {"requirement_id": "req-3", "requirement_text": "Fluent English required.", "modality": "mandatory", "category": "langues", "verdict": "to_verify"},
+        ]
+    }
+
+    reconcile_cv_plan_with_requirements_fit(preparation, fits)
+
+    assert len(preparation["cv_action_plan"]) == 2
+    repeated = preparation["cv_action_plan"][0]
+    assert repeated["requirement_ids"] == ["req-1", "req-2"]
+    assert [ref["source_field"] for ref in repeated["source_references"]] == [
+        "requirements",
+        "description_original",
+    ]
+    assert preparation["cv_coverage"]["requirements_total"] == 2
+    assert preparation["cv_coverage"]["supported"] == 1
+    assert preparation["cv_coverage"]["to_verify"] == 1
 
 
 def _run_node_script(script: str) -> None:
@@ -283,6 +323,11 @@ assert.strictEqual(cvPlanRank({ status: "supported", evidence_quality: "needs_qu
 assert.strictEqual(cvPlanRank({ status: "needs_evidence", modality: "preferred" }), 3);
 assert.strictEqual(cvPlanRank({ blocking: true }), 0);
 assert.strictEqual(cvPlanRank({ source: "cv_structure", status: "supported" }), 2);
+assert.strictEqual(
+  cvPlanItemFilterKey({ status: "needs_evidence", filter: "verify", evidence_quality: "partial" }),
+  "blocking",
+  "un élément classé comme blocage factuel reste visible dans le filtre Bloquants",
+);
 const counts = cvPlanCountByFilter(entries);
 assert.deepStrictEqual(counts, { all: 5, highlight: 2, verify: 2, blocking: 1 });
 '''.replace("PREP", fixture_prep())

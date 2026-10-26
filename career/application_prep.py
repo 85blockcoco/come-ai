@@ -324,6 +324,8 @@ def _canonical_requirements(intelligence: Mapping[str, Any] | None) -> list[dict
                 "id": identifier,
                 "text": text,
                 "source": clean_text(record.get("source_field"), limit=80) or "description_original",
+                "source_field": source_field or "description_original",
+                "locator": clean_text(record.get("locator"), limit=80),
                 "modality": clean_text(record.get("modality"), limit=40) or "unknown",
                 "category": clean_text(record.get("category"), limit=40) or "other",
             }
@@ -673,12 +675,80 @@ def reconcile_cv_plan_with_requirements_fit(
         if isinstance(fit, Mapping) and clean_text(fit.get("requirement_id"), limit=120)
     }
 
+    # A board may repeat the exact same requirement in a structured field and
+    # in its free-text description. Keep every canonical fit and citation in
+    # ``requirements_fit`` / ``offer_intelligence``; collapse only the user
+    # facing CV actions and coverage when wording, category, modality and
+    # verdict are identical. Translations, different categories, and divergent
+    # verdicts remain separate.
+    intelligence = preparation.get("offer_intelligence")
+    records_by_id = (
+        intelligence.get("requirements_by_id", {})
+        if isinstance(intelligence, Mapping)
+        else {}
+    )
+    groups: list[dict[str, Any]] = []
+    groups_by_key: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    group_by_requirement_id: dict[str, dict[str, Any]] = {}
+    for fit in raw_fits:
+        if not isinstance(fit, Mapping):
+            continue
+        requirement_id = clean_text(fit.get("requirement_id"), limit=120)
+        text = clean_text(fit.get("requirement_text"), limit=400)
+        identity = normalized_text(text)
+        if not identity:
+            identity = f"id:{requirement_id}" if requirement_id else f"row:{len(groups)}"
+        key = (
+            identity,
+            clean_text(fit.get("category"), limit=80),
+            clean_text(fit.get("modality"), limit=40),
+            clean_text(fit.get("verdict"), limit=40),
+        )
+        group = groups_by_key.get(key)
+        if group is None:
+            group = dict(fit)
+            group["requirement_ids"] = []
+            group["source_references"] = []
+            groups_by_key[key] = group
+            groups.append(group)
+        if requirement_id and requirement_id not in group["requirement_ids"]:
+            group["requirement_ids"].append(requirement_id)
+            record = records_by_id.get(requirement_id) if isinstance(records_by_id, Mapping) else None
+            record = record if isinstance(record, Mapping) else {}
+            group["source_references"].append(
+                {
+                    "requirement_id": requirement_id,
+                    "source_field": clean_text(record.get("source_field"), limit=80),
+                    "locator": clean_text(record.get("locator"), limit=80),
+                    "text": clean_text(record.get("text") or text, limit=400),
+                }
+            )
+            group_by_requirement_id[requirement_id] = group
+
     plan = preparation.get("cv_action_plan")
     if isinstance(plan, list):
+        reconciled_plan: list[dict[str, Any]] = []
+        plan_by_group: dict[int, dict[str, Any]] = {}
         for item in plan:
             if not isinstance(item, dict):
                 continue
-            fit = fits_by_id.get(clean_text(item.get("requirement_id"), limit=120))
+            requirement_id = clean_text(item.get("requirement_id"), limit=120)
+            group = group_by_requirement_id.get(requirement_id)
+            if group is not None:
+                group_key = id(group)
+                existing_item = plan_by_group.get(group_key)
+                if existing_item is not None:
+                    existing_item["requirement_ids"] = list(group["requirement_ids"])
+                    existing_item["source_references"] = list(group["source_references"])
+                    continue
+                item["requirement_ids"] = list(group["requirement_ids"])
+                item["source_references"] = list(group["source_references"])
+                plan_by_group[group_key] = item
+            else:
+                reconciled_plan.append(item)
+            if group is not None:
+                reconciled_plan.append(item)
+            fit = fits_by_id.get(requirement_id)
             verdict = clean_text(fit.get("verdict"), limit=40) if fit else ""
             if verdict not in {"to_verify", "unsupported", "contradicted"}:
                 continue
@@ -712,12 +782,13 @@ def reconcile_cv_plan_with_requirements_fit(
                 + "Présente seulement les faits prouvés et vérifie l’écart avant de préparer le dossier."
             )
             item["why"] = reason or item.get("why", "")
+        preparation["cv_action_plan"] = reconciled_plan
 
     coverage = preparation.get("cv_coverage")
     if not isinstance(coverage, dict):
         return
     applicable_fits = [
-        fit for fit in raw_fits
+        fit for fit in groups
         if isinstance(fit, Mapping) and fit.get("verdict") != "not_applicable"
     ]
     if not applicable_fits:

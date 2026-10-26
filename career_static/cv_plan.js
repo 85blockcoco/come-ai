@@ -96,6 +96,11 @@ function cvPlanRank(item) {
 }
 
 function cvPlanItemFilterKey(item) {
+  // Keep a missing or partial proof in the factual-blocker filter even when
+  // the backend's source-level hint says "verify". Its rank and its filter
+  // must agree: the person can still verify the fact, but cannot claim it in
+  // the dossier until the evidence is complete.
+  if (cvPlanRankKey(item) === "blocking") return "blocking";
   if (item && typeof item === "object" && cvPlanFilterLabels[item.filter]) return item.filter;
   return cvPlanFilterByRankKey[cvPlanRankKey(item)] || "highlight";
 }
@@ -274,7 +279,7 @@ function renderCvPlanSection(target, prep, job) {
     make(
       "p",
       hasCoverage
-        ? `${coverage.supported || 0}/${coverage.requirements_total || 0} exigences appuyées par des preuves suffisantes · ${coverage.coverage_percent || 0} % confirmées · ${coverage.to_verify || 0} à vérifier · ${coverage.unsupported || 0} écart(s) établi(s) · ${coverage.contradicted || 0} contradiction(s) · langue cible ${coverage.target_language || "à confirmer"}.`
+        ? `Couverture documentaire : ${coverage.supported || 0}/${coverage.requirements_total || 0} exigences appuyées par des preuves suffisantes · ${coverage.coverage_percent || 0} % confirmées · ${coverage.to_verify || 0} à vérifier · ${coverage.unsupported || 0} écart(s) établi(s) · ${coverage.contradicted || 0} contradiction(s) · langue cible ${coverage.target_language || "à confirmer"}.`
         : "Analyse locale en cours : aucune exigence détectée n’est encore comptabilisée.",
       "scoring-title cv-plan-summary",
     ),
