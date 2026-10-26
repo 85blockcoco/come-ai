@@ -406,13 +406,13 @@ above are the latest observed run, not a stability guarantee.
 - Full offline suite on the code at `edb624204a372117148e1d523a8971547d2e94d3`: **2,973 passed, 2 skipped, 0 failed in 291.75 s**. The two skipped tests require real nested macOS sandboxes and pytest skipped them inside this already sandboxed runner.
 - Full offline suite on `82e5623e2503dea71693f009ed982d68374f4407`: **2,972 passed, 1 failed, 2 skipped in 871.80 s**. The failure was the 500-offer deduplication timing assertion (516 ms vs <200 ms). Repeated isolated measurements were 428–762 ms; the host load average was approximately 386. The two skipped cases require real nested macOS sandboxes.
 - A focused Career criteria/search/deduplication matrix passed **282 tests**. The deduplication performance check passed in that run; another full-suite attempt before the optimization had shown variable timings, so the threshold is monitored rather than relaxed.
-- After the bounded URL and redundant-pair fast paths, **191 focused Career/Dev Kit correctness tests passed** with the timing assertion deselected; the fast-path URL test passed separately. No post-optimization pass of the 200 ms benchmark is claimed.
+- After the bounded URL and redundant-pair fast paths, **191 focused Career/Dev Kit correctness tests passed** with the timing assertion deselected; the fast-path URL test passed separately. The complete deduplication module then passed (**163 passed in 3.67 s**, including the <200 ms assertion). Three isolated post-optimization timing runs passed (pytest durations 2.27, 3.06 and 2.45 s including startup); retain a repeat under a stable host load as a follow-up, but the target passed on all three runs.
 - Current targeted Ruff checks, `node --check career_static/career.js` and `git diff --check` passed. Global `ruff check .`, JavaScript syntax checks and compileall passed on the earlier `edb6242` validation SHA. A repo-wide formatter was not run because it would create broad unrelated churn.
 
 ### Remaining acceptance work
 
 - T060: repeat the synthetic end-to-end browser journey on the exact latest candidate; add official-source discovery and local file selection coverage where possible.
-- T061: the sprint-build median remains above the 500 ms target; the 500-offer deduplication benchmark also missed in the latest full-suite run. Re-measure the post-optimization candidate under a stable host load and investigate remaining costs without relaxing thresholds.
+- T061: the sprint-build median remains above the 500 ms target. The 500-offer deduplication assertion passed in the full module and three isolated post-optimization runs; investigate the Sprint cost without relaxing thresholds.
 - T062: resolve/record the formatting policy for touched files without reformatting unrelated files.
 - T065/T066: formal Constitution review and merge-readiness remain open. The real sandbox scenarios have not been verified on this exact runner.
 
