@@ -14,6 +14,7 @@ from dataclasses import asdict, dataclass, field as dataclass_field
 from typing import Any, Mapping
 
 from career.application_prep import prepare_application
+from career.ats_guide import human_apply_guide
 from career.application_studio import build_kit_texts, build_local_application_draft, scan_kit_placeholders
 from career.cv_fit import classify_variant
 from career.cv_variants import ALL_VARIANTS
@@ -39,6 +40,7 @@ class ApplyKit:
     language: str = "fr"
     fact_checks: dict[str, Any] = dataclass_field(default_factory=dict)
     review_token: str | None = None
+    ats_guide: dict[str, Any] | None = None
 
 
 _REQUIRED_PROFILE_FIELDS: tuple[str, ...] = (
@@ -434,13 +436,14 @@ def build_apply_kit(
             "letter_docx": f"{base}/letter/docx",
         }
 
-    trust = job.get("official_source_trust")
-    trust = trust if isinstance(trust, Mapping) else {}
-    deep_link = (
-        str(job.get("official_url") or "").strip() or None
-        if bool(job.get("source_verified")) and trust.get("status") == "verified"
-        else None
-    )
+    guide_payload = None
+    try:
+        guide = human_apply_guide(dict(job))
+        guide_payload = guide.to_dict()
+        deep_link = guide.apply_url or None
+    except UserFacingError as error:
+        deep_link = None
+        fact_checks["destination_error"] = str(error)
 
     exports_ready = bool(export_urls.get("cv_pdf") and export_urls.get("letter_pdf")) if service is not None else None
     readiness, block_reasons = _readiness(
@@ -458,6 +461,9 @@ def build_apply_kit(
     if document_placeholders:
         readiness = max(0, readiness - 20)
         block_reasons.append("Les documents CV/lettre contiennent des éléments à compléter avant le dépôt.")
+    if fact_checks.get("destination_error"):
+        readiness = max(0, readiness - 25)
+        block_reasons.append(str(fact_checks["destination_error"]))
     checklist = _checklist(
         profile,
         job,
@@ -489,4 +495,5 @@ def build_apply_kit(
         language=str((letter_payload or {}).get("language") or normalized_language),
         fact_checks=fact_checks,
         review_token=review_token,
+        ats_guide=guide_payload,
     )

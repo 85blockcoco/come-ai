@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 from datetime import date
+from html import escape
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import parse_qs
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
@@ -810,6 +813,45 @@ def create_career_router(
                 draft_id=payload.draft_id, review_token=payload.review_token,
             )
         )
+
+    @router.post("/api/career/applications/{application_id}/manual-destination")
+    async def manual_destination(application_id: str, request: Request) -> Any:
+        """A human form click opens the verified destination after review."""
+        if request.headers.get("content-type", "").split(";", 1)[0] != "application/x-www-form-urlencoded":
+            raise HTTPException(status_code=415, detail="Le formulaire de revue est invalide.")
+        raw = bytearray()
+        async for chunk in request.stream():
+            raw.extend(chunk)
+            if len(raw) > 2_048:
+                raise HTTPException(status_code=413, detail="Le formulaire de revue est trop volumineux.")
+        try:
+            fields = parse_qs(raw.decode("utf-8"), keep_blank_values=True, strict_parsing=True, max_num_fields=3)
+        except (ValueError, UnicodeError) as error:
+            raise HTTPException(status_code=422, detail="Le formulaire de revue est invalide.") from error
+        if (
+            set(fields) != {"approved", "draft_id", "review_token"}
+            or any(len(values) != 1 for values in fields.values())
+            or fields["approved"] != ["true"]
+            or not 1 <= len(fields["draft_id"][0]) <= 80
+            or not re.fullmatch(r"[0-9a-f]{64}", fields["review_token"][0])
+        ):
+            raise HTTPException(status_code=422, detail="Relis ce dossier puis confirme explicitement sa revue.")
+        headers = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
+        try:
+            destination = await local(lambda: service.manual_application_destination(
+                application_id, fields["draft_id"][0], fields["review_token"][0]
+            ))
+        except UserFacingError as error:
+            return HTMLResponse(
+                '<!doctype html><html lang="fr"><meta charset="utf-8"><title>Dossier à vérifier</title>'
+                '<link rel="stylesheet" href="/app-static/app.css"><main class="standalone-message">'
+                '<h1>Vérifie ton dossier</h1><p>' + escape(str(error)) + '</p>'
+                '<a href="/app#applications">Revenir aux candidatures</a></main></html>',
+                status_code=400, headers=headers,
+            )
+        if request.headers.get("accept") == "application/json":
+            return JSONResponse({"destination": destination}, headers=headers)
+        return RedirectResponse(destination, status_code=303, headers=headers)
 
     @router.post("/api/career/applications/{application_id}/confirm-receipt")
     async def confirm_receipt(application_id: str, payload: ReceiptPayload) -> Any:

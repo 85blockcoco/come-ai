@@ -4371,6 +4371,32 @@ class CareerService:
             self._audit(connection, "application_stage_updated", "application", application_id)
         return self.get_application(application_id)
 
+    def manual_application_destination(self, application_id: str, draft_id: str, review_token: str) -> str:
+        """Approve the exact reviewed kit and return its verified destination.
+
+        The caller may navigate there after the person's explicit click. This
+        method sends no request to that destination and never records a send.
+        """
+        with self._lock:
+            application = self.get_application(application_id)
+            if application.get("stage") in STAGES_AT_OR_AFTER_SENT:
+                raise UserFacingError("Un envoi a déjà été déclaré pour ce dossier. Consulte son suivi.")
+            draft = self.get_application_draft(draft_id)
+            if draft.get("job_id") != application.get("job_id"):
+                raise UserFacingError("Le brouillon ne correspond pas à ce dossier.")
+            kit = self._build_apply_kit(
+                str(application["job_id"]), str(draft["language"]), str(draft.get("variant") or "") or None
+            )
+            if kit.get("draft_id") != draft_id or kit.get("review_token") != review_token:
+                raise UserFacingError("Le dossier affiché a changé. Rouvre sa préparation avant de l’approuver.")
+            if kit.get("block_reasons") or kit.get("readiness") != 100 or not kit.get("deep_link"):
+                raise UserFacingError("Ce dossier comporte encore des éléments à vérifier avant d’ouvrir le dépôt manuel.")
+            self.approve_for_manual_submission(
+                application_id, True, "Dossier relu avant ouverture manuelle du site officiel.",
+                draft_id=draft_id, review_token=review_token,
+            )
+            return str(kit["deep_link"])
+
     def approve_for_manual_submission(
         self, application_id: str, approved: bool, note: str = "", *, draft_id: str = "", review_token: str = ""
     ) -> dict[str, Any]:

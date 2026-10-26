@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <meta name="description" content="NAGE — machine locale de candidatures : offres, dossiers, assistant, missions.">
+    <title>NAGE // machine de candidatures</title>
+    <link rel="icon" href="/app-static/icon.png">
+    <link rel="stylesheet" href="/app-static/app.css">
+  </head>
+  <body>
+    <div class="ambient ambient-a" aria-hidden="true"></div>
+    <div class="ambient ambient-b" aria-hidden="true"></div>
+
+    <div class="window">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M4 20V4h3.4l9.2 11.6V4H20v16h-3.4L7.4 8.4V20H4z" fill="currentColor"/></svg>
+          </span>
+          <span class="brand-text"><strong>NAGE</strong><small>machine de candidatures</small></span>
+        </div>
+
+        <nav class="nav" aria-label="Navigation principale">
+          <button class="nav-item" data-view="today" aria-label="Aujourd’hui" aria-current="page">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.2l8-6.6 8 6.6V20a1 1 0 01-1 1h-4.6v-5.4H9.6V21H5a1 1 0 01-1-1v-8.8z"/></svg>
+            <span>Aujourd’hui</span>
+          </button>
+          <button class="nav-item" data-view="applications" aria-label="Candidatures">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1zm7 1.5V8h3.5L14 4.5zM8.6 12h6.8v1.6H8.6V12zm0 4h6.8v1.6H8.6V16z"/></svg>
+            <span>Candidatures</span>
+            <em class="nav-badge" id="badgeApplications" hidden>0</em>
+          </button>
+          <button class="nav-item" data-view="tracking" aria-label="Suivi">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1zm2 4h10v1.6H7V8zm0 3.6h10V13.2H7v-1.6zm0 3.6h6.4v1.6H7v-1.6z"/></svg>
+            <span>Suivi</span>
+            <em class="nav-badge" id="badgeTracking" hidden>0</em>
+          </button>
+          <button class="nav-item" data-view="offers" aria-label="Offres">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5A2.5 2.5 0 016.5 4h11A2.5 2.5 0 0120 6.5v11a2.5 2.5 0 01-2.5 2.5h-11A2.5 2.5 0 014 17.5v-11zM8 9h8V7.4H8V9zm0 3.8h8v-1.6H8v1.6zm0 3.8h5.4v-1.6H8v1.6z"/></svg>
+            <span>Offres</span>
+          </button>
+          <button class="nav-item" data-view="assistant" aria-label="Assistant">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a8.6 8.6 0 00-8.6 8.6c0 1.6.4 3 1.2 4.3L3.4 21l5.4-1.1a8.6 8.6 0 104.2-16.9H12z"/></svg>
+            <span>Assistant</span>
+          </button>
+          <button class="nav-item" data-view="missions" aria-label="Missions">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6l2.3 2.3 3.2-.4 1.2 3 3 1.2-.4 3.2 2.3 2.3-2.3 2.3.4 3.2-3 1.2-1.2 3-3.2-.4L12 21.4l-2.3-2.3-3.2.4-1.2-3-3-1.2.4-3.2L.4 12l2.3-2.3-.4-3.2 3-1.2 1.2-3 3.2.4L12 2.6zm-1 5.9v4.2l3.4 2 .8-1.4-2.6-1.5V8.5H11z"/></svg>
+            <span>Missions</span>
+            <i class="pulse" id="fleetPulse" hidden></i>
+          </button>
+          <button class="nav-item" data-view="memory" aria-label="Mémoire">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.2c-4.9 0-8.8 3.9-8.8 8.8s3.9 8.8 8.8 8.8 8.8-3.9 8.8-8.8S16.9 3.2 12 3.2zm0 2.2a6.6 6.6 0 016.6 6.6c0 1.5-.5 2.9-1.4 4L11 9.3V6.7a6.6 6.6 0 011 0zM9.5 7.6v6.1l5.6 5.2c-1 .4-2 .6-3.1.6a6.6 6.6 0 01-6.6-6.6c0-2.2 1.1-4.2 2.8-5.4l1.3-.9z"/></svg>
+            <span>Mémoire</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-foot">
+          <div class="status-dot" id="statusDot" title="État du serveur local"><span></span><b id="statusText">Connexion…</b></div>
+          <div class="sidebar-links">
+            <a href="/career" title="Ouvrir l’espace Career complet">Career ↗</a>
+            <a href="/v5" title="Ouvrir l’espace V5">V5 ↗</a>
+            <a href="/" title="Ouvrir l’interface historique">V3 ↗</a>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main" id="main">
+        <header class="topbar">
+          <div class="topbar-title">
+            <h1 id="viewTitle" tabindex="-1">Aujourd’hui</h1>
+            <p id="viewSubtitle">Chargement de ton espace…</p>
+          </div>
+          <div class="topbar-actions">
+            <label class="kit-language" for="kitLanguage">Langue du dossier
+              <select id="kitLanguage"><option value="en">Anglais</option><option value="fr">Français</option><option value="it">Italien</option><option value="de">Allemand</option></select>
+            </label>
+            <label class="search" id="searchBox" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.8l-.3-.3a6.5 6.5 0 10-.7.7l.3.3v.8l5 5 1.5-1.5-5-5zm-6 0a4.5 4.5 0 110-9 4.5 4.5 0 010 9z"/></svg>
+              <input id="searchInput" aria-label="Filtrer les offres" type="search" placeholder="Filtrer…" autocomplete="off">
+            </label>
+            <button class="ghost-btn" id="refreshBtn" title="Actualiser les données">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L7.5 6 12 10V7a5 5 0 11-5 5H5a7 7 0 107-7z"/></svg>
+              <span>Actualiser</span>
+            </button>
+          </div>
+        </header>
+
+        <div class="scroll" id="scroll">
+          <section class="view" id="view-today"></section>
+          <section class="view" id="view-applications" hidden></section>
+          <section class="view" id="view-tracking" hidden></section>
+          <section class="view" id="view-offers" hidden></section>
+          <section class="view" id="view-assistant" hidden></section>
+          <section class="view" id="view-missions" hidden></section>
+          <section class="view" id="view-memory" hidden></section>
+        </div>
+      </main>
+    </div>
+
+    <script src="/app-static/app.js"></script>
+  </body>
+</html>
