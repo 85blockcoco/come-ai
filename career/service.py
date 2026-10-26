@@ -19,7 +19,7 @@ import urllib.parse
 import uuid
 from contextlib import contextmanager
 from dataclasses import replace
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -64,6 +64,23 @@ from .application_dashboard import (
     build_dashboard_payload,
 )
 from .application_prep import prepare_application, summarize_offer
+from .send_confirmation import (
+    FOLLOWUP_RECORDED_EVENT_TYPE,
+    SEND_CONFIRMATION_EVENT_TYPE,
+    STAGES_AT_OR_AFTER_SENT,
+    TRACKER_HONESTY_NOTE,
+    MAX_TRACKER_APPLICATIONS,
+    SendConfirmationError,
+    SendEvidence,
+    build_followup_draft,
+    evidence_fingerprint,
+    evidence_payload,
+    latest_followup_on,
+    latest_send_evidence,
+    send_record_from_payload,
+    send_record_to_dict,
+    validate_evidence,
+)
 from .application_sprint import MAX_SPRINT_CANDIDATES, MAX_SPRINT_ITEMS, build_application_sprint
 from .cv_fit import (
     PipelineItem,
@@ -3843,6 +3860,280 @@ class CareerService:
             )
             self._audit(connection, "application_receipt_unknown", "application", application_id)
         return self.get_application(application_id)
+
+    # ------------------------------------------------------------------
+    # SPEC-047 — Confirmation d'envoi humaine + relance optimale
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _send_events(connection: sqlite3.Connection, application_id: str) -> list[dict[str, Any]]:
+        rows = connection.execute(
+            """
+            SELECT id, event_type, detail, created_at FROM application_events
+            WHERE application_id = ? ORDER BY created_at ASC, rowid ASC
+            """,
+            (application_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def _send_record_response(
+        self,
+        *,
+        job_id: str,
+        application_id: str,
+        created: bool,
+        note: str | None = None,
+    ) -> dict[str, Any]:
+        with self._lock, self._connection() as connection:
+            events = self._send_events(connection, application_id)
+            application = connection.execute(
+                "SELECT stage, receipt_status, confirmation_reference FROM applications WHERE id = ?",
+                (application_id,),
+            ).fetchone()
+            job = connection.execute(
+                "SELECT company, title FROM jobs WHERE id = ?", (job_id,)
+            ).fetchone()
+        if application is None or job is None:
+            raise UserFacingError("Cette candidature Career n'existe pas.")
+        send = latest_send_evidence(events)
+        if send is None:
+            raise UserFacingError("Aucun envoi declare pour cette offre.")
+        evidence_note = send[1].get("note")
+        last_followup = latest_followup_on(events)
+        record = send_record_from_payload(job_id, send[1], last_followup_on=last_followup)
+        if record is None:
+            raise UserFacingError("L'envoi declare est illisible : enregistre-le a nouveau.")
+        draft = build_followup_draft(
+            title=str(job["title"]),
+            company=str(job["company"]),
+            channel=record.channel,
+            sent_at=record.sent_at,
+            reference=str(application["confirmation_reference"] or ""),
+        )
+        return {
+            "record": send_record_to_dict(record, note=evidence_note if note is None else note),
+            "job_id": job_id,
+            "application_id": application_id,
+            "created": created,
+            "stage": str(application["stage"]),
+            "receipt_status": str(application["receipt_status"]),
+            "followup_done_on": last_followup.isoformat() if last_followup else None,
+            "followup_draft": draft,
+            "honesty": TRACKER_HONESTY_NOTE,
+        }
+
+    def record_send(
+        self,
+        job_id: str,
+        evidence: SendEvidence,
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        current = now or datetime.now(timezone.utc)
+        if current.tzinfo is None:
+            current = current.replace(tzinfo=timezone.utc)
+        try:
+            validate_evidence(evidence, now=current)
+        except SendConfirmationError as error:
+            raise UserFacingError(str(error)) from error
+        identifier = clean_text(job_id, limit=80)
+        if not identifier:
+            raise UserFacingError("Indique l'offre concernee par la confirmation d'envoi.")
+        detail = json.dumps(evidence_payload(evidence), ensure_ascii=False)
+        fingerprint = evidence_fingerprint(evidence)
+        now_iso = utc_now()
+        with self._lock, self._connection() as connection:
+            job = connection.execute("SELECT id FROM jobs WHERE id = ?", (identifier,)).fetchone()
+            if not job:
+                raise UserFacingError("Cette offre Career n'existe pas.")
+            application = connection.execute(
+                "SELECT id, stage, approval_granted FROM applications WHERE job_id = ?",
+                (identifier,),
+            ).fetchone()
+            if not application:
+                raise UserFacingError(
+                    "Aucune candidature suivie pour cette offre : cree d'abord le suivi local "
+                    "avant de confirmer un envoi."
+                )
+            application_id = str(application["id"])
+            if not application["approval_granted"]:
+                raise UserFacingError(
+                    "Approuve d'abord le depot manuel pour cette offre avant d'enregistrer son envoi."
+                )
+            existing = latest_send_evidence(self._send_events(connection, application_id))
+            created = False
+            if existing is None:
+                created = True
+                connection.execute(
+                    """
+                    INSERT INTO application_events (id, application_id, job_id, event_type, detail, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        f"event_{uuid.uuid4().hex}",
+                        application_id,
+                        identifier,
+                        SEND_CONFIRMATION_EVENT_TYPE,
+                        detail,
+                        now_iso,
+                    ),
+                )
+            elif json.dumps(existing[1], sort_keys=True, ensure_ascii=False) != fingerprint:
+                connection.execute(
+                    "UPDATE application_events SET detail = ? WHERE id = ?",
+                    (detail, existing[0]),
+                )
+            if application["stage"] not in STAGES_AT_OR_AFTER_SENT:
+                connection.execute(
+                    """
+                    UPDATE applications SET stage = 'submitted', receipt_status = 'unknown', updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (now_iso, application_id),
+                )
+                self._application_event(
+                    connection,
+                    application_id,
+                    identifier,
+                    "stage_updated",
+                    "Envoi declare manuellement par la personne (confirmation d'envoi).",
+                )
+            self._audit(connection, "send_confirmation_recorded", "application", application_id)
+        return self._send_record_response(
+            job_id=identifier, application_id=application_id, created=created
+        )
+
+    def record_followup_done(
+        self,
+        job_id: str,
+        *,
+        done_on: date | None = None,
+        note: str = "",
+    ) -> dict[str, Any]:
+        identifier = clean_text(job_id, limit=80)
+        if not identifier:
+            raise UserFacingError("Indique l'offre concernee par la relance.")
+        followed_up_on = done_on or date.today()
+        now_iso = utc_now()
+        with self._lock, self._connection() as connection:
+            application = connection.execute(
+                "SELECT id FROM applications WHERE job_id = ?", (identifier,)
+            ).fetchone()
+            if not application:
+                raise UserFacingError("Cette candidature Career n'existe pas.")
+            application_id = str(application["id"])
+            if latest_send_evidence(self._send_events(connection, application_id)) is None:
+                raise UserFacingError(
+                    "Enregistre d'abord l'envoi declare avant de noter une relance."
+                )
+            events = self._send_events(connection, application_id)
+            if latest_followup_on(events) == followed_up_on:
+                return self._send_record_response(
+                    job_id=identifier, application_id=application_id, created=False
+                )
+            connection.execute(
+                """
+                INSERT INTO application_events (id, application_id, job_id, event_type, detail, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    f"event_{uuid.uuid4().hex}",
+                    application_id,
+                    identifier,
+                    FOLLOWUP_RECORDED_EVENT_TYPE,
+                    json.dumps({"done_on": followed_up_on.isoformat()}, ensure_ascii=False),
+                    now_iso,
+                ),
+            )
+            self._audit(connection, "followup_recorded", "application", application_id)
+        return self._send_record_response(
+            job_id=identifier, application_id=application_id, created=False
+        )
+
+    def get_send_record(self, job_id: str) -> dict[str, Any]:
+        identifier = clean_text(job_id, limit=80)
+        if not identifier:
+            raise UserFacingError("Indique l'offre dont lire la confirmation d'envoi.")
+        with self._lock, self._connection() as connection:
+            application = connection.execute(
+                "SELECT id FROM applications WHERE job_id = ?", (identifier,)
+            ).fetchone()
+        if not application:
+            raise UserFacingError("Cette candidature Career n'existe pas.")
+        return self._send_record_response(
+            job_id=identifier, application_id=str(application["id"]), created=False
+        )
+
+    def build_followup_draft(self, job_id: str) -> str:
+        return str(self.get_send_record(job_id)["followup_draft"])
+
+    def apply_tracker(self) -> dict[str, Any]:
+        today = date.today()
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT a.id AS application_id, a.job_id, a.stage, a.receipt_status,
+                       a.confirmation_reference, j.company, j.title, j.city, j.official_url
+                FROM applications a JOIN jobs j ON a.job_id = j.id
+                WHERE a.stage IN ('submitted', 'submitted_confirmed')
+                ORDER BY a.updated_at DESC, a.id ASC
+                LIMIT ?
+                """,
+                (MAX_TRACKER_APPLICATIONS,),
+            ).fetchall()
+            items: list[dict[str, Any]] = []
+            for row in rows:
+                events = self._send_events(connection, str(row["application_id"]))
+                send = latest_send_evidence(events)
+                if send is None:
+                    continue
+                record = send_record_from_payload(
+                    str(row["job_id"]), send[1], last_followup_on=latest_followup_on(events)
+                )
+                if record is None:
+                    continue
+                due_day = record.follow_up_due.date()
+                draft = build_followup_draft(
+                    title=str(row["title"] or ""),
+                    company=str(row["company"] or ""),
+                    channel=record.channel,
+                    sent_at=record.sent_at,
+                    reference=str(row["confirmation_reference"] or ""),
+                )
+                items.append(
+                    {
+                        "job_id": str(row["job_id"]),
+                        "application_id": str(row["application_id"]),
+                        "title": str(row["title"] or "Offre sans intitule"),
+                        "company": str(row["company"] or ""),
+                        "city": str(row["city"] or ""),
+                        "official_url": str(row["official_url"] or ""),
+                        "stage": str(row["stage"]),
+                        "receipt_status": str(row["receipt_status"]),
+                        "channel": record.channel,
+                        "sent_at": record.sent_at.isoformat(),
+                        "follow_up_due": record.follow_up_due.isoformat(),
+                        "follow_up_due_date": due_day.isoformat(),
+                        "days_waiting": max((today - record.sent_at.date()).days, 0),
+                        "status": "due" if due_day <= today else "upcoming",
+                        "overdue": due_day < today,
+                        "followup_draft": draft,
+                        "is_email": False,
+                    }
+                )
+        items.sort(key=lambda item: (item["follow_up_due_date"], item["title"].casefold()))
+        due_items = [item for item in items if item["status"] == "due"]
+        return {
+            "generated_at": utc_now(),
+            "today": today.isoformat(),
+            "items": items,
+            "totals": {
+                "sent_without_response": len(items),
+                "due": len(due_items),
+                "overdue": sum(1 for item in items if item["overdue"]),
+            },
+            "honesty": TRACKER_HONESTY_NOTE,
+        }
 
     # ------------------------------------------------------------------
     # Local application kit (CVBOOST-05)
