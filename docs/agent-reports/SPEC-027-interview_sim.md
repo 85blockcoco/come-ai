@@ -111,3 +111,34 @@ routes du tip distant ne sont pas repris.
 - Deux langues de génération (`fr`, `en`) ; toute autre valeur retombe sur le français.
 - Le générateur ne couvre que les mots-clés de sa bibliothèque fermée. Une offre très spécialisée reçoit les questions génériques de son secteur, jamais une question inventée sur un outil inconnu.
 - Aucun appel LLM, aucune soumission automatique, aucune donnée réelle dans les fixtures.
+
+## Revue de livraison (CVBOOST-62 / exécution du 26 octobre 2026)
+
+Cette exécution a reçu la mission SPEC-027 alors que la livraison existait déjà
+(`agent/spec-027-interview-sim`, registre `status=done`). Plutôt que de créer
+une seconde implémentation du même module, la livraison a été **revérifiée et
+réconciliée avec la lignée courante** :
+
+1. **Consolidation, pas de v3.** Une implémentation parallèle commencée avant
+   la découverte de l'état de la branche a été écartée (sauvegarde hors
+   dépôt) ; aucun second `career/interview_sim.py` n'est introduit.
+2. **Merge sans conflit** de `origin/agent/spec-027-interview-sim` dans la
+   lignée courante (`2e52575`) : `git merge-tree --write-tree` → exit 0,
+   arbre `250fc6c0`, puis merge `ort` effectué sans hunk manuel
+   (`c105d2c`). Le diff n'ajoute que les fichiers de la livraison + les
+   commits de flotte manquant à la lignée.
+3. **Contrat Python revérifié sur l'arbre fusionné** (script dédié) :
+   `InterviewQuestion(kind, question, evidence_needed)` ✓, `StarWorksheet(
+   question_id, situation, task, action, result, completeness)` ✓,
+   `build_question_set(offer, *, seed, limit)` ✓, `self_score()` ✓,
+   `evidence_checklist()` ✓, `build_worksheet()` ✓.
+4. **Comportement** : les 3 offres fixtures produisent 16 questions avec les
+   4 familles ; déterminisme même-graine vérifié ; offre vide tolérée
+   (14 questions, 4 familles) ; fiche vierge = `completeness 0.0` et
+   `score 0` ; score borné 0-100.
+5. **Périmètre** : `SCHEMA_VERSION = 8` inchangé, aucune migration, la seule
+   évolution de `career/service.py` est le bloc de capacité `interview_sim`
+   de `/api/career/health` ; `ruff check .` vert ; `git diff --check` propre.
+6. **Routes** : les 3 routes `/api/career/interview-sim/…` restent en place
+   et lisent l'offre via `get_job()` (offre enregistrée uniquement).
+
