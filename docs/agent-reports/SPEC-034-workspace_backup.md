@@ -157,9 +157,21 @@ Couverture :
   checksum falsifié, entrée non listée, entrée symlink, entrée chiffrée,
   doublons, ZIP corrompu, manifeste absent, checksum orphelin, parent symlinké
   sortant du workspace ;
-- smoke REST complet via `create_career_router()`.
+- smoke REST complet via `create_career_router()` et montage réel dans
+  l'application produite par `come_ai_web.create_app()`.
 
 `ruff check .` → **All checks passed**.
+
+### Correction hors périmètre fonctionnel (transparence)
+
+La première exécution complète a révélé **un échec préexistant**, sans rapport
+avec SPEC-034 : `tests/test_career_agent.py` vérifiait encore
+`len(preferences["families"]) == 6`, alors que le commit `cd0e5e8` a étendu
+`JOB_FAMILIES` à 14 familles (généralisation sectorielle). L'assertion dérive
+maintenant de la constante autoritaire `career.models.JOB_FAMILIES`
+(`len(...) == len(JOB_FAMILIES)`), ce qui évite une nouvelle divergence lors
+d'une future extension de la taxonomie. Aucun comportement applicatif n'est
+modifié par ce changement de test.
 
 ---
 
