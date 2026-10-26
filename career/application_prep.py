@@ -654,6 +654,94 @@ def prepare_application(
     }
 
 
+def reconcile_cv_plan_with_requirements_fit(
+    preparation: dict[str, Any], requirements_fit: Mapping[str, Any]
+) -> None:
+    """Make the CV plan agree with canonical, evidence-aware fit verdicts.
+
+    The text-match plan is useful for locating profile passages, but a token
+    overlap alone cannot prove that a full offer requirement is satisfied.
+    When canonical fit data is available, use its verdict for the coverage
+    summary and downgrade partial, unsupported, or contradictory matches.
+    """
+    raw_fits = requirements_fit.get("fits")
+    if not isinstance(raw_fits, list):
+        return
+    fits_by_id = {
+        clean_text(fit.get("requirement_id"), limit=120): fit
+        for fit in raw_fits
+        if isinstance(fit, Mapping) and clean_text(fit.get("requirement_id"), limit=120)
+    }
+
+    plan = preparation.get("cv_action_plan")
+    if isinstance(plan, list):
+        for item in plan:
+            if not isinstance(item, dict):
+                continue
+            fit = fits_by_id.get(clean_text(item.get("requirement_id"), limit=120))
+            verdict = clean_text(fit.get("verdict"), limit=40) if fit else ""
+            if verdict not in {"to_verify", "unsupported", "contradicted"}:
+                continue
+            requirement = clean_text(fit.get("requirement_text") or item.get("requirement"), limit=300)
+            evidence = clean_text(fit.get("profile_evidence") or item.get("profile_evidence"), limit=300)
+            reason = clean_text(fit.get("reason"), limit=500)
+            item["status"] = "needs_evidence"
+            item["filter"] = "blocking" if verdict in {"unsupported", "contradicted"} else "verify"
+            item["action_type"] = "do_not_overstate"
+            item["action_label"] = (
+                "Ne pas présenter comme conforme"
+                if verdict in {"unsupported", "contradicted"}
+                else "Vérifier la couverture complète"
+            )
+            item["profile_reference"] = (
+                "Écart établi par le profil approuvé"
+                if verdict in {"unsupported", "contradicted"}
+                else "Preuve partielle à vérifier dans le profil approuvé"
+            )
+            item["profile_evidence"] = evidence
+            item["evidence_quality"] = "partial" if evidence else "missing"
+            item["blocking_note"] = (
+                "Le profil prouve un niveau ou un fait différent de l’exigence. Tu peux uniquement décrire la preuve existante telle quelle ; ne la reformule pas comme si elle satisfaisait l’exigence."
+                if verdict in {"unsupported", "contradicted"}
+                else "Le profil contient un élément lié à l’exigence, mais il ne prouve pas encore tous ses éléments. N’affiche pas l’exigence complète comme acquise."
+            )
+            item["suggested_change"] = (
+                f"Exigence : « {requirement} ». "
+                + (f"Preuve approuvée : « {evidence} ». " if evidence else "Aucune preuve complète n’est enregistrée. ")
+                + (f"{reason} " if reason else "")
+                + "Présente seulement les faits prouvés et vérifie l’écart avant de préparer le dossier."
+            )
+            item["why"] = reason or item.get("why", "")
+
+    coverage = preparation.get("cv_coverage")
+    if not isinstance(coverage, dict):
+        return
+    applicable_fits = [
+        fit for fit in raw_fits
+        if isinstance(fit, Mapping) and fit.get("verdict") != "not_applicable"
+    ]
+    if not applicable_fits:
+        return
+    counts = {
+        verdict: sum(1 for fit in applicable_fits if fit.get("verdict") == verdict)
+        for verdict in ("supported", "to_verify", "unsupported", "contradicted")
+    }
+    total = len(applicable_fits)
+    coverage.update(
+        requirements_total=total,
+        supported=counts["supported"],
+        to_verify=counts["to_verify"],
+        unsupported=counts["unsupported"],
+        contradicted=counts["contradicted"],
+        coverage_percent=round(counts["supported"] / total * 100),
+        label="Exigences appuyées par des preuves suffisantes",
+        disclaimer=(
+            "Le taux compte les exigences dont la preuve approuvée a été jugée suffisante par la comparaison locale. "
+            "Une preuve partielle, insuffisante ou absente ne compte pas comme conforme."
+        ),
+    )
+
+
 def summarize_offer(job: dict[str, Any]) -> dict[str, Any]:
     """Local, deterministic, factual summary of one offer (no model, no network)."""
     intelligence = job.get("offer_intelligence")

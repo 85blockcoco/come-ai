@@ -324,6 +324,13 @@ footer { margin: 18px 3px 0; color: var(--muted); font-size: .72rem; line-height
 .stagehunter-domains { display: flex; flex-wrap: wrap; gap: 7px 14px; }
 .stagehunter-domain { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--ink); }
 .stagehunter-domain input { width: 16px; min-height: 16px; accent-color: var(--accent); }
+.stagehunter-defaults-note { padding: 11px 13px; border: 1px solid #c9ded2; border-radius: 11px; color: var(--accent-dark); background: var(--surface-soft); font-size: .8rem; line-height: 1.5; }
+.stagehunter-advanced { border: 1px solid var(--border); border-radius: 12px; background: var(--surface-muted); }
+.stagehunter-advanced > summary { display: flex; align-items: baseline; flex-wrap: wrap; gap: 5px 10px; min-height: 44px; padding: 11px 14px; color: var(--accent-dark); cursor: pointer; font-size: .82rem; font-weight: 740; }
+.stagehunter-advanced > summary span { color: var(--muted); font-size: .73rem; font-weight: 500; }
+.stagehunter-advanced[open] > summary { border-bottom: 1px solid var(--border); }
+.stagehunter-advanced-content { padding: 14px; }
+.stagehunter-advanced:focus-within { border-color: var(--focus); }
 .stagehunter-ranking { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 9px; }
 .stagehunter-weight { display: flex; align-items: center; justify-content: space-between; gap: 9px; font-size: .78rem; color: var(--muted); }
 .stagehunter-weight input { width: 74px; }

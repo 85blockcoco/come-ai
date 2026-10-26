@@ -65,7 +65,11 @@ from .application_dashboard import (
     build_dashboard_payload,
 )
 from .action_center import build_application_action_center
-from .application_prep import prepare_application, summarize_offer
+from .application_prep import (
+    prepare_application,
+    reconcile_cv_plan_with_requirements_fit,
+    summarize_offer,
+)
 from .application_sprint import MAX_SPRINT_CANDIDATES, MAX_SPRINT_ITEMS, build_application_sprint
 from .requirements_fit import analyze_fit
 from .source_trust import check_trust, status_label as source_trust_label
@@ -2186,6 +2190,9 @@ class CareerService:
             analysis["requirements_fit"] = analyze_fit(
                 job, {"facts": approved_profile_facts}
             ).to_dict()
+            reconcile_cv_plan_with_requirements_fit(
+                analysis, analysis["requirements_fit"]
+            )
         cv_analysis = _cv_analysis if _cv_analysis is not None else self._current_cv_analysis()
         qualification = (
             dict(_qualification)

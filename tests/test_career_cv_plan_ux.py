@@ -344,16 +344,16 @@ assert.match(improvementRow.textContent, /Amélioration/);
 assert.match(improvementRow.textContent, /ajoute un résultat chiffré uniquement si tu peux le prouver/);
 // La ligne de couverture explique la mesure documentaire et exclut la probabilité.
 const summaryMatch = nodes.find((node) => matchesClass(node, "cv-plan-summary"));
-assert.match(summaryMatch.textContent, /2\/5 exigences détectées sont étayées par ton profil/);
-assert.match(summaryMatch.textContent, /couverture documentaire 40 %/);
+assert.match(summaryMatch.textContent, /2\/5 exigences appuyées par des preuves suffisantes/);
+assert.match(summaryMatch.textContent, /40 % confirmées/);
 assert.match(summaryMatch.textContent, /langue cible en/);
 const disclaimer = nodes.find((node) => node.textContent === "Ce n’est pas une probabilité d’embauche : c’est un contrôle des preuves actuellement présentes dans ton profil.");
 assert(disclaimer, "l’avertissement non-probabiliste est affiché");
 // Explication dépliable de la couverture documentaire.
 const help = nodes.find((node) => node.tag === "details");
 assert(help, "l’aide à la couverture est repliable");
-assert.match(help.textContent, /retrouvées mot pour mot/);
-assert.match(help.textContent, /jamais inventée/);
+assert.match(help.textContent, /preuve approuvée/);
+assert.match(help.textContent, /ne compte jamais comme une exigence satisfaite/);
 assert.strictEqual(networkRequests.length, 0);
 '''.replace("PREP", fixture_prep())
     _run_node_script(script)

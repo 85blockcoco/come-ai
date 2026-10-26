@@ -274,7 +274,7 @@ function renderCvPlanSection(target, prep, job) {
     make(
       "p",
       hasCoverage
-        ? `${coverage.supported || 0}/${coverage.requirements_total || 0} exigences détectées sont étayées par ton profil · couverture documentaire ${coverage.coverage_percent || 0} % · langue cible ${coverage.target_language || "à confirmer"}.`
+        ? `${coverage.supported || 0}/${coverage.requirements_total || 0} exigences appuyées par des preuves suffisantes · ${coverage.coverage_percent || 0} % confirmées · ${coverage.to_verify || 0} à vérifier · ${coverage.unsupported || 0} écart(s) établi(s) · ${coverage.contradicted || 0} contradiction(s) · langue cible ${coverage.target_language || "à confirmer"}.`
         : "Analyse locale en cours : aucune exigence détectée n’est encore comptabilisée.",
       "scoring-title cv-plan-summary",
     ),
@@ -292,8 +292,8 @@ function renderCvPlanSection(target, prep, job) {
     help.append(make("summary", "Que mesure la couverture documentaire ?"));
     const helpList = make("ul", "", "job-reasons");
     [
-      "La couverture compte uniquement les exigences écrites dans le texte de l’offre disponible localement et retrouvées mot pour mot dans une rubrique de ton profil (compétences, expériences, formation, langues, informations complémentaires).",
-      "« À vérifier » signifie qu’aucune preuve exacte n’a été trouvée : l’information manque, elle n’est jamais inventée et rien d’infondé n’est copiable depuis l’interface.",
+      "Le pourcentage compte les exigences dont une preuve approuvée a été jugée suffisante par la comparaison locale entre l’offre et ton profil. Un simple mot-clé commun ou une preuve partielle ne suffit pas à les déclarer couvertes.",
+      "« À vérifier » signifie que les faits enregistrés ne suffisent pas à conclure. Un écart établi ou une contradiction reste visible et ne compte jamais comme une exigence satisfaite.",
       "Les marques « revu » restent dans ce navigateur uniquement ; ton CV source et ton profil ne sont jamais modifiés par ce plan.",
     ].forEach((text) => helpList.append(make("li", text)));
     help.append(helpList);
@@ -411,7 +411,7 @@ function renderCvPlanItem(entry, job, coverage, reviewed, context) {
     copy.append(
       make(
         "p",
-        "Blocage factuel : n’inscris pas cette exigence dans ton CV tant qu’aucune preuve vérifiable n’existe côté profil.",
+        item.blocking_note || "Blocage factuel : n’inscris pas cette exigence dans ton CV tant qu’aucune preuve vérifiable n’existe côté profil.",
         "scoring-disclaimer cv-plan-blocking-note",
       ),
     );

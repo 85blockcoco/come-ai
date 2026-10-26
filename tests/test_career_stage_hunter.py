@@ -284,6 +284,46 @@ def test_job_prep_compares_offer_requirements_with_saved_profile_facts(tmp_path:
     assert fit["to_verify_count"] >= 1  # absence is never treated as incompatibility
 
 
+def test_cv_plan_coverage_never_counts_partial_or_insufficient_fit_as_supported(tmp_path: Path) -> None:
+    service = CareerService(tmp_path)
+    service.update_profile({
+        "education": "Master 1 Finance — synthetic profile",
+        "skills": "Excel modelling and valuation",
+        "languages": "English B2",
+    })
+    job = service.import_job(
+        synthetic_job(
+            requirements="Excel modelling and valuation are required.",
+            languages_required="English fluency required.",
+        )
+    )
+
+    prep = service.get_job_prep(job["id"])
+
+    fit = prep["requirements_fit"]
+    coverage = prep["cv_coverage"]
+    assert coverage["supported"] == fit["supported_count"]
+    assert coverage["to_verify"] == fit["to_verify_count"]
+    assert coverage["unsupported"] == fit["unsupported_count"]
+    assert coverage["contradicted"] == fit["contradicted_count"]
+    assert coverage["requirements_total"] == sum(
+        fit[key] for key in (
+            "supported_count", "to_verify_count", "unsupported_count", "contradicted_count"
+        )
+    )
+    unsupported_ids = {
+        item["requirement_id"] for item in fit["fits"]
+        if item["verdict"] in {"unsupported", "contradicted", "to_verify"}
+    }
+    plan_items = {
+        item.get("requirement_id"): item for item in prep["cv_action_plan"]
+    }
+    for requirement_id in unsupported_ids.intersection(plan_items):
+        assert plan_items[requirement_id]["status"] == "needs_evidence"
+        assert plan_items[requirement_id]["action_type"] == "do_not_overstate"
+        assert plan_items[requirement_id]["blocking_note"]
+
+
 def test_job_prep_carries_reconstructed_source_trust_and_temporal_evidence(tmp_path: Path) -> None:
     service = CareerService(tmp_path)
     payload = synthetic_job(

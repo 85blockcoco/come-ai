@@ -38,6 +38,28 @@ def test_stage_search_exposes_accessible_progress_and_result_summary() -> None:
     assert 'id="stagehunter-result-summary"' in html
 
 
+def test_stagehunter_keeps_first_run_criteria_visible_and_advanced_filters_collapsible() -> None:
+    html = HTML.read_text(encoding="utf-8")
+    core_criteria = html.index('id="stagehunter-start-date"')
+    advanced = html.index('<details class="stagehunter-advanced">')
+    finance_domains = html.index('id="stagehunter-domains"')
+    save_button = html.index("Enregistrer mes critères")
+    assert core_criteria < advanced < finance_domains < save_button
+    assert 'id="stagehunter-min-stage-duration"' in html
+    assert 'offres à partir du 1<sup>er</sup> janvier 2027' in html
+    assert "stages de six mois minimum" in html
+    # The default branch is closed so the first screen emphasizes start date,
+    # minimum duration and contract before optional matching refinements.
+    assert '<details class="stagehunter-advanced" open' not in html
+
+
+def test_stagehunter_cycle_summary_follows_the_five_user_steps() -> None:
+    html = HTML.read_text(encoding="utf-8")
+    last_step = html.index('<p class="eyebrow">Étape E</p>')
+    overview = html.index("stagehunter-pipeline-panel")
+    assert last_step < overview
+
+
 def test_offer_fact_helpers_never_replace_missing_information_with_an_invention() -> None:
     source = SCRIPT.read_text(encoding="utf-8")
     helpers = source.split("function formatStageDate(", 1)[1].split(
