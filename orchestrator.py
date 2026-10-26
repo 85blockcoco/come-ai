@@ -235,6 +235,15 @@ def run_worker(worktree_path: str, prompt: str, order_id: str) -> dict:
     # Copier les fichiers référencés dans le worktree AVANT le lancement :
     # sans eux, l'agent lance `find / -name WORKER_TEMPLATE.md` (scan disque
     # complet, x8 workers = load average > 300 et machine à genoux).
+    # Empêcher Spotlight d'indexer le worktree : chaque nouveau worktree
+    # déclenche sinon un orage mdworker (load average > 300, CPU système 36%).
+    try:
+        _ni = Path(worktree_path) / ".metadata_never_index"
+        if not _ni.exists():
+            _ni.write_text("", encoding="utf-8")
+    except Exception:
+        pass
+
     for _name in ("WORKER_TEMPLATE.md",):
         _src = Path(__file__).resolve().parent / _name
         _dst = Path(worktree_path) / _name
