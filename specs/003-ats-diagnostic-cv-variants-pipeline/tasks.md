@@ -17,13 +17,13 @@ The original checklist was generated for `AI-Excel-Agent-application-sprint`; th
 - T005-T044 are implemented and covered by the existing variant, coverage, kit, API, UI and pipeline tests.
 - T045, T047-T057 are implemented/adapted and covered with synthetic Canva-equivalent PDFs, including a split experience continued on page two. Coordinate extraction uses the existing `pypdf` visitor API rather than adding `pdfplumber`; no dependency was added.
 - T046 remains open for a real personal CV; synthetic fixtures were used instead. No personal CV was read.
-- T058 current code run at `edb624204a372117148e1d523a8971547d2e94d3`: **2,973 passed, 2 skipped, 0 failed in 291.75 s** (`COME_AI_DIAGNOSTICS_OFFLINE=1`). The two skipped macOS sandbox tests were invoked separately on an earlier SHA but were skipped by the active outer sandbox in this campaign; no current-runner real-sandbox pass is claimed.
+- T058 current code run at `43f533cf888ee10c20e89df33d33dfb688189000`: **2,974 passed, 2 skipped, 0 failed in 267.59 s** (`COME_AI_DIAGNOSTICS_OFFLINE=1`). The two skipped tests require real nested macOS sandboxes; no current-runner real-sandbox pass is claimed.
 - T059 focused Career criteria/search/deduplication matrix on the current implementation: **282 passed in 38.34 s**. The complete suite also includes the Spec 003 feature, Dev Kit active-cycle resume and Career import tests.
 - T060 remains open. A synthetic local browser run on `9c0304da98f3c6eabf10e93cdddd199b21c765be` completed manual import, qualification, explicit language selection, kit creation, local tracking and persistence after restarting the app process. The exact current revision could not be reopened in the browser during the latest turn; official-source discovery and local file selection remain unverified.
-- T061 has a repeatable synthetic offline harness at `scripts/benchmark_career_spec003.py`. Latest recorded Sprint run after reusing qualification results: 150 candidates median 777.3 ms (target <500 ms, **miss**); kit median 345.6 ms (target <2,000 ms, pass); pipeline 50 offers median 151.8 ms (target <200 ms, pass); PDF analysis median 22.4 ms (target <3,000 ms, pass; 4 synthetic experiences). The full suite on `82e5623` failed the 500-offer deduplication timing assertion (516 ms vs <200 ms); isolated pre-optimization measurements ranged from 428 to 762 ms while host load average was approximately 386. After bounded URL and redundant-pair fast paths, the full deduplication module passed (**163 passed in 3.67 s**, including the <200 ms assertion) and the isolated timing assertion passed three more times (pytest durations 2.27, 3.06 and 2.45 s including startup). The Sprint 500 ms target remains open.
+- T061 passes on `43f533c` using the synthetic offline harness: Sprint 150 candidates median 337.5 ms (target <500 ms); application kit median 291.9 ms (<2,000 ms); pipeline 50 offers median 78.7 ms (<200 ms); PDF analysis median 12.6 ms (<3,000 ms; 4 experiences detected). Strict command: `COME_AI_DIAGNOSTICS_OFFLINE=1 /Users/comedelavenne/AI-Excel-Agent/.venv/bin/python scripts/benchmark_career_spec003.py --strict` (exit 0). The full deduplication module passed 163 tests including its <200 ms assertion.
 - T063 is complete for the tested synthetic/API contracts and benchmark command; this plan records the latest measured limits and open acceptance work.
 - T065 (formal Constitution checklist) and T066 (merge readiness) remain open. A real CV was not opened; no assertion about personal-CV validation is made.
-- Global `ruff check .`, JavaScript syntax checks and compileall passed on the earlier `edb6242` validation SHA. On the current working tree, targeted Ruff checks, `node --check career_static/career.js` and `git diff --check` pass. A repo-wide formatter was not run; formatting is not marked complete.
+- Global `ruff check .`, Career/Evolution/Dev Kit JavaScript syntax checks, `compileall -q career devkit data` and `git diff --check` passed on `43f533c`. `ruff format --check` reports five files would be broadly reformatted; no formatter was run to avoid unrelated churn, so T062 remains open pending an explicit formatting policy.
 
 ## Format: `[ID] [P?] [Story?] Description with file path`
 
@@ -179,12 +179,12 @@ The original checklist was generated for `AI-Excel-Agent-application-sprint`; th
 **Purpose**: Improvements affecting multiple user stories, validation, and delivery readiness
 
 - [ ] T060 [P] **Quickstart validation** — Complete a current-revision browser journey from discovery through qualification, prep, kit, tracking and persistence; route/render smoke alone does not verify all SC-001 through SC-010.
-- [ ] T061 [P] **Performance benchmarks** — Latest reproducible Sprint and deduplication measurements are logged in plan.md; both retain open timing targets and the post-optimization deduplication benchmark needs a stable-load rerun.
-- [ ] T062 [P] **Linting & formatting** — Targeted Ruff, Career JavaScript syntax and diff checks pass on current code; global checks are historical on an earlier SHA. Record a formatting policy without reformatting unrelated files.
+- [x] T061 [P] **Performance benchmarks** — Current strict synthetic benchmark passes the Sprint, kit, pipeline and PDF targets; detailed medians and command are logged in plan.md.
+- [ ] T062 [P] **Linting & formatting** — `ruff check .`, Career/Evolution/Dev Kit JavaScript syntax, `compileall` and diff checks pass on `43f533c`. `ruff format --check` reports five touched/legacy files would be broadly reformatted; no formatter was run to avoid unrelated churn. Record the accepted formatting policy.
 - [x] T063 [P] **Documentation updates** — This plan and status record now match measured synthetic results and outstanding acceptance gaps.
 - [x] T064 **End-to-end regression test** — The full suite includes the existing synthetic HTTP journey test from exploration to a persisted manual kit; this is HTTP integration coverage, not a browser E2E claim.
 - [ ] T065 **Constitution compliance check** — Formal checklist has not been completed for the current candidate.
-- [ ] T066 **Prepare merge request** — Candidate is not ready: sprint benchmark misses target; browser click-through, formatting decision and exact-runner sandbox verification remain open.
+- [ ] T066 **Prepare merge request** — Candidate is not ready: current full-suite run, exact-revision browser click-through, formatting decision, Constitution review and real sandbox verification remain open.
 
 ---
 
