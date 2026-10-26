@@ -2,8 +2,9 @@
    Toutes les données viennent de l'API locale (127.0.0.1) : aucune requête externe. */
 (() => {
   "use strict";
+  window.__appState = null;
 
-  const state = {
+  const state = window.__appState = {
     view: "today",
     dashboard: null,
     pipeline: null,
@@ -11,6 +12,7 @@
     overview: null,
     missions: null,
     filter: "",
+    tracker: null,
     chat: [],
     chatMode: "offline",
     sending: false,
@@ -61,6 +63,7 @@
   const VIEWS = {
     today: { title: "Aujourd’hui", subtitle: "état du système · ce qui compte maintenant" },
     applications: { title: "Candidatures", subtitle: "chaque dossier, son étape, sa prochaine action" },
+    tracking: { title: "Suivi", subtitle: "envois confirmés · relances à copier" },
     offers: { title: "Offres", subtitle: "offres suivies · filtre instantané" },
     assistant: { title: "Terminal", subtitle: "assistant local · aucun cloud par défaut" },
     missions: { title: "Missions", subtitle: "flotte de construction · preuves vérifiées" },
@@ -89,6 +92,7 @@
   const loaders = {
     dashboard: async () => (state.dashboard = await api("/api/career/dashboard")),
     pipeline: async () => (state.pipeline = await api("/api/career/application-pipeline")),
+    tracker: async () => (state.tracker = await api("/api/career/apply-tracker")),
     jobs: async () => (state.jobs = await api("/api/career/jobs?limit=300")),
     overview: async () => (state.overview = await api("/api/v5/overview")),
     missions: async () => (state.missions = await api("/api/app/missions")),
@@ -100,7 +104,8 @@
     // pipeline peut prendre ~13 s ; inutile de bloquer tout l'écran).
     const results = await Promise.allSettled(
       Object.values(loaders).map(async (load) => {
-        await load();
+        try { await load(); }
+        catch (e) { console.error("LOADER_FAIL:", e.message); throw e; }
         setStatus("online", "Local · 127.0.0.1");
         renderBadges();
         render(state.view);
@@ -138,6 +143,9 @@
   function renderBadges() {
     const active = state.pipeline?.pipeline?.length ?? 0;
     const badge = $("#badgeApplications");
+    const bt = $("#badgeTracking");
+    const due = state.tracker?.totals?.due ?? state.tracker?.totals?.overdue ?? 0;
+    bt.hidden = !due; bt.textContent = String(due);
     badge.hidden = !active;
     badge.textContent = String(active);
     const workers = state.missions?.workers ?? 0;
@@ -274,6 +282,10 @@
         item.official_url
           ? el("a", { class: "chip violet", href: item.official_url, target: "_blank", rel: "noopener" }, "offre ↗")
           : null,
+        el("button", { class: "chip green", type: "button", title: "Réponses types copiables",
+          onclick: (event) => { event.stopPropagation(); showQuickAnswers(item.job_id, item.title); } }, "réponses"),
+        el("button", { class: "chip", type: "button", title: "Marquer envoyé (confirmation humaine)",
+          onclick: (event) => { event.stopPropagation(); markSent(item.job_id, item.title); } }, "marqué envoyé"),
       ),
     );
   }
@@ -517,6 +529,67 @@
           "Mode Hors ligne actif : Ollama et outils locaux uniquement. Aucun fournisseur cloud n’est appelé sans une autorisation explicite, réutilisable une seule fois."),
       ),
     );
+  }
+
+  function renderTracking() {
+    const host = $("#view-tracking");
+    const t = state.tracker;
+    if (!t) { host.replaceChildren(loading()); return; }
+    const items = t.items ?? [];
+    host.replaceChildren(
+      el("div", { class: "grid kpi" },
+        el("div", { class: "card kpi-card" }, el("div", { class: "kpi-top" }, el("span", { class: "kpi-label" }, "Envoyés"), el("span", { class: "kpi-chip" }, "✓")), el("div", { class: "kpi-value" }, String(t.totals?.sent_without_response ?? items.length)), el("div", { class: "kpi-foot" }, "sans réponse")),
+        el("div", { class: "card kpi-card" }, el("div", { class: "kpi-top" }, el("span", { class: "kpi-label" }, "À relancer"), el("span", { class: "kpi-chip" }, "◷")), el("div", { class: "kpi-value" }, String(t.totals?.due ?? 0)), el("div", { class: "kpi-foot" }, "échéance atteinte")),
+        el("div", { class: "card kpi-card" }, el("div", { class: "kpi-top" }, el("span", { class: "kpi-label" }, "En retard"), el("span", { class: "kpi-chip" }, "!")), el("div", { class: "kpi-value" }, String(t.totals?.overdue ?? 0)), el("div", { class: "kpi-foot" }, "relance urgente")),
+      ),
+      el("div", { class: "section-title" }, el("h2", {}, "Candidatures envoyées"), el("span", { class: "hint" }, "confirmation humaine · relance à copier")),
+      el("div", { class: "card" }, items.length ? items.map((it) => el("div", { class: "pipeline-item" },
+        el("div", { class: "pipeline-main" }, el("strong", {}, it.title || "Dossier"), el("span", {}, `${it.company || "—"} · envoyé ${it.sent_at || "—"}`), el("div", { class: "next" }, `relance prévue : ${it.follow_up_due || "—"}`)),
+        el("div", { class: "pipeline-progress" }, el("div", { class: "bar" }, el("i", { style: `width:${Math.min(100, it.progress_percent || 100)}%` })), el("small", {}, it.channel || "site")),
+        el("div", { class: "offer-tags" }, it.follow_up_draft ? el("button", { class: "chip green", type: "button", onclick: () => copyText(it.follow_up_draft) }, "copier relance") : null),
+      )) : emptyState("Aucun envoi confirmé", "Marque une candidature « envoyé » pour la suivre ici.")),
+      el("p", { class: "note tight" }, t.honesty || "Sont listées les candidatures déclarées envoyées."),
+    );
+  }
+
+  async function showQuickAnswers(jobId, title) {
+    let data;
+    try { data = await api(`/api/career/quick-answers/${jobId}`); }
+    catch (e) { alert(`Réponses indisponibles : ${e.message}`); return; }
+    const overlay = el("div", { class: "modal-overlay", onclick: (ev) => { if (ev.target === overlay) overlay.remove(); } });
+    const box = el("div", { class: "card modal-box" },
+      el("div", { class: "section-title", style: "margin-top:0" }, el("h2", {}, `Réponses types — ${title || "offre"}`), el("span", { class: "hint" }, `${data.answers?.length ?? 0} questions`)),
+      el("div", { class: "quick-list" }, (data.answers || []).map((a) =>
+        el("div", { class: "quick-row" },
+          el("div", { class: "quick-label" }, a.label || a.question || "—"),
+          el("div", { class: "quick-value" }, a.value || "(à compléter)"),
+          el("button", { class: "chip", type: "button", onclick: () => copyText(a.value || "") }, "copier"),
+          el("span", { class: `chip ${a.confidence === "exact" ? "green" : a.confidence === "derived" ? "amber" : "red"}` }, a.confidence || "—"),
+        ))),
+      el("button", { class: "ghost-btn", type: "button", onclick: () => overlay.remove(), style: "margin-top:12px" }, "Fermer"),
+    );
+    overlay.append(box);
+    document.body.append(overlay);
+  }
+
+  async function markSent(jobId, title) {
+    const channel = prompt(`Canal d'envoi pour « ${title || "cette offre"} » ?\n(site / email / portal)`, "site");
+    if (!channel) return;
+    const iso = new Date().toISOString().slice(0, 19) + "Z";
+    try {
+      await api(`/api/career/send-confirmation/${jobId}`, { method: "POST", body: JSON.stringify({ channel, sent_at: iso }) });
+      await loaders.tracker();
+      renderBadges();
+      if (state.view === "tracking") renderTracking();
+      alert("Envoi enregistré. Tu peux le suivre dans « Suivi ».");
+    } catch (e) { alert(`Échec : ${e.message}`); }
+  }
+
+  function copyText(text) {
+    if (!text) return;
+    (navigator.clipboard?.writeText ? navigator.clipboard.writeText(text) : Promise.resolve())
+      .then(() => {}).catch(() => {});
+    const ta = document.createElement("textarea"); ta.value = text; document.body.append(ta); ta.select(); document.execCommand("copy"); ta.remove();
   }
 
   function emptyState(title, detail) {
