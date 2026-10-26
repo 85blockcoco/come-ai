@@ -1701,6 +1701,7 @@ class CareerService:
                     now,
                 ),
             )
+            self._invalidate_manual_review(connection, str(job["id"]))
             self._audit(connection, f"application_draft_created_{generation_mode}", "application_draft", draft_id)
         return self.get_application_draft(draft_id)
 
@@ -1731,6 +1732,17 @@ class CareerService:
             result["cv_markdown"] = row["cv_markdown"]
             result["letter_markdown"] = row["letter_markdown"]
         return result
+
+    @staticmethod
+    def _draft_review_token(draft: Mapping[str, Any]) -> str:
+        reviewed = {
+            key: str(draft.get(key) or "")
+            for key in (
+                "id", "job_id", "language", "variant", "cv_markdown", "letter_markdown",
+                "profile_updated_at", "job_updated_at",
+            )
+        }
+        return hashlib.sha256(json.dumps(reviewed, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
 
     def list_application_drafts(self) -> list[dict[str, Any]]:
         with self._lock, self._connection() as connection:
@@ -1828,14 +1840,42 @@ class CareerService:
         if not letter:
             raise UserFacingError("La lettre corrigée ne peut pas être vide.")
         with self._lock, self._connection() as connection:
+            previous = connection.execute(
+                "SELECT job_id, cv_markdown, letter_markdown FROM application_drafts WHERE id = ?", (identifier,)
+            ).fetchone()
+            if not previous:
+                raise UserFacingError("Ce brouillon de candidature n’existe pas.")
             result = connection.execute(
                 "UPDATE application_drafts SET cv_markdown = ?, letter_markdown = ? WHERE id = ?",
                 (cv, letter, identifier),
             )
             if result.rowcount != 1:
                 raise UserFacingError("Ce brouillon de candidature n’existe pas.")
+            if cv != previous["cv_markdown"] or letter != previous["letter_markdown"]:
+                self._invalidate_manual_review(connection, str(previous["job_id"]))
             self._audit(connection, "application_draft_edited", "application_draft", identifier)
         return self.get_application_draft(identifier)
+
+    def _invalidate_manual_review(self, connection: sqlite3.Connection, job_id: str) -> None:
+        """Require a new review when the documents of an unsent kit change."""
+        application = connection.execute(
+            "SELECT id, stage, approval_granted, receipt_status FROM applications WHERE job_id = ?", (job_id,)
+        ).fetchone()
+        if (
+            not application
+            or not application["approval_granted"]
+            or application["stage"] in STAGES_AT_OR_AFTER_SENT
+            or application["receipt_status"] == "confirmed"
+        ):
+            return
+        connection.execute(
+            "UPDATE applications SET approval_granted = 0, stage = 'to_review', updated_at = ? WHERE id = ?",
+            (utc_now(), application["id"]),
+        )
+        self._application_event(
+            connection, str(application["id"]), job_id, "manual_review_invalidated",
+            "Les documents ont changé ; une nouvelle revue humaine est nécessaire.",
+        )
 
     def get_preferences(self) -> dict[str, Any]:
         with self._lock, self._connection() as connection:
@@ -3769,6 +3809,12 @@ class CareerService:
         variant: str | None = None,
     ) -> dict[str, Any]:
         """Prepare a local, human-reviewed dossier for one saved offer."""
+        with self._lock:
+            return self._build_apply_kit(job_id, language, variant)
+
+    def _build_apply_kit(
+        self, job_id: str, language: str, variant: str | None
+    ) -> dict[str, Any]:
         identifier = clean_text(job_id, limit=80)
         if not identifier:
             raise UserFacingError("Indique l'offre à préparer.")
@@ -4325,7 +4371,9 @@ class CareerService:
             self._audit(connection, "application_stage_updated", "application", application_id)
         return self.get_application(application_id)
 
-    def approve_for_manual_submission(self, application_id: str, approved: bool, note: str = "") -> dict[str, Any]:
+    def approve_for_manual_submission(
+        self, application_id: str, approved: bool, note: str = "", *, draft_id: str = "", review_token: str = ""
+    ) -> dict[str, Any]:
         if not approved:
             raise UserFacingError("L’approbation explicite est requise pour cette offre précise.")
         with self._lock, self._connection() as connection:
@@ -4336,6 +4384,29 @@ class CareerService:
                 raise UserFacingError("Cette candidature Career n’existe pas.")
             if application["receipt_status"] == "confirmed":
                 raise UserFacingError("La réception de cette candidature est déjà confirmée.")
+            if draft_id or review_token:
+                reviewed = connection.execute(
+                    """
+                    SELECT application_drafts.*, candidate_profile.updated_at AS current_profile_revision,
+                           jobs.updated_at AS current_offer_revision, career_intake.updated_at AS current_intake_revision
+                    FROM application_drafts
+                    JOIN jobs ON jobs.id = application_drafts.job_id
+                    JOIN candidate_profile ON candidate_profile.id = 1
+                    LEFT JOIN career_intake ON career_intake.id = 1
+                    WHERE application_drafts.id = ? AND application_drafts.job_id = ?
+                    """,
+                    (clean_text(draft_id, limit=80), application["job_id"]),
+                ).fetchone()
+                reviewed = dict(reviewed) if reviewed else {}
+                if (
+                    not reviewed
+                    or not re.fullmatch(r"[0-9a-f]{64}", review_token)
+                    or self._draft_review_token(reviewed) != review_token
+                    or reviewed.get("profile_updated_at") != reviewed.get("current_profile_revision")
+                    or reviewed.get("job_updated_at") != reviewed.get("current_offer_revision")
+                    or str(reviewed.get("created_at") or "") < str(reviewed.get("current_intake_revision") or "")
+                ):
+                    raise UserFacingError("Le dossier affiché a changé ou n’est plus à jour. Rouvre sa préparation avant de l’approuver.")
             if application["approval_granted"]:
                 return self.get_application(application_id)
             connection.execute(
@@ -4825,6 +4896,15 @@ class CareerService:
     def create_application_kit(
         self, job_id: str, language: Any, variant: Any = "m_a"
     ) -> dict[str, Any]:
+        # One request owns draft selection and generation at a time. A double
+        # click must not race another request into creating a second draft or
+        # writing the same derived document paths concurrently.
+        with self._lock:
+            return self._create_application_kit(job_id, language, variant)
+
+    def _create_application_kit(
+        self, job_id: str, language: Any, variant: Any
+    ) -> dict[str, Any]:
         """Open (or reopen) the preparation kit for one explicitly chosen offer.
 
         Idempotent by design: the tracker record is created only if absent
@@ -4842,9 +4922,15 @@ class CareerService:
         with self._lock, self._connection() as connection:
             existing = connection.execute(
                 """
-                SELECT id FROM application_drafts
-                WHERE job_id = ? AND language = ? AND variant = ?
-                ORDER BY created_at DESC, application_drafts.rowid DESC LIMIT 1
+                SELECT application_drafts.id FROM application_drafts
+                JOIN jobs ON jobs.id = application_drafts.job_id
+                JOIN candidate_profile ON candidate_profile.id = 1
+                LEFT JOIN career_intake ON career_intake.id = 1
+                WHERE application_drafts.job_id = ? AND language = ? AND variant = ?
+                  AND application_drafts.profile_updated_at = candidate_profile.updated_at
+                  AND application_drafts.job_updated_at = jobs.updated_at
+                  AND application_drafts.created_at >= COALESCE(career_intake.updated_at, '')
+                ORDER BY application_drafts.created_at DESC, application_drafts.rowid DESC LIMIT 1
                 """,
                 (identifier, normalized_language, selected_variant.id),
             ).fetchone()
@@ -4991,6 +5077,7 @@ class CareerService:
             },
             "job": job,
             "draft": draft,
+            "review_token": self._draft_review_token(draft) if draft else None,
             "language": kit_language,
             "kit_texts": {field: kit_texts.get(field, "") for field in KIT_TEXT_FIELDS},
             "kit_edited": bool(edits),

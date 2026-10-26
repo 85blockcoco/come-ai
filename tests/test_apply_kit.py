@@ -40,6 +40,7 @@ def synthetic_job(**changes):
 def synthetic_profile():
     return {
         "display_name": "Personne Démo",
+        "contact_email": "demo@example.test",
         "education": "Master Finance (démo)",
         "experience": "Projet étudiant de modélisation (démo)",
         "skills": "Excel, analyse financière",
@@ -78,8 +79,11 @@ def kit_client(service):
 
 
 def test_apply_kit_complete():
-    job = verified_conforming_job()
-    kit = build_apply_kit(job["source_id"], synthetic_profile(), job=job)
+    job = verified_conforming_job(requirements="Excel")
+    kit = build_apply_kit(
+        job["source_id"], synthetic_profile(), job=job,
+        intake={"answers": {"target_roles": "Analyste finance (démo)", "missions": "Analyse financière (démo)"}},
+    )
     assert kit.job_id == job["source_id"]
     assert kit.readiness == 100
     assert kit.block_reasons == []
@@ -90,6 +94,14 @@ def test_apply_kit_complete():
     assert isinstance(kit.checklist, list) and kit.checklist
     assert kit.deep_link == "https://careers.example.test/jobs/demo-42"
     assert isinstance(kit.export_urls, dict)
+
+
+def test_apply_kit_blocks_unfinished_document_placeholders():
+    kit = build_apply_kit("synthetic", synthetic_profile(), job=verified_conforming_job())
+
+    assert kit.readiness < 100
+    assert kit.fact_checks["document_placeholders"]
+    assert any("document" in reason.lower() for reason in kit.block_reasons)
 
 
 def test_apply_kit_incomplete(tmp_path: Path):
@@ -122,6 +134,14 @@ def test_apply_kit_endpoint_smoke(tmp_path: Path):
     first_exports = data["export_urls"]
     assert set(first_exports) == {"cv_pdf", "letter_pdf", "cv_docx", "letter_docx"}
     application = service.list_applications()[0]
+    assert data["application"]["id"] == application["id"]
+    assert data["draft_id"] == service.list_application_drafts()[0]["id"]
+    assert data["language"] == "fr"
+    assert data["fact_checks"]["document_placeholders"]
+    assert len(data["review_token"]) == 64
+    approval_url = f"/api/career/applications/{application['id']}/approve"
+    reviewed = {"approved": True, "draft_id": data["draft_id"], "review_token": data["review_token"]}
+    assert client.post(approval_url, json={**reviewed, "review_token": "0" * 64}).status_code == 400
     assert application["stage"] == "to_review"
     assert application["approval_granted"] is False
     repeat = client.post(f"/api/career/apply-kit/{job_id}")

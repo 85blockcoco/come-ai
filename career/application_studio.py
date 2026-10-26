@@ -898,7 +898,9 @@ def build_kit_texts(
     }
 
 
-def scan_kit_placeholders(texts: dict[str, Any]) -> list[str]:
+def scan_kit_placeholders(
+    texts: dict[str, Any], *, fields: tuple[str, ...] = KIT_TEXT_FIELDS
+) -> list[str]:
     """List every bracketed item the reader must still complete or re-check.
 
     This is the local fact-check surface for the kit texts: nothing generated
@@ -906,9 +908,9 @@ def scan_kit_placeholders(texts: dict[str, Any]) -> list[str]:
     an explicit, editable marker.
     """
     markers: list[str] = []
-    for field in KIT_TEXT_FIELDS:
+    for field in fields:
         value = str(texts.get(field) or "") if isinstance(texts, dict) else ""
-        for match in re.findall(r"\[[^\[\]\n]{2,160}\]", value):
+        for match in re.findall(r"\[[^\[\]\n]{2,160}\](?!\()", value):
             marker = match.strip()
             if marker and marker not in markers:
                 markers.append(marker)

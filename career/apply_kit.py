@@ -10,11 +10,11 @@ helpers.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field as dataclass_field
 from typing import Any, Mapping
 
 from career.application_prep import prepare_application
-from career.application_studio import build_kit_texts, build_local_application_draft
+from career.application_studio import build_kit_texts, build_local_application_draft, scan_kit_placeholders
 from career.cv_fit import classify_variant
 from career.cv_variants import ALL_VARIANTS
 from career.models import clean_text
@@ -33,6 +33,11 @@ class ApplyKit:
     checklist: list[dict[str, Any]]
     deep_link: str | None
     export_urls: dict[str, str]
+    application: dict[str, Any] | None = None
+    draft_id: str | None = None
+    language: str = "fr"
+    fact_checks: dict[str, Any] = dataclass_field(default_factory=dict)
+    review_token: str | None = None
 
 
 _REQUIRED_PROFILE_FIELDS: tuple[str, ...] = (
@@ -376,6 +381,9 @@ def build_apply_kit(
     # Export urls: prefer a persisted draft when a service is available.
     export_urls: dict[str, str] = {}
     draft_id: str | None = None
+    application_payload: dict[str, Any] | None = None
+    fact_checks: dict[str, Any] = {}
+    review_token: str | None = None
     kit_result: Mapping[str, Any] | None = None
     if service is not None:
         try:
@@ -383,6 +391,13 @@ def build_apply_kit(
                 resolved_job_id, normalized_language, variant or (variant_payload or {}).get("id") or "m_a"
             )
             if isinstance(kit_result, Mapping):
+                review_token = str(kit_result.get("review_token") or "") or None
+                application = kit_result.get("application")
+                if isinstance(application, Mapping):
+                    application_payload = dict(application)
+                kit_checks = kit_result.get("fact_checks")
+                if isinstance(kit_checks, Mapping):
+                    fact_checks = dict(kit_checks)
                 draft = kit_result.get("draft")
                 if isinstance(draft, Mapping):
                     draft_id = str(draft.get("id") or "").strip() or None
@@ -423,6 +438,13 @@ def build_apply_kit(
         letter=letter_payload,
         exports_ready=exports_ready,
     )
+    document_placeholders = scan_kit_placeholders(
+        letter_payload or {}, fields=("cv_markdown", "letter_markdown")
+    )
+    fact_checks["document_placeholders"] = document_placeholders
+    if document_placeholders:
+        readiness = max(0, readiness - 20)
+        block_reasons.append("Les documents CV/lettre contiennent des éléments à compléter avant le dépôt.")
     checklist = _checklist(
         profile,
         job,
@@ -431,6 +453,12 @@ def build_apply_kit(
         unverified,
         exports_ready=exports_ready,
     )
+    checklist.insert(-1, {
+        "id": "documents_complete",
+        "label": "CV et lettre sans éléments à compléter",
+        "done": not document_placeholders,
+        "note": ", ".join(document_placeholders),
+    })
     answers = _answers(profile, intake, job, normalized_language)
 
     return ApplyKit(
@@ -443,4 +471,9 @@ def build_apply_kit(
         checklist=checklist,
         deep_link=deep_link,
         export_urls=export_urls,
+        application=application_payload,
+        draft_id=draft_id,
+        language=str((letter_payload or {}).get("language") or normalized_language),
+        fact_checks=fact_checks,
+        review_token=review_token,
     )

@@ -129,6 +129,8 @@ class ApplicationStagePayload(BaseModel):
 class ApprovalPayload(BaseModel):
     approved: bool
     note: str = Field(default="", max_length=1_000)
+    draft_id: str = Field(default="", max_length=80)
+    review_token: str = Field(default="", pattern=r"^(?:[0-9a-f]{64})?$")
 
 
 class ReceiptPayload(BaseModel):
@@ -791,7 +793,10 @@ def create_career_router(
     @router.post("/api/career/applications/{application_id}/approve")
     async def approve_application(application_id: str, payload: ApprovalPayload) -> Any:
         return await local(
-            lambda: service.approve_for_manual_submission(application_id, payload.approved, payload.note)
+            lambda: service.approve_for_manual_submission(
+                application_id, payload.approved, payload.note,
+                draft_id=payload.draft_id, review_token=payload.review_token,
+            )
         )
 
     @router.post("/api/career/applications/{application_id}/confirm-receipt")
