@@ -72,7 +72,7 @@ def kill_disk_scans() -> None:
                 pass
 
 
-def kill_pytest_excess(limit: int = 6) -> None:
+def kill_pytest_excess(limit: int = 10) -> None:
     rows = [(p, c) for p, c in ps_table() if "pytest" in c and "python" in c]
     if len(rows) <= limit:
         return
@@ -123,13 +123,41 @@ def kill_orphan_pytest() -> None:
         marker = "AI-Excel-Agent-worker-cvboost-"
         if marker not in cwd:
             continue  # Codex ou autre: ne pas toucher
-        order = cwd.split(marker, 1)[1].split("/")[0]
+        order = "cvboost-" + cwd.split(marker, 1)[1].split("/")[0]
         if order not in live:
             try:
                 os.kill(pid, 9)
                 log(f"pytest orphelin tué pid={pid} worktree={order}")
             except Exception:
                 pass
+
+
+_last_kick = 0.0
+
+
+def ensure_parallelism(min_workers: int = 3, cooldown: float = 300.0) -> None:
+    """Si des slots sont vides et que des missions sont prêtes, relance le driver.
+
+    Le driver attend un résultat (wait_for_any_result) : quand un worker meurt
+    sans publier, le slot reste vide jusqu'au prochain résultat. On secoue.
+    """
+    global _last_kick
+    workers = len(pgrep("opencode run --auto"))
+    if workers >= min_workers or time.time() - _last_kick < cooldown:
+        return
+    reg = json.load(open(ROOT / "missions_registry.json", encoding="utf-8"))
+    done = {m["id"] for m in reg["missions"] if m["status"] == "done"}
+    ready = [m for m in reg["missions"]
+             if m["status"] == "pending" and all(d in done for d in m.get("dependencies", []))]
+    if not ready:
+        return
+    _last_kick = time.time()
+    log(f"slots vides ({workers} workers, {len(ready)} missions prêtes) → relance du driver")
+    for pid in pgrep("mission_driver.py"):
+        try:
+            os.kill(pid, 9)
+        except Exception:
+            pass
 
 
 def snapshot() -> None:
@@ -155,6 +183,7 @@ def main() -> None:
             kill_disk_scans()
             kill_orphan_pytest()
             kill_pytest_excess()
+            ensure_parallelism()
             if time.time() - last_state >= STATE_EVERY:
                 snapshot()
                 last_state = time.time()
