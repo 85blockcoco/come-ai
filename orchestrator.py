@@ -40,9 +40,17 @@ WORKER_REPORTING_FOOTER = """
 
 ## CONTRAT DE SORTIE (OBLIGATOIRE, À FAIRE EN DERNIER)
 
-1. Lance les tests des fichiers que tu as touchés puis, si possible, la suite
-   complète : `.venv/bin/python -m pytest -q` (ou `python3 -m pytest -q`).
-   Lance aussi `ruff check .` sur les fichiers modifiés.
+### INTERDICTIONS (elles saturent la machine et te font échouer)
+- **NE LANCE JAMAIS la suite complète** (`pytest -q` sans argument, 6000+ tests).
+  Uniquement les fichiers de test liés à TA mission.
+- **NE LANCE JAMAIS `find /` ni de recherche sur tout le disque.** Tout ce dont
+  tu as besoin est déjà dans ce worktree.
+- **N'INSTALLE RIEN** : pas de `pip install`, pas de `npm install`.
+
+### À FAIRE
+1. Tests ciblés uniquement :
+   `.venv/bin/python -m pytest -q tests/test_<ta_feature>.py`
+   puis `ruff check <fichiers modifiés>`.
 2. Écris `messages/result.json` DANS CE WORKTREE avec exactement :
 
 ```json
@@ -50,7 +58,7 @@ WORKER_REPORTING_FOOTER = """
   "status": "done",
   "files_created": ["chemin/relatif/fichier.py", "tests/test_x.py"],
   "output": "Résumé en 1-2 phrases de ce qui est livré",
-  "logs": "dernières lignes de pytest / ruff",
+  "logs": "dernières lignes de pytest ciblé / ruff",
   "error": null
 }
 ```
@@ -58,6 +66,8 @@ WORKER_REPORTING_FOOTER = """
 `status` vaut `"done"` seulement si les tests pertinents passent et que le code
 est réellement écrit. Sinon `"failed"` avec `error` renseigné.
 Ne termine jamais sans avoir écrit ce fichier.
+Budget : 25 minutes maximum. Au-delà, écris `result.json` avec ce qui marche
+et `status: "done"` si le code est utilisable, sinon `"failed"` + la cause.
 """
 
 POLL_INTERVAL = 3  # secondes# MAX_WORKERS permet de limiter la machine secondaire (ex: 2) sans toucher
