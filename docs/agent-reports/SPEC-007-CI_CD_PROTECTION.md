@@ -48,18 +48,23 @@ ne démarre pas, au lieu de retomber silencieusement sur le repli HTTP.
 ### 2.3 Parcours E2E Playwright
 
 `tests/e2e/` démarre l'application réelle (`create_app`) sur un répertoire
-de données synthétique, puis exécute les 4 parcours exigés :
+de données synthétique, puis exécute les 4 parcours exigés en pilotant le
+navigateur Chromium comme un utilisateur : clic sur les onglets, sélection de
+l'offre, analyse, choix de variante, génération du kit, lecture des champs et
+téléchargement du DOCX via le lien de l'UI.
 
 | Fichier | Parcours vérifié |
 |---|---|
-| `test_offer_to_kit.py` | offre → détail → prép → kit → réouverture idempotente → téléchargement DOCX valide → pipeline |
-| `test_profile_incomplete.py` | profil vide → offre → couverture 0 → ajout de preuve → couverture et exigences étayées en hausse |
-| `test_anti_invention.py` | exigence LBO non étayée → listée « non trouvée dans ton profil », jamais revendiquée, marquée « à vérifier » |
-| `test_no_auto_apply.py` | aucune action `mailto:`/SMTP/soumission, aucune route Career d'envoi, pipeline et kit `automatic_submission: false` |
+| `test_offer_to_kit.py` | offre → détail → prép → variante → écarts → kit → téléchargement DOCX **via l'UI** → pipeline |
+| `test_profile_incomplete.py` | profil vide → offre → couverture 0 → formulaire de profil du navigateur → couverture et exigences étayées en hausse |
+| `test_anti_invention.py` | exigence LBO non étayée → listée « non trouvée dans ton profil », jamais revendiquée, marquée « à vérifier », absente de la motivation courte |
+| `test_no_auto_apply.py` | aucune action `mailto:`/SMTP/soumission, aucune route Career d'envoi, aucun bouton d'envoi après un kit généré dans l'UI |
 
 `tests/e2e/utils.py` fournit un contrat `page` unique : `BrowserPage`
-(Chromium réel) et `HttpPage` (repli local quand Playwright n'est pas
-installé). Les assertions sont identiques dans les deux modes.
+(Chromium réel, helpers `click_button`, `wait_for_option`, `fill`,
+`value`, `download_in`) et `HttpPage` (repli local quand Playwright n'est pas
+installé). En mode navigateur, les étapes UI sont exécutées ; les mêmes
+contrats HTTP restent vérifiés dans les deux modes.
 
 ### 2.4 Contrôles CI implémentés
 
@@ -94,10 +99,10 @@ d'intégrité deviennent exploitables. Aucun contenu visible ne change.
 
 ```text
 E2E_REQUIRE_BROWSER=1 pytest -q tests/e2e --tb=short
-→ 4 passed in 120.83s   (Chromium réel)
+→ 4 passed in 126.07s   (Chromium réel, interactions UI)
 
 pytest -q tests/test_ci_guards.py tests/smoke
-→ 9 passed in 39.11s
+→ 9 passed in 31.93s
 
 pytest -q tests/test_career_application_kit.py \
          tests/integration/test_us3_pipeline.py \

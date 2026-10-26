@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from utils import synthetic_offer, synthetic_profile
+from utils import (
+    generate_kit_from_prep_ui,
+    run_offer_analysis_ui,
+    synthetic_offer,
+    synthetic_profile,
+    wait_for_app_ready,
+)
 
 
 def test_unsupported_requirement_is_flagged_not_invented(page) -> None:
-    assert "Côme AI Career" in page.open("/career")
-
     profile = synthetic_profile(
         experience="Projet étudiant d'analyse financière (démo).",
         skills="Excel, analyse financière",
@@ -25,6 +29,27 @@ def test_unsupported_requirement_is_flagged_not_invented(page) -> None:
     )
     assert imported.status == 201
     job_id = imported.json()["id"]
+
+    assert "Côme AI Career" in page.open("/career")
+
+    # L'UI doit nommer l'exigence manquante et l'isoler du contenu du kit.
+    if page.supports_ui:
+        wait_for_app_ready(page)
+        analysis = run_offer_analysis_ui(page, job_id)
+        assert "Non trouvé dans ton profil" in analysis
+        assert "LBO" in analysis
+
+        kit_text = generate_kit_from_prep_ui(page)
+        assert "Vérificateur de faits local" in kit_text
+        assert "LBO" in kit_text
+        assert "Non trouvé dans ton profil" in kit_text
+
+        cv_value = page.value('label:has-text("CV adapté (modifiable avant export)") textarea')
+        assert "LBO" in cv_value, "l'exigence reste citée pour vérification"
+        assert "à vérifier" in cv_value.lower()
+        motivation_value = page.value('label:has-text("Motivation courte") textarea')
+        assert "LBO" not in motivation_value
+        assert "private equity" not in motivation_value.lower()
 
     kit = page.api(
         "POST",

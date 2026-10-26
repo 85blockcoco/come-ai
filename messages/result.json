@@ -25,7 +25,7 @@
     "tests/test_ci_guards.py",
     "docs/agent-reports/SPEC-007-CI_CD_PROTECTION.md"
   ],
-  "output": "CI à 11 contrôles requis alignés sur la protection de main, documentation + script d'application GitHub, 4 parcours E2E Playwright et contrôles CI (privacy, no-auto-apply, provenance, migrations, DOCX déterministe).",
-  "logs": "E2E_REQUIRE_BROWSER=1 pytest -q tests/e2e → 4 passed (Chromium réel, 120.83s)\npytest -q tests/test_ci_guards.py tests/smoke → 9 passed\npytest -q tests/test_career_application_kit.py tests/integration/test_us3_pipeline.py tests/test_qualification_snapshot_persistence.py → 27 passed\npython -m career.{privacy,no_auto_apply,provenance,migrations} check → OK\npython -m career.docx check-deterministic → OK (0fa996e1d377…)\nnpm test → OK — 5 fichiers JS valides\nruff check . → All checks passed\ngit diff --check → propre",
+  "output": "CI à 11 contrôles requis alignés sur la protection de main, documentation + script d'application GitHub, 4 parcours E2E Playwright pilotant réellement l'UI (offre → kit → export, preuve → couverture, anti-invention, zéro envoi) et contrôles CI (privacy, no-auto-apply, provenance, migrations, DOCX déterministe).",
+  "logs": "E2E_REQUIRE_BROWSER=1 pytest -q tests/e2e → 4 passed (Chromium réel, interactions UI, 126.07s)\npytest -q tests/test_ci_guards.py tests/smoke → 9 passed (31.93s)\npytest -q tests/test_career_application_kit.py tests/integration/test_us3_pipeline.py tests/test_qualification_snapshot_persistence.py → 27 passed\npython -m career.{privacy,no_auto_apply,provenance,migrations} check → OK\npython -m career.docx check-deterministic → OK (0fa996e1d377…)\nnpm test → OK — 5 fichiers JS valides\nruff check . → All checks passed\ngit diff --check → propre",
   "error": null
 }

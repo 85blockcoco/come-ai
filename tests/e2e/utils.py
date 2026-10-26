@@ -46,6 +46,17 @@ def synthetic_profile(**overrides: Any) -> dict[str, Any]:
     return payload
 
 
+def wait_for_app_ready(page: Any) -> None:
+    """Attend la fin du chargement asynchrone de l'espace Career.
+
+    Les tests navigateur interagissent avec les formulaires et le sélecteur
+    d'offres : attendre le badge de santé et la note de profil évite de saisir
+    des données qu'un ``loadProfile`` encore en vol écraserait.
+    """
+    page.wait_for_text("#career-health", "aucune candidature envoyée")
+    page.wait_for_text("#profile-readiness-score", "Profil prêt à")
+
+
 def run_offer_analysis_ui(page: Any, job_id: str, *, expect: str | None = None) -> str:
     """Parcours réel dans l'UI Stage Hunter : offre → analyse → panneau de prépa.
 
@@ -54,12 +65,36 @@ def run_offer_analysis_ui(page: Any, job_id: str, *, expect: str | None = None) 
     « Analyser cette offre »).
     """
     page.click("#tab-stagehunter")
+    page.wait_for_option("#stagehunter-prep-job", job_id)
     page.select("#stagehunter-prep-job", job_id)
     page.click("#stagehunter-prep-submit")
     page.wait_for_text("#stagehunter-prep", "Variante CV recommandée")
     if expect:
         page.wait_for_text("#stagehunter-prep", expect)
     return page.text("#stagehunter-prep")
+
+
+def generate_kit_from_prep_ui(page: Any, *, variant: str = "m_a") -> str:
+    """Depuis le panneau de préparation, génère le kit et ouvre sa vue Candidatures."""
+    page.select(".kit-variant-select", variant)
+    page.click_button("#stagehunter-prep", "Préparer le kit de candidature")
+    page.wait_for("#view-applications:not([hidden])")
+    page.wait_for(".application-kit:not([hidden])")
+    page.wait_for_text(".application-kit:not([hidden])", "Kit de candidature local")
+    return page.text(".application-kit:not([hidden])")
+
+
+def fill_profile_ui(page: Any, profile: dict[str, Any]) -> None:
+    """Renseigne puis enregistre le profil via le vrai formulaire de l'UI."""
+    page.click("#tab-profile")
+    page.wait_for("#view-profile:not([hidden])")
+    page.fill("#profile-display-name", str(profile.get("display_name", "")))
+    page.fill("#profile-education", str(profile.get("education", "")))
+    page.fill("#profile-experience", str(profile.get("experience", "")))
+    page.fill("#profile-skills", str(profile.get("skills", "")))
+    page.fill("#profile-languages", str(profile.get("languages", "")))
+    page.click("#profile-form button[type=submit]")
+    page.wait_for_text("#career-message", "Profil enregistré localement.")
 
 
 class HttpPage:
@@ -127,8 +162,38 @@ class BrowserPage:
     def text(self, selector: str) -> str:
         return self._page.locator(selector).first.inner_text(timeout=20_000)
 
+    def value(self, selector: str) -> str:
+        return self._page.locator(selector).first.input_value(timeout=20_000)
+
     def count(self, selector: str) -> int:
         return self._page.locator(selector).count()
+
+    def wait_for(self, selector: str, *, state: str = "visible", timeout: int = 20_000) -> None:
+        self._page.locator(selector).first.wait_for(state=state, timeout=timeout)
+
+    def wait_for_option(self, selector: str, value: str, *, timeout: int = 20_000) -> None:
+        self._page.locator(f'{selector} option[value="{value}"]').first.wait_for(
+            state="attached", timeout=timeout
+        )
+
+    def click_button(self, container: str, text: str) -> None:
+        self._page.locator(container).get_by_role("button", name=text, exact=True).first.click(
+            timeout=20_000
+        )
+
+    def download_in(self, container: str, label: str) -> ApiResult:
+        """Clique un lien de téléchargement de l'UI et restitue son contenu."""
+        with self._page.expect_download(timeout=30_000) as pending:
+            self._page.locator(container).get_by_role("link", name=label, exact=True).first.click(
+                timeout=20_000
+            )
+        download = pending.value
+        content = b""
+        if download is not None:
+            path = download.path()
+            if path:
+                content = Path(path).read_bytes()
+        return ApiResult(status=200, text="", headers={}, content=content)
 
     def wait_for_text(self, selector: str, needle: str, *, timeout: int = 20_000) -> None:
         self._page.locator(selector).filter(has_text=needle).first.wait_for(state="attached", timeout=timeout)

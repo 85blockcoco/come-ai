@@ -2,20 +2,43 @@
 
 from __future__ import annotations
 
-from utils import synthetic_offer, synthetic_profile
+from utils import (
+    generate_kit_from_prep_ui,
+    run_offer_analysis_ui,
+    synthetic_offer,
+    synthetic_profile,
+    wait_for_app_ready,
+)
 
 
 def test_offer_to_kit_journey(page) -> None:
-    html = page.open("/career")
-    assert "Côme AI Career" in html
-    assert "Candidatures" in html
-
     profile = page.api("PUT", "/api/career/profile", synthetic_profile())
     assert profile.status == 200
 
     imported = page.api("POST", "/api/career/jobs/import", synthetic_offer())
     assert imported.status == 201, imported.text
     job_id = imported.json()["id"]
+
+    html = page.open("/career")
+    assert "Côme AI Career" in html
+    assert "Candidatures" in html
+
+    # Le parcours principal se fait dans le navigateur : Stage Hunter →
+    # analyse de l'offre → choix de variante → génération du kit → export.
+    if page.supports_ui:
+        wait_for_app_ready(page)
+        analysis = run_offer_analysis_ui(page, job_id, expect="Couverture obligatoire")
+        assert "Variante CV recommandée" in analysis
+
+        kit_text = generate_kit_from_prep_ui(page, variant="m_a")
+        assert "Kit de candidature local" in kit_text
+        assert "Aucun envoi automatique" in kit_text
+        assert "Vérificateur de faits local" in kit_text
+
+        exported_ui = page.download_in(
+            ".application-kit:not([hidden])", "Télécharger Word du CV"
+        )
+        assert exported_ui.content[:2] == b"PK", "l'export UI est une archive OOXML valide"
 
     detail = page.api("GET", f"/api/career/jobs/{job_id}")
     assert detail.status == 200

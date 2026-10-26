@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from utils import synthetic_offer, synthetic_profile
+from utils import (
+    generate_kit_from_prep_ui,
+    run_offer_analysis_ui,
+    synthetic_offer,
+    synthetic_profile,
+    wait_for_app_ready,
+)
 
 FORBIDDEN_UI = ("mailto:", "smtplib", "automatic_submission\": true", "automatic_submission: true")
 
@@ -39,6 +45,19 @@ def test_no_automatic_submission_anywhere(page) -> None:
         ),
     )
     assert imported.status == 201
+    job_id = imported.json()["id"]
+
+    # Même après un parcours complet dans le navigateur, aucune action
+    # d'envoi, de contact ou de téléversement n'apparaît.
+    if page.supports_ui:
+        page.open("/career")
+        wait_for_app_ready(page)
+        run_offer_analysis_ui(page, job_id)
+        kit_text = generate_kit_from_prep_ui(page)
+        assert "Aucun envoi automatique" in kit_text
+        assert page.count('a[href^="mailto:"]') == 0
+        assert page.count("button:has-text('Envoyer la candidature')") == 0
+        assert page.count("button:has-text('Contacter le recruteur')") == 0
 
     pipeline = page.api("GET", "/api/career/application-pipeline")
     assert pipeline.status == 200
@@ -47,7 +66,7 @@ def test_no_automatic_submission_anywhere(page) -> None:
     kit = page.api(
         "POST",
         "/api/career/application-kits",
-        {"job_id": imported.json()["id"], "language": "fr", "variant": "m_a"},
+        {"job_id": job_id, "language": "fr", "variant": "m_a"},
     )
     assert kit.status == 200
     assert kit.json()["automatic_submission"] is False
