@@ -1,0 +1,13 @@
+{
+  "status": "done",
+  "files_created": [
+    "career/send_confirmation.py",
+    "career/service.py",
+    "career/router.py",
+    "tests/test_send_confirmation.py",
+    "docs/agent-reports/SPEC-047-send-confirmation.md"
+  ],
+  "output": "SPEC-047 livrée sur worker/cvboost-84-1793027188235 (push 4925cb0, origin) : module pur career/send_confirmation.py (SendEvidence/SendRecord, anti-fraude +24h, +7 jours ouvrés vendredi→lundi, fériés optionnels, brouillon de relance FR prêt à copier), persistance idempotente en table send_confirmations (une seule ligne d'événement, stage 'submitted' seulement après approbation du dépôt manuel), endpoints POST /api/career/send-confirmation/{id}, /followup, GET /{id}/draft, GET /api/career/apply-tracker (échus d'abord, sans réponse). NOTE: une branche jumelle agent/spec-047-send-confirmation (5b35e8a, livrée par le worker du worktree -1793026432421) existe déjà — implémentations indépendantes, ne pas écraser ; arbitrage à faire côté orchestrateur.",
+  "logs": "pytest tests/test_send_confirmation.py → 18 passed (contre-état final impossible à rejouer après le push : la machine tue les processus python par OOM, load average ~600 à cause des jobs d'orchestration en fond ; le fichier de tests passait en boucle avant la charge)\nruff check career/send_confirmation.py career/service.py career/router.py tests/test_send_confirmation.py → All checks passed\nRégression ciblée (individuelle) : test_career_application_dashboard 22 passed ; test_career_application_sprint 12 passed ; test_qualification_snapshot_persistence 8 passed ; contract/test_variant_classification 3 passed\nMigration v7→v8 vérifiée manuellement : send_confirmations créée, user_version=8, schema_version des snapshots de qualification inchangé (7)\ngit diff --check → clean\nPush : origin/worker/cvboost-84-1793027188235 = 4925cb0",
+  "error": null
+}
