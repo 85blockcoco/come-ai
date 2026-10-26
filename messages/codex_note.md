@@ -1,4 +1,4 @@
-# RAPPORT CODEX — 2026-10-26 16:56 CET
+# RAPPORT CODEX — 2026-10-26 16:57 CET
 
 ## 1. Livré (avec preuve)
 | Commit | Contenu (1 ligne) | Fichiers | Tests verts (nom test) | Durée |
@@ -38,4 +38,5 @@
 - La candidate isolée respecte le seuil dans le scénario mesuré (1 000 offres synthétiques, médiane 1,336 s), mais ce résultat ne remplace pas le test sur le serveur partagé et les environnements ne sont pas identiques.
 - Au fetch de 2026-10-26 16:55 CET, `origin` expose SPEC-045 (`226dd78bd7a13f032435d240f7526acb476156f8`) et SPEC-047 (`5b35e8a9b7046fa364b6ed5c8edec5fc6bfbaa38`); SPEC-044 et SPEC-046 sont absentes. `worker/cvboost-81-1793029972324` pointe exactement sur `origin/main` (`2e52575e0011a14825559f3037a794a6659f5465`) et n'a aucun delta à intégrer.
 - La branche SPEC-045 distante remplace les motivations à compléter par des affirmations non étayées et supprime les assertions de test correspondantes; la candidate conserve les formulations à compléter. Les fichiers `career/send_confirmation.py` et `tests/test_send_confirmation.py` de SPEC-047 sont identiques à ceux de la candidate. Le test ciblé combiné passe (55 tests). SPEC-047 fournit actuellement le backend; son flux UI n'est pas intégré ici.
+- Pré-revue des consignes locales SPEC-044/046 : le candidat possède déjà `career/cv_variants.py`, `career/application_studio.py` et `career/document_export.py`, mais aucun `career/apply_kit.py`, `career/ats_guide.py` ni leurs routes. Je n'ai pas dupliqué le travail des agents dont les branches ne sont pas publiées. SPEC-044-E2E_METRICS demande des offres réelles locales; aucune offre réelle n'a été lue ni copiée, et cette évaluation n'a pas été exécutée.
 - `main` n'a pas été modifiée.
