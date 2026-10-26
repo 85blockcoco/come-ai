@@ -13,7 +13,10 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
+from .exploration_service import ExplorationService
 from .profile_import import MAX_PROFILE_IMPORT_BYTES
+from .offer_dates import extract_offer_dates
+from .offer_qualification import qualify_offer
 from .service import CareerService
 from workspace_core import UserFacingError, to_jsonable
 
@@ -96,7 +99,7 @@ class StageSearchPayload(BaseModel):
     require_known_location: bool = True
     start_date: str = Field(default="", max_length=32)
     duration_months: int | None = Field(default=None, ge=1, le=24)
-    contract_types: list[str] = Field(default_factory=lambda: ["stage", "cdd", "cdi", "vie"], max_length=4)
+    contract_types: list[str] = Field(default_factory=lambda: ["stage"], max_length=4)
     start_months: list[int] = Field(default_factory=lambda: [1, 2, 3], max_length=12)
     minimum_stage_duration_months: int = Field(default=6, ge=1, le=24)
     education_preference: str = Field(default="bachelor_m1_then_m2", max_length=40)
@@ -250,6 +253,10 @@ def create_career_router(
     if not CAREER_STATIC_DIR.is_dir():
         raise RuntimeError("Les fichiers Career Agent sont introuvables.")
     router = APIRouter()
+    # One exploration service per application: it owns the background runs and
+    # the cooperative cancellation between two sources.
+    explorations = ExplorationService(service)
+    router.on_shutdown.append(explorations.shutdown)
 
     async def local(call: Any) -> Any:
         return to_jsonable(await run_in_threadpool(call))
@@ -457,9 +464,44 @@ def create_career_router(
         # Opening Career reads the last local report; it never fetches boards.
         return await local(service.get_exploration)
 
+    @router.get("/api/career/stage-search/coverage")
+    async def stage_search_coverage(run_id: str | None = Query(default=None, max_length=160)) -> Any:
+        """Recalculate exact source coverage from the selected local run."""
+        return await local(lambda: service.get_stage_source_coverage(run_id))
+
     @router.post("/api/career/stage-search/explore")
     async def explore_stages(payload: DiscoverySearchPayload) -> Any:
         return await local(lambda: service.explore_internships(force=payload.force))
+
+    # --- Exploration runs -------------------------------------------------
+    # The synchronous explorer above answers in one response.  These three
+    # routes expose a real, server-side run: every phase and every counter is
+    # incremented by a step that really finished, the state survives a page
+    # reload and the run can be stopped between two sources.
+
+    @router.get("/api/career/stage-search/explorations")
+    async def list_explorations() -> Any:
+        """The recent runs, so a reloaded page can resume the last one."""
+        return await local(lambda: {"runs": explorations.list_runs()})
+
+    @router.post("/api/career/stage-search/explorations", status_code=202)
+    async def start_exploration(payload: DiscoverySearchPayload) -> Any:
+        """Start one exploration and return its first real state."""
+        return await local(lambda: explorations.start(force=payload.force))
+
+    @router.get("/api/career/stage-search/explorations/{run_id}")
+    async def exploration_state(run_id: str) -> Any:
+        state = await local(lambda: explorations.state(run_id))
+        if state is None:
+            raise HTTPException(status_code=404, detail="Exploration introuvable.")
+        return state
+
+    @router.post("/api/career/stage-search/explorations/{run_id}/cancel")
+    async def cancel_exploration(run_id: str) -> Any:
+        state = await local(lambda: explorations.cancel(run_id))
+        if state is None:
+            raise HTTPException(status_code=404, detail="Exploration introuvable.")
+        return state
 
     @router.get("/api/career/discovery-sources")
     async def discovery_sources() -> Any:
@@ -505,12 +547,36 @@ def create_career_router(
 
     @router.post("/api/career/jobs/import", status_code=201)
     async def import_job(payload: JobImportPayload) -> Any:
-        result = await local(lambda: service.import_job(payload.model_dump()))
+        import_payload = payload.model_dump()
+        # The request model intentionally does not accept a client supplied
+        # qualification. Derive source-attributed facts locally instead, with
+        # neutral limits so the caller's search preferences are not guessed.
+        qualification = qualify_offer(
+            import_payload,
+            minimum_duration_months=1,
+            minimum_stage_duration_months=1,
+            allowed_contract_types=["internship", "apprenticeship", "graduate", "VIE", "permanent", "fixed_term"],
+            allowed_start_months=list(range(1, 13)),
+        ).to_dict()
+        qualification["temporal_facts"] = [
+            fact.to_dict() for fact in extract_offer_dates(import_payload)
+        ]
+        import_payload["qualification"] = qualification
+        result = await local(lambda: service.import_job(import_payload))
         return result
 
     @router.get("/api/career/jobs/{job_id}")
     async def job(job_id: str) -> Any:
         return await local(lambda: service.get_job(job_id))
+
+    @router.get("/api/career/jobs/{job_id}/offer-intelligence")
+    async def job_offer_intelligence(job_id: str) -> Any:
+        return await local(lambda: service.get_offer_intelligence(job_id))
+
+    @router.get("/api/career/offer-intelligence/{job_id}")
+    async def offer_intelligence(job_id: str) -> Any:
+        """Same snapshot, same identifiers: this route is an alias, not a copy."""
+        return await local(lambda: service.get_offer_intelligence(job_id))
 
     @router.get("/api/career/jobs/{job_id}/prep")
     async def job_prep(job_id: str) -> Any:
@@ -748,6 +814,45 @@ def create_career_router(
     async def reset_data(payload: ResetPayload) -> dict[str, bool]:
         await local(lambda: service.reset_personal_data(payload.confirmation))
         return {"deleted": True}
+
+    # --- Translation variants (SPEC-033) -------------------------------------
+
+    class TranslationDetectPayload(BaseModel):
+        text: str = Field(default="", max_length=20_000)
+
+    class TranslationBuildPayload(BaseModel):
+        variant_id: str = Field(min_length=1, max_length=40)
+        target_lang: str = Field(min_length=2, max_length=5, pattern="^(en|de|es|fr)$")
+        arena_available: bool = False
+
+    @router.post("/api/career/translation-variants/detect")
+    async def translation_detect(payload: TranslationDetectPayload) -> Any:
+        from career.translation_variants import detect_offer_lang
+
+        return await local(
+            lambda: {
+                "detected_lang": detect_offer_lang(payload.text),
+                "text_sample": payload.text[:200],
+            }
+        )
+
+    @router.post("/api/career/translation-variants/build", status_code=201)
+    async def translation_build(payload: TranslationBuildPayload) -> Any:
+        from career.translation_variants import build_variant
+
+        report = await local(
+            lambda: build_variant(
+                payload.variant_id,
+                payload.target_lang,
+                arena_available=payload.arena_available,
+            )
+        )
+        return {
+            "offer_lang": report.offer_lang,
+            "mode": report.mode,
+            "translated_fields": report.translated_fields,
+            "untranslated": report.untranslated,
+        }
 
     return router
 
