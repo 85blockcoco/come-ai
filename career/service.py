@@ -136,7 +136,7 @@ from .exploration import (
     criteria_admit,
     ranking_key,
 )
-from .offer_qualification import qualify_offer
+from .offer_qualification import qualify_offer, scoped_geo_criteria_cache
 from .offer_intelligence import (
     align_display_requirements,
     build_snapshot,
@@ -2055,6 +2055,8 @@ class CareerService:
         *,
         _scoring_context: dict[str, Any] | None = None,
         _include_recommendation_scores: bool = True,
+        _include_qualification_details: bool = True,
+        _include_enrichment: bool = True,
     ) -> dict[str, Any]:
         """Rank every stored offer against the brief, with the reason for each score."""
         payload = self.get_stage_search()
@@ -2062,12 +2064,13 @@ class CareerService:
         jobs = self.list_jobs(
             _scoring_context=_scoring_context,
             _include_scoring=_include_recommendation_scores,
+            _include_enrichment=_include_enrichment,
         )
         matches: list[dict[str, Any]] = []
         if payload["configured"]:
             for job in jobs:
                 stage_match = score_brief_match(brief, job)
-                qualification = qualify_offer(
+                qualification_result = qualify_offer(
                     job,
                     allowed_contract_types=brief.get("contract_types"),
                     allowed_start_months=brief.get("start_months"),
@@ -2076,7 +2079,13 @@ class CareerService:
                     excluded_countries=brief.get("excluded_countries"),
                     excluded_cities=brief.get("excluded_cities"),
                     require_known_location=brief.get("require_known_location", True),
-                ).to_dict()
+                    include_geo_score=_include_qualification_details,
+                )
+                qualification = (
+                    qualification_result.to_dict()
+                    if _include_qualification_details
+                    else {"target_status": qualification_result.target_status}
+                )
                 _attach_qualification_presentation(stage_match, qualification)
                 matches.append({
                     "job": job,
@@ -2104,7 +2113,7 @@ class CareerService:
         else:
             matches = []
             for job in jobs:
-                qualification = qualify_offer(
+                qualification_result = qualify_offer(
                     job,
                     allowed_contract_types=brief.get("contract_types"),
                     allowed_start_months=brief.get("start_months"),
@@ -2113,7 +2122,13 @@ class CareerService:
                     excluded_countries=brief.get("excluded_countries"),
                     excluded_cities=brief.get("excluded_cities"),
                     require_known_location=brief.get("require_known_location", True),
-                ).to_dict()
+                    include_geo_score=_include_qualification_details,
+                )
+                qualification = (
+                    qualification_result.to_dict()
+                    if _include_qualification_details
+                    else {"target_status": qualification_result.target_status}
+                )
                 matches.append({"job": job, "stage_match": None, "qualification": qualification,
                                 "requirement_ids": _requirement_ids_of(job),
                                 "education_access": score_brief_match(brief, job)["education_access"]})
@@ -2307,7 +2322,7 @@ class CareerService:
         # Ranking and preparation normalize many of the same short job and
         # criteria strings. Keep these results only for this local operation;
         # profile and CV text is never retained in a process-wide cache.
-        with scoped_normalized_text_cache():
+        with scoped_normalized_text_cache(), scoped_geo_criteria_cache():
             return self._build_application_sprint(limit=limit)
 
     def _build_application_sprint(self, *, limit: int) -> dict[str, Any]:
@@ -2385,7 +2400,7 @@ class CareerService:
         # labels for every offer. Keep those short strings only for this one
         # synchronous read; the cache is reset in a finally block and never
         # retains profile or offer text across requests.
-        with scoped_normalized_text_cache():
+        with scoped_normalized_text_cache(), scoped_geo_criteria_cache():
             return self._build_application_pipeline()
 
     def _build_application_pipeline(self) -> dict[str, Any]:
@@ -2395,7 +2410,11 @@ class CareerService:
         applications = self.list_applications()
         # Stage matches already carry the serialized local jobs. Reuse them
         # here instead of listing and serializing every offer twice.
-        matches = self.list_stage_matches(_include_recommendation_scores=False).get("matches") or []
+        matches = self.list_stage_matches(
+            _include_recommendation_scores=False,
+            _include_qualification_details=False,
+            _include_enrichment=False,
+        ).get("matches") or []
         jobs = [
             match["job"]
             for match in matches
@@ -2433,6 +2452,15 @@ class CareerService:
         context = {
             "jobs": job_context,
             "sprint_queue": sprint_queue,
+            # Stage derivation runs once per offer. Index these IDs here so a
+            # large application set does not cause a list scan for every job.
+            "application_job_ids": {
+                str(item.get("job_id")) for item in applications if item.get("job_id")
+            },
+            "draft_job_ids": {
+                str(item.get("job_id")) for item in drafts if item.get("job_id")
+            },
+            "sprint_job_ids": {item["job_id"] for item in sprint_queue},
             "prep_cache": set(self._prep_cache),
             "selected_variant": {},
             "application_drafts": drafts,
@@ -3832,6 +3860,7 @@ class CareerService:
         calendar_status: str = "",
         _scoring_context: dict[str, Any] | None = None,
         _include_scoring: bool = True,
+        _include_enrichment: bool = True,
     ) -> list[dict[str, Any]]:
         clauses = ["1 = 1"]
         params: list[Any] = []
@@ -3878,18 +3907,20 @@ class CareerService:
             rows = connection.execute(statement, params).fetchall()
             summaries: dict[str, dict[str, Any]] = {}
             versions: dict[str, int] = {}
-            for item in connection.execute(
-                "SELECT job_id, version, summary_json FROM job_offer_intelligence_snapshots "
-                "WHERE is_current = 1"
-            ).fetchall():
-                identifier = str(item["job_id"])
-                versions[identifier] = int(item["version"] or 0)
-                try:
-                    payload = json.loads(item["summary_json"] or "{}")
-                except (TypeError, ValueError):
-                    payload = {}
-                summaries[identifier] = payload if isinstance(payload, dict) else {}
-            source_material = source_material_store.load_current_all(connection)
+            source_material: dict[str, dict[str, Any]] = {}
+            if _include_enrichment:
+                for item in connection.execute(
+                    "SELECT job_id, version, summary_json FROM job_offer_intelligence_snapshots "
+                    "WHERE is_current = 1"
+                ).fetchall():
+                    identifier = str(item["job_id"])
+                    versions[identifier] = int(item["version"] or 0)
+                    try:
+                        payload = json.loads(item["summary_json"] or "{}")
+                    except (TypeError, ValueError):
+                        payload = {}
+                    summaries[identifier] = payload if isinstance(payload, dict) else {}
+                source_material = source_material_store.load_current_all(connection)
         context = _scoring_context
         if _include_scoring and context is None:
             context = self._scoring_context()
@@ -3904,11 +3935,12 @@ class CareerService:
             # stays a separately labelled set of publisher-provided fields.
             identifier = str(job.get("id") or "")
             summary = summaries.get(identifier)
-            job["offer_intelligence_summary"] = summary
-            job["offer_intelligence"] = None
-            job["offer_intelligence_current"] = identifier in versions
-            job["offer_intelligence_version"] = versions.get(identifier)
-            job["source_material"] = source_material.get(identifier)
+            if _include_enrichment:
+                job["offer_intelligence_summary"] = summary
+                job["offer_intelligence"] = None
+                job["offer_intelligence_current"] = identifier in versions
+                job["offer_intelligence_version"] = versions.get(identifier)
+                job["source_material"] = source_material.get(identifier)
         source_rank = {"open": 0, "unknown": 1, "closed": 2}
         if _include_scoring:
             jobs.sort(

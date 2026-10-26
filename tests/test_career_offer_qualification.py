@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+import career.offer_qualification as offer_qualification
 from career.offer_qualification import qualify_offer
 
 
@@ -68,6 +69,28 @@ def test_valid_six_month_date_range_can_prove_duration():
     assert result.duration_min_months == result.duration_max_months == 6
     assert result.target_status == "conforming"
     assert result.provenance["duration_min_months"].source == "source_date_range"
+
+
+def test_geo_criteria_cache_is_reused_only_inside_scoped_operation(monkeypatch):
+    calls = 0
+    original = offer_qualification._country_codes
+
+    def count_country_codes(values):
+        nonlocal calls
+        calls += 1
+        return original(values)
+
+    monkeypatch.setattr(offer_qualification, "_country_codes", count_country_codes)
+    criteria = {"preferred_countries": ["United Kingdom"], "excluded_countries": ["France"]}
+
+    with offer_qualification.scoped_geo_criteria_cache():
+        first = offer_qualification.geo_score_for("France", **criteria)
+        second = offer_qualification.geo_score_for("France", **criteria)
+        assert first == second
+        assert calls == 2
+
+    offer_qualification.geo_score_for("France", **criteria)
+    assert calls == 4
 
 
 def test_ambiguous_date_range_does_not_round_up_to_six_months():

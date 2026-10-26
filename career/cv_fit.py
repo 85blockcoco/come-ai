@@ -357,15 +357,30 @@ def derive_pipeline_stage(job_id: str, context: Any) -> PipelineStage:
     selected = context.get("selected_variant") or {}
     sprint = context.get("sprint_queue") or []
     jobs = context.get("jobs") or {}
-    if any(_text(item.get("job_id")) == job_id for item in applications):
+    application_job_ids = context.get("application_job_ids")
+    if (
+        job_id in application_job_ids
+        if isinstance(application_job_ids, (set, frozenset))
+        else any(_text(item.get("job_id")) == job_id for item in applications)
+    ):
         return PipelineStage.TRACKING_CREATED
-    if any(_text(item.get("job_id")) == job_id for item in drafts):
+    draft_job_ids = context.get("draft_job_ids")
+    if (
+        job_id in draft_job_ids
+        if isinstance(draft_job_ids, (set, frozenset))
+        else any(_text(item.get("job_id")) == job_id for item in drafts)
+    ):
         return PipelineStage.KIT_GENERATED
     if job_id in prep_cache and selected.get(job_id):
         return PipelineStage.VARIANT_SELECTED
     if job_id in prep_cache:
         return PipelineStage.PREP_ANALYZED
-    if any(_text(item.get("job_id")) == job_id for item in sprint):
+    sprint_job_ids = context.get("sprint_job_ids")
+    if (
+        job_id in sprint_job_ids
+        if isinstance(sprint_job_ids, (set, frozenset))
+        else any(_text(item.get("job_id")) == job_id for item in sprint)
+    ):
         return PipelineStage.SPRINT_QUEUED
     job = jobs.get(job_id) if isinstance(jobs, dict) else None
     if isinstance(job, dict) and job.get("qualification_facts_json"):

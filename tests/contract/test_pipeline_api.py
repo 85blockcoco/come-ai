@@ -25,3 +25,14 @@ def test_pipeline_stage_priority_is_deterministic() -> None:
     assert derive_pipeline_stage("job-1", context) is PipelineStage.QUALIFIED
     context["jobs"]["job-1"]["qualification_facts_json"] = ""
     assert derive_pipeline_stage("job-1", context) is PipelineStage.DISCOVERED
+
+
+def test_pipeline_stage_supports_prebuilt_job_id_indexes() -> None:
+    context = {
+        "application_job_ids": {"job-1"},
+        "draft_job_ids": {"job-1"},
+        "sprint_job_ids": {"job-1"},
+    }
+
+    assert derive_pipeline_stage("job-1", context) is PipelineStage.TRACKING_CREATED
+    assert derive_pipeline_stage("job-2", context) is PipelineStage.DISCOVERED

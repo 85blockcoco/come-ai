@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import asdict, dataclass
 from datetime import date
-from typing import Any
+from typing import Any, Iterator
 
 from .exploration import _SENIOR_TITLE, classify_internship
 from .models import (
@@ -72,6 +74,57 @@ _CONTRACT_PATTERNS = (
     ("permanent", re.compile(r"\b(?:CDI|permanent(?:\s+(?:role|position|contract))?|indefinite[- ]term)\b", re.I)),
     ("fixed_term", re.compile(r"\b(?:CDD|fixed[- ]term contract)\b", re.I)),
 )
+
+_GEO_CRITERIA_CACHE: ContextVar[dict[tuple[tuple[str, ...], tuple[str, ...]], tuple[set[str], set[str], set[str], set[str]]] | None] = ContextVar(
+    "career_geo_criteria_cache", default=None
+)
+
+
+@contextmanager
+def scoped_geo_criteria_cache() -> Iterator[None]:
+    """Cache normalized country criteria only for one synchronous operation."""
+    cache: dict[
+        tuple[tuple[str, ...], tuple[str, ...]],
+        tuple[set[str], set[str], set[str], set[str]],
+    ] = {}
+    token = _GEO_CRITERIA_CACHE.set(cache)
+    try:
+        yield
+    finally:
+        _GEO_CRITERIA_CACHE.reset(token)
+        cache.clear()
+
+
+def _prepared_geo_criteria(
+    preferred_countries: Any, excluded_countries: Any
+) -> tuple[set[str], set[str], set[str], set[str]]:
+    def key_values(values: Any) -> tuple[str, ...]:
+        result: list[str] = []
+        for item in values or ():
+            if isinstance(item, str):
+                if item:
+                    result.append(item)
+            else:
+                cleaned = clean_text(item, limit=120)
+                if cleaned:
+                    result.append(cleaned)
+        return tuple(result)
+
+    preferred = key_values(preferred_countries)
+    excluded = key_values(excluded_countries)
+    key = (preferred, excluded)
+    cache = _GEO_CRITERIA_CACHE.get()
+    if cache is not None and key in cache:
+        return cache[key]
+    prepared = (
+        _country_codes(preferred),
+        _country_wordings(preferred),
+        _country_codes(excluded),
+        _country_wordings(excluded),
+    )
+    if cache is not None and len(cache) < 64:
+        cache[key] = prepared
+    return prepared
 _MONTHS = {
     "january": 1, "janvier": 1, "januar": 1, "gennaio": 1, "enero": 1, "jan": 1,
     "february": 2, "fevrier": 2, "februar": 2, "febbraio": 2, "febrero": 2, "feb": 2,
@@ -187,17 +240,20 @@ def geo_score_for(country: Any, *, preferred_countries: Any = None,
     if not text:
         return 0, "Pays inconnu"
     code = canonical_country_code(text)
-    if code and code in _country_codes(excluded_countries):
+    preferred_codes, preferred_wordings, excluded_codes, excluded_wordings = (
+        _prepared_geo_criteria(preferred_countries, excluded_countries)
+    )
+    if code and code in excluded_codes:
         return GEO_EXCLUDED_PENALTY, f"Pays exclu ({code})"
-    if code and code in _country_codes(preferred_countries):
+    if code and code in preferred_codes:
         return GEO_PREFERRED_BOOST, f"Pays ciblé ({code})"
     # A country the closed table does not know can still be excluded or
     # targeted by the person verbatim: the wording they wrote is the wording
     # the source wrote.
     wording = normalized_text(text)
-    if wording and wording in _country_wordings(excluded_countries):
+    if wording and wording in excluded_wordings:
         return GEO_EXCLUDED_PENALTY, f"Pays exclu ({text})"
-    if wording and wording in _country_wordings(preferred_countries):
+    if wording and wording in preferred_wordings:
         return GEO_PREFERRED_BOOST, f"Pays ciblé ({text})"
     if not code:
         return 0, "Pays inconnu"
@@ -215,6 +271,7 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
                   require_known_location: bool = False,
                   preferred_countries: list[str] | tuple[str, ...] | None = None,
                   geo_excluded_countries: list[str] | tuple[str, ...] | None = None,
+                  include_geo_score: bool = True,
                   as_of: date | None = None) -> QualifiedOffer:
     """Qualify a normalized offer against explicit user-configurable criteria.
 
@@ -397,10 +454,14 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
     # The country the source wrote decides the ranking points.  A city never
     # does: "Frankfurt" stays an unknown country, it is never turned into a
     # French offer.
-    geo_score, geo_reason = geo_score_for(
-        country,
-        preferred_countries=preferred_countries,
-        excluded_countries=geo_excluded_countries,
+    geo_score, geo_reason = (
+        geo_score_for(
+            country,
+            preferred_countries=preferred_countries,
+            excluded_countries=geo_excluded_countries,
+        )
+        if include_geo_score
+        else (0, "")
     )
     country_excluded = _matches_excluded_place(country, excluded_countries, country=True)
     city_excluded = _matches_excluded_place(city, excluded_cities)
