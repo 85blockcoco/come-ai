@@ -516,6 +516,13 @@ def create_career_router(
     async def job_prep(job_id: str) -> Any:
         return await local(lambda: service.get_job_prep(job_id))
 
+    @router.get("/api/career/ats-guide/{job_id}")
+    async def ats_guide(job_id: str) -> Any:
+        """Static description of the human application flow for one job."""
+        from career.ats_guide import human_apply_guide
+
+        return await local(lambda: human_apply_guide(service.get_job(job_id)).to_dict())
+
     @router.get("/api/career/jobs/{job_id}/summary")
     async def job_summary(
         job_id: str,
