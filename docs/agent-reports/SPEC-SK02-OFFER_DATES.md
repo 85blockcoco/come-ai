@@ -337,12 +337,12 @@ composant du dépôt.
 
 ## 13. Conclusion
 
-✅ Module `career/offer_dates.py` : analyseur temporel multilingue **FR/EN/DE/IT/ES**  
-✅ **8** `fact_type`, offsets exacts, quote verbatim, precision, confidence, contradictions mutuelles  
-✅ Les **10 pièges obligatoires** sont couverts, dans les 5 langues  
-✅ **82 fixtures synthétiques** + **270 tests**, 100 % du corpus correctement classé  
-✅ Zéro jour inventé, zéro échéance classes comme début, zéro maximum utilisé comme minimum  
-✅ Ruff propre, suite complète verte (1643 tests), `git diff --check` propre  
+✅ Module `career/offer_dates.py` : analyseur temporel multilingue **FR/EN/DE/IT/ES**\
+✅ **8** `fact_type`, offsets exacts, quote verbatim, precision, confidence, contradictions mutuelles\
+✅ Les **10 pièges obligatoires** sont couverts, dans les 5 langues\
+✅ **82 fixtures synthétiques** + **270 tests**, 100 % du corpus correctement classé\
+✅ Zéro jour inventé, zéro échéance classes comme début, zéro maximum utilisé comme minimum\
+✅ Ruff propre, suite complète verte (1643 tests), `git diff --check` propre\
 ✅ Rapport livré
 
 **Prêt pour relecture et intégration.**
