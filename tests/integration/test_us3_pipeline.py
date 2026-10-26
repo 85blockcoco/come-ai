@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 import career.models as career_models
+import career.service as career_service_module
 from career.service import CareerService
 from come_ai_web import create_app
 
@@ -108,6 +109,29 @@ def test_pipeline_scopes_short_text_normalization_cache(tmp_path: Path, monkeypa
     # has to normalize the value again instead of retaining profile text.
     career_models.normalized_text("corporate finance")
     assert counts["corporate finance"] == 2
+
+
+def test_application_pipeline_skips_unused_profile_recommendation_scores(
+    tmp_path: Path, monkeypatch
+) -> None:
+    service = CareerService(tmp_path, curated_sources=())
+    service.update_stage_search(service.get_stage_search()["brief"])
+    service.import_job(
+        {
+            "company": "Synthetic Bank",
+            "title": "Corporate Finance Intern",
+            "job_family": "Corporate Finance",
+            "official_url": "https://careers.example.test/pipeline-no-explorer-score",
+            "source_status": "open",
+        }
+    )
+    expected = service.get_application_pipeline()
+
+    def unexpected_profile_score(*args, **kwargs):
+        raise AssertionError("Pipeline must not calculate Explorer profile recommendation scores")
+
+    monkeypatch.setattr(career_service_module, "score_job", unexpected_profile_score)
+    assert service.get_application_pipeline() == expected
 
 
 def test_pipeline_frontend_contract_exists() -> None:

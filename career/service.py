@@ -2051,12 +2051,18 @@ class CareerService:
         return self.get_stage_search()
 
     def list_stage_matches(
-        self, *, _scoring_context: dict[str, Any] | None = None
+        self,
+        *,
+        _scoring_context: dict[str, Any] | None = None,
+        _include_recommendation_scores: bool = True,
     ) -> dict[str, Any]:
         """Rank every stored offer against the brief, with the reason for each score."""
         payload = self.get_stage_search()
         brief = payload["brief"]
-        jobs = self.list_jobs(_scoring_context=_scoring_context)
+        jobs = self.list_jobs(
+            _scoring_context=_scoring_context,
+            _include_scoring=_include_recommendation_scores,
+        )
         matches: list[dict[str, Any]] = []
         if payload["configured"]:
             for job in jobs:
@@ -2389,7 +2395,7 @@ class CareerService:
         applications = self.list_applications()
         # Stage matches already carry the serialized local jobs. Reuse them
         # here instead of listing and serializing every offer twice.
-        matches = self.list_stage_matches().get("matches") or []
+        matches = self.list_stage_matches(_include_recommendation_scores=False).get("matches") or []
         jobs = [
             match["job"]
             for match in matches
@@ -3777,6 +3783,7 @@ class CareerService:
         shortlisted: bool | None = None,
         calendar_status: str = "",
         _scoring_context: dict[str, Any] | None = None,
+        _include_scoring: bool = True,
     ) -> list[dict[str, Any]]:
         clauses = ["1 = 1"]
         params: list[Any] = []
@@ -3835,8 +3842,13 @@ class CareerService:
                     payload = {}
                 summaries[identifier] = payload if isinstance(payload, dict) else {}
             source_material = source_material_store.load_current_all(connection)
-        context = _scoring_context if _scoring_context is not None else self._scoring_context()
-        jobs = [self._serialize_job(row, context) for row in rows]
+        context = _scoring_context
+        if _include_scoring and context is None:
+            context = self._scoring_context()
+        jobs = [
+            self._serialize_job(row, context, include_scoring=_include_scoring)
+            for row in rows
+        ]
         for job in jobs:
             # The explorer shows the identifiers of the current snapshot: it
             # never recomputes a requirement on its own. The summary is the
@@ -3850,17 +3862,18 @@ class CareerService:
             job["offer_intelligence_version"] = versions.get(identifier)
             job["source_material"] = source_material.get(identifier)
         source_rank = {"open": 0, "unknown": 1, "closed": 2}
-        jobs.sort(
-            key=lambda job: (
-                bool(job["scoring"].get("blocking_constraints")),
-                not bool(job["scoring"].get("is_recommendable")),
-                -int(job["scoring"].get("score", 0)),
-                source_rank.get(str(job.get("source_status")), 3),
-                not bool(job.get("deadline_date")),
-                str(job.get("deadline_date") or "9999-12-31"),
-                str(job.get("updated_at") or ""),
+        if _include_scoring:
+            jobs.sort(
+                key=lambda job: (
+                    bool(job["scoring"].get("blocking_constraints")),
+                    not bool(job["scoring"].get("is_recommendable")),
+                    -int(job["scoring"].get("score", 0)),
+                    source_rank.get(str(job.get("source_status")), 3),
+                    not bool(job.get("deadline_date")),
+                    str(job.get("deadline_date") or "9999-12-31"),
+                    str(job.get("updated_at") or ""),
+                )
             )
-        )
         return jobs
 
     def _scoring_context(self) -> dict[str, Any]:
@@ -3883,7 +3896,13 @@ class CareerService:
             "intake": self._serialize_intake_row(intake_row) if intake_row else {},
         }
 
-    def _serialize_job(self, row: sqlite3.Row, context: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _serialize_job(
+        self,
+        row: sqlite3.Row,
+        context: dict[str, Any] | None = None,
+        *,
+        include_scoring: bool = True,
+    ) -> dict[str, Any]:
         result = dict(row)
         qualification_row = {
             "qualification_schema_version": result.pop("qualification_schema_version", None),
@@ -3924,10 +3943,11 @@ class CareerService:
         result["shortlisted"] = bool(result["shortlisted"])
         result["calendar_reasons"] = json.loads(result.pop("calendar_reasons_json") or "[]")
         result["deadline_status"] = deadline_state(result.get("deadline_date"), result.get("source_status", "unknown"))
-        context = context or self._scoring_context()
-        result["scoring"] = score_job(
-            context.get("profile"), context.get("preferences"), context.get("intake"), result
-        )
+        if include_scoring:
+            context = context or self._scoring_context()
+            result["scoring"] = score_job(
+                context.get("profile"), context.get("preferences"), context.get("intake"), result
+            )
         application_id = result.pop("application_id", None)
         stage = result.pop("application_stage", None)
         receipt = result.pop("application_receipt_status", None)
