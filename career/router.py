@@ -516,6 +516,13 @@ def create_career_router(
     async def job_prep(job_id: str) -> Any:
         return await local(lambda: service.get_job_prep(job_id))
 
+    @router.get("/api/career/quick-answers/{job_id}")
+    async def quick_answers(
+        job_id: str,
+        lang: str = Query(default="fr", pattern="^(fr|en)$"),
+    ) -> Any:
+        return await local(lambda: service.get_quick_answers(job_id, lang=lang))
+
     @router.get("/api/career/jobs/{job_id}/summary")
     async def job_summary(
         job_id: str,

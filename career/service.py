@@ -65,6 +65,7 @@ from .application_dashboard import (
 )
 from .application_prep import prepare_application, summarize_offer
 from .application_sprint import MAX_SPRINT_CANDIDATES, MAX_SPRINT_ITEMS, build_application_sprint
+from .quick_answers import SUPPORTED_LANGS, build_answer_pack
 from .cv_fit import (
     PipelineItem,
     classify_variant,
@@ -3342,6 +3343,45 @@ class CareerService:
         if not row:
             raise UserFacingError("Cette offre Career n’existe pas.")
         return self._serialize_job(row, self._scoring_context())
+
+    def get_quick_answers(self, job_id: str, lang: str = "fr") -> dict[str, Any]:
+        """SPEC-045 — réponses types copiables calculées depuis les données locales.
+
+        Zéro invention : une information absente donne une réponse ``missing``
+        à valeur vide, à compléter par la personne.  Aucune donnée ne quitte
+        l'espace local et rien n'est soumis automatiquement.
+        """
+        normalized_lang = clean_text(lang, limit=8).lower() or "fr"
+        if normalized_lang not in SUPPORTED_LANGS:
+            raise UserFacingError("La langue demandée doit être fr ou en.")
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM jobs WHERE id = ?",
+                (clean_text(job_id, limit=80),),
+            ).fetchone()
+            if not row:
+                raise UserFacingError("Cette offre Career n’existe pas.")
+            job = self._row_dict(row)
+            profile = self._row_dict(
+                connection.execute("SELECT * FROM candidate_profile WHERE id = 1").fetchone()
+            )
+            preference_rows = connection.execute(
+                "SELECT kind, item_key, label, enabled, priority, scope "
+                "FROM preference_items ORDER BY kind, priority DESC, label"
+            ).fetchall()
+            settings = {
+                setting["setting_key"]: setting["setting_value"]
+                for setting in connection.execute(
+                    "SELECT setting_key, setting_value FROM career_settings"
+                ).fetchall()
+            }
+        preferences = self._serialize_preferences(preference_rows, settings)
+        answers = build_answer_pack(profile=profile, job=job, preferences=preferences, lang=normalized_lang)
+        return {
+            "job_id": str(job.get("id") or ""),
+            "lang": normalized_lang,
+            "answers": [answer.to_dict() for answer in answers],
+        }
 
     def list_jobs(
         self,
