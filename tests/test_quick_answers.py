@@ -282,6 +282,9 @@ def test_motivation_is_exactly_two_plain_sentences_derived_from_the_offer():
     assert "Stagiaire M&A" in motivation.value
     assert "Banque Synthétique" in motivation.value
     assert "M&A / Investment Banking" in motivation.value
+    assert "[à compléter" in motivation.value
+    assert "Mon parcours" not in motivation.value
+    assert "contribuer rapidement" not in motivation.value
 
 
 def test_motivation_without_job_family_uses_a_generic_second_sentence():
@@ -290,7 +293,9 @@ def test_motivation_without_job_family_uses_a_generic_second_sentence():
     )
     assert motivation.source_field == "job.title,job.company"
     assert "À préciser" not in motivation.value
-    assert motivation.value.endswith("votre équipe.")
+    assert "[à compléter avec ta raison personnelle]" in motivation.value
+    assert "Fait approuvé du profil" in motivation.value
+    assert "Mon parcours" not in motivation.value
 
 
 def test_motivation_with_unnamed_offer_is_missing_not_invented():

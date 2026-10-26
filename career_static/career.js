@@ -3534,6 +3534,109 @@ function renderRequirementsFit(target, result, offerIntelligence) {
   target.append(section);
 }
 
+function renderQuickAnswers(target, job) {
+  const jobId = String(job?.id || "").trim();
+  if (!jobId) return;
+  const section = make("section", "", "stagehunter-prep-section quick-answers");
+  section.append(make("h4", "Réponses rapides pour le formulaire"));
+  section.append(make(
+    "p",
+    "Valeurs locales modifiables avant copie. Relis chaque réponse dans le formulaire officiel ; aucun champ n’est envoyé automatiquement.",
+    "scoring-disclaimer",
+  ));
+  const languageRow = make("label", "Langue des questions et du gabarit : ", "quick-answers-language");
+  const language = make("select");
+  language.setAttribute("aria-label", "Langue des réponses rapides");
+  language.append(new Option("Français", "fr"), new Option("English", "en"));
+  language.value = String(job.language || "").toLowerCase().startsWith("en") ? "en" : "fr";
+  languageRow.append(language);
+  section.append(languageRow);
+  const languageNote = make("p", "", "quick-answers-language-note");
+  section.append(languageNote);
+  const status = make("p", "Chargement des réponses locales…", "quick-answers-status");
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
+  section.append(status);
+  const list = make("div", "", "quick-answers-grid");
+  section.append(list);
+  target.append(section);
+
+  let requestVersion = 0;
+  const sourceLabels = {
+    "profile.eligibility": "Éligibilité déclarée dans le profil Career",
+    "profile.languages": "Langues enregistrées dans le profil Career",
+    "profile.education": "Formation enregistrée dans le profil Career",
+    "profile.experience": "Expérience enregistrée dans le profil Career",
+    "preferences.availability.availability_start": "Réglage de disponibilité Career",
+    "preferences.availability.minimum_duration_months,maximum_duration_months": "Durée configurée dans les réglages Career",
+    "preferences.locations": "Villes activées dans les préférences Career",
+    "job.title,job.company": "Titre et entreprise de l’offre enregistrée",
+    "job.title,job.company,job.job_family": "Titre, entreprise et domaine de l’offre enregistrée",
+    "preferences.availability.salary_expectation": "Préférence de rémunération enregistrée",
+    "preferences.availability.compensation_expectation": "Préférence de rémunération enregistrée",
+  };
+  const load = async () => {
+    const version = ++requestVersion;
+    const lang = language.value;
+    status.textContent = "Chargement des réponses locales…";
+    list.replaceChildren();
+    languageNote.textContent = lang === "en"
+      ? "Questions are in English; profile values stay in their original language. Review and translate them yourself if needed. Changing the language replaces edits that have not been copied."
+      : "La motivation est un gabarit à compléter avec ta raison personnelle et une preuve approuvée. Changer de langue remplace les modifications non copiées.";
+    try {
+      const payload = await api(`/api/career/quick-answers/${encodeURIComponent(jobId)}?lang=${encodeURIComponent(lang)}`);
+      if (!section.isConnected || version !== requestVersion) return;
+      for (const answer of payload.answers || []) {
+        const card = make("article", "", "quick-answer-card");
+        const heading = make("div", "", "quick-answer-heading");
+        heading.append(make("strong", answer.label || "Réponse"));
+        const isMotivationTemplate = String(answer.label || "").toLowerCase().includes("motivation");
+        const confidenceLabel = isMotivationTemplate
+          ? "Gabarit à compléter"
+          : answer.confidence === "exact"
+            ? "Valeur du profil"
+            : answer.confidence === "derived"
+              ? "Dérivé — à vérifier"
+              : "À compléter";
+        heading.append(make("span", confidenceLabel, `quick-answer-confidence ${answer.confidence || "missing"}`));
+        card.append(heading);
+        const source = sourceLabels[answer.source_field] || "Données locales Career";
+        card.append(make("p", `Source : ${source}`, "quick-answer-source"));
+        const editor = document.createElement("textarea");
+        editor.rows = isMotivationTemplate ? 3 : 2;
+        editor.maxLength = 2_000;
+        editor.value = String(answer.value || "");
+        editor.placeholder = answer.confidence === "missing"
+          ? "À compléter avec une information exacte ; rien n’est enregistré automatiquement."
+          : "Relis et ajuste avant de copier.";
+        editor.setAttribute("aria-label", `${answer.label || "Réponse"} — modifiable avant copie`);
+        card.append(editor);
+        const actions = make("div", "", "quick-answer-actions");
+        const copyStatus = make("span", "", "kit-copy-status");
+        const copy = make("button", "Copier", "quiet-button");
+        copy.type = "button";
+        copy.disabled = !editor.value.trim() || /\[(?:à compléter|complete)/i.test(editor.value);
+        copy.setAttribute("aria-label", `Copier « ${answer.label || "réponse"} » après relecture`);
+        editor.addEventListener("input", () => {
+          copy.disabled = !editor.value.trim() || /\[(?:à compléter|complete)/i.test(editor.value);
+          if (!copy.disabled) copyStatus.textContent = "Modification temporaire ; le profil ne change pas.";
+        });
+        copy.addEventListener("click", () => copyKitValue(editor.value, copyStatus));
+        actions.append(copy, copyStatus);
+        card.append(actions);
+        list.append(card);
+      }
+      status.textContent = `${list.children.length} réponses locales prêtes à relire. Copie manuelle uniquement.`;
+    } catch (error) {
+      if (!section.isConnected || version !== requestVersion) return;
+      status.textContent = `Réponses indisponibles : ${error.message}`;
+      status.classList.add("error");
+    }
+  };
+  language.addEventListener("change", load);
+  load();
+}
+
 function renderStagePrep(prep) {
   const target = $("#stagehunter-prep");
   if (!target) return;
@@ -3556,6 +3659,7 @@ function renderStagePrep(prep) {
       "application-meta",
     ),
   );
+  renderQuickAnswers(target, job);
   if ((prep.uncertainty || []).length) {
     const warnings = make("ul", "", "scoring-list blocked-list");
     prep.uncertainty.forEach((item) => warnings.append(make("li", item)));

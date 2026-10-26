@@ -243,19 +243,19 @@ def _motivation_answer(job: dict[str, Any], lang: str) -> Answer:
         )
     source_field = "job.title,job.company"
     if lang == "en":
-        first = f"The {title} position at {company} is a strong match with my career plans."
+        first = f"Motivation for the “{title}” position at {company}: [complete with your personal reason]."
         if family and family != _GENERIC_FAMILY:
-            second = f"My background in {family} would let me contribute quickly to your team."
+            second = f"Approved profile fact to connect to “{family}”: [complete and verify before use]."
             source_field += ",job.job_family"
         else:
-            second = "This opportunity would let me contribute concretely to your team's goals."
+            second = "Approved profile fact that supports this motivation: [complete and verify before use]."
     else:
-        first = f"Le poste de {title} au sein de {company} correspond précisément à mon projet professionnel."
+        first = f"Motivation pour le poste « {title} » chez {company} : [à compléter avec ta raison personnelle]."
         if family and family != _GENERIC_FAMILY:
-            second = f"Mon parcours en {family} me permettrait de contribuer rapidement à vos équipes."
+            second = f"Fait approuvé du profil à relier à « {family} » : [à compléter et vérifier avant usage]."
             source_field += ",job.job_family"
         else:
-            second = "Cette opportunité me permettrait de contribuer concrètement aux objectifs de votre équipe."
+            second = "Fait approuvé du profil qui étaye cette motivation : [à compléter et vérifier avant usage]."
     return _answer(
         "motivation", lang,
         value=f"{first} {second}", source_field=source_field, confidence="derived",

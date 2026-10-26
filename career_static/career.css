@@ -418,6 +418,19 @@ footer { margin: 18px 3px 0; color: var(--muted); font-size: .72rem; line-height
 .requirements-fit-item { margin-bottom: 8px; }
 .requirements-fit-item.to_verify, .requirements-fit-item.unsupported, .requirements-fit-item.contradicted { color: var(--warning); }
 .requirements-fit-item p { margin: 4px 0; }
+.quick-answers { padding: 12px; border: 1px solid #c8ded2; border-radius: 12px; background: #f7fbf8; }
+.quick-answers-language { display: inline-flex; align-items: center; gap: 8px; margin: 4px 0 8px; font-size: .75rem; font-weight: 700; }
+.quick-answers-language select { min-height: 36px; padding: 5px 9px; border: 1px solid #b7cfc1; border-radius: 8px; background: #fff; color: var(--ink); }
+.quick-answers-language-note, .quick-answers-status, .quick-answer-source { margin: 5px 0; color: var(--muted); font-size: .7rem; line-height: 1.45; }
+.quick-answers-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 8px; margin-top: 8px; }
+.quick-answer-card { min-width: 0; padding: 10px; border: 1px solid #d8e7de; border-radius: 10px; background: #fff; }
+.quick-answer-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; font-size: .75rem; }
+.quick-answer-confidence { padding: 3px 7px; border-radius: 99px; background: #edf4ef; color: #385848; font-size: .62rem; font-weight: 700; }
+.quick-answer-confidence.derived { background: #fff4dd; color: #78520c; }
+.quick-answer-confidence.missing { background: #f2f3f2; color: #545f58; }
+.quick-answer-card textarea { display: block; width: 100%; min-height: 58px; margin: 6px 0; padding: 8px; border: 1px solid #cddbd2; border-radius: 8px; color: var(--ink); font: inherit; font-size: .75rem; line-height: 1.45; resize: vertical; }
+.quick-answer-card textarea:focus-visible, .quick-answers-language select:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.quick-answer-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
 .stagehunter-prep-actions { align-items: end; }
 .stagehunter-sprint { display: grid; gap: 14px; margin-top: 14px; }
 .sprint-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
