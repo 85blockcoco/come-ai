@@ -54,6 +54,7 @@ from .application_studio import (
     render_application_html,
     scan_kit_placeholders,
 )
+from .apply_kit import build_apply_kit as _module_build_apply_kit
 from .calendar_export import build_deadline_calendar_ics
 from .application_dashboard import (
     CHECKLIST_EVENT_TYPE,
@@ -2120,6 +2121,29 @@ class CareerService:
         )
         self._prep_cache.add(job_id)
         return analysis
+
+    def build_apply_kit(self, job_id: str, profile: Any = None) -> dict[str, Any]:
+        identifier = clean_text(job_id, limit=80)
+        job = self.get_job(identifier)
+        if profile is None:
+            profile = self.get_profile()
+        intake = self._scoring_context().get("intake", {}) or {}
+        kit = _module_build_apply_kit(
+            identifier,
+            profile,
+            service=self,
+            job=job,
+            intake=intake,
+        )
+        from .apply_kit import to_dict
+
+        return to_dict(kit)
+
+    def get_apply_kit(self, job_id: str, profile: Any = None) -> dict[str, Any]:
+        return self.build_apply_kit(job_id, profile)
+
+    def apply_kit(self, job_id: str, profile: Any = None) -> dict[str, Any]:
+        return self.build_apply_kit(job_id, profile)
 
     def get_application_sprint(self, *, limit: int = 12) -> dict[str, Any]:
         """Prioritise a bounded batch for local preparation, without sending.

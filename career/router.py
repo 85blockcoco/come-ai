@@ -516,6 +516,10 @@ def create_career_router(
     async def job_prep(job_id: str) -> Any:
         return await local(lambda: service.get_job_prep(job_id))
 
+    @router.post("/api/career/apply-kit/{job_id}")
+    async def apply_kit(job_id: str) -> Any:
+        """Build a ready-to-submit dossier for one offer (SPEC-044)."""
+        return await local(lambda: service.build_apply_kit(job_id))
     @router.get("/api/career/jobs/{job_id}/summary")
     async def job_summary(
         job_id: str,
