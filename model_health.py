@@ -48,14 +48,11 @@ ALL_MODELS = [
 # (réponse réelle + latence). Les opencode-go/* se bloquent en attente d'API
 # (60 min à 0,2 % CPU, aucun fichier écrit) : exclus.
 VERIFIED_MODELS = [
-    # demandé par Côme le 26/10 (GLM 5.3 Flash "roule bien") — pool mixte :
-    # Go d'abord (choix utilisateur), puis gratuits quand ils reviennent de froid.
-    "opencode-go/glm-5.3-flash",
-    "opencode/deepseek-v4.1-flash-free",
-    "opencode/big-pickle",
-    "opencode/mimo-v2.6-flash-free",
-    "opencode/nemotron-3.5-super-vl-free",
-    "google/gemma-4-26b-a4b-it",
+    # Modèles qui ont prouvé qu'ils livrent (>= 1 mission OK dans l'historique).
+    "opencode-go/beam-free", "opencode-go/minimax-m3", "opencode-go/claude-haiku-5-5",
+    "opencode-go/mimo-v2.6-flash", "opencode-go/grok-4.7", "opencode-go/qwen3.8-flash",
+    "opencode/deepseek-v4.1-flash-free", "opencode/big-pickle",
+    "opencode/mimo-v2.6-flash-free", "opencode-go/glm-5.3-flash",
 ]
 ALL_MODELS = list(VERIFIED_MODELS)
 

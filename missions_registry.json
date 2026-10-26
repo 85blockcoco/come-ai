@@ -559,7 +559,7 @@
    ],
    "status": "pending",
    "description": "Recette bout-en-bout: profil fictif approuvé → exploration → source vérifiée → qualification → dédup → matching → fiche → adaptation CV → lettre → checklist → suivi → relance → prépa entretien. Vérifs: client HTTP réel, navigateur réel, SQLite temp, redémarrage app, import répété, hors ligne, source partielle indisponible, offre contradictoire/expirée/sans date. Zéro candidature/envoi/cloud/donnée privée. Métriques distinctes: synthétiques, app-verified, live, qualité réelle non mesurée. Aucun score simulé mélangé métrique réelle.",
-   "retry_of": 2
+   "retry_of": 0
   },
   {
    "id": "34",
@@ -727,7 +727,7 @@
    ],
    "status": "pending",
    "description": "Playwright : parcours offre→kit, profil incomplet→preuve→couverture, anti-invention, zéro envoi auto. Fixtures synthétiques, FastAPI isolé, captures échec, rapport HTML.",
-   "retry_of": 2
+   "retry_of": 0
   },
   {
    "id": "40",
@@ -1424,7 +1424,7 @@
    ],
    "status": "pending",
    "description": "Extracteur qui regroupe les attentes par secteur/famille de poste et produit une FAQ sectorielle : questions probables + éléments de réponse issus des preuves du profil.",
-   "retry_of": 2
+   "retry_of": 0
   },
   {
    "id": "67",
@@ -1488,7 +1488,7 @@
    ],
    "status": "pending",
    "description": "Journal append-only des décisions (qui, quand, contexte, résultat) avec recherche/filtre et génération d'un rapport d'explication par décision.",
-   "retry_of": 2
+   "retry_of": 0
   },
   {
    "id": "71",
@@ -1500,7 +1500,7 @@
    ],
    "status": "pending",
    "description": "Agrégateur hebdo : N candidatures envoyées, taux de réponse, temps par étape, comparaison à l'objectif fixé, top 3 actions recommandées pour la semaine suivante.",
-   "retry_of": 2
+   "retry_of": 0
   },
   {
    "id": "72",
@@ -1527,7 +1527,7 @@
    "branch": "",
    "merged_sha": "",
    "completed_at": "",
-   "retry_of": 2
+   "retry_of": 0
   },
   {
    "id": "74",
@@ -1541,7 +1541,7 @@
    "branch": "",
    "merged_sha": "",
    "completed_at": "",
-   "retry_of": 2
+   "retry_of": 0
   },
   {
    "id": "75",
@@ -1556,7 +1556,7 @@
    "branch": "",
    "merged_sha": "",
    "completed_at": "",
-   "retry_of": 2
+   "retry_of": 0
   },
   {
    "id": "76",
@@ -1603,7 +1603,7 @@
    "branch": "",
    "merged_sha": "",
    "completed_at": "",
-   "retry_of": 2
+   "retry_of": 0
   },
   {
    "id": "78",
@@ -1674,7 +1674,7 @@
    "status": "pending",
    "priority": "P0",
    "description": "Postuler en un clic — dossier prêt par offre",
-   "retry_of": 1
+   "retry_of": 0
   },
   {
    "id": "82",
@@ -1682,9 +1682,10 @@
    "branch": "agent/spec-045-quick-answers",
    "prompt_file": "docs/agent_missions/SPEC-045-QUICK_ANSWERS_PROMPT.md",
    "dependencies": [],
-   "status": "pending",
+   "status": "done",
    "priority": "P0",
-   "description": "Réponses types copiables pour formulaires d'offre"
+   "description": "Réponses types copiables pour formulaires d'offre",
+   "retry_of": null
   },
   {
    "id": "83",
@@ -1695,7 +1696,7 @@
    "status": "pending",
    "priority": "P0",
    "description": "Détection plateforme ATS + guide humain d'application",
-   "retry_of": 1
+   "retry_of": 0
   },
   {
    "id": "84",
@@ -1703,12 +1704,102 @@
    "branch": "agent/spec-047-send-confirmation",
    "prompt_file": "docs/agent_missions/SPEC-047-SEND_CONFIRMATION_PROMPT.md",
    "dependencies": [],
-   "status": "pending",
+   "status": "done",
    "priority": "P0",
-   "description": "Confirmation d'envoi manuelle + relance optimale"
+   "description": "Confirmation d'envoi manuelle + relance optimale",
+   "completed_at": "2026-10-26T17:22:42.634964",
+   "worker_result": {
+    "task_id": "cvboost-84-1793031287706",
+    "status": "done",
+    "files_created": [
+     "career/send_confirmation.py",
+     "career/service.py",
+     "career/router.py",
+     "tests/test_send_confirmation.py",
+     "docs/agent-reports/SPEC-047-SEND-CONFIRMATION.md"
+    ],
+    "output": "SPEC-047 implemente : module send_confirmation, methodes service, endpoints REST, tests verts.",
+    "logs": "pytest -q tests/test_send_confirmation.py -> 26 passed\nruff check career/ -> All checks passed\ngit diff --check -> clean",
+    "error": null
+   },
+   "verified": "push vérifié + tests verts",
+   "push_verified": true
+  },
+  {
+   "id": "85",
+   "title": "SPEC-048 — Palette de commandes + raccourcis clavier",
+   "branch": "agent/spec-048-cmd_palette",
+   "prompt_file": "docs/agent_missions/SPEC-048-CMD_PALETTE_PROMPT.md",
+   "dependencies": [],
+   "status": "pending",
+   "priority": "P1",
+   "description": "Palette de commandes + raccourcis clavier"
+  },
+  {
+   "id": "86",
+   "title": "SPEC-049 — Centre de notifications et relances dues",
+   "branch": "agent/spec-049-notif_center",
+   "prompt_file": "docs/agent_missions/SPEC-049-NOTIF_CENTER_PROMPT.md",
+   "dependencies": [],
+   "status": "pending",
+   "priority": "P1",
+   "description": "Centre de notifications et relances dues",
+   "retry_of": 0
+  },
+  {
+   "id": "87",
+   "title": "SPEC-050 — Mode hors-ligne (service worker + cache)",
+   "branch": "agent/spec-050-offline_pwa",
+   "prompt_file": "docs/agent_missions/SPEC-050-OFFLINE_PWA_PROMPT.md",
+   "dependencies": [],
+   "status": "pending",
+   "priority": "P2",
+   "description": "Mode hors-ligne (service worker + cache)",
+   "retry_of": 0
+  },
+  {
+   "id": "88",
+   "title": "SPEC-051 — Export groupé zip + copie en un clic",
+   "branch": "agent/spec-051-bundle_export",
+   "prompt_file": "docs/agent_missions/SPEC-051-BUNDLE_EXPORT_PROMPT.md",
+   "dependencies": [],
+   "status": "pending",
+   "priority": "P1",
+   "description": "Export groupé zip + copie en un clic",
+   "retry_of": 0
+  },
+  {
+   "id": "89",
+   "title": "SPEC-052 — Accessibilité et responsive mobile",
+   "branch": "agent/spec-052-a11y_mobile",
+   "prompt_file": "docs/agent_missions/SPEC-052-A11Y_MOBILE_PROMPT.md",
+   "dependencies": [],
+   "status": "pending",
+   "priority": "P2",
+   "description": "Accessibilité et responsive mobile",
+   "retry_of": 0
+  },
+  {
+   "id": "90",
+   "title": "SPEC-053 — Performance perçue (skeleton, optimistic, prefetch)",
+   "branch": "agent/spec-053-perf_ux",
+   "prompt_file": "docs/agent_missions/SPEC-053-PERF_UX_PROMPT.md",
+   "dependencies": [],
+   "status": "pending",
+   "priority": "P2",
+   "description": "Performance perçue (skeleton, optimistic, prefetch)",
+   "retry_of": 0
   }
  ],
  "execution_order": [
+  [
+   "85",
+   "86",
+   "87",
+   "88",
+   "89",
+   "90"
+  ],
   [
    "01",
    "02",
