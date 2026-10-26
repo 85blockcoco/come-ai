@@ -178,3 +178,27 @@ Couverture :
   recommandé.
 - Les métadonnées de permissions/UID ne sont pas restaurées : les fichiers
   réécrits sont en `0600` et les dossiers créés héritent du umask local.
+
+---
+
+## 7. Reprise CVBOOST-69 (worker `cvboost-69-1793043011734`)
+
+L'implémentation de `agent/spec-034-workspace-backup` (commit `dd424d3`) a été
+rejouée sur la base courante `worker/cvboost-69-1793043011734` (`2e52575`,
+post-Mission 11/13) plutôt que dupliquée : une seconde implémentation parallèle
+aurait créé deux modules et deux jeux de routes concurrents.
+
+Vérifications de reprise sur cette base :
+
+```
+pytest -q tests/test_workspace_backup.py                                  → 28 passed
+pytest -q tests/test_career_agent.py tests/test_career_application_dashboard.py
+                                                                          → 61 passed
+ruff check career/workspace_backup.py career/router.py tests/test_workspace_backup.py
+                                                                          → All checks passed
+git diff --check                                                          → clean
+```
+
+Aucune modification de `career.service.SCHEMA_VERSION` (toujours 8) ni des
+dépendances. Le seul écart de la reprise est la base Git : la branche de travail
+repart de `main` récent pour éviter un merge massif de fichiers hors SPEC-034.
