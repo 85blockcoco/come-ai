@@ -1,4 +1,4 @@
-# RAPPORT CODEX — 2026-10-26 16:40 CET
+# RAPPORT CODEX — 2026-10-26 16:42 CET
 
 ## 1. Livré (avec preuve)
 | Commit | Contenu (1 ligne) | Fichiers | Tests verts (nom test) | Durée |
@@ -8,7 +8,7 @@
 | `9528dc0` | Reprend SPEC-045 réponses rapides, sans intégration aveugle | `career/quick_answers.py`, `career/service.py`, `career/router.py`, `tests/test_quick_answers.py`, rapport de mission | `tests/test_quick_answers.py` et suites Career ciblées — 571 passed après adaptation | 9,01 s (pytest mesuré après adaptation) |
 | `36ea301` (`36ea301aa5bb57736818b0523db627bde3993e07`, poussé) | Ajoute les réponses rapides éditables au Stage Hunter, motivation explicitement à compléter et avertissement anglais localisé | `career/quick_answers.py`, `career_static/career.js`, `career_static/career.css`, `tests/test_quick_answers.py`, `messages/codex_note.md` | `tests/test_quick_answers.py` — 24 passed; parcours Chromium synthétique: neuf réponses, copie manuelle, bascule de langue, aucun défaut JavaScript | pytest 4,45 s; navigateur 6,8 s |
 | `b031646` (`b031646e875cd5c830de68966c2fef0f5007f8c9`, SPEC-047) | Ajoute la déclaration humaine d'envoi et le suivi local des relances; garde des routes d'envoi fermée et exacte | `career/send_confirmation.py`, `career/service.py`, `career/router.py`, `tests/test_send_confirmation.py`, `tests/test_career_application_kit.py`, rapport SPEC-047 | `tests/test_send_confirmation.py`, `tests/test_career_application_kit.py`, `tests/test_career_application_dashboard.py` — 65 passed; Ruff vert | 73,71 s (pytest) |
-| lot pipeline-cache (commit inclus dans ce push) | Applique le cache court au calcul du pipeline, à durée limitée à une requête; vérifie l'équivalence du résultat et la libération du cache | `career/service.py`, `tests/integration/test_us3_pipeline.py`, `messages/codex_note.md` | `tests/integration/test_us3_pipeline.py` — 4 passed; `tests/test_career_application_sprint.py` — 14 passed; Ruff, syntaxe JS et diff verts | intégration 30,85 s; sprint 24,47 s |
+| `6484122` (`648412252f658212eaf6de93484750411182d41e`, poussé et vérifié) | Applique le cache court au calcul du pipeline, à durée limitée à une requête; vérifie l'équivalence du résultat et la libération du cache | `career/service.py`, `tests/integration/test_us3_pipeline.py`, `messages/codex_note.md` | `tests/integration/test_us3_pipeline.py` — 4 passed; `tests/test_career_application_sprint.py` — 14 passed; Ruff, syntaxe JS et diff verts | intégration 30,85 s; sprint 24,47 s |
 
 ## 2. En cours maintenant
 | Tâche | % fait | Temps passé | Temps restant estimé | Blocage ? |
@@ -27,8 +27,8 @@
 | Déduplication CV | mêmes exigences présentes dans deux champs d'une offre | quatre conseils et quatre éléments UI uniques; provenance des deux champs conservée | parcours Chromium avec offre et profil synthétiques |
 
 ## 4. État 24 h de ta prod
-- commits aujourd'hui : 16 avant le commit du lot pipeline-cache; vérifiés par `git rev-list --count --since='2026-10-26 00:00' HEAD` à 16:40 CET.
-- lignes ajoutées / supprimées : à calculer après le commit avec `git diff --stat HEAD~N`, N = nombre de commits du jour après livraison.
+- commits aujourd'hui : 17 à 16:42 CET, vérifiés par `git rev-list --count --since='2026-10-26 00:00' HEAD` avant ce commit de rapport.
+- lignes ajoutées / supprimées : 2805 / 93 selon `git diff --stat HEAD~17` (17 commits du jour jusqu'au lot pipeline-cache).
 - tests verts : `tests/integration/test_us3_pipeline.py` (4 passed, 30,85 s); `tests/test_career_application_sprint.py` (14 passed, 24,47 s); `tests/test_quick_answers.py` (24 passed); `tests/test_send_confirmation.py tests/test_career_application_kit.py tests/test_career_application_dashboard.py` (65 passed, 73,71 s); auparavant suites Career ciblées (561 passed); Ruff, `node --check career_static/career.js`, `git diff --check`; parcours Chromium synthétique Career.
 - aucune suite complète exécutée; les données de profil, d'offre et de candidature du serveur vivant n'ont pas été lues.
 
