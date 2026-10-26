@@ -222,6 +222,18 @@ def run_worker(worktree_path: str, prompt: str, order_id: str) -> dict:
     prompt_file = Path(worktree_path) / "WORKER_PROMPT.md"
     prompt_file.write_text(prompt + WORKER_REPORTING_FOOTER, encoding="utf-8")
 
+    # Copier les fichiers référencés dans le worktree AVANT le lancement :
+    # sans eux, l'agent lance `find / -name WORKER_TEMPLATE.md` (scan disque
+    # complet, x8 workers = load average > 300 et machine à genoux).
+    for _name in ("WORKER_TEMPLATE.md",):
+        _src = Path(__file__).resolve().parent / _name
+        _dst = Path(worktree_path) / _name
+        try:
+            if _src.exists() and not _dst.exists():
+                _dst.write_bytes(_src.read_bytes())
+        except Exception as _copy_err:
+            log(f"copie {_name} impossible: {_copy_err}")
+
     # Pool DYNAMIQUE trié par santé/performance (model_health.py):
     # les modèles OK d'abord (score = 60/latence), les LIMIT/SLOW reviennent
     # quand leur cooldown adaptatif échu (base 90 min, ajustée sur le reset
