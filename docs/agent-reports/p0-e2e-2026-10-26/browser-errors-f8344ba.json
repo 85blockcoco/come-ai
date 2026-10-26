@@ -1,0 +1,8 @@
+[
+  {
+    "level": "error",
+    "message": "Error: prompt() is not supported.\n    at markSent (http://127.0.0.1:18924/app-static/app.js:608:21)\n    at HTMLButtonElement.onclick (http://127.0.0.1:18924/app-static/app.js:290:58)",
+    "timestamp": "2026-10-26T17:57:52.023Z",
+    "url": "http://127.0.0.1:18924/app-static/app.js"
+  }
+]

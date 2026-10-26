@@ -1,0 +1,34 @@
+{
+  "observed_at": "2026-10-26T18:01:20.732130+00:00",
+  "kind": "HTTP API, not browser E2E",
+  "steps_status": [
+    200,
+    200,
+    201
+  ],
+  "replay_status": 201,
+  "single_tracking": true,
+  "exports": [
+    {
+      "name": "cv_pdf",
+      "status": 200,
+      "bytes": 2299
+    },
+    {
+      "name": "letter_pdf",
+      "status": 200,
+      "bytes": 2602
+    },
+    {
+      "name": "cv_docx",
+      "status": 200,
+      "bytes": 37293
+    },
+    {
+      "name": "letter_docx",
+      "status": 200,
+      "bytes": 37513
+    }
+  ],
+  "automatic_submission": false
+}
