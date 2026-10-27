@@ -2659,7 +2659,13 @@ function stageOfferOverview(job, qualification) {
     const block = make("div", "", "stage-offer-requirements");
     block.append(make("strong", "Prérequis repérés dans l’offre"));
     const list = make("ul");
-    requirements.forEach((item) => list.append(make("li", item)));
+    requirements.forEach((item) => {
+      const row = make("li", "", "stage-requirement-item");
+      const priority = requirementPriorityLabel({text: item});
+      row.append(chip(priority, priority === "Obligatoire" ? "danger" : priority === "Souhaité" ? "good" : "warning"));
+      row.append(make("span", item));
+      list.append(row);
+    });
     block.append(list);
     panel.append(block);
   }
@@ -3504,6 +3510,12 @@ function renderStagePrep(prep) {
     ...(job.qualification_facts || {}),
     ...(prep.qualification || {}),
   }));
+  const requirementSummary = make("p", "", "application-meta");
+  const requirementItems = prep.requirements || [];
+  const requiredCount = requirementItems.filter((item) => requirementPriorityLabel(item) === "Obligatoire").length;
+  const preferredCount = requirementItems.filter((item) => requirementPriorityLabel(item) === "Souhaité").length;
+  requirementSummary.textContent = `${requirementItems.length} exigence(s) détectée(s) · ${requiredCount} obligatoire(s) · ${preferredCount} souhaitée(s) · le reste à vérifier.`;
+  target.append(requirementSummary);
   if (job.official_url) {
     const link = make("a", "Ouvrir l’offre officielle conservée", "secondary-button external-link");
     link.href = job.official_url;
