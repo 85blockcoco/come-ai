@@ -18,7 +18,7 @@
 | Raccordement app P0 / recette trois interactions | 0/1 recette navigateur validée; chaîne HTTP API réussie | non mesuré | estimation annoncée à 22:08: 1 h 30 à 2 h 30 de travail effectif pour le P0, à réviser à la recette | Codex reprend la lane UI candidate sur demande explicite; correctifs en cours |
 | Alignement sur le vrai `origin/main` GitHub | non mesuré | merge-tree sans changement d'index effectué | non estimé avant résolution | main `69fc924` non ancêtre; 35 chemins conflictuels constatés, aucun merge appliqué |
 | SPEC-044..047 | 4/4 contributions disponibles revues et intégrées/adaptées côté backend | non mesuré | recette UI en cours | aucun blocage de publication SPEC-046 |
-| Recette visuelle NAGE Studio | code, serveur et assets HTTP validés; navigateur non capturé | non mesuré | une recette navigateur à rejouer | l’outil navigateur Codex a expiré trois fois avant de rendre la page; pas présenté comme validé visuellement |
+| Recette visuelle NAGE Studio | validée sur `/app#applications` au port isolé 18924 | non mesuré | terminé pour ce lot | menu visible, application immédiate et persistance vérifiée après rechargement; aucune action métier déclenchée |
 
 ## 3. Performances mesurées
 | Métrique | Avant | Après | Comment mesuré |
