@@ -221,7 +221,11 @@ def extract_requirements(job: dict[str, Any]) -> list[dict[str, str]]:
             return
         if len(items) >= MAX_REQUIREMENTS:
             return
-        items.append({"text": statement, "source": source, "modality": _infer_modality(statement)})
+        item = {"text": statement, "source": source}
+        modality = _infer_modality(statement)
+        if modality != "unknown":
+            item["modality"] = modality
+        items.append(item)
 
     structured = clean_text(job.get("requirements"), limit=20_000)
     for line in structured.splitlines():
