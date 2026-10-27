@@ -95,7 +95,9 @@ def detect_offer_lang(text: str) -> OFFER_LANG:
     Pure heuristic, no model.  Ties are broken by declaration order
     (en > de > es > fr) so the result is always deterministic.
     """
-    tokens = text.lower().split()
+    if not text:
+        return "fr"
+    tokens = str(text).lower().split()
     if not tokens:
         return "fr"
     scores: dict[str, int] = {lang: 0 for lang in ("en", "de", "es", "fr")}
@@ -146,6 +148,8 @@ def build_variant(
     if variant is None:
         known = ", ".join(VARIANT_LABELS)
         raise ValueError(f"Variante inconnue: {variant_id!r} (connues: {known})")
+    if target_lang not in ("en", "de", "es", "fr"):
+        raise ValueError(f"Langue cible inconnue: {target_lang!r} (attendues: en, de, es, fr)")
     if target_lang == "fr":
         return VariantReport(
             offer_lang="fr",

@@ -10,7 +10,7 @@
 | `career/lexicons/en.json` | Lexique FR → EN (41 termes) |
 | `career/lexicons/de.json` | Lexique FR → DE (41 termes) |
 | `career/lexicons/es.json` | Lexique FR → ES (41 termes) |
-| `tests/test_translation_variants.py` | 30 tests (détection, lexiques, variantes, déterminisme) |
+| `tests/test_translation_variants.py` | 33 tests (détection, lexiques, variantes, déterminisme, garde-fous) |
 | `career/router.py` | 2 endpoints REST (`/api/career/translation-variants/detect`, `/build`) |
 
 ## Contrats respectés
@@ -33,16 +33,16 @@
 ## Tests
 
 ```
-pytest -q tests/test_translation_variants.py → 30 passed
+pytest -q tests/test_translation_variants.py → 33 passed
 ruff check career/translation_variants.py career/router.py → All checks passed!
 git diff --check (fichiers mission) → propre
 ```
 
 Couverture :
-- Détection langue : EN, DE, ES, FR, texte vide, texte court, mixte FR/EN (adversarial)
+- Détection langue : EN, DE, ES, FR, texte vide, texte court, mixte FR/EN (adversarial), texte absent (`None`)
 - Lexiques : chargement, validité JSON, immutabilité, traduction de termes clés
 - Variantes : 3 variantes × 3 langues (9 cas), mode passthrough, mode arena, déterminisme
-- Erreurs : variante inconnue, langue inconnue
+- Erreurs : variante inconnue, langue cible inconnue (`"it"`)
 
 ## Limites
 
@@ -66,6 +66,24 @@ Causes corrigées :
 
 Ajout : `test_rest_smoke_detect_and_build` (detect 200 + build 201, mode lexicon).
 Résultats : `pytest tests/test_translation_variants.py` → 31 passed ; ruff clean.
-Suite complète : 3005 passed, 1 failed préexistant et hors périmètre
-(`test_evolution_web.py::test_evolution_candidate_result_has_direct_review_handoff`,
-échoue aussi sans mes modifications).
+
+## Suite — durcissement 27/10/2026
+
+Deux garde-fous ajoutés après revue :
+1. `detect_offer_lang()` retourne `"fr"` pour un texte absent (`None`) au lieu de
+   lever `AttributeError`, afin qu'une offre sans description ne casse pas la
+   pipeline.
+2. `build_variant()` rejette explicitement une langue cible hors
+   `en/de/es/fr` (`ValueError`) au lieu de produire un rapport vide.
+
+Tests ajoutés : `test_detect_none_text_defaults_to_french`,
+`test_build_variant_unknown_target_lang_raises`.
+Résultats : `pytest tests/test_translation_variants.py` → 33 passed (10,29 s) ;
+`ruff check` sur les fichiers mission → clean.
+
+Suite complète (27/10) : 3123 passed, 1 failed préexistant et hors périmètre
+(`tests/test_career_agent.py::test_local_storage_profile_preferences_and_persistence`,
+qui attend encore 6 familles alors que `JOB_FAMILIES` en compte 14 depuis le
+commit `cd0e5e8`). `ruff check .` signale 17 erreurs préexistantes dans
+`night_supervisor.py`, `design/**` et `come_ai_web.py`, aucun fichier de cette
+mission.

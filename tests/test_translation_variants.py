@@ -92,6 +92,11 @@ def test_detect_short_text_returns_a_language() -> None:
     assert result in ("en", "de", "es", "fr")
 
 
+def test_detect_none_text_defaults_to_french() -> None:
+    """Robustness: a missing offer text must not crash the pipeline."""
+    assert detect_offer_lang(None) == "fr"  # type: ignore[arg-type]
+
+
 def test_detect_mixed_fr_en_wins_on_majority_language() -> None:
     """Adversarial: mixed-language text should detect the majority language."""
     result = detect_offer_lang(SYNTHETIC_OFFER_MIXED)
@@ -192,6 +197,12 @@ def test_build_variant_tracks_untranslated_terms() -> None:
 def test_build_variant_unknown_variant_raises() -> None:
     with pytest.raises(ValueError):
         build_variant("unknown_variant", "en")  # type: ignore[arg-type]
+
+
+def test_build_variant_unknown_target_lang_raises() -> None:
+    """An unsupported target language must fail loudly, not silently passthrough."""
+    with pytest.raises(ValueError, match="Langue cible inconnue"):
+        build_variant("m_a", "it")  # type: ignore[arg-type]
 
 
 def test_build_variant_arena_mode() -> None:
