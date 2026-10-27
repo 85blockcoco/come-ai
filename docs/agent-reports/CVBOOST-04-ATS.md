@@ -17,7 +17,8 @@ Le système ne parle **jamais** de « rejet » : il parle de **niveau de risque*
 
 ### Résultats des tests
 - ✅ **57 tests unitaires** dédiés (`tests/test_cv_quality_ats.py`), fixtures **synthétiques** (PDF générés par reportlab, DOCX par python-docx)
-- ✅ **1478 tests** dans la suite globale (≥ 1269 requis) — aucune régression
+- ✅ **Suite globale** : 1451 passés + 1 ignoré sur la branche de livraison `agent/cvboost-04-ats` @ `b4c1f26` (≥ 1269 requis) — aucune régression.
+  Sur `main` @ `a054c97` **+ ce seul commit**, mesuré dans un worktree isolé : 1430 passés + 1 ignoré.
 - ✅ **9 détecteurs** implémentés + score pondéré + label + interprétation
 - ✅ **Performance** : ~45 ms pour un PDF de 5 pages (seuil : 3 s)
 
@@ -228,13 +229,23 @@ Aucune donnée personnelle, aucun fichier externe.
 # 57 passed
 
 /Users/comedelavenne/AI-Excel-Agent/.venv/bin/python -m pytest -q
-# 1478 passed
+# 1451 passed, 1 skipped   (branche de livraison agent/cvboost-04-ats @ b4c1f26)
+# 1430 passed, 1 skipped   (main @ a054c97 + ce seul commit, worktree isolé)
 
 /Users/comedelavenne/AI-Excel-Agent/.venv/bin/python -m ruff check .
 # All checks passed!
 
+VENV_PY=/Users/comedelavenne/AI-Excel-Agent/.venv/bin/python ./checklist_codex.sh all
+# TOUT VERT
+
 git diff --check   # propre
 ```
+
+> **Reproductibilité** : les chiffres ci-dessus sont mesurés dans un *worktree* propre
+> (sans `.env`, sans fichiers non suivis). Un arbre de travail sale peut afficher un total
+> collecté différent (fichiers de mission non commités) : seul le nombre *passé* sur un
+> checkout propre fait foi. Le test ignoré est `tests/test_offer_summary_exhaustiveness.py`
+> (script ou base absents — comportement attendu hors environnement complet).
 
 ---
 
@@ -329,3 +340,17 @@ Les causes et les correctifs :
 3. **Règle de géométrie manquante** : une image dominante (≥ 25 % de la page) sans texte
    adjacent signale un CV aplati dont le contenu est incorporé dans l'image (OCR requis).
 4. **CTM** : la matrice de transformation courante est appliquée aux positions des glyphes.
+
+### Revalidation finale (order `cvboost-04-1792586026`)
+
+Le périmètre autorisé a été rejoué à l'identique sur `main` @ `a054c97` dans un worktree
+isolé : les 5 fichiers de code et de test du périmètre y sont **identiques** à la branche de
+livraison (`git diff` vide sur `career/cv_quality/ats.py`, `models.py`, `parser.py`,
+`__init__.py` et `tests/test_cv_quality_ats.py` — Mission 13 ne touche pas ce périmètre) ;
+seul ce rapport diffère, par les corrections de chiffres ci-dessous. La suite globale y
+passe à **1430 passés + 1 ignoré**, `ruff` est propre et `checklist_codex.sh` affiche
+**TOUT VERT**.
+
+Cette revalidation a aussi corrigé le décompte de la suite globale cité plus haut
+(« 1478 »), qui provenait d'un arbre de travail sale et n'était donc pas reproductible ;
+les chiffres publiés ci-dessus sont mesurés sur des checkouts propres.

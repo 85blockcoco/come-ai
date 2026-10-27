@@ -7,9 +7,8 @@ Documentation: No public API; uses search HTML with structured data.
 
 from __future__ import annotations
 
-import functools
+import re
 import socket
-import ssl
 import time
 import urllib.error
 import urllib.parse
@@ -20,12 +19,19 @@ from html.parser import HTMLParser
 from typing import Any, Callable, Iterator
 
 from ..discovery import DiscoveryPayload, PublicSourceError, source_html_to_text
-from ..countries import canonical_country_codes, country_from_source, split_location
+from ..countries import (
+    GeoFilter,
+    geo_filter,
+    resolve_hinted_country,
+    resolve_published_country,
+)
 from ..models import clean_text, canonical_url
-from ..exploration import classify_internship, criteria_admit, ranking_key
-from ..offer_qualification import qualify_offer
-from ..stage_search import default_brief, score_brief_match, validate_brief
+from ..exploration import admit_offer, ranking_key
 from ..source_fields import attach_source_material
+from ..stage_search import default_brief, validate_brief
+
+from .cards import card_attributes, published_fields, time_attribute
+from .http import ssl_context
 
 
 _JT_BASE = "https://www.jobteaser.com"
@@ -36,28 +42,6 @@ _JT_RATE_LIMIT = 2.0
 _JT_USER_AGENT = "ComeAI-StageBot/1.0"
 _JT_MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 _JT_MAX_ROWS = 400
-
-
-@functools.lru_cache(maxsize=1)
-def _trusted_ssl_context() -> ssl.SSLContext:
-    """SSL context that trusts the certifi root bundle when it is installed.
-
-    macOS Python installers often leave the system keychain without the
-    Mozilla root bundle, which makes a plain default context reject every
-    public site with CERTIFICATE_VERIFY_FAILED.  ``certifi`` solves this
-    without weakening certificate verification; the stdlib context stays the
-    fallback when certifi is absent.  The same fallback already backs the
-    Greenhouse transport (``career/discovery.py``) and the public ATS
-    connectors (``career/connectors/public_ats.py``).
-    """
-    context = ssl.create_default_context()
-    try:
-        import certifi  # noqa: PLC0415 - optional, keep stdlib-only fallback
-
-        context = ssl.create_default_context(cafile=certifi.where())
-    except (ImportError, OSError):
-        pass
-    return context
 
 
 @dataclass
@@ -105,11 +89,16 @@ class _JTJobParser(HTMLParser):
                 "contract_type": "",
                 "url": "",
                 "description": "",
+                "attributes": card_attributes(attrs),
             }
             self._depth = 1
         elif self._in_job_card:
             self._depth += 1
-            if tag == "a" and attrs_dict.get("href"):
+            if tag == "time":
+                published = time_attribute(attrs)
+                if published:
+                    self._current.setdefault("attributes", {})["datetime"] = published
+            elif tag == "a" and attrs_dict.get("href"):
                 href = attrs_dict["href"]
                 if "/jobs/" in href or "/offers/" in href:
                     self._current["url"] = urllib.parse.urljoin(_JT_BASE, href)
@@ -163,7 +152,7 @@ def _default_fetch(url: str) -> str | None:
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=_JT_TIMEOUT, context=_trusted_ssl_context()) as resp:
+        with urllib.request.urlopen(req, timeout=_JT_TIMEOUT, context=ssl_context()) as resp:
             body = resp.read(_JT_MAX_RESPONSE_BYTES + 1)
             if len(body) > _JT_MAX_RESPONSE_BYTES:
                 _HEALTH.last_error = "Response too large"
@@ -203,7 +192,7 @@ def _parse_location(location_text: str) -> tuple[str, str]:
     location_text = clean_text(location_text, limit=160)
     if not location_text:
         return "", ""
-    parts = split_location(location_text)
+    parts = [p.strip() for p in re.split(r"[,(]", location_text) if p.strip()]
     if len(parts) >= 2:
         city = parts[0]
         country = parts[-1]
@@ -211,16 +200,49 @@ def _parse_location(location_text: str) -> tuple[str, str]:
     return location_text, ""
 
 
-def _is_excluded_location(city: str, country: str, excluded_codes: frozenset[str]) -> str:
-    """Canonical country of a location when it is excluded, else an empty string.
+def _is_france_location(city: str, country: str) -> bool:
+    """Check if location is in France (to be excluded per R1)."""
+    france_indicators = {"france", "fr", "paris", "lyon", "marseille", "toulouse", "nice", "nantes",
+                         "strasbourg", "montpellier", "bordeaux", "lille", "rennes", "reims",
+                         "le havre", "saint-etienne", "toulon", "grenoble", "dijon", "angers",
+                         "villeurbanne", "nanterre", "creteil", "aubervilliers", "asnieres",
+                         "colombes", "courbevoie", "levallois-perret", "neuilly-sur-seine"}
+    city_norm = city.lower().strip()
+    country_norm = country.lower().strip()
+    if country_norm in {"france", "fr"}:
+        return True
+    for ind in france_indicators:
+        if ind == "fr":
+            continue
+        if ind in city_norm.split():
+            return True
+        if f"-{ind}" in city_norm or f"{ind}-" in city_norm:
+            return True
+    return False
+
+
+def _is_excluded_location(city: str, country: str, geo: GeoFilter, location_text: str = "") -> str:
+    """Canonical country of a location when it is rejected, else an empty string.
 
     The country is normalized before the comparison, so ``"France"``,
     ``"FR"``, ``"FRA"`` and ``"fr"`` are all the same country while
     ``"Frankfurt"`` (Germany) is never mistaken for ``"FR"``.  A city alone
     never designates a country: an unknown country is not a French offer.
+
+    A source that publishes the country alone (``"France"``, ``"Germany"``)
+    publishes a country: it is read on the country name, never guessed.  A
+    posting that names several countries is kept as soon as one of them is
+    allowed.
+
+    A scraped card that names a single city and no country may only be
+    **excluded** by the city hint: the hint never proves where the offer is,
+    it only refuses an offer whose location suggests an excluded country.
     """
-    code = country_from_source(country)
-    return code if code and code in excluded_codes else ""
+    _ = city
+    _canonical, excluded = resolve_published_country(None, location_text or country, geo)
+    if excluded:
+        return excluded
+    return resolve_hinted_country(location_text or country, geo)
 
 
 def _is_finance_role(title: str, description: str) -> bool:
@@ -250,12 +272,13 @@ def _is_stage_role(title: str, description: str, contract_type: str) -> bool:
 
 
 def _iter_raw_offers(
-    countries_exclude: frozenset[str] = frozenset(),
+    geo: GeoFilter | None = None,
     query: str = "finance internship",
     fetch: Callable[[str], str | None] | None = None,
 ) -> Iterator[dict[str, Any]]:
     """Iterate over raw internship offers from JobTeaser."""
     fetch_fn = fetch or _default_fetch
+    geo_filter_object = geo or GeoFilter()
     for page in range(1, _JT_MAX_PAGES + 1):
         url = _build_search_url(query, page)
         html = fetch_fn(url)
@@ -287,20 +310,16 @@ def _iter_raw_offers(
             description = source_html_to_text(raw.get("description", ""))
 
             if not title or not company or not url_raw:
-                _HEALTH.filtered_count += 1
                 continue
 
             try:
                 official_url = canonical_url(url_raw)
             except Exception:
-                _HEALTH.filtered_count += 1
                 continue
 
             city, country = _parse_location(location_text)
 
-            # The excluded countries are dropped here, on the source side: the
-            # offer never becomes a local record and never consumes a slot.
-            excluded_code = _is_excluded_location(city, country, countries_exclude)
+            excluded_code = _is_excluded_location(city, country, geo_filter_object, location_text)
             if excluded_code:
                 _HEALTH.excluded_by_country[excluded_code] = (
                     _HEALTH.excluded_by_country.get(excluded_code, 0) + 1
@@ -329,7 +348,11 @@ def _iter_raw_offers(
             if not job_id:
                 job_id = str(hash(official_url))[-12:]
 
-            job = {
+            country_canonical, _ = resolve_published_country(
+                None, location_text, geo_filter_object
+            )
+
+            yield attach_source_material({
                 "company": company,
                 "title": title,
                 "source_name": "jobteaser",
@@ -338,7 +361,7 @@ def _iter_raw_offers(
                 "apply_url": official_url,
                 "city": city,
                 "country": country,
-                "country_canonical": country_from_source(country),
+                "country_canonical": country_canonical,
                 "posted_date": "",
                 "deadline_date": "",
                 "start_date": "",
@@ -352,14 +375,7 @@ def _iter_raw_offers(
                 "languages_required": "",
                 "eligibility_requirement": "",
                 "description_original": description,
-            }
-            yield attach_source_material(
-                job,
-                "jobteaser",
-                {"title": title, "company": company, "location": location_text,
-                 "contract_type": contract_type, "url": url_raw},
-                description=description,
-            )
+            }, "jobteaser", published_fields(raw, raw.get("attributes")))
 
         if len(page_jobs) < 15:
             break
@@ -394,6 +410,7 @@ class JobTeaserConnector:
     def discover_internships(
         self, source: dict[str, Any], *, selection_brief: dict[str, Any], deadline: float | None = None,
         countries_exclude: list[str] | tuple[str, ...] | None = None,
+        countries_include: list[str] | tuple[str, ...] | None = None,
     ) -> DiscoveryPayload:
         if not isinstance(source, dict) or source.get("provider") != "jobteaser":
             raise PublicSourceError("La source ne correspond pas au connecteur JobTeaser.", code="invalid_source")
@@ -401,9 +418,7 @@ class JobTeaserConnector:
             raise PublicSourceError("Une source officielle vérifiée est requise avant toute consultation.", code="unverified_source")
 
         brief = validate_brief(selection_brief) if selection_brief else default_brief()
-        excluded_codes = frozenset(canonical_country_codes(
-            countries_exclude if countries_exclude is not None else brief.get("countries_exclude")
-        ))
+        geo = geo_filter(countries_exclude, countries_include, brief)
 
         _HEALTH.raw_offers = 0
         _HEALTH.valid_offers = 0
@@ -419,7 +434,7 @@ class JobTeaserConnector:
         raw_count = evaluated = invalid = confirmed = uncertain = excluded = relevant = filtered = 0
         ranked: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
 
-        for raw in _iter_raw_offers(countries_exclude=excluded_codes, fetch=self._fetch):
+        for raw in _iter_raw_offers(geo=geo, fetch=self._fetch):
             if deadline is not None and self.monotonic() >= deadline:
                 raise PublicSourceError("Le budget de recherche est atteint.", code="budget")
             raw_count += 1
@@ -433,32 +448,20 @@ class JobTeaserConnector:
                 continue
 
             evaluated += 1
-            classification = classify_internship(job)
-            qualification = qualify_offer(
-                job,
-                allowed_contract_types=brief.get("contract_types"),
-                allowed_start_months=brief.get("start_months"),
-                required_start_date=brief.get("start_date"),
-                minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
-            ).to_dict()
-            job["qualification"] = qualification
-            target = qualification["target_status"]
+            # The admission layer decides; the connector only transmits.
+            verdict = admit_offer(job, brief)
+            target = verdict["target_status"]
             confirmed += int(target == "conforming")
             uncertain += int(target == "to_verify")
             excluded += int(target == "non_conforming")
-            if target == "non_conforming":
+            if verdict["status"] == "excluded":
                 continue
-            if (not job.get("official_url") or
-                    (qualification["contract_type"] == "unknown" and not classification.get("evidence"))):
-                filtered += 1
-                continue
-            match = score_brief_match(brief, job)
-            if not criteria_admit(match, job, brief):
+            if verdict["status"] != "admitted":
                 filtered += 1
                 continue
             relevant += 1
-            job["internship_classification"] = classification
-            ranked.append((ranking_key(job, match), {"job": job, "match": match}))
+            job = verdict["job"]
+            ranked.append((ranking_key(job, verdict["match"]), {"job": job, "match": verdict["match"]}))
 
         import heapq
         selected = heapq.nsmallest(self.max_results, ranked, key=lambda item: item[0])
@@ -497,6 +500,7 @@ class JobTeaserConnector:
             "raw_count": _HEALTH.raw_count,
             "filtered_count": _HEALTH.filtered_count,
             "excluded_count": _HEALTH.excluded_count,
+            "country_excluded_count": _HEALTH.excluded_count,
             "excluded_by_country": dict(_HEALTH.excluded_by_country),
         }
 

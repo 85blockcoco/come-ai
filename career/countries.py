@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from dataclasses import dataclass
 from typing import Any
 
 from .models import clean_text
@@ -217,3 +218,457 @@ def canonical_country_codes(values: Any) -> tuple[str, ...]:
         if code and code not in codes:
             codes.append(code)
     return tuple(codes)
+
+
+# Wordings that are a city, not a country name.  A source that publishes
+# "Dubai" publishes a city: the country stays unknown unless the source
+# publishes it too.
+_CITY_NAMES = frozenset({"dubai"})
+
+# US state postal abbreviations that are also ISO 3166-1 alpha-2 codes.  In a
+# prose location they publish a state, not a country: "Chicago, IL" is
+# Illinois, not Israel.  They are only read when the source publishes them in
+# a structural country field, where the code is a published fact.
+_STATE_CODES = frozenset({
+    "AL", "AR", "CA", "CO", "DE", "GA", "ID", "IL", "IN", "LA", "MA", "MD",
+    "ME", "MN", "MO", "MS", "MT", "NE", "SC", "SD",
+})
+
+
+def _country_slot_code(location: Any) -> str:
+    """The country the last part of a location publishes, when it publishes one.
+
+    A source writes the country last (``"Paris, FR"``).  A code that is
+    also a US state abbreviation is never read here: it publishes a state.
+    """
+    text = clean_text(location, limit=300)
+    if not text:
+        return ""
+    parts = [part.strip() for part in re.split(_LOCATION_SEPARATORS, text) if part.strip()]
+    if len(parts) < 2:
+        return ""
+    code = canonicalize_country(parts[-1])
+    if code in _STATE_CODES:
+        return ""
+    return code
+
+
+def _country_name_code(piece: Any) -> str:
+    """The country a single location part names, on country names only."""
+    text = clean_text(piece, limit=120)
+    if not text:
+        return ""
+    folded = _fold(text)
+    if not folded or folded in _CITY_NAMES:
+        return ""
+    return _NAMES_TO_ALPHA2.get(folded, "")
+
+
+def countries_named_in_location(value: Any) -> tuple[str, ...]:
+    """Every country a published location names, in the order it writes them.
+
+    A location is read on country **names** only.  A two-letter wording is
+    ambiguous in a prose location — ``"Chicago, IL"`` publishes an American
+    state, not Israel — so it is never turned into a geography here.  The
+    structural country fields of the sources (Greenhouse
+    ``office.country_code``, Ashby ``addressCountry``) are read elsewhere,
+    where the code is a published fact.
+
+    ``"London, Greater London, England, United Kingdom, Paris, France"``
+    names two countries; ``"Paris"`` names none at all.
+    """
+    text = clean_text(value, limit=300)
+    if not text:
+        return ()
+    codes: list[str] = []
+    for piece in re.split(_LOCATION_SEPARATORS, text):
+        code = _country_name_code(piece)
+        if code and code not in codes:
+            codes.append(code)
+    return tuple(codes)
+
+
+def country_from_location(value: Any) -> str:
+    """The first country a published location names, when it names one.
+
+    A location is read on country **names** only.  A two-letter wording is
+    ambiguous in a prose location — ``"Chicago, IL"`` publishes an American
+    state, not Israel — so it is never turned into a geography here.  The
+    structural country fields of the sources (Greenhouse ``office.country_code``,
+    Ashby ``addressCountry``) are read elsewhere, where the code is a fact.
+
+    The first country wins: a source writes its main location first, and
+    ``"Paris"`` names no country at all.
+    """
+    codes = countries_named_in_location(value)
+    return codes[0] if codes else ""
+
+
+def resolve_published_country(explicit: Any, location: Any, geo: GeoFilter) -> tuple[str, str]:
+    """Resolve the country of one published posting.
+
+    The structural country of the source wins when it publishes one: it is a
+    published fact, not a reading of a prose.  Otherwise the location is
+    read:
+
+    * the countries it **names** (``"Paris, France"``, ``"France"``) are read
+      first, because a name is never ambiguous;
+    * a posting that names several countries is kept as soon as one of them
+      is allowed — a London role published next to Paris is still a London
+      role — and it is dropped only when every country it names is excluded;
+    * a location that publishes a bare code in its country slot
+      (``"Paris, FR"``) is read on that code, unless the code is also a US
+      state abbreviation: ``"Chicago, IL"`` publishes Illinois, not Israel.
+
+    The answer is the pair ``(canonical code, excluded code)``:
+
+    * the canonical code is the first country the posting publishes that the
+      filter keeps, and is empty when the posting publishes none;
+    * the excluded code is the country that caused the drop, and is empty
+      when the posting is kept.
+    """
+    code = canonicalize_country(explicit)
+    if code:
+        return ("", code) if geo.rejects(code) else (code, "")
+    named = countries_named_in_location(location)
+    if len(named) > 1:
+        allowed = [item for item in named if not geo.rejects(item)]
+        if allowed:
+            return allowed[0], ""
+        return named[0], named[0]
+    if named:
+        code = named[0]
+        return ("", code) if geo.rejects(code) else (code, "")
+    slot = _country_slot_code(location)
+    if slot:
+        return ("", slot) if geo.rejects(slot) else (slot, "")
+    return "", ""
+
+
+def resolve_hinted_country(location: Any, geo: GeoFilter,
+                           hints: dict[str, str] | None = None) -> str:
+    """The country a city wording suggests, when the filter excludes it.
+
+    A hint may only **exclude** an offer: it never proves where an offer is
+    located and never turns an unknown country into a known one.  Only a
+    location that names a single place is read this way — a posting
+    published in several unnamed places is never excluded by a hint.
+    """
+    codes = hinted_country_codes(location, hints)
+    for code in codes:
+        if geo.rejects(code):
+            return code
+    return ""
+
+
+# --------------------------------------------------------------------------
+# City hints
+# --------------------------------------------------------------------------
+#
+# A source that scrapes a result page publishes a free-text location, often
+# without any country ("Paris", "Nantes").  The tables below associate a city
+# wording with the country it belongs to.  A hint may only **exclude** an
+# offer: it never proves where an offer is located, and it never turns an
+# unknown country into a known one.  An offer whose location names several
+# places is never excluded by a hint — it is not possible to prove that every
+# one of them is excluded.
+#
+# The vocabulary is factual: a city belongs to the country it belongs to.
+
+_CITY_HINTS: dict[str, str] = {
+    # France
+    "paris": "FR", "lyon": "FR", "marseille": "FR", "toulouse": "FR", "nice": "FR",
+    "nantes": "FR", "strasbourg": "FR", "montpellier": "FR", "bordeaux": "FR",
+    "lille": "FR", "rennes": "FR", "reims": "FR", "le havre": "FR",
+    "saint etienne": "FR", "toulon": "FR", "grenoble": "FR", "dijon": "FR",
+    "angers": "FR", "villeurbanne": "FR", "nanterre": "FR", "creteil": "FR",
+    "aubervilliers": "FR", "asnieres": "FR", "colombes": "FR", "courbevoie": "FR",
+    "levallois perret": "FR", "neuilly sur seine": "FR", "brest": "FR",
+    "tours": "FR", "amiens": "FR", "limoges": "FR", "annecy": "FR",
+    "perpignan": "FR", "besancon": "FR", "metz": "FR", "orleans": "FR",
+    "rouen": "FR", "mulhouse": "FR", "caen": "FR", "nancy": "FR",
+    "clichy": "FR", "clichy billancourt": "FR", "boulogne billancourt": "FR",
+    "saint denis": "FR", "issy les moulineaux": "FR", "malakoff": "FR",
+    "montrouge": "FR", "vanves": "FR", "meudon": "FR", "sevres": "FR",
+    "chatillon": "FR", "bagneux": "FR", "arcueil": "FR", "gentilly": "FR",
+    "kremlin bicetre": "FR", "ivry sur seine": "FR", "drancy": "FR",
+    "pantin": "FR", "saint ouen": "FR", "les lilas": "FR", "romainville": "FR",
+    "noisy le grand": "FR", "joinville le pont": "FR", "fontenay sous bois": "FR",
+    "saint mande": "FR", "vincennes": "FR", "charenton le pont": "FR",
+    "maisons alfort": "FR", "alfortville": "FR", "antony": "FR", "clamart": "FR",
+    "l hay les roses": "FR", "fresnes": "FR", "cachan": "FR", "evry": "FR",
+    "evry courcouronnes": "FR", "cergy": "FR", "poissy": "FR", "sarcelles": "FR",
+    "le mans": "FR", "quimper": "FR", "la rochelle": "FR", "cholet": "FR",
+    "valence": "FR", "avignon": "FR", "pau": "FR", "bayonne": "FR",
+    "calais": "FR", "dunkerque": "FR", "arles": "FR",
+    # United Kingdom
+    "london": "GB", "manchester": "GB", "birmingham": "GB", "glasgow": "GB",
+    "edinburgh": "GB", "bristol": "GB", "leeds": "GB", "liverpool": "GB",
+    "cambridge": "GB", "oxford": "GB", "brighton": "GB", "nottingham": "GB",
+    "leicester": "GB", "sheffield": "GB", "york": "GB", "norwich": "GB",
+    "exeter": "GB", "plymouth": "GB", "portsmouth": "GB", "cardiff": "GB",
+    "belfast": "GB", "newcastle": "GB", "sunderland": "GB", "aberdeen": "GB",
+    "dundee": "GB", "swansea": "GB", "bath": "GB",
+    # Germany
+    "berlin": "DE", "munich": "DE", "hamburg": "DE", "frankfurt": "DE",
+    "cologne": "DE", "koln": "DE", "stuttgart": "DE", "dusseldorf": "DE",
+    "dortmund": "DE", "essen": "DE", "leipzig": "DE", "bremen": "DE",
+    "dresden": "DE", "hannover": "DE", "nuremberg": "DE", "nurnberg": "DE",
+    "duisburg": "DE", "bochum": "DE", "wuppertal": "DE", "bielefeld": "DE",
+    "bonn": "DE", "munster": "DE", "karlsruhe": "DE", "mannheim": "DE",
+    "augsburg": "DE", "wiesbaden": "DE", "monchengladbach": "DE",
+    "gelsenkirchen": "DE", "aachen": "DE", "braunschweig": "DE", "chemnitz": "DE",
+    "halle": "DE", "magdeburg": "DE", "freiburg": "DE", "kiel": "DE", "mainz": "DE",
+    "lubeck": "DE", "erfurt": "DE", "potsdam": "DE", "heidelberg": "DE",
+    "regensburg": "DE", "saarbrucken": "DE",
+    # Spain
+    "madrid": "ES", "barcelona": "ES", "valencia": "ES", "seville": "ES",
+    "zaragoza": "ES", "malaga": "ES", "bilbao": "ES", "granada": "ES",
+    "alicante": "ES", "cordoba": "ES", "valladolid": "ES", "murcia": "ES",
+    "palma": "ES", "palma de mallorca": "ES", "san sebastian": "ES",
+    "coruna": "ES", "vigo": "ES", "pontevedra": "ES", "santander": "ES",
+    "gijon": "ES", "bilbo": "ES",
+    # Italy
+    "rome": "IT", "milan": "IT", "naples": "IT", "turin": "IT", "palermo": "IT",
+    "genoa": "IT", "bologna": "IT", "florence": "IT", "bari": "IT",
+    "catania": "IT", "venice": "IT", "verona": "IT", "messina": "IT",
+    "padua": "IT", "trieste": "IT", "brescia": "IT", "parma": "IT",
+    "modena": "IT", "perugia": "IT", "ravenna": "IT", "livorno": "IT",
+    "cagliari": "IT", "salerno": "IT", "ferrara": "IT", "bergamo": "IT",
+    "trento": "IT", "bolzano": "IT", "novara": "IT", "como": "IT", "pisa": "IT",
+    # Netherlands, Belgium, Luxembourg
+    "amsterdam": "NL", "rotterdam": "NL", "the hague": "NL", "utrecht": "NL",
+    "eindhoven": "NL", "groningen": "NL", "tilburg": "NL", "alkmaar": "NL",
+    "nijmegen": "NL", "breda": "NL", "maastricht": "NL", "zwolle": "NL",
+    "leiden": "NL", "delft": "NL", "haarlem": "NL", "amersfoort": "NL",
+    "apeldoorn": "NL", "den haag": "NL",
+    "brussels": "BE", "antwerp": "BE", "ghent": "BE", "charloi": "BE",
+    "liege": "BE", "bruges": "BE", "namur": "BE", "leuven": "BE", "hasselt": "BE",
+    "genk": "BE", "mons": "BE", "kortrijk": "BE", "mechelen": "BE",
+    "tournai": "BE", "aalst": "BE", "sint niklaas": "BE", "ostend": "BE",
+    "roeselare": "BE", "gand": "BE", "anvers": "BE",
+    "luxembourg": "LU", "esch sur alzette": "LU", "dudelange": "LU",
+    "differdange": "LU", "ettelbruck": "LU",
+    # Switzerland
+    "zurich": "CH", "geneva": "CH", "geneve": "CH", "basel": "CH",
+    "bern": "CH", "lausanne": "CH", "winterthur": "CH", "lucerne": "CH",
+    "lugano": "CH", "biel": "CH", "thun": "CH", "koenzliken": "CH",
+    "fribourg": "CH", "schaffhausen": "CH", "zug": "CH", "sion": "CH",
+    "aarau": "CH", "chur": "CH", "davos": "CH", "verbier": "CH",
+    # Austria, Ireland, Portugal
+    "vienna": "AT", "wien": "AT", "graz": "AT", "linz": "AT", "salzburg": "AT",
+    "innsbruck": "AT", "klagenfurt": "AT", "villach": "AT", "wels": "AT",
+    "sankt polten": "AT", "st pölten": "AT", "dornbirn": "AT",
+    "dublin": "IE", "cork": "IE", "galway": "IE", "limerick": "IE",
+    "waterford": "IE", "killarney": "IE", "wexford": "IE", "drogheda": "IE",
+    "dundalk": "IE", "tralee": "IE", "carlow": "IE", "kilkenny": "IE",
+    "sligo": "IE", "tipperary": "IE", "donegal": "IE", "mayo": "IE",
+    "lisbon": "PT", "lisboa": "PT", "porto": "PT", "braga": "PT",
+    "coimbra": "PT", "aveiro": "PT", "faro": "PT", "setubal": "PT",
+    "guimaraes": "PT", "leiria": "PT", "viseu": "PT", "evora": "PT",
+    "funchal": "PT", "sintra": "PT", "cascais": "PT", "madeira": "PT",
+    "azores": "PT",
+    # Nordics
+    "stockholm": "SE", "gothenburg": "SE", "malmo": "SE", "uppsala": "SE",
+    "vasteras": "SE", "orebro": "SE", "linkoping": "SE", "helsingborg": "SE",
+    "jonkoping": "SE", "norrkoping": "SE", "lulea": "SE", "umea": "SE",
+    "oslo": "NO", "bergen": "NO", "trondheim": "NO", "stavanger": "NO",
+    "drammen": "NO", "kristiansand": "NO", "sandnes": "NO", "tromso": "NO",
+    "bodo": "NO", "harstad": "NO", "narvik": "NO", "fredrikstad": "NO",
+    "copenhagen": "DK", "kobenhavn": "DK", "aarhus": "DK", "odense": "DK",
+    "aalborg": "DK", "esbjerg": "DK", "randers": "DK", "kolding": "DK",
+    "horsens": "DK", "vejle": "DK", "roskilde": "DK", "silkeborg": "DK",
+    "helsinki": "FI", "espoo": "FI", "tampere": "FI", "vantaa": "FI",
+    "oulu": "FI", "turku": "FI", "jyvaskyla": "FI", "kuopio": "FI",
+    "lahti": "FI", "pori": "FI", "kouvola": "FI", "joensuu": "FI",
+    "lappeenranta": "FI", "hameenlinna": "FI", "vaasa": "FI", "rovaniemi": "FI",
+    "reykjavik": "IS", "akureyri": "IS",
+    # Central and Eastern Europe
+    "warsaw": "PL", "warszawa": "PL", "krakow": "PL",
+    "wroclaw": "PL", "poznan": "PL", "lodz": "PL", "katowice": "PL",
+    "gdansk": "PL", "szczecin": "PL", "bydgoszcz": "PL", "lublin": "PL",
+    "bialystok": "PL", "torun": "PL", "kielce": "PL", "gliwice": "PL",
+    "zabrze": "PL", "olsztyn": "PL", "rzeszow": "PL", "gdynia": "PL",
+    "prague": "CZ", "praha": "CZ", "brno": "CZ", "ostrava": "CZ",
+    "plzen": "CZ", "olomouc": "CZ", "liberec": "CZ", "ceske budejovice": "CZ",
+    "hradec kralove": "CZ", "zlin": "CZ", "pardubice": "CZ",
+    "budapest": "HU", "debrecen": "HU", "szeged": "HU", "miskolc": "HU",
+    "pecs": "HU", "gyor": "HU", "nyiregyhaza": "HU", "kecskemet": "HU",
+    "szekesfehervar": "HU", "szombathely": "HU", "szolnok": "HU",
+    "tatabanya": "HU", "kaposvar": "HU",
+    "bucharest": "RO", "cluj napoca": "RO", "timisoara": "RO", "iasi": "RO",
+    "constanta": "RO", "craiova": "RO", "brasov": "RO", "galati": "RO",
+    "ploiesti": "RO", "oradea": "RO", "brad": "RO", "arad": "RO", "sibiu": "RO",
+    "baia mare": "RO", "buziau": "RO", "resita": "RO", "slatina": "RO",
+    "pitesti": "RO", "athens": "GR", "thessaloniki": "GR", "patras": "GR",
+    "heraklion": "GR", "larissa": "GR", "volos": "GR", "ioannina": "GR",
+    "chania": "GR", "kavala": "GR", "rhodes": "GR", "corfu": "GR",
+    "xanthi": "GR", "komotini": "GR", "agrinio": "GR", "katerini": "GR",
+    "tallinn": "EE", "tartu": "EE", "narva": "EE", "viljandi": "EE",
+    "rakvere": "EE", "kohtla jarve": "EE",
+    "riga": "LV", "daugavpils": "LV", "liepaja": "LV", "jelgava": "LV",
+    "jurmala": "LV", "rezekne": "LV", "valmiera": "LV", "ventspils": "LV",
+    "salacgriva": "LV", "kraslava": "LV",
+    "vilnius": "LT", "kaunas": "LT", "klaipeda": "LT", "siauliai": "LT",
+    "panevezys": "LT", "alytus": "LT", "marijampole": "LT", "mazeikiai": "LT",
+    "jonava": "LT", "ukmerge": "LT",
+    "bratislava": "SK", "kosice": "SK", "presov": "SK", "zilina": "SK",
+    "nitra": "SK", "banska bystrica": "SK", "trnava": "SK", "martin": "SK",
+    "poprad": "SK", "zvolen": "SK", "povazska bystrica": "SK",
+    "nove zamky": "SK", "michalovce": "SK", "spisska nova ves": "SK",
+    "komarno": "SK", "levice": "SK", "dubnica": "SK",
+    "ljubljana": "SI", "maribor": "SI", "celje": "SI", "kranj": "SI",
+    "velika gorica": "SI", "novo mesto": "SI", "ptuj": "SI", "trbovlje": "SI",
+    "kamnik": "SI", "jesenice": "SI",
+    "zagreb": "HR", "rijeka": "HR", "osijek": "HR", "zadar": "HR",
+    "pula": "HR", "varazdin": "HR", "sibenik": "HR", "dubrovnik": "HR",
+    # North America, Asia, Oceania, rest of the world
+    "toronto": "CA", "montreal": "CA", "vancouver": "CA", "calgary": "CA",
+    "ottawa": "CA", "edmonton": "CA", "winnipeg": "CA", "quebec city": "CA",
+    "hamilton": "CA", "halifax": "CA", "victoria": "CA", "saskatoon": "CA",
+    "regina": "CA", "kelowna": "CA", "laval": "CA", "guelph": "CA",
+    "new york": "US", "nyc": "US", "san francisco": "US", "los angeles": "US",
+    "chicago": "US", "boston": "US", "seattle": "US", "austin": "US",
+    "denver": "US", "washington": "US", "miami": "US", "atlanta": "US",
+    "san diego": "US", "portland": "US", "dallas": "US", "houston": "US",
+    "philadelphia": "US", "phoenix": "US", "san jose": "US", "pittsburgh": "US",
+    "minneapolis": "US", "detroit": "US", "nashville": "US", "raleigh": "US",
+    "charlotte": "US", "cleveland": "US", "columbus": "US", "indianapolis": "US",
+    "hong kong": "HK", "kowloon": "HK",
+    "singapore": "SG", "tokyo": "JP", "osaka": "JP", "kyoto": "JP",
+    "yokohama": "JP", "nagoya": "JP", "sapporo": "JP", "fukuoka": "JP",
+    "kobe": "JP", "hiroshima": "JP", "sendai": "JP",
+    "shanghai": "CN", "beijing": "CN", "shenzhen": "CN", "guangzhou": "CN",
+    "hangzhou": "CN", "chengdu": "CN", "nanjing": "CN", "wuhan": "CN",
+    "xian": "CN", "suzhou": "CN", "seoul": "KR", "busan": "KR", "incheon": "KR",
+    "daegu": "KR", "daejeon": "KR", "gwangju": "KR", "suwon": "KR",
+    "mumbai": "IN", "delhi": "IN", "bangalore": "IN", "hyderabad": "IN",
+    "chennai": "IN", "pune": "IN", "kolkata": "IN", "ahmedabad": "IN",
+    "jaipur": "IN", "gurgaon": "IN", "noida": "IN",
+    "sydney": "AU", "melbourne": "AU", "brisbane": "AU", "perth": "AU",
+    "adelaide": "AU", "canberra": "AU", "gold coast": "AU", "hobart": "AU",
+    "darwin": "AU", "auckland": "NZ", "wellington": "NZ", "christchurch": "NZ",
+    "sao paulo": "BR", "rio de janeiro": "BR", "brasilia": "BR",
+    "salvador": "BR", "fortaleza": "BR", "belo horizonte": "BR", "curitiba": "BR",
+    "recife": "BR", "porto alegre": "BR", "manaus": "BR", "campinas": "BR",
+    "mexico city": "MX", "guadalajara": "MX", "monterrey": "MX", "puebla": "MX",
+    "queretaro": "MX", "tijuana": "MX", "cancun": "MX",
+    "johannesburg": "ZA", "cape town": "ZA", "pretoria": "ZA", "durban": "ZA",
+    "port elizabeth": "ZA", "bloemfontein": "ZA",
+    "tel aviv": "IL", "jerusalem": "IL", "haifa": "IL", "netanya": "IL",
+    "dubai": "AE", "abu dhabi": "AE", "sharjah": "AE", "al ain": "AE",
+    "istanbul": "TR", "ankara": "TR", "izmir": "TR", "antalya": "TR",
+    "bursa": "TR", "adana": "TR", "konya": "TR", "gaziantep": "TR",
+    "moscow": "RU", "saint petersburg": "RU", "novosibirsk": "RU",
+    "yekaterinburg": "RU", "kazan": "RU", "kyiv": "UA", "kiev": "UA",
+    "kharkiv": "UA", "odessa": "UA", "lviv": "UA",
+    "riyadh": "SA", "jeddah": "SA", "dammam": "SA", "doha": "QA", "cairo": "EG",
+    "alexandria": "EG", "giza": "EG", "casablanca": "MA", "rabat": "MA",
+    "marrakech": "MA", "tangier": "MA", "agadir": "MA",
+}
+
+# French regions APEC publishes on its own postings.
+_FRANCE_REGION_HINTS: dict[str, str] = {
+    "ile de france": "FR", "provence": "FR", "alsace": "FR", "aquitaine": "FR",
+    "bretagne": "FR", "normandie": "FR", "occitanie": "FR",
+    "pays de la loire": "FR", "hauts de france": "FR", "grand est": "FR",
+    "nouvelle aquitaine": "FR", "auvergne rhone alpes": "FR",
+    "bourgogne franche comte": "FR", "centre val de loire": "FR", "corse": "FR",
+}
+
+
+def _build_hint_index(hints: dict[str, str]) -> dict[str, str]:
+    index: dict[str, str] = {}
+    for name, code in hints.items():
+        key = _fold(name)
+        if key:
+            index.setdefault(key, code)
+    return index
+
+
+CITY_HINT_INDEX: dict[str, str] = _build_hint_index(_CITY_HINTS)
+FRANCE_REGION_HINT_INDEX: dict[str, str] = _build_hint_index(_FRANCE_REGION_HINTS)
+APEC_HINT_INDEX: dict[str, str] = {**CITY_HINT_INDEX, **FRANCE_REGION_HINT_INDEX}
+
+
+def hinted_country_codes(location: Any, hints: dict[str, str] | None = None) -> tuple[str, ...]:
+    """The countries a city wording suggests.
+
+    The hint is read on the whole location when it names one place, and on
+    its words otherwise.  An empty result means the wording suggests no
+    country: the offer then stays visible.
+    """
+    text = clean_text(location, limit=300)
+    vocabulary = CITY_HINT_INDEX if hints is None else hints
+    if not text or not vocabulary:
+        return ()
+    parts = [part.strip() for part in re.split(_LOCATION_SEPARATORS, text) if part.strip()]
+    parts = [part for part in parts if not canonicalize_country(part)]
+    if not parts:
+        return ()
+    if len(parts) > 1:
+        # Several unnamed places: nothing is proven, nothing is excluded.
+        return ()
+    codes: list[str] = []
+    for token in _fold(parts[0]).split():
+        code = vocabulary.get(token)
+        if code and code not in codes:
+            codes.append(code)
+    return tuple(codes)
+
+
+@dataclass(frozen=True)
+class GeoFilter:
+    """The geographic filter a connector applies on its own side.
+
+    Two lists are read:
+
+    * ``exclude`` — the countries the person never wants.  France is the
+      default and is always excluded unless the person explicitly empties
+      the list.
+    * ``include`` — the countries a source is allowed to publish.  It is
+      empty by default (every country is allowed) and is meant for the
+      sources that only publish a targeted geography.
+
+    An offer whose country is unknown is never dropped: a missing country
+    is an unknown fact, and the product shows it to the person as *to
+    verify* instead of guessing a geography for it.
+    """
+
+    exclude: frozenset[str] = frozenset()
+    include: frozenset[str] = frozenset()
+
+    def rejects(self, code: str) -> bool:
+        """True when an offer published in ``code`` must be dropped."""
+        if not code:
+            return False
+        if code in self.exclude:
+            return True
+        if self.include and code not in self.include:
+            return True
+        return False
+
+    def rejects_wording(self, country: Any) -> str:
+        """Canonical country of a wording when it is rejected, else ``""``."""
+        code = country_from_source(country)
+        return code if self.rejects(code) else ""
+
+
+def geo_filter(
+    countries_exclude: Any = None,
+    countries_include: Any = None,
+    brief: dict[str, Any] | None = None,
+) -> GeoFilter:
+    """Build the filter a connector must apply.
+
+    The explicit parameters win; the brief is the fallback.  An explicit
+    empty list is a real choice and disables that side of the filter: it is
+    the only way a French posting reaches the person again.
+    """
+    payload = brief or {}
+    exclude = countries_exclude if countries_exclude is not None else payload.get("countries_exclude")
+    include = countries_include if countries_include is not None else payload.get("countries_include")
+    return GeoFilter(
+        exclude=frozenset(canonical_country_codes(exclude)),
+        include=frozenset(canonical_country_codes(include)),
+    )

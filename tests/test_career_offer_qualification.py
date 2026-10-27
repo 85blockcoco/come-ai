@@ -162,3 +162,48 @@ def test_title_seasons_deadlines_and_quarters_do_not_invent_start_month(title: s
     }, as_of=date(2026, 10, 18))
     assert result.start_month is None
     assert result.target_status == "to_verify"
+
+
+def test_education_requirement_is_exposed_with_exact_quote() -> None:
+    """SK-19 : le niveau d'études requis apparaît dans la provenance, cité verbatim."""
+    description = "Nous recherchons un stagiaire. Bac+5 minimum (Finance) requis pour ce poste."
+    result = qualify_offer({
+        "title": "Finance Intern",
+        "description_original": description,
+        "employment_type": "Internship",
+        "official_url": "https://careers.example.test/education",
+        "source_name": "greenhouse",
+        "source_id": "education-1",
+        "source_verified": True,
+    }, as_of=date(2026, 10, 18))
+    fact = result.provenance["education_required"]
+    assert fact.value == 5
+    assert fact.source == "description_passage"
+    assert fact.quote == "Bac+5"
+    assert description[description.index(fact.quote):description.index(fact.quote) + len(fact.quote)] == fact.quote
+
+
+def test_offer_without_education_requirement_has_no_education_evidence() -> None:
+    result = qualify_offer({
+        "title": "Finance Intern",
+        "description_original": "Six month internship in a friendly team; start date to be confirmed.",
+        "employment_type": "Internship",
+        "official_url": "https://careers.example.test/no-education",
+        "source_name": "greenhouse",
+        "source_id": "education-2",
+        "source_verified": True,
+    }, as_of=date(2026, 10, 18))
+    assert "education_required" not in result.provenance
+
+
+def test_negated_education_mention_never_becomes_evidence() -> None:
+    result = qualify_offer({
+        "title": "Finance Intern",
+        "description_original": "Poste ouvert sans diplôme d'ingénieur requis.",
+        "employment_type": "Internship",
+        "official_url": "https://careers.example.test/negated-education",
+        "source_name": "greenhouse",
+        "source_id": "education-3",
+        "source_verified": True,
+    }, as_of=date(2026, 10, 18))
+    assert "education_required" not in result.provenance

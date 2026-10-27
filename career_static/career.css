@@ -78,6 +78,12 @@ h1 span { color: var(--accent); }
 .dashboard-hero .inline-actions { justify-content: flex-end; }
 .dashboard-content { margin-top: 16px; }
 .dashboard-content .metrics { margin-bottom: 0; }
+.daily-digest-panel { margin-bottom: 16px; }
+.daily-digest-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 11px; margin-bottom: 16px; }
+.daily-digest-summary .metric { padding: 11px 13px; }
+.daily-digest-summary .metric strong { font-size: 1.2rem; }
+.daily-digest-section { margin-top: 16px; }
+.daily-digest-section .panel-heading { margin-bottom: 2px; }
 .action-plan-panel { display: grid; gap: 0; margin-top: 16px; padding: 19px; border-color: #cce5d7; background: linear-gradient(135deg, #fff 0%, #f6fcf8 100%); }
 .action-plan-heading { margin-bottom: 7px; }
 .action-plan-heading .local-tag { flex: 0 0 auto; }
@@ -234,6 +240,13 @@ details summary:focus-visible { border-radius: 5px; outline-offset: 4px; }
 .job-card-header, .application-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .job-card h3, .application-card h3 { font-size: .94rem; line-height: 1.35; }
 .job-company { margin-top: 3px; color: var(--muted); font-size: .78rem; }
+/* SK-20 : badge "Exhaustivité XX%" calculé côté service, couleurs seuils 70/40/0 */
+.exhaustiveness-badge { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 999px; font-size: .72rem; font-weight: 700; border: 1px solid currentColor; white-space: nowrap; }
+.exhaustiveness-badge.is-green { color: var(--good); background: var(--good-soft); }
+.exhaustiveness-badge.is-orange { color: var(--warning); background: var(--warning-soft); }
+.exhaustiveness-badge.is-red { color: var(--danger); background: var(--danger-soft); }
+.exhaustiveness-badge.is-gray { color: var(--faint); background: var(--surface-muted); }
+
 .job-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
 .job-chip { display: inline-flex; align-items: center; min-height: 24px; padding: 4px 7px; color: #315d4e; background: #eef8f2; }
 .job-chip.good { color: var(--good); background: var(--good-soft); }
@@ -467,6 +480,7 @@ button, a, .career-tab { transition: background-color .16s ease, border-color .1
 
 @media (max-width: 1050px) {
   .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .daily-digest-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 860px) {
   .career-topbar, .dashboard-hero { align-items: flex-start; flex-direction: column; }
@@ -488,6 +502,7 @@ button, a, .career-tab { transition: background-color .16s ease, border-color .1
   .stage-detail-hero { flex-direction: column; }
   .stage-detail-hero .primary-button { width: 100%; }
   .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .daily-digest-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .two-columns, .three-columns { grid-template-columns: 1fr; }
   .profile-import-field-controls { grid-template-columns: 1fr; }
   .profile-import-history-item { align-items: flex-start; flex-direction: column; }
@@ -510,6 +525,7 @@ button, a, .career-tab { transition: background-color .16s ease, border-color .1
 }
 @media (max-width: 420px) {
   .metrics { grid-template-columns: 1fr; }
+  .daily-digest-summary { grid-template-columns: 1fr; }
   .career-shell { width: min(100% - 20px, 760px); }
   .brand-mark { width: 42px; height: 42px; border-radius: 13px; }
   .top-actions { width: 100%; }
@@ -566,8 +582,89 @@ button, a, .career-tab { transition: background-color .16s ease, border-color .1
 .application-checklist-items input { width: auto; flex-shrink: 0; margin-top: 2px; }
 .timeline-event { margin: 0; color: var(--muted); font-size: .72rem; line-height: 1.4; }
 .clipboard-fallback { position: absolute; inset-inline-start: -9999px; top: 0; }
+
+/* SPEC-005 — cockpit quotidien (« Aujourd'hui »). */
+.daily-panel { display: grid; gap: .9rem; padding: 19px; border-color: #cce5d7; background: linear-gradient(135deg, #fff 0%, #f6fcf8 100%); }
+.daily-progression { display: grid; gap: .55rem; }
+.daily-progression h3 { color: var(--accent-dark); font-size: .88rem; }
+.daily-progression .metrics { grid-template-columns: repeat(6, minmax(0, 1fr)); margin-bottom: 0; }
+.daily-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.daily-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center; padding: 11px; border: 1px solid #dbe7df; border-radius: 12px; background: #fff; }
+.daily-card-copy { display: grid; min-width: 0; gap: 3px; }
+.daily-card-copy strong { overflow: hidden; font-size: .83rem; text-overflow: ellipsis; white-space: nowrap; }
+.daily-card-copy span, .daily-card-copy small { color: var(--muted); font-size: .72rem; line-height: 1.35; }
+.daily-card-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.daily-card .quiet-button { grid-column: 2; grid-row: 1 / span 2; }
+@media (max-width: 1050px) {
+  .daily-progression .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .daily-grid { grid-template-columns: minmax(0, 1fr); }
+}
 @media (max-width: 620px) {
   .application-filters { align-items: stretch; }
   .application-filters label { flex: 1 1 100%; }
   .application-filters select { width: 100%; }
 }
+
+/* SK-10 — profil candidat : approbation champ par champ des faits prouvés. */
+.candidate-profile-builder { display: grid; gap: 12px; }
+.candidate-facts-counts { display: flex; flex-wrap: wrap; gap: 7px; }
+.fact-count { padding: 4px 11px; border: 1px solid var(--border); border-radius: 16px; background: #fff; color: var(--muted); font-size: .74rem; }
+.fact-count-pending { border-color: #e5c98a; background: var(--warning-soft); color: var(--warning); }
+.fact-count-approved { border-color: #cfe3d8; background: var(--good-soft); color: var(--good); }
+.candidate-facts-list { display: grid; gap: 10px; }
+.candidate-fact { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface-soft); }
+.candidate-fact-proposed { border-left: 3px solid var(--warning); }
+.candidate-fact-approved { border-left: 3px solid var(--good); }
+.candidate-fact-modified { border-left: 3px solid var(--accent); }
+.candidate-fact-rejected, .candidate-fact-suspended { opacity: .72; border-left: 3px solid var(--faint); }
+.candidate-fact-head { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.candidate-fact-kind, .candidate-fact-status, .candidate-fact-ocr { padding: 3px 9px; border-radius: 12px; background: #fff; border: 1px solid var(--border); font-size: .7rem; }
+.candidate-fact-ocr { border-color: #e5c98a; background: var(--warning-soft); color: var(--warning); }
+.candidate-fact-label { margin: 0; font-size: .88rem; font-weight: 650; }
+.candidate-fact-evidence { margin: 0; color: var(--muted); font-size: .72rem; }
+.candidate-fact-quote { margin: 0; padding: 7px 10px; border-left: 2px solid var(--border); background: #fff; color: var(--ink); font-size: .76rem; line-height: 1.4; }
+.candidate-fact-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.candidate-fact-correction { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.candidate-fact-correction input { flex: 1 1 220px; min-height: 34px; padding: 5px 9px; border: 1px solid var(--border); border-radius: 8px; background: #fff; color: var(--ink); font-size: .82rem; }
+
+/* SK-11 — dossier de candidature vérifiable (local, aucun envoi automatique). */
+.application-dossier { margin-top: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); display: grid; gap: 12px; }
+.application-dossier[hidden] { display: none; }
+.application-dossier-section { display: grid; gap: 7px; padding-top: 8px; border-top: 1px dashed var(--border); }
+.application-dossier-verification { border-top: none; }
+.application-dossier-blocked { margin: 0; padding: 8px 10px; border: 1px solid #e6b3b3; border-radius: 8px; background: var(--danger-soft, #fdf1f1); color: var(--danger); font-size: .78rem; font-weight: 650; }
+.application-dossier-artifact { display: grid; gap: 6px; }
+.application-dossier-artifact summary { cursor: pointer; font-size: .78rem; font-weight: 650; }
+.application-dossier-body { max-height: 320px; overflow: auto; margin: 0; padding: 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-soft); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .74rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.dossier-claim { font-size: .76rem; line-height: 1.4; }
+.dossier-claim-unsupported { color: var(--danger); }
+.dossier-claim-to_verify { color: var(--warning); }
+ .dossier-claim-supported { color: var(--ink); }
+
+/* SPEC-023 — Personal style memory panel (Réglages) */
+.memory-style-panel { display: grid; gap: 12px; }
+.memory-style-panel h3 { margin-top: 8px; font-size: .92rem; }
+.memory-stats { display: flex; flex-wrap: wrap; gap: 8px; }
+.memory-stat { padding: 5px 11px; border: 1px solid var(--border); border-radius: 17px; background: #fff; color: var(--ink); font-size: .74rem; }
+.memory-status { margin: 0; color: var(--muted); font-size: .76rem; line-height: 1.45; }
+.memory-status.error { color: var(--danger); font-weight: 650; }
+.memory-constraints { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.memory-constraints li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #dce9e2; border-radius: 9px; background: var(--surface-soft); }
+.memory-constraints code { color: var(--accent-dark); font-size: .78rem; }
+.memory-badge { padding: 2px 8px; border-radius: 11px; background: #eef3f0; color: var(--muted); font-size: .68rem; font-weight: 700; }
+.memory-badge.auto { background: var(--accent-soft); color: var(--accent-dark); }
+.memory-pref-list, .memory-glossary, .memory-history { display: grid; gap: 9px; }
+.memory-pref-card, .memory-history-item { display: grid; gap: 6px; padding: 11px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
+.memory-pref-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.memory-pref-value { margin: 0; color: var(--ink); font-size: .82rem; }
+.memory-pref-meta { margin: 0; color: var(--faint); font-size: .7rem; line-height: 1.4; }
+.memory-confidence-bar { height: 6px; border-radius: 3px; background: #edf2ef; overflow: hidden; }
+.memory-confidence-bar span { display: block; height: 100%; background: var(--accent); }
+.memory-pref-card .quiet-button, .memory-history-item .quiet-button { justify-self: start; }
+.memory-history-item.undone { opacity: .62; }
+.memory-history-context { margin: 0; color: var(--muted); font-size: .75rem; }
+.memory-history-choice { margin: 0; color: var(--ink); font-size: .8rem; }
+.memory-form .form-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.memory-form .form-row label { flex: 1 1 200px; }
+.memory-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.memory-actions .file-button { display: inline-flex; align-items: center; cursor: pointer; }

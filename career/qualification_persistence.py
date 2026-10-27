@@ -43,6 +43,12 @@ _FACT_FIELDS = (
 def _bounded_scalar(value: Any) -> str | int | float | bool | None:
     if value is None or isinstance(value, (bool, int, float)):
         return value
+    if isinstance(value, (list, tuple)):
+        # A list of quoted facts (missions, SK-18) is persisted as readable
+        # text, never as a Python repr.
+        return "\n".join(
+            clean_text(item, limit=300) for item in value if clean_text(item, limit=300)
+        )[:2_000]
     return clean_text(value, limit=2_000)
 
 

@@ -28,6 +28,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
+from career.memory_router import create_memory_router
+from career.personal_memory import StyleMemoryStore
 from career.profile_import import MAX_PROFILE_IMPORT_BYTES
 from career.router import CAREER_STATIC_DIR, create_career_router
 from career.service import CareerService
@@ -293,6 +295,10 @@ def create_app(
     logger = _build_logger(config.log_dir)
     agent = agent_override or AgentService(config, workspace)
     career = career_override or CareerService(config.base_dir)
+    # Personal style memory stays next to the Career database (and therefore
+    # outside the general chat workspace).  Construction never parses the file,
+    # so a damaged file cannot prevent the local app from starting.
+    style_memory = StyleMemoryStore(Path(career.data_dir) / "style_memory")
     tools = LocalTools(workspace)
     memory: PersonalMemoryStore | None = None
     memory_error: str | None = None
@@ -392,6 +398,7 @@ def create_app(
     )
     app.state.runtime = runtime
     app.state.career = career
+    app.state.style_memory = style_memory
     app.state.get_workshop = get_workshop
     # The launcher binds Uvicorn to 127.0.0.1. This is a second line of
     # defence against unexpected Host headers when using a local browser.
@@ -411,6 +418,13 @@ def create_app(
         paths=("/api/career/profile-imports",),
         prefix=True,
         error_message="Document de profil trop volumineux (maximum 10 Mo).",
+    )
+    app.add_middleware(
+        UploadBodyLimitMiddleware,
+        max_bytes=MAX_CAREER_PROFILE_IMPORT_BYTES,
+        paths=("/api/career/evidence",),
+        prefix=True,
+        error_message="Pièce jointe trop volumineuse (maximum 10 Mo).",
     )
     app.add_middleware(
         UploadBodyLimitMiddleware,
@@ -886,6 +900,7 @@ def create_app(
         career_ai_generator = generate_career_application
 
     app.include_router(create_career_router(career, ai_generator=career_ai_generator))
+    app.include_router(create_memory_router(style_memory))
     from devkit.router import create_developer_router
 
     app.include_router(create_developer_router(get_workshop))

@@ -210,7 +210,9 @@ function labelForView(viewName) {
     studio: "Application Studio",
     applications: "Candidatures",
     interviews: "Coach d’entretien",
+    traceability: "Traçabilité",
     profile: "Mon profil",
+    evidence: "Centre de preuves",
     settings: "Réglages",
   }[viewName] || "Career";
 }
@@ -249,7 +251,7 @@ function organiseViews() {
   }
 }
 
-const careerViews = new Set(["dashboard", "discover", "stagehunter", "shortlist", "studio", "applications", "interviews", "profile", "settings"]);
+const careerViews = new Set(["dashboard", "discover", "stagehunter", "shortlist", "studio", "applications", "interviews", "profile", "evidence", "settings", "traceability", "constitution", "dependencies"]);
 let internalHashChange = false;
 
 function refreshView(viewName) {
@@ -260,6 +262,12 @@ function refreshView(viewName) {
     studio: loadStudio,
     applications: loadApplications,
     interviews: loadCoach,
+    evidence: () => (typeof loadEvidenceCenter === "function" ? loadEvidenceCenter() : Promise.resolve()),
+    // SPEC-011 — le registre de traçabilité est un module autonome : Career
+    // ne fait que lui demander de se rafraîchir.
+    traceability: () => window.CareerTraceability?.refresh(),
+    constitution: async () => { if (window.ComeConstitution?.init) await window.ComeConstitution.init(); },
+    dependencies: () => (window.CareerDependencies?.refresh ? window.CareerDependencies.refresh() : Promise.resolve()),
   };
   loaders[viewName]?.().catch((error) => setMessage(error.message, true));
 }
@@ -281,6 +289,9 @@ function showView(viewName, { focus = true, updateHash = true } = {}) {
     view.hidden = view.id !== `view-${viewName}`;
   });
   refreshView(viewName);
+  if (viewName === "profile") {
+    window.careerProfileBuilder?.refresh?.();
+  }
   document.title = `${labelForView(viewName)} — Côme AI Career`;
   if (updateHash && window.location.hash !== `#career/${viewName}`) {
     internalHashChange = true;
@@ -1062,6 +1073,10 @@ function jobCard(job, mode = "discover", qualification = null) {
     if (note) card.append(note);
   }
   card.append(actions);
+  // SPEC-006 : the badges of freshness, completeness and source trust are
+  // read from the local offer-quality contract.  The module is optional:
+  // the card stays usable when it is not loaded.
+  if (window.CareerOfferQuality?.decorate) window.CareerOfferQuality.decorate(card, job);
   return card;
 }
 
@@ -1197,6 +1212,16 @@ function applicationCard(application) {
   kitContainer.hidden = true;
   kitButton.addEventListener("click", () => openApplicationKit(application, kitContainer));
   actions.append(kitButton);
+  // SK-11 : le dossier vérifiable est une action distincte du kit — il applique
+  // le vérificateur de faits et refuse l'export tant qu'une affirmation n'est
+  // pas prouvée. Il reste entièrement local et n'envoie rien.
+  const dossierButton = make("button", "Ouvrir le dossier vérifiable", "secondary-button");
+  dossierButton.type = "button";
+  const dossierContainer = make("div", "", "application-dossier");
+  dossierContainer.dataset.applicationId = application.id;
+  dossierContainer.hidden = true;
+  dossierButton.addEventListener("click", () => openApplicationDossier(application, dossierContainer));
+  actions.append(dossierButton);
   const noteLabel = make("label", "Note de suivi (facultative)");
   const noteInput = document.createElement("input");
   noteInput.type = "text";
@@ -1253,6 +1278,7 @@ function applicationCard(application) {
     card.append(make("p", "L’approbation locale pour cette offre précise est requise avant de consigner une réception confirmée.", "application-meta"));
   }
   card.append(kitContainer);
+  card.append(dossierContainer);
   return card;
 }
 
@@ -1717,6 +1743,9 @@ async function loadCoach() {
       if (active) await openCoachSession(active.id);
       else renderCoachSession(null);
     }
+    // SPEC-010 — l'assistant d'entretien ciblé partage le même rechargement.
+    if (typeof interviewPrepWire === "function") interviewPrepWire();
+    if (typeof loadInterviewPrep === "function") await loadInterviewPrep();
   } catch (error) { setMessage(error.message, true); }
 }
 
@@ -2169,6 +2198,17 @@ function renderApplicationKit(kit, container) {
     warnings.append(profileAction);
   }
   container.append(warnings);
+
+  // SPEC-004 : la revue du CV ciblé est un module séparé ; s'il n'est pas
+  // chargé, le kit reste utilisable tel quel.
+  if (typeof renderCvReviewSection === "function") {
+    const review = renderCvReviewSection({
+      applicationId: application.id,
+      variant: kit.variant || (kit.draft && kit.draft.variant) || "",
+      language: kit.language || "fr",
+    });
+    if (review) container.append(review);
+  }
 }
 
 async function openApplicationKit(application, container) {
@@ -2843,6 +2883,19 @@ function renderStageMap(matches) {
   map.append(list);
 }
 
+// SK-20 : badge "Exhaustivité XX%" par offre, alimenté par le score calculé
+// côté service (career.offer_exhaustiveness). Rien n'est calculé ici : le
+// label et la couleur viennent de la qualification, ou rien ne s'affiche.
+function renderExhaustivenessBadge(qualification) {
+  const color = qualification?.exhaustiveness_badge_color;
+  const label = qualification?.exhaustiveness_badge;
+  if (!label || !color) return null;
+  const missing = (qualification?.exhaustiveness_missing || []).join(", ");
+  const badge = make("span", label, `exhaustiveness-badge is-${color}`);
+  if (missing) badge.title = `Manquant : ${missing}`;
+  return badge;
+}
+
 function renderStageMatches(payload) {
   const target = $("#stagehunter-matches");
   const empty = $("#stagehunter-matches-empty");
@@ -2882,6 +2935,8 @@ function renderStageMatches(payload) {
       ...(match.qualification || {}),
     };
     chips?.after(stageOfferOverview(match.job || {}, qualificationFacts));
+    const exhaustivenessBadge = renderExhaustivenessBadge(qualificationFacts);
+    if (exhaustivenessBadge) chips?.append(exhaustivenessBadge);
     const actions = card.querySelector(".job-actions");
     const prep = make("button", "Préparer cette candidature", "secondary-button");
     prep.type = "button";
@@ -3110,7 +3165,6 @@ function loadStageSourceCoverage(runId) {
       target.textContent = error?.message || "La mesure exacte de couverture n’est pas disponible pour ce parcours.";
     });
 }
-
 function renderStageExploration(payload) {
   const status = $("#stagehunter-explore-status");
   const sources = $("#stagehunter-explore-sources");

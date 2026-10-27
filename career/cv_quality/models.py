@@ -18,6 +18,99 @@ STATUS_UNKNOWN = "UNKNOWN"
 FindingStatus = Literal[STATUS_OK, STATUS_INFO, STATUS_RISK, STATUS_UNKNOWN]
 
 
+# Salary extraction vocabulary
+SALARY_TYPE_BASE = "base"
+SALARY_TYPE_VARIABLE = "variable"
+SALARY_TYPE_BONUS = "bonus"
+SALARY_TYPE_STOCK = "stock"
+SALARY_TYPE_EQUITY = "equity"
+SALARY_TYPE_RSU = "rsu"
+SALARY_TYPE_PACKAGE = "package"
+SALARY_TYPE_TOTAL = "total"
+SALARY_TYPE_UNKNOWN = "unknown"
+
+SalaryType = Literal[
+    "base",
+    "variable",
+    "bonus",
+    "stock",
+    "equity",
+    "rsu",
+    "package",
+    "total",
+    "unknown",
+]
+
+SALARY_PERIOD_ANNUAL = "annual"
+SALARY_PERIOD_MONTHLY = "monthly"
+SALARY_PERIOD_HOURLY = "hourly"
+SALARY_PERIOD_UNKNOWN = "unknown"
+
+SalaryPeriodicity = Literal["annual", "monthly", "hourly", "unknown"]
+
+# ISO 4217 codes recognised by the salary extractor. The empty string means
+# "no currency written in the source" — the amount is then left as it is
+# written, without any invented conversion.
+Currency = Literal[
+    "EUR",
+    "USD",
+    "GBP",
+    "JPY",
+    "CHF",
+    "CAD",
+    "AUD",
+    "NOK",
+    "SEK",
+    "DKK",
+    "PLN",
+    "INR",
+    "BRL",
+    "ZAR",
+    "SGD",
+    "",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class SalaryEvidence:
+    """A single salary/compensation mention extracted from a job offer.
+
+    Attributes:
+        raw_text: Exact excerpt of the source text covered by this evidence
+            (e.g. "45 000 € brut annuel").
+        source_offset: Character index in the raw source text where the mention starts.
+        source_excerpt: ~50 characters of context around source_offset for verification.
+        min_annual_eur: Lower bound of the amount, annualised (monthly x12, hourly x2080).
+            The value stays expressed in `currency` — no FX rate is ever applied, so the
+            field never invents a converted figure. None when the mention is not a monetary
+            amount (percentage, share/unit count) or when no amount could be read.
+        max_annual_eur: Upper bound of the amount (equal to min_annual_eur for a fixed amount,
+            strictly greater for a range).
+        currency: ISO 4217 code of the source currency ("EUR", "USD", "GBP", "JPY", ...).
+            Empty string when the text carries no currency token.
+        salary_type: Nature of the compensation (base, variable, bonus, stock, equity, rsu,
+            package, total) or "unknown".
+        periodicity: Periodicity of the amount (annual, monthly, hourly) or "unknown".
+        raw_amount_text: The amount as written in the source (e.g. "45 000 €", "55k€", "$80,000").
+        raw_period_text: The period/qualifier as written (e.g. "brut annuel", "par an",
+            "mensuel"). Empty string when absent.
+        confidence: Heuristic score in [0.0, 1.0] — high when currency, type and periodicity
+            are all explicit, low when the mention is ambiguous.
+    """
+
+    raw_text: str
+    source_offset: int
+    source_excerpt: str
+    min_annual_eur: float | None
+    max_annual_eur: float | None
+    currency: str
+    salary_type: SalaryType
+    periodicity: SalaryPeriodicity
+    raw_amount_text: str
+    raw_period_text: str
+    confidence: float
+
+
 @dataclass(frozen=True, slots=True)
 class Finding:
     """A single structural issue detected in the CV.
@@ -104,6 +197,7 @@ class Provenance:
     filetype: str
     text_length: int
     page_count: int | None
+    source_text: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,6 +216,7 @@ class CVAnalysisResult:
     experiences: list[ExperienceEntry]
     readability: ReadabilityScore
     provenance: Provenance
+    text: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -199,3 +294,39 @@ class ATSCheckResult:
     pages_analyzed: int
     parse_errors: list[str]
     risk_interpretation: str = ""
+
+
+# Matching models (Mission 08)
+MatchActionCode = Literal["HIGHLIGHT", "REPHRASE", "DO_NOT_ADD", "QUANTIFY", "CONFIRM_LANGUAGE"]
+
+
+@dataclass(frozen=True, slots=True)
+class MatchEvidence:
+    text: str
+    offset: int
+    kind: str = "document"
+    field: str | None = None
+    confidence: float = 1.0
+    coverage: float = 1.0
+
+
+@dataclass(frozen=True, slots=True)
+class MatchAction:
+    code: MatchActionCode
+    requirement_text: str
+    cv_evidence_text: str | None
+    cv_evidence_offset: int | None
+    reason: str
+    confidence: float
+    evidence: MatchEvidence | None = None
+    cv_evidence_field: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class MatchResult:
+    overall_score: float
+    matched_requirements: int
+    total_requirements: int
+    actions: list[MatchAction]
+    missing_critical: list[str]
+    warnings: list[str]

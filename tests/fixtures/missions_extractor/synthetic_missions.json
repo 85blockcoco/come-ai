@@ -1,0 +1,584 @@
+{
+  "schema": "come-career-missions-extractor-fixtures/1",
+  "note": "Offres synthétiques (aucune donnée personnelle, aucun texte réel). Chaque entrée décrit une annonce et les missions qui doivent en être extraites. Les types, la confiance et les compétences implicites sont figés pour empêcher une dérive silencieuse du classifieur.",
+  "fixtures": [
+    {
+      "id": "MIS-001",
+      "language": "fr",
+      "title": "Stage — Modélisation financière (synthétique)",
+      "description_original": "Missions : Modélisation financière LBO. Présentation aux clients. Gestion équipe 3 personnes.",
+      "expected": [
+        {
+          "type": "deliverable",
+          "text": "Modélisation financière LBO.",
+          "confidence": "explicit",
+          "implied_skills": ["Financial Modeling", "LBO"]
+        },
+        {
+          "type": "task",
+          "text": "Présentation aux clients.",
+          "confidence": "inferred",
+          "implied_skills": []
+        },
+        {
+          "type": "team",
+          "text": "Gestion équipe 3 personnes.",
+          "confidence": "explicit",
+          "implied_skills": []
+        }
+      ]
+    },
+    {
+      "id": "MIS-002",
+      "language": "fr",
+      "title": "Stage — Transaction support (synthétique)",
+      "description_original": "Vos missions : Analyse due diligence. Reporting mensuel. Support transactions M&A.",
+      "expected": [
+        {
+          "type": "task",
+          "text": "Analyse due diligence.",
+          "confidence": "inferred",
+          "implied_skills": ["Due Diligence"]
+        },
+        {
+          "type": "deliverable",
+          "text": "Reporting mensuel.",
+          "confidence": "explicit",
+          "implied_skills": []
+        },
+        {
+          "type": "responsibility",
+          "text": "Support transactions M&A.",
+          "confidence": "explicit",
+          "implied_skills": ["M&A"]
+        }
+      ]
+    },
+    {
+      "id": "MIS-003",
+      "language": "fr",
+      "title": "Stage — Analyse (synthétique)",
+      "description_original": "Missions : • Modélisation • Reporting • Client",
+      "expected": [
+        {
+          "type": "deliverable",
+          "text": "Modélisation",
+          "confidence": "explicit",
+          "implied_skills": []
+        },
+        {
+          "type": "deliverable",
+          "text": "Reporting",
+          "confidence": "explicit",
+          "implied_skills": []
+        },
+        {
+          "type": "task",
+          "text": "Client",
+          "confidence": "inferred",
+          "implied_skills": []
+        }
+      ]
+    },
+    {
+      "id": "MIS-004",
+      "language": "fr",
+      "title": "Stage — Structuration (synthétique)",
+      "description_original": "Responsabilités :\n1. Modélisation\n2. Reporting",
+      "expected": [
+        {
+          "type": "deliverable",
+          "text": "Modélisation",
+          "confidence": "explicit",
+          "implied_skills": []
+        },
+        {
+          "type": "deliverable",
+          "text": "Reporting",
+          "confidence": "explicit",
+          "implied_skills": []
+        }
+      ]
+    },
+    {
+      "id": "MIS-005",
+      "language": "fr",
+      "title": "Stage — Modélisation (synthétique)",
+      "description_original": "Missions : Modélisation financière.\n\nProfil recherché : Bac+5 en finance.",
+      "expected": [
+        {
+          "type": "deliverable",
+          "text": "Modélisation financière.",
+          "confidence": "explicit",
+          "implied_skills": ["Financial Modeling"]
+        }
+      ]
+    },
+    {
+      "id": "MIS-006",
+      "language": "fr",
+      "title": "Stage — À préciser (synthétique)",
+      "description_original": "Missions : Selon profil",
+      "expected": []
+    },
+    {
+      "id": "MIS-007",
+      "language": "fr",
+      "title": "Stage — Profil (synthétique)",
+      "description_original": "Missions : Modélisation financière.\n\nProfil : Bac+5 en finance.\nAvantages : Tickets restaurant.",
+      "expected": [
+        {
+          "type": "deliverable",
+          "text": "Modélisation financière.",
+          "confidence": "explicit",
+          "implied_skills": ["Financial Modeling"]
+        }
+      ]
+    },
+    {
+      "id": "MIS-008",
+      "language": "fr",
+      "title": "Offre sans rubriques missions (synthétique)",
+      "description_original": "Profil recherché :\n• Bac+5\nAvantages :\n• Tickets restaurant",
+      "expected": []
+    },
+    {
+      "id": "MIS-009",
+      "language": "en",
+      "title": "Graduate Analyst (synthetic)",
+      "description_original": "Key responsibilities: Build financial models. Lead client presentations. Manage analyst team.",
+      "expected": [
+        {
+          "type": "deliverable",
+          "text": "Build financial models.",
+          "confidence": "explicit",
+          "implied_skills": ["Financial Modeling"]
+        },
+        {
+          "type": "task",
+          "text": "Lead client presentations.",
+          "confidence": "inferred",
+          "implied_skills": ["Client Presentation"]
+        },
+        {
+          "type": "team",
+          "text": "Manage analyst team.",
+          "confidence": "explicit",
+          "implied_skills": []
+        }
+      ]
+    },
+    {
+      "id": "MIS-010",
+      "language": "en",
+      "title": "Deal team analyst (synthetic)",
+      "description_original": "What you'll do: Daily valuation work. Prepare pitch books. KPI: deal closure rate.",
+      "expected": [
+        {
+          "type": "task",
+          "text": "Daily valuation work.",
+          "confidence": "inferred",
+          "implied_skills": ["Valuation"]
+        },
+        {
+          "type": "deliverable",
+          "text": "Prepare pitch books.",
+          "confidence": "explicit",
+          "implied_skills": []
+        },
+        {
+          "type": "kpi",
+          "text": "KPI: deal closure rate.",
+          "confidence": "explicit",
+          "implied_skills": []
+        }
+      ]
+    },
+    {
+      "id": "MIS-011",
+      "language": "en",
+      "title": "Day to day analyst (synthetic)",
+      "description_original": "Day-to-day:\n• Build financial models\n• Prepare pitch books",
+      "expected": [
+        {
+          "type": "deliverable",
+          "text": "Build financial models",
+          "confidence": "explicit",
+          "implied_skills": ["Financial Modeling"]
+        },
+        {
+          "type": "deliverable",
+          "text": "Prepare pitch books",
+          "confidence": "explicit",
+          "implied_skills": []
+        }
+      ]
+    },
+    {
+      "id": "MIS-012",
+      "language": "en",
+      "title": "Reporting analyst (synthetic)",
+      "description_original": "Your tasks:\n• Update the Excel tracker\n• Prepare the monthly report",
+      "expected": [
+        {
+          "type": "task",
+          "text": "Update the Excel tracker",
+          "confidence": "inferred",
+          "implied_skills": ["Excel"]
+        },
+        {
+          "type": "deliverable",
+          "text": "Prepare the monthly report",
+          "confidence": "explicit",
+          "implied_skills": []
+        }
+      ]
+    },
+    {
+      "id": "MIS-013",
+      "language": "de",
+      "title": "Praktikant Corporate Finance (synthetisch)",
+      "description_original": "Ihre Aufgaben: Finanzmodellierung. Kundenpräsentationen. Teamleitung.",
+      "expected": [
+        {
+          "type": "deliverable",
+          "text": "Finanzmodellierung.",
+          "confidence": "explicit",
+          "implied_skills": ["Financial Modeling"]
+        },
+        {
+          "type": "task",
+          "text": "Kundenpräsentationen.",
+          "confidence": "inferred",
+          "implied_skills": ["Client Presentation"]
+        },
+        {
+          "type": "team",
+          "text": "Teamleitung.",
+          "confidence": "explicit",
+          "implied_skills": []
+        }
+      ]
+    },
+    {
+      "id": "MIS-014",
+      "language": "de",
+      "title": "Praktikant Aufgabenbereich (synthetisch)",
+      "description_original": "Aufgabenbereich:\n• Erstellen von Financial Models\n• Zusammenarbeit mit dem Team",
+      "expected": [
+        {
+          "type": "deliverable",
+          "text": "Erstellen von Financial Models",
+          "confidence": "explicit",
+          "implied_skills": ["Financial Modeling"]
+        },
+        {
+          "type": "team",
+          "text": "Zusammenarbeit mit dem Team",
+          "confidence": "explicit",
+          "implied_skills": []
+        }
+      ]
+    },
+    {
+      "id": "MIS-015",
+      "language": "it",
+      "title": "Stage Corporate Finance (sintetico)",
+      "description_original": "Mansioni: Analisi valutazione. Reportistica. Coordinamento team.",
+      "expected": [
+        {
+          "type": "task",
+          "text": "Analisi valutazione.",
+          "confidence": "inferred",
+          "implied_skills": ["Valuation"]
+        },
+        {
+          "type": "deliverable",
+          "text": "Reportistica.",
+          "confidence": "explicit",
+          "implied_skills": []
+        },
+        {
+          "type": "team",
+          "text": "Coordinamento team.",
+          "confidence": "explicit",
+          "implied_skills": []
+        }
+      ]
+    },
+    {
+      "id": "MIS-016",
+      "language": "it",
+      "title": "Stage Compiti (sintetico)",
+      "description_original": "Compiti:\n• Preparare il modello LBO\n• Analizzare i dati con Excel",
+      "expected": [
+        {
+          "type": "deliverable",
+          "text": "Preparare il modello LBO",
+          "confidence": "explicit",
+          "implied_skills": ["LBO"]
+        },
+        {
+          "type": "task",
+          "text": "Analizzare i dati con Excel",
+          "confidence": "inferred",
+          "implied_skills": ["Excel"]
+        }
+      ]
+    },
+    {
+      "id": "MIS-017",
+      "language": "es",
+      "title": "Becario Finanzas (sintético)",
+      "description_original": "Funciones: Modelado financiero. Presentaciones. Gestión equipo.",
+      "expected": [
+        {
+          "type": "deliverable",
+          "text": "Modelado financiero.",
+          "confidence": "explicit",
+          "implied_skills": ["Financial Modeling"]
+        },
+        {
+          "type": "task",
+          "text": "Presentaciones.",
+          "confidence": "inferred",
+          "implied_skills": []
+        },
+        {
+          "type": "team",
+          "text": "Gestión equipo.",
+          "confidence": "explicit",
+          "implied_skills": []
+        }
+      ]
+    },
+    {
+      "id": "MIS-018",
+      "language": "es",
+      "title": "Becario Tus funciones (sintético)",
+      "description_original": "Tus funciones:\n• Elaborar modelos financieros\n• Coordinar al equipo",
+      "expected": [
+        {
+          "type": "deliverable",
+          "text": "Elaborar modelos financieros",
+          "confidence": "explicit",
+          "implied_skills": []
+        },
+        {
+          "type": "team",
+          "text": "Coordinar al equipo",
+          "confidence": "explicit",
+          "implied_skills": []
+        }
+      ]
+    },
+    {
+      "id": "MIS-019",
+      "language": "nl",
+      "title": "Stagiair Finance (synthetisch)",
+      "description_original": "Taken: Financiële modellering. Klantpresentaties. Teamleiding.",
+      "expected": [
+        {
+          "type": "deliverable",
+          "text": "Financiële modellering.",
+          "confidence": "explicit",
+          "implied_skills": ["Financial Modeling"]
+        },
+        {
+          "type": "task",
+          "text": "Klantpresentaties.",
+          "confidence": "inferred",
+          "implied_skills": ["Client Presentation"]
+        },
+        {
+          "type": "team",
+          "text": "Teamleiding.",
+          "confidence": "explicit",
+          "implied_skills": []
+        }
+      ]
+    },
+    {
+      "id": "MIS-020",
+      "language": "nl",
+      "title": "Stagiair Verantwoordelijkheden (synthetisch)",
+      "description_original": "Verantwoordelijkheden:\n• Opstellen van financiële modellen\n• Samenwerken met het team",
+      "expected": [
+        {
+          "type": "deliverable",
+          "text": "Opstellen van financiële modellen",
+          "confidence": "explicit",
+          "implied_skills": ["Financial Modeling"]
+        },
+        {
+          "type": "team",
+          "text": "Samenwerken met het team",
+          "confidence": "explicit",
+          "implied_skills": []
+        }
+      ]
+    },
+    {
+      "id": "MIS-021",
+      "language": "fr",
+      "title": "Offre bilingue (synthétique)",
+      "description_original": "Missions :\n• Modélisation financière\nKey responsibilities:\n• Build valuation models",
+      "expected": [
+        {
+          "type": "deliverable",
+          "text": "Modélisation financière",
+          "confidence": "explicit",
+          "implied_skills": ["Financial Modeling"]
+        },
+        {
+          "type": "deliverable",
+          "text": "Build valuation models",
+          "confidence": "explicit",
+          "implied_skills": ["Valuation"]
+        }
+      ]
+    },
+    {
+      "id": "MIS-022",
+      "language": "fr",
+      "title": "Stage — Doublon (synthétique)",
+      "description_original": "Missions :\n• Modélisation financière\n• Modélisation financière\n• Reporting mensuel",
+      "expected": [
+        {
+          "type": "deliverable",
+          "text": "Modélisation financière",
+          "confidence": "explicit",
+          "implied_skills": ["Financial Modeling"]
+        },
+        {
+          "type": "deliverable",
+          "text": "Reporting mensuel",
+          "confidence": "explicit",
+          "implied_skills": []
+        }
+      ]
+    },
+    {
+      "id": "MIS-023",
+      "language": "fr",
+      "title": "Stage — Markdown (synthétique)",
+      "description_original": "## Missions\n- Modélisation financière\n- Reporting mensuel",
+      "expected": [
+        {
+          "type": "deliverable",
+          "text": "Modélisation financière",
+          "confidence": "explicit",
+          "implied_skills": ["Financial Modeling"]
+        },
+        {
+          "type": "deliverable",
+          "text": "Reporting mensuel",
+          "confidence": "explicit",
+          "implied_skills": []
+        }
+      ]
+    },
+    {
+      "id": "MIS-024",
+      "language": "fr",
+      "title": "Stage — Puces vides (synthétique)",
+      "description_original": "Missions :\n•\n• \n1.\n2. Reporting mensuel",
+      "expected": [
+        {
+          "type": "deliverable",
+          "text": "Reporting mensuel",
+          "confidence": "explicit",
+          "implied_skills": []
+        }
+      ]
+    },
+    {
+      "id": "MIS-025",
+      "language": "fr",
+      "title": "Stage — Paragraphe entreprise (synthétique)",
+      "description_original": "Missions :\n• Modélisation financière\nWe are a leading financial services firm.",
+      "expected": [
+        {
+          "type": "deliverable",
+          "text": "Modélisation financière",
+          "confidence": "explicit",
+          "implied_skills": ["Financial Modeling"]
+        }
+      ]
+    },
+    {
+      "id": "MIS-026",
+      "language": "fr",
+      "title": "Stage — KPI (synthétique)",
+      "description_original": "Missions :\n• KPI : taux de closing supérieur à 30 %\n• Objectif : 10 LBO signés",
+      "expected": [
+        {
+          "type": "kpi",
+          "text": "KPI : taux de closing supérieur à 30 %",
+          "confidence": "explicit",
+          "implied_skills": []
+        },
+        {
+          "type": "kpi",
+          "text": "Objectif : 10 LBO signés",
+          "confidence": "explicit",
+          "implied_skills": ["LBO"]
+        }
+      ]
+    },
+    {
+      "id": "MIS-027",
+      "language": "fr",
+      "title": "Stage — Responsabilités (synthétique)",
+      "description_original": "Missions :\n• Être responsable du reporting mensuel\n• Superviser l'équipe analytique",
+      "expected": [
+        {
+          "type": "responsibility",
+          "text": "Être responsable du reporting mensuel",
+          "confidence": "ambiguous",
+          "implied_skills": []
+        },
+        {
+          "type": "team",
+          "text": "Superviser l'équipe analytique",
+          "confidence": "explicit",
+          "implied_skills": []
+        }
+      ]
+    },
+    {
+      "id": "MIS-028",
+      "language": "fr",
+      "title": "Stage — Périmètre (synthétique)",
+      "description_original": "Missions :\n• Périmètre : portefeuille clients European Private Equity",
+      "expected": [
+        {
+          "type": "scope",
+          "text": "Périmètre : portefeuille clients European Private Equity",
+          "confidence": "explicit",
+          "implied_skills": []
+        }
+      ]
+    },
+    {
+      "id": "MIS-029",
+      "language": "fr",
+      "title": "Stage — Deuxième rubrique missions (synthétique)",
+      "description_original": "Missions :\n• Modélisation financière\n\nProfil recherché :\n• Bac+5\n\nAutres missions :\n• Reporting mensuel",
+      "expected": [
+        {
+          "type": "deliverable",
+          "text": "Modélisation financière",
+          "confidence": "explicit",
+          "implied_skills": ["Financial Modeling"]
+        },
+        {
+          "type": "deliverable",
+          "text": "Reporting mensuel",
+          "confidence": "explicit",
+          "implied_skills": []
+        }
+      ]
+    }
+  ]
+}

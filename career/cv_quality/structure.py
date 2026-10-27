@@ -683,6 +683,9 @@ def analyze_cv(document: DocumentInput) -> CVAnalysisResult:
         filetype=document.filetype,
         text_length=len(text),
         page_count=document.page_count,
+        # CVBOOST-21: the exact source text is kept so that a match can
+        # quote a verbatim excerpt (and its offset) instead of paraphrasing.
+        source_text=text,
     )
 
     return CVAnalysisResult(
@@ -691,4 +694,5 @@ def analyze_cv(document: DocumentInput) -> CVAnalysisResult:
         experiences=experiences,
         readability=readability,
         provenance=provenance,
+        text=text,
     )

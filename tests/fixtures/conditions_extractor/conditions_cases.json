@@ -1,0 +1,330 @@
+{
+  "version": "1.0.0",
+  "description": "Fixtures synthétiques SK-17 — extracteur de conditions de travail. 6 langues (FR/EN/DE/IT/ES/NL), aucune offre réelle, aucune donnée personnelle, aucun accès réseau.",
+  "cases": [
+    {
+      "id": "fr-hybrid-2j",
+      "lang": "fr",
+      "text": "Télétravail 2 jours par semaine",
+      "expect": [
+        {"condition_type": "hybrid", "value": "2 days/week", "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "fr-remote-full",
+      "lang": "fr",
+      "text": "Full remote possible",
+      "expect": [
+        {"condition_type": "remote", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "fr-onsite",
+      "lang": "fr",
+      "text": "Présentiel obligatoire",
+      "expect": [
+        {"condition_type": "onsite", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "fr-flexible-benefits",
+      "lang": "fr",
+      "text": "Horaires flexibles, tickets resto, mutuelle",
+      "expect": [
+        {"condition_type": "flexible_hours", "value": true, "confidence": "explicit"},
+        {"condition_type": "meal_vouchers", "value": true, "confidence": "explicit"},
+        {"condition_type": "health_insurance", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "fr-no-remote-onsite",
+      "lang": "fr",
+      "text": "Pas de télétravail, sur site 5j/7",
+      "expect": [
+        {"condition_type": "remote", "value": false, "confidence": "explicit"},
+        {"condition_type": "onsite", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "fr-part-time",
+      "lang": "fr",
+      "text": "Temps partiel 20 heures par semaine",
+      "expect": [
+        {"condition_type": "part_time", "value": "20 h/week", "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "fr-equipment-training",
+      "lang": "fr",
+      "text": "Matériel fourni, budget formation 1500 €",
+      "expect": [
+        {"condition_type": "equipment", "value": true, "confidence": "explicit"},
+        {"condition_type": "training_budget", "value": 1500, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "en-hybrid-3d",
+      "lang": "en",
+      "text": "Hybrid: 3 days from home",
+      "expect": [
+        {"condition_type": "hybrid", "value": "3 days/week", "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "en-remote-first",
+      "lang": "en",
+      "text": "Remote-first culture",
+      "expect": [
+        {"condition_type": "remote", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "en-benefits-relocation",
+      "lang": "en",
+      "text": "Flexible hours, health insurance, relocation package",
+      "expect": [
+        {"condition_type": "flexible_hours", "value": true, "confidence": "explicit"},
+        {"condition_type": "health_insurance", "value": true, "confidence": "explicit"},
+        {"condition_type": "relocation", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "en-training-budget",
+      "lang": "en",
+      "text": "Training budget 2000 USD, paid training",
+      "expect": [
+        {"condition_type": "training_budget", "value": 2000, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "en-certification",
+      "lang": "en",
+      "text": "Certification support included",
+      "expect": [
+        {"condition_type": "certification_support", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "en-language-training",
+      "lang": "en",
+      "text": "Language classes offered every week",
+      "expect": [
+        {"condition_type": "language_training", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "en-visa-sponsorship",
+      "lang": "en",
+      "text": "Visa sponsorship available for the right profile",
+      "expect": [
+        {"condition_type": "visa_sponsorship", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "en-equipment",
+      "lang": "en",
+      "text": "Laptop provided, transport allowance",
+      "expect": [
+        {"condition_type": "equipment", "value": true, "confidence": "explicit"},
+        {"condition_type": "transport", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "de-hybrid-2t",
+      "lang": "de",
+      "text": "Hybrid: 2 Tage Homeoffice",
+      "expect": [
+        {"condition_type": "hybrid", "value": "2 days/week", "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "de-glleitzeit-benefits",
+      "lang": "de",
+      "text": "Gleitzeit, Jobticket, Fortbildungsbudget 2000€",
+      "expect": [
+        {"condition_type": "flexible_hours", "value": true, "confidence": "explicit"},
+        {"condition_type": "transport", "value": true, "confidence": "explicit"},
+        {"condition_type": "training_budget", "value": 2000, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "de-work-permit",
+      "lang": "de",
+      "text": "Arbeitserlaubnis vorhanden",
+      "expect": [
+        {"condition_type": "visa_sponsorship", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "de-relocation",
+      "lang": "de",
+      "text": "Umzugshilfe und Relocation package",
+      "expect": [
+        {"condition_type": "relocation", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "de-language-course",
+      "lang": "de",
+      "text": "Sprachkurs angeboten",
+      "expect": [
+        {"condition_type": "language_training", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "de-onsite",
+      "lang": "de",
+      "text": "Arbeit vor Ort im Büro",
+      "expect": [
+        {"condition_type": "onsite", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "it-smart-working",
+      "lang": "it",
+      "text": "Smart working 3 giorni, buoni pasto",
+      "expect": [
+        {"condition_type": "hybrid", "value": "3 days/week", "confidence": "explicit"},
+        {"condition_type": "meal_vouchers", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "it-remote",
+      "lang": "it",
+      "text": "Lavoro da casa completo",
+      "expect": [
+        {"condition_type": "remote", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "it-health-insurance",
+      "lang": "it",
+      "text": "Assicurazione salute inclusa",
+      "expect": [
+        {"condition_type": "health_insurance", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "it-work-permit",
+      "lang": "it",
+      "text": "Permesso lavoro supportato",
+      "expect": [
+        {"condition_type": "visa_sponsorship", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "it-flexible-hours",
+      "lang": "it",
+      "text": "Orari flessibili, scelta degli orari",
+      "expect": [
+        {"condition_type": "flexible_hours", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "es-remote-flexible",
+      "lang": "es",
+      "text": "Teletrabajo total, horario flexible",
+      "expect": [
+        {"condition_type": "remote", "value": true, "confidence": "explicit"},
+        {"condition_type": "flexible_hours", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "es-benefits",
+      "lang": "es",
+      "text": "Cheques comida y seguro médico",
+      "expect": [
+        {"condition_type": "meal_vouchers", "value": true, "confidence": "explicit"},
+        {"condition_type": "health_insurance", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "es-onsite",
+      "lang": "es",
+      "text": "Trabajo presencial en oficina",
+      "expect": [
+        {"condition_type": "onsite", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "es-work-permit",
+      "lang": "es",
+      "text": "Permiso trabajo garantizado",
+      "expect": [
+        {"condition_type": "visa_sponsorship", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "es-training-budget",
+      "lang": "es",
+      "text": "Presupuesto formación 1200€",
+      "expect": [
+        {"condition_type": "training_budget", "value": 1200, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "nl-thuiswerken",
+      "lang": "nl",
+      "text": "Thuiswerken 1 dag, maaltijdcheques",
+      "expect": [
+        {"condition_type": "hybrid", "value": "1 days/week", "confidence": "explicit"},
+        {"condition_type": "meal_vouchers", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "nl-transport",
+      "lang": "nl",
+      "text": "Vergoeding openbaar vervoer",
+      "expect": [
+        {"condition_type": "transport", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "nl-language-course",
+      "lang": "nl",
+      "text": "Taalcursus beschikbaar",
+      "expect": [
+        {"condition_type": "language_training", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "nl-relocation",
+      "lang": "nl",
+      "text": "Verhuizing ondersteuning",
+      "expect": [
+        {"condition_type": "relocation", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "nl-training-budget",
+      "lang": "nl",
+      "text": "Opleidingsbudget 1000 EUR",
+      "expect": [
+        {"condition_type": "training_budget", "value": 1000, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "fr-mobility-budget",
+      "lang": "fr",
+      "text": "Budget mobilité 800 € et aide installation",
+      "expect": [
+        {"condition_type": "mobility_budget", "value": true, "confidence": "explicit"},
+        {"condition_type": "relocation", "value": true, "confidence": "explicit"}
+      ]
+    },
+    {
+      "id": "en-inferred-flexible",
+      "lang": "en",
+      "text": "Flexible",
+      "expect": [
+        {"condition_type": "flexible_hours", "value": true, "confidence": "inferred"}
+      ]
+    },
+    {
+      "id": "en-no-condition",
+      "lang": "en",
+      "text": "We are looking for a data analyst to join our team.",
+      "expect": []
+    }
+  ]
+}

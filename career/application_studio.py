@@ -56,7 +56,60 @@ class ApplicationKitResult:
     provenance_map: dict[str, dict[str, Any]]
 
 
+@dataclass(frozen=True, slots=True)
+class KitSection:
+    """One planned section of the targeted CV, before any document is written.
+
+    The plan is pure and deterministic: it is the single source of truth
+    shared by the DOCX generator and by the SPEC-004 review workspace, so the
+    review always shows the exact lines the export would contain.
+    """
+
+    heading: str
+    field: str
+    lines: tuple[str, ...]
+    rendered: tuple[str, ...]
+    placeholder: bool
+
+
+@dataclass(frozen=True, slots=True)
+class KitSummary:
+    """The generated professional summary and the source wording behind it."""
+
+    heading: str
+    text: str
+    source_text: str
+    placeholder: bool
+
+
+@dataclass(frozen=True, slots=True)
+class KitGap:
+    """One offer requirement with no supporting profile evidence."""
+
+    requirement: str
+    requirement_type: str
+    text: str
+
+
 _FIXED_ZIP_TIME = (1980, 1, 1, 0, 0, 0)
+
+# The single marker used whenever a fact is missing: never a fabricated one.
+PLACEHOLDER_MARKER = "[AJOUTER PREUVE CHIFFRÉE]"
+SUMMARY_HEADING = "Professional Summary"
+# Heading (case-folded) → profile field carrying the source lines.
+SECTION_FIELDS: dict[str, str] = {
+    "professional experience": "experience",
+    "transaction experience": "experience",
+    "quantitative projects": "projects",
+    "finance experience": "experience",
+    "reporting & analysis": "experience",
+    "education": "education",
+    "technical skills": "skills",
+    "projects": "projects",
+    "languages": "languages",
+    "certifications": "certifications",
+}
+DEFAULT_SECTION_FIELD = "profile"
 
 
 def _save_deterministic_docx(document: Document, path: Path) -> None:
@@ -83,7 +136,7 @@ def _citation(source: str, quote: Any, offset: int = 0) -> dict[str, Any]:
     return {"source": source, "quote": _text(quote, 500), "offset": offset}
 
 
-def _variant_text(value: str, variant: CVVariant) -> str:
+def variant_text(value: str, variant: CVVariant) -> str:
     if variant.locale == "en-GB":
         return value.replace("modeling", "modelling").replace(
             "optimization", "optimisation"
@@ -98,22 +151,81 @@ def _profile_lines(profile: dict[str, Any], field: str) -> list[str]:
     return [line.strip(" •-\t") for line in value.splitlines() if line.strip(" •-\t")]
 
 
-def _add_heading_and_lines(
+def plan_kit_sections(profile: dict[str, Any], variant: CVVariant) -> list[KitSection]:
+    """Plan every section of the targeted CV without writing any document.
+
+    Pure: same profile and same variant always produce the same plan. The
+    review workspace (SPEC-004) reuses this plan so that the lines shown to
+    the reader are exactly the lines written in the exported DOCX.
+    """
+
+    sections: list[KitSection] = []
+    for heading in variant.section_order:
+        field = SECTION_FIELDS.get(heading.casefold(), DEFAULT_SECTION_FIELD)
+        lines = tuple(_profile_lines(profile, field))
+        rendered = tuple(variant_text(line, variant) for line in lines)
+        sections.append(
+            KitSection(
+                heading=heading,
+                field=field,
+                lines=lines,
+                rendered=rendered,
+                placeholder=not lines,
+            )
+        )
+    return sections
+
+
+def plan_kit_summary(
+    job: dict[str, Any], profile: dict[str, Any], variant: CVVariant
+) -> KitSummary:
+    """Plan the professional summary from the approved profile only."""
+
+    title = _text(job.get("title")) or "[role to confirm]"
+    skills = _text(profile.get("skills"))
+    if skills:
+        text = f"Targeting {title}. Documented profile skills: " + variant_text(skills, variant)
+    else:
+        text = f"Targeting {title}. [SKILLS TO CONFIRM]"
+    return KitSummary(
+        heading=SUMMARY_HEADING,
+        text=text,
+        source_text=skills,
+        placeholder=not skills,
+    )
+
+
+def plan_kit_gaps(coverage: CoverageResult) -> list[KitGap]:
+    """Plan the requirement bullets that have no supporting profile evidence."""
+
+    gaps: list[KitGap] = []
+    for gap in coverage.gaps:
+        if gap.provenance is None:
+            gaps.append(
+                KitGap(
+                    requirement=gap.requirement,
+                    requirement_type=gap.requirement_type,
+                    text=f"{gap.requirement}: {PLACEHOLDER_MARKER}",
+                )
+            )
+    return gaps
+
+
+def _write_kit_section(
     document: Document,
-    heading: str,
-    lines: list[str],
+    section: KitSection,
     *,
-    variant: CVVariant,
     provenance_map: dict[str, dict[str, Any]],
-    source: str,
 ) -> None:
-    document.add_heading(heading, level=1)
-    if not lines:
-        document.add_paragraph("[AJOUTER PREUVE CHIFFRÉE]")
+    """Write one planned section and index its provenance."""
+
+    document.add_heading(section.heading, level=1)
+    if section.placeholder:
+        document.add_paragraph(PLACEHOLDER_MARKER)
         return
-    for index, line in enumerate(lines):
-        rendered = _variant_text(line, variant)
-        if source == "profile.experience" and rendered.count("|") >= 2:
+    source = f"profile.{section.field}"
+    for index, (line, rendered) in enumerate(zip(section.lines, section.rendered)):
+        if section.field == "experience" and rendered.count("|") >= 2:
             date_text, role, company_and_result = (
                 part.strip() for part in rendered.split("|", 2)
             )
@@ -123,7 +235,7 @@ def _add_heading_and_lines(
                 document.add_paragraph(result, style="List Bullet")
         else:
             document.add_paragraph(rendered, style="List Bullet")
-        provenance_map[f"{heading}:{index}"] = _citation(source, line)
+        provenance_map[f"{section.heading}:{index}"] = _citation(source, line)
 
 
 def generate_application_kit(
@@ -165,47 +277,17 @@ def generate_application_kit(
     cv.add_paragraph(
         f"Graduation: {graduation_source}" if graduation_source else "Graduation: [À CONFIRMER]"
     )
-    cv.add_heading("Professional Summary", level=1)
-    approved_skills = _text(profile.get("skills"))
-    summary = (
-        f"Targeting {job.get('title') or '[role to confirm]'}. "
-        "Documented profile skills: "
-        + _variant_text(approved_skills, variant)
-        if approved_skills
-        else f"Targeting {job.get('title') or '[role to confirm]'}. [SKILLS TO CONFIRM]"
-    )
-    cv.add_paragraph(summary)
-    provenance_map["Professional Summary"] = _citation(
+    summary_plan = plan_kit_summary(job, profile, variant)
+    cv.add_heading(summary_plan.heading, level=1)
+    cv.add_paragraph(summary_plan.text)
+    provenance_map[summary_plan.heading] = _citation(
         "profile.skills", profile.get("skills")
     )
 
-    content_by_section = {
-        "professional experience": ("experience", _profile_lines(profile, "experience")),
-        "transaction experience": ("experience", _profile_lines(profile, "experience")),
-        "quantitative projects": ("projects", _profile_lines(profile, "projects")),
-        "finance experience": ("experience", _profile_lines(profile, "experience")),
-        "reporting & analysis": ("experience", _profile_lines(profile, "experience")),
-        "education": ("education", _profile_lines(profile, "education")),
-        "technical skills": ("skills", _profile_lines(profile, "skills")),
-        "projects": ("projects", _profile_lines(profile, "projects")),
-        "languages": ("languages", _profile_lines(profile, "languages")),
-        "certifications": ("certifications", _profile_lines(profile, "certifications")),
-    }
-    for heading in variant.section_order:
-        field, lines = content_by_section.get(heading.casefold(), ("profile", []))
-        _add_heading_and_lines(
-            cv,
-            heading,
-            lines,
-            variant=variant,
-            provenance_map=provenance_map,
-            source=f"profile.{field}",
-        )
-    for gap in coverage.gaps:
-        if gap.provenance is None:
-            cv.add_paragraph(
-                f"{gap.requirement}: [AJOUTER PREUVE CHIFFRÉE]", style="List Bullet"
-            )
+    for section in plan_kit_sections(profile, variant):
+        _write_kit_section(cv, section, provenance_map=provenance_map)
+    for gap in plan_kit_gaps(coverage):
+        cv.add_paragraph(gap.text, style="List Bullet")
 
     cv_path = destination / "cv.docx"
     _save_deterministic_docx(cv, cv_path)
@@ -214,7 +296,7 @@ def generate_application_kit(
     letter.add_heading(f"Application — {job.get('title') or '[Role]'}", level=1)
     letter.add_paragraph(f"Dear Hiring Team at {job.get('company') or '[Company]'},")
     letter.add_paragraph(
-        _variant_text(
+        variant_text(
             f"I am applying with a {variant.cover_letter_tone} focus supported only by cited profile evidence.",
             variant,
         )

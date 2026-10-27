@@ -336,6 +336,50 @@
       "absent": [
         "deadline"
       ]
+    },
+    {
+      "id": "fr-start-prise-de-poste",
+      "text": "Prise de poste le 1er janvier 2027",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 1,
+            "month": 1,
+            "year": 2027
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Prise de poste le 1er janvier 2027"
+        }
+      ],
+      "absent": [
+        "published",
+        "deadline",
+        "end"
+      ]
+    },
+    {
+      "id": "fr-end-se-termine-en",
+      "text": "Le contrat se termine en décembre 2027",
+      "expected": [
+        {
+          "fact_type": "end",
+          "value": {
+            "day": null,
+            "month": 12,
+            "year": 2027
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "se termine en décembre 2027"
+        }
+      ],
+      "absent": [
+        "start",
+        "deadline",
+        "published"
+      ]
     }
   ]
 }

@@ -172,6 +172,75 @@ def criteria_admit(match: dict[str, Any], job: dict[str, Any] | None = None,
     return True
 
 
+ADMITTED = "admitted"
+FILTERED = "filtered"
+EXCLUDED = "excluded"
+
+
+def admit_offer(job: dict[str, Any], brief: dict[str, Any], *,
+                source_verified: bool | None = None) -> dict[str, Any]:
+    """Decide whether one published posting enters the results.
+
+    The decision belongs to the admission layer, never to a connector: a
+    connector only transmits what the source published.  The verdict never
+    rewrites the offer — it returns the same job with the qualification and
+    the classification attached, so that the service boundary can check the
+    decision again with the current criteria.
+
+    The verdict is one of:
+
+    ``admitted``
+        the posting satisfies the criteria of the person;
+    ``filtered``
+        the posting is a possible internship but does not satisfy the
+        requested criteria;
+    ``excluded``
+        the posting is not a possible internship at all.
+    """
+    # Local imports keep the module free of a cycle: the qualification layer
+    # already reads the admission rules of this module.
+    from .offer_qualification import qualify_offer
+    from .stage_search import score_brief_match
+
+    offer = dict(job)
+    if source_verified is not None:
+        offer["source_verified"] = source_verified
+    classification = classify_internship(offer)
+    qualification = qualify_offer(
+        offer,
+        allowed_contract_types=brief.get("contract_types"),
+        allowed_start_months=brief.get("start_months"),
+        required_start_date=brief.get("start_date"),
+        minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
+        excluded_countries=brief.get("excluded_countries"),
+        excluded_cities=brief.get("excluded_cities"),
+        require_known_location=brief.get("require_known_location", False),
+        preferred_countries=brief.get("preferred_countries"),
+        geo_excluded_countries=brief.get("geo_excluded_countries"),
+    ).to_dict()
+    offer["qualification"] = qualification
+    target = qualification["target_status"]
+    verdict: dict[str, Any] = {
+        "status": EXCLUDED if target == "non_conforming" else FILTERED,
+        "target_status": target,
+        "job": offer,
+        "classification": classification,
+        "qualification": qualification,
+        "match": None,
+    }
+    if target == "non_conforming":
+        return verdict
+    if (not offer.get("official_url")
+            or (qualification["contract_type"] == "unknown" and not classification.get("evidence"))):
+        return verdict
+    match = score_brief_match(brief, offer)
+    if not criteria_admit(match, offer, brief):
+        return verdict
+    offer["internship_classification"] = classification
+    verdict.update(status=ADMITTED, match=match)
+    return verdict
+
+
 def ranking_key(job: dict[str, Any], match: dict[str, Any]) -> tuple[Any, ...]:
     digest = hashlib.sha256(json.dumps(job, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
     status = (job.get("qualification") or {}).get("target_status")

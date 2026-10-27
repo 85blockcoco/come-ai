@@ -1,0 +1,16 @@
+{
+  "qualification": {
+    "provenance": {
+      "salary": {
+        "value": "",
+        "source": "extractor",
+        "quote": ""
+      },
+      "missions": {
+        "value": [],
+        "source": "extractor",
+        "quote": ""
+      }
+    }
+  }
+}

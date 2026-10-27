@@ -420,6 +420,81 @@
       "absent": [
         "deadline"
       ]
+    },
+    {
+      "id": "en-end-ends-in",
+      "text": "The contract ends in December 2027",
+      "expected": [
+        {
+          "fact_type": "end",
+          "value": {
+            "day": null,
+            "month": 12,
+            "year": 2027
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "contract ends in December 2027"
+        }
+      ],
+      "absent": [
+        "start",
+        "deadline",
+        "published"
+      ]
+    },
+    {
+      "id": "en-start-and-end-in-one-sentence",
+      "text": "The role starts in March and ends in June 2027",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": 3,
+            "year": null
+          },
+          "precision": "month",
+          "confidence": "inferred",
+          "quote": "starts in March"
+        },
+        {
+          "fact_type": "end",
+          "value": {
+            "day": null,
+            "month": 6,
+            "year": 2027
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "ends in June 2027"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "published"
+      ]
+    },
+    {
+      "id": "en-duration-range-with-from-prefix",
+      "text": "Interns from 3 to 6 months are welcome",
+      "expected": [
+        {
+          "fact_type": "duration_range",
+          "value": {
+            "months_min": 3,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "from 3 to 6 months"
+        }
+      ],
+      "absent": [
+        "duration_min",
+        "duration_max",
+        "duration_exact"
+      ]
     }
   ]
 }

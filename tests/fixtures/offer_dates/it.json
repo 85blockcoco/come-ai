@@ -304,6 +304,92 @@
       "absent": [
         "deadline"
       ]
+    },
+    {
+      "id": "it-start-comincia",
+      "text": "Comincia in gennaio",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": 1,
+            "year": null
+          },
+          "precision": "month",
+          "confidence": "inferred",
+          "quote": "Comincia in gennaio"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "published",
+        "end"
+      ]
+    },
+    {
+      "id": "it-end-termina-in",
+      "text": "Il contratto termina in dicembre 2027",
+      "expected": [
+        {
+          "fact_type": "end",
+          "value": {
+            "day": null,
+            "month": 12,
+            "year": 2027
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "termina in dicembre 2027"
+        }
+      ],
+      "absent": [
+        "start",
+        "deadline",
+        "published"
+      ]
+    },
+    {
+      "id": "it-start-ordinal-degree",
+      "text": "Inizio: 1° gennaio 2027",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": 1,
+            "month": 1,
+            "year": 2027
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Inizio: 1° gennaio 2027"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "published"
+      ]
+    },
+    {
+      "id": "it-duration-dura",
+      "text": "Il tirocinio dura sei mesi",
+      "expected": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 6,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "dura sei mesi"
+        }
+      ],
+      "absent": [
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
     }
   ]
 }

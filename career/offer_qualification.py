@@ -11,10 +11,14 @@ import re
 import unicodedata
 from contextlib import contextmanager
 from contextvars import ContextVar
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import date
 from typing import Any, Iterator
 
+from .cv_quality.conditions_extractor import extract_conditions_from_offer
+from .cv_quality.missions_extractor import extract_missions
+from .cv_quality.education_extractor import extract_education
+from .cv_quality.parser import extract_salary
 from .exploration import _SENIOR_TITLE, classify_internship
 from .models import (
     DEFAULT_GEO_EXCLUDED_COUNTRIES,
@@ -27,6 +31,7 @@ from .models import (
     country_wordings,
     normalized_text,
 )
+from .offer_exhaustiveness import ExhaustivenessScore, compute_exhaustiveness
 
 
 @dataclass(frozen=True)
@@ -62,9 +67,26 @@ class QualifiedOffer:
     # source wrote, and the reason that produced them.
     geo_score: int = 0
     geo_reason: str = ""
+    exhaustiveness_score: int = 0
+    exhaustiveness_breakdown: dict[str, int] = field(default_factory=lambda: {
+        "missions": 0, "salary": 0, "conditions": 0, "education": 0, "dates": 0})
+    exhaustiveness_missing: tuple[str, ...] = ("missions", "salary", "conditions", "education", "dates")
+    exhaustiveness_badge: str = "Exhaustivité 0% | Rémunération : non communiquée"
+    exhaustiveness_badge_color: str = "gray"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+    def exhaustiveness(self) -> ExhaustivenessScore:
+        """Rebuild the mutable scoring object from the frozen fields."""
+        return ExhaustivenessScore(
+            overall_score=self.exhaustiveness_score,
+            breakdown=dict(self.exhaustiveness_breakdown),
+            missing=list(self.exhaustiveness_missing),
+            present=[name for name, weight in self.exhaustiveness_breakdown.items() if weight],
+            badge_label=self.exhaustiveness_badge,
+            badge_color=self.exhaustiveness_badge_color,  # type: ignore[arg-type]
+        )
 
 
 _CONTRACT_PATTERNS = (
@@ -327,6 +349,25 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
     evidence: dict[str, FactEvidence] = {}
     missing: list[str] = []
 
+    # SK-18 : les missions annoncées (responsabilités, tâches, livrables,
+    # KPI) sont extraites du texte de l'offre et citées comme preuve. Rien
+    # n'est interprété : chaque mission est un extrait verbatim du texte.
+    missions = extract_missions(description)
+    if missions:
+        evidence["missions"] = FactEvidence(
+            [mission.text for mission in missions],
+            "missions_extractor",
+            missions[0].quote,
+        )
+
+    salaries = extract_salary(description)
+    if salaries:
+        evidence["salary"] = FactEvidence(
+            [asdict(salary) for salary in salaries],
+            "salary_extractor",
+            salaries[0].raw_text,
+        )
+
     def field(name: str, label: str | None = None) -> str | None:
         value = clean_text(offer.get(name), limit=240)
         if value:
@@ -529,6 +570,14 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
     elif contract_type == "unknown" and re.search(r"\bgraduate\b", _fold(title + " " + employment)):
         evidence["contract_type"] = FactEvidence("graduate role ambiguous", "title_or_contract_passage", title or employment)
 
+    # SK-19 : niveau d'études requis, extrait localement avec citation exacte.
+    # Exposition seule — n'entre dans aucun arbitrage target_status/reasons.
+    if description:
+        for fact in extract_education(description):
+            if fact.fact_type == "education_level_required" and fact.level_rank > 0:
+                evidence["education_required"] = FactEvidence(fact.level_rank, "description_passage", fact.quote)
+                break
+
     reasons: list[str] = []
     target_status = "to_verify"
     if start_date_conflict_reason:
@@ -607,6 +656,33 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
     elif target_status != "non_conforming":
         reasons.append("La source officielle ou le lien reste à vérifier.")
 
+    # Conditions de travail (SK-17) : elles sont *recopiées* dans la
+    # provenance, elles ne décident jamais de la conformité de l'offre.
+    conditions = extract_conditions_from_offer(offer)
+    if conditions:
+        evidence["conditions"] = FactEvidence(
+            value=[fact.to_dict() for fact in conditions],
+            source=f"source_field:{conditions[0].source_field}",
+            quote=" | ".join(fact.quote for fact in conditions[:3])[:300],
+        )
+    # Exhaustiveness (SK-20) counts only the evidence collected above; no
+    # extractor is relaunched and nothing is inferred here.
+    exhaustiveness = compute_exhaustiveness({
+        "start_date": str(parsed_start) if parsed_start else start_date,
+        "deadline_date": deadline or None,
+        "qualification": {
+            "provenance": {key: {"value": item.value} for key, item in evidence.items()},
+            "duration_min_months": low,
+        },
+    })
+    evidence["exhaustiveness"] = FactEvidence(
+        exhaustiveness.overall_score, "exhaustiveness_component_scores",
+        "Missions:{} Salaire:{} Conditions:{} Education:{} Dates:{}".format(
+            exhaustiveness.breakdown["missions"], exhaustiveness.breakdown["salary"],
+            exhaustiveness.breakdown["conditions"], exhaustiveness.breakdown["education"],
+            exhaustiveness.breakdown["dates"]),
+    )
+
     return QualifiedOffer(
         contract_type=contract_type,
         contract_status=internship["status"],
@@ -630,4 +706,9 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
         reasons=tuple(reasons),
         geo_score=geo_score,
         geo_reason=geo_reason,
+        exhaustiveness_score=exhaustiveness.overall_score,
+        exhaustiveness_breakdown=dict(exhaustiveness.breakdown),
+        exhaustiveness_missing=tuple(exhaustiveness.missing),
+        exhaustiveness_badge=exhaustiveness.badge_label,
+        exhaustiveness_badge_color=exhaustiveness.badge_color,
     )

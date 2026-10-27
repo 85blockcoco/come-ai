@@ -2,7 +2,7 @@ from dataclasses import FrozenInstanceError, asdict
 
 import pytest
 
-from career.cv_fit import CoverageResult, FitGap, PipelineItem
+from career.cv_fit import CoverageResult, FitGap, PipelineItem, serialize_gap
 from career.cv_quality.models import Provenance
 from career.cv_variants import MA_VARIANT
 from career.models import PipelineStage
@@ -29,7 +29,7 @@ def test_fit_gap_instantiation_serialization_and_provenance() -> None:
     )
 
     assert gap.provenance is provenance
-    assert asdict(gap) == {
+    assert serialize_gap(gap) == {
         "requirement": "financial modeling",
         "requirement_type": "mandatory",
         "current_state": "unquantified",
@@ -42,6 +42,7 @@ def test_fit_gap_instantiation_serialization_and_provenance() -> None:
         },
         "variant_specific": True,
     }
+    assert serialize_gap(gap, include_source_text=True)["provenance"]["source_text"] == ""
     with pytest.raises(FrozenInstanceError):
         gap.current_state = "weak"  # type: ignore[misc]
 

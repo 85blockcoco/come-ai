@@ -12,17 +12,33 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sqlite3
 import threading
 import time
 import urllib.parse
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterator, Mapping
+from typing import Any, Callable, Iterator, Mapping
 
+from .daily_digest import (
+    DAILY_DIGEST_SETTING,
+    DAILY_DIGEST_TTL_SECONDS,
+    DAILY_DIGEST_TTL_SETTING,
+    MAX_PARALLEL_SOURCES,
+    MAX_TTL_SECONDS,
+    MIN_TTL_SECONDS,
+    build_tracks,
+    empty_state as empty_daily_digest_state,
+    moment_text,
+    normalize_ttl,
+    parse_moment,
+    project_digest,
+)
 from .models import (
     AVAILABILITY_STATES,
     APPLICATION_STAGES,
@@ -71,6 +87,14 @@ from .application_prep import (
     summarize_offer,
 )
 from .application_sprint import MAX_SPRINT_CANDIDATES, MAX_SPRINT_ITEMS, build_application_sprint
+from .application_dossier import (
+    DossierVersion,
+    build_application_dossier as build_dossier,
+    dossier_from_dict,
+    export_dossier as export_application_dossier_files,
+    facts_from_profile,
+    with_artifacts,
+)
 from .requirements_fit import analyze_fit
 from .source_trust import check_trust, status_label as source_trust_label
 from .quick_answers import SUPPORTED_LANGS, build_answer_pack
@@ -99,7 +123,24 @@ from .cv_fit import (
     generate_diff,
     serialize_gap,
 )
+from .cv_review import ReviewEvent
+from .cv_review_store import (
+    append_event,
+    list_workspaces,
+    load_workspace,
+    read_events,
+    save_workspace,
+)
 from .cv_variants import ALL_VARIANTS
+from .evidence import EvidenceCenter, EvidenceItem, evidence_from_candidate_fact, evidence_from_fit_verdict
+from .evidence_store import SqliteEvidenceStore
+from .offer_quality import (
+    assess_offer,
+    deadline_hint_from_text,
+    is_refresh_due,
+    offer_facts,
+)
+from .offer_quality_store import OfferQualityStore, probe_source_status
 
 try:
     from consent_guard import ConsentGuard
@@ -124,8 +165,19 @@ from .interview import (
     progress_summary,
     select_question,
 )
+from .interview_prep import (
+    PrepContext,
+    Preparation,
+    build_preparation,
+    render_markdown,
+    serialize_feedback,
+    serialize_question,
+    serialize_session,
+    simulate as simulate_interview_answer,
+)
+from .interview_store import InterviewPrepStore
 from .ocr import LocalVisionOCR, OCRResult
-from .discovery import DiscoveryPayload, GreenhouseBoard, GreenhouseJobBoardConnector, PublicSourceError, parse_greenhouse_board_token
+from .discovery import DiscoveryPayload, GreenhouseBoard, GreenhouseJobBoardConnector, PublicSourceError, callable_geo_kwargs, parse_greenhouse_board_token
 from .connectors import default_exploration_connectors
 from .exploration import (
     EXPLORATION_LAST_SETTING,
@@ -146,6 +198,7 @@ from . import offer_intelligence_store
 from . import source_material_store
 from .scoring import classify_job_family, score_job
 from .source_coverage import CoverageRunNotFound, compute_metrics
+from .traceability_store import TRACEABILITY_DB_FILENAME, TraceabilityService
 from workspace_core import UserFacingError, extract_text, safe_error
 from .cv_quality.parser import extract_text_from_file
 from .profile_import import (
@@ -155,14 +208,35 @@ from .profile_import import (
     parse_profile_text,
 )
 from .profile_readiness import assess_profile_readiness
+from .candidate_profile import (
+    CandidateProfile,
+    Evidence,
+    Fact,
+    FACT_STATUSES,
+    SOURCE_EMBEDDED_TEXT,
+    SOURCE_OCR,
+    STATUS_APPROVED,
+    STATUS_MODIFIED,
+    STATUS_PROPOSED,
+    apply_decision,
+    export_profile,
+    merge_usable_facts,
+    merge_usable_facts_with_sources,
+    profile_target,
+    remove_profile_line,
+    serialize_fact,
+)
+from .profile_builder import align_page_spans, build_fact_proposals
+from .cv_quality.parser import extract_pages_from_bytes
 from .qualification_persistence import (
     decode_qualification_snapshot,
     normalize_qualification_snapshot,
     snapshot_matches_current_source,
 )
+from .offer_requirements import analyze_offer
 
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 12
 # The Stage Hunter brief lives in career_settings as one JSON value: no
 # schema migration, and it is exported with the rest of the local settings.
 STAGE_SEARCH_SETTING_KEY = "stage_search_brief"
@@ -259,6 +333,32 @@ def re_sub_filename(value: str) -> str:
     return compact[:60] or "candidature"
 
 
+class _OfferQualityCatalog:
+    """The read-only catalog of the collected offers (SPEC-006).
+
+    The assessment needs the other offers only to know whether the offer it
+    assesses is published somewhere else.  The rows are read without their
+    long text: the deduplication reads the identity of an offer, never its
+    description.
+    """
+
+    def __init__(self, jobs: list[dict[str, Any]]):
+        self._jobs = jobs
+        self._by_id = {str(job.get("id")): job for job in jobs if job.get("id")}
+
+    def offer(self, offer_id: str) -> dict[str, Any]:
+        job = self._by_id.get(str(offer_id))
+        if job is None:
+            raise UserFacingError("Cette offre Career n’existe pas.")
+        return job
+
+    def offers(self) -> list[dict[str, Any]]:
+        return list(self._jobs)
+
+    def duplicates_of(self, offer_id: str) -> list[dict[str, Any]]:
+        return [job for job in self._jobs if str(job.get("id")) != str(offer_id)]
+
+
 class CareerService:
     """Small local service with short SQLite connections and explicit rules."""
 
@@ -270,6 +370,8 @@ class CareerService:
         discovery_connector: GreenhouseJobBoardConnector | None = None,
         curated_sources: tuple[dict[str, Any], ...] | None = None,
         exploration_connectors: dict[str, Any] | None = None,
+        daily_digest_ttl_seconds: int = DAILY_DIGEST_TTL_SECONDS,
+        offer_quality_probe: Callable[[str], int | None] | None = None,
     ):
         self.base_dir = base_dir.resolve()
         self.data_dir = self.base_dir / "career_data"
@@ -279,16 +381,30 @@ class CareerService:
         self.export_dir = self.data_dir / "exports"
         self.ocr_dir = self.data_dir / "ocr"
         self.studio_dir = self.data_dir / "application_studio"
+        # The CV review workspace (SPEC-004) keeps its own private directory:
+        # one state file and one append-only history per application.
+        self.review_dir = self.data_dir / "cv_review"
         # Backups are intentionally separate from exports and source documents:
         # they contain a complete private snapshot of the local Career data.
         self.backups_dir = self.data_dir / "backups"
         self.db_path = self.data_dir / "career.sqlite3"
+        # Le centre de preuves vit dans son propre répertoire privé : la base
+        # Career principale n'est jamais migrée pour ajouter des preuves.
+        self.evidence_dir = self.data_dir / "evidence"
+        self.evidence_attachments_dir = self.evidence_dir / "attachments"
+        self.evidence_uploads_dir = self.evidence_dir / "uploads"
+        self.evidence_db_path = self.evidence_dir / "evidence.sqlite3"
         self.ocr = ocr or LocalVisionOCR(self.ocr_dir)
         # The discovery lock is intentionally process-local: the local web
         # server has one process, and it prevents double-clicks from issuing
         # parallel requests to the same public board.
         self.discovery_connector = discovery_connector or GreenhouseJobBoardConnector()
         self._curated_sources = curated_sources
+        # SPEC-006 : the freshness snapshots and their change history live
+        # beside the other private Career data.  The URL probe is the only
+        # network call of the module and it is never used implicitly.
+        self.offer_quality_store = OfferQualityStore(self.data_dir / "offer_quality.json")
+        self.offer_quality_probe = offer_quality_probe or probe_source_status
         self._exploration_connectors = (exploration_connectors if exploration_connectors is not None
                                         else default_exploration_connectors(self.discovery_connector))
         # Bounded in-memory cache, separate from personal boards and private
@@ -298,8 +414,24 @@ class CareerService:
         self._prep_cache: set[str] = set()
         self._discovery_lock = threading.Lock()
         self._lock = threading.RLock()
+        # The daily digest cache lifetime is explicit and configurable: a
+        # constructor default, overridable later from the local settings.
+        self.daily_digest_ttl_seconds = normalize_ttl(daily_digest_ttl_seconds)
+        # SPEC-011 : le registre de traçabilité vit dans sa propre base
+        # locale, créée à la demande pour ne pas ralentir le démarrage.
+        self._traceability: TraceabilityService | None = None
         self._ensure_storage()
         self._initialize()
+        # SPEC-010 — the targeted interview preparation keeps its own private
+        # file so that adding it never rewrites the main Career schema.
+        self.interview_prep_store = InterviewPrepStore(self.data_dir)
+        # Une seule instance du centre de preuves par profil : c'est la
+        # source de vérité unique des preuves du candidat.
+        self._evidence_store = SqliteEvidenceStore(self.evidence_db_path)
+        self._evidence_center = EvidenceCenter(
+            self._evidence_store,
+            attachments_dir=self.evidence_attachments_dir,
+        )
         if ConsentGuard is not None:
             try:
                 self.consent_guard = ConsentGuard(self.data_dir / "consent")
@@ -315,6 +447,9 @@ class CareerService:
         self.ocr_dir.mkdir(parents=True, exist_ok=True)
         self.studio_dir.mkdir(parents=True, exist_ok=True)
         self.backups_dir.mkdir(parents=True, exist_ok=True)
+        self.evidence_dir.mkdir(parents=True, exist_ok=True)
+        self.evidence_attachments_dir.mkdir(parents=True, exist_ok=True)
+        self.evidence_uploads_dir.mkdir(parents=True, exist_ok=True)
         for path in (
             self.data_dir,
             self.documents_dir,
@@ -322,11 +457,51 @@ class CareerService:
             self.ocr_dir,
             self.studio_dir,
             self.backups_dir,
+            self.evidence_dir,
+            self.evidence_attachments_dir,
+            self.evidence_uploads_dir,
         ):
             try:
                 os.chmod(path, 0o700)
             except OSError:
                 pass
+
+    @property
+    def traceability(self) -> TraceabilityService:
+        """Magasin local du registre de traçabilité des exigences (SPEC-011).
+
+        La base est dédiée et vit dans le répertoire privé ``career_data/`` :
+        le schéma versionné de l'application n'est jamais modifié par le
+        registre, et l'effacement des données Career efface aussi ces traces.
+        """
+        if self._traceability is None:
+            self._traceability = TraceabilityService(self.traceability_db_path())
+        return self._traceability
+
+    def traceability_db_path(self) -> Path:
+        """Path of the registry database, without creating it.
+
+        The personal-data reset needs to know whether the file exists even
+        when this process never opened the traceability view: the registry
+        may come from an earlier session and must not survive a deletion
+        request.
+        """
+        return self.data_dir / TRACEABILITY_DB_FILENAME
+
+    def _traceability_export(self) -> dict[str, Any]:
+        """Return the traceability registry for the personal-data export.
+
+        SPEC-011: the registry holds requirement texts, evidence citations
+        taken from the profile and the audit history. That is personal data:
+        the copy a person downloads ("Exporter mes données") must carry it,
+        otherwise the copy is silently incomplete.
+        """
+        try:
+            return {"available": True, **self.traceability.store.export_json()}
+        except Exception:
+            # An export must not lose the rest of the personal data because
+            # of one module: the section stays present and says it is missing.
+            return {"available": False, "trace_count": 0, "traces": []}
 
     @contextmanager
     def _connection(self) -> Iterator[sqlite3.Connection]:
@@ -560,6 +735,45 @@ class CareerService:
                     );
                     CREATE INDEX interview_sessions_updated_idx ON interview_sessions(status, updated_at DESC);
                     CREATE INDEX interview_sessions_job_idx ON interview_sessions(job_id, updated_at DESC);
+
+                    CREATE TABLE candidate_facts (
+                        id TEXT PRIMARY KEY,
+                        batch_id TEXT NOT NULL DEFAULT '',
+                        kind TEXT NOT NULL CHECK (kind IN ('skill', 'experience', 'education', 'language', 'project', 'certification', 'date', 'contact', 'other')),
+                        label TEXT NOT NULL,
+                        value TEXT NOT NULL DEFAULT '',
+                        status TEXT NOT NULL DEFAULT 'proposed' CHECK (status IN ('proposed', 'approved', 'rejected', 'modified', 'suspended')),
+                        original_label TEXT NOT NULL DEFAULT '',
+                        original_value TEXT NOT NULL DEFAULT '',
+                        evidence_json TEXT NOT NULL DEFAULT '{}',
+                        meta_json TEXT NOT NULL DEFAULT '{}',
+                        note TEXT NOT NULL DEFAULT '',
+                        source_document TEXT NOT NULL DEFAULT '',
+                        source_method TEXT NOT NULL DEFAULT 'embedded_text',
+                        source_key TEXT NOT NULL DEFAULT '',
+                        applied_field TEXT NOT NULL DEFAULT '',
+                        applied_line TEXT NOT NULL DEFAULT '',
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL,
+                        decided_at TEXT
+                    );
+                    CREATE INDEX candidate_facts_status_idx ON candidate_facts(status, created_at DESC);
+                    CREATE INDEX candidate_facts_batch_idx ON candidate_facts(batch_id);
+
+                    CREATE TABLE application_dossiers (
+                        id TEXT PRIMARY KEY,
+                        application_id TEXT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+                        job_id TEXT NOT NULL,
+                        language TEXT NOT NULL,
+                        language_source TEXT NOT NULL DEFAULT 'offer',
+                        version INTEGER NOT NULL DEFAULT 1,
+                        dossier_json TEXT NOT NULL DEFAULT '{}',
+                        verification_json TEXT NOT NULL DEFAULT '{}',
+                        export_allowed INTEGER NOT NULL DEFAULT 0,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    );
+                    CREATE INDEX application_dossiers_application_idx ON application_dossiers(application_id, version DESC);
                     """
                 )
                 connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
@@ -637,7 +851,7 @@ class CareerService:
 
     def _migrate(self, connection: sqlite3.Connection, version: int) -> None:
         """Migrate in-place without touching a person's existing Career data."""
-        if version < 1 or version > 7:
+        if version < 1 or version > 10:
             raise UserFacingError("La base Career locale ne peut pas être mise à jour automatiquement.")
         if version == 1:
             self._migrate_to_v2(connection)
@@ -661,6 +875,41 @@ class CareerService:
             version = 7
         if version == 7:
             self._migrate_to_v8(connection)
+            version = 8
+        if version == 8:
+            self._migrate_to_v9(connection)
+            version = 9
+        if version == 9:
+            self._migrate_to_v10(connection)
+            version = 10
+        if version == 10:
+            self._migrate_to_v11(connection)
+            version = 11
+        if version == 11:
+            self._migrate_to_v12(connection)
+
+    @staticmethod
+    def _migrate_to_v12(connection: sqlite3.Connection) -> None:
+        """Add the verifiable application dossier (SK-11) without touching data."""
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS application_dossiers (
+                id TEXT PRIMARY KEY,
+                application_id TEXT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+                job_id TEXT NOT NULL,
+                language TEXT NOT NULL,
+                language_source TEXT NOT NULL DEFAULT 'offer',
+                version INTEGER NOT NULL DEFAULT 1,
+                dossier_json TEXT NOT NULL DEFAULT '{}',
+                verification_json TEXT NOT NULL DEFAULT '{}',
+                export_allowed INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS application_dossiers_application_idx
+                ON application_dossiers(application_id, version DESC);
+            """
+        )
 
     def _migrate_to_v2(self, connection: sqlite3.Connection) -> None:
         self._add_column_if_missing(connection, "candidate_profile", "contact_email", "TEXT NOT NULL DEFAULT ''")
@@ -807,6 +1056,93 @@ class CareerService:
             """
         )
 
+    @staticmethod
+    def _migrate_to_v9(connection: sqlite3.Connection) -> None:
+        """Add the candidate facts table without rewriting any existing row."""
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS candidate_facts (
+                id TEXT PRIMARY KEY,
+                batch_id TEXT NOT NULL DEFAULT '',
+                kind TEXT NOT NULL CHECK (kind IN ('skill', 'experience', 'education', 'language', 'project', 'certification', 'date', 'contact', 'other')),
+                label TEXT NOT NULL,
+                value TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'proposed' CHECK (status IN ('proposed', 'approved', 'rejected', 'modified', 'suspended')),
+                original_label TEXT NOT NULL DEFAULT '',
+                original_value TEXT NOT NULL DEFAULT '',
+                evidence_json TEXT NOT NULL DEFAULT '{}',
+                meta_json TEXT NOT NULL DEFAULT '{}',
+                note TEXT NOT NULL DEFAULT '',
+                source_document TEXT NOT NULL DEFAULT '',
+                source_method TEXT NOT NULL DEFAULT 'embedded_text',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                decided_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS candidate_facts_status_idx ON candidate_facts(status, created_at DESC);
+            CREATE INDEX IF NOT EXISTS candidate_facts_batch_idx ON candidate_facts(batch_id);
+            """
+        )
+
+    def _migrate_to_v10(self, connection: sqlite3.Connection) -> None:
+        """Remember what each applied fact wrote into the profile (additive).
+
+        Two columns are added to ``candidate_facts``: the profile field and
+        the exact line the fact contributed when it was applied.  They make
+        a decision reversible: a fact that is rejected, suspended or deleted
+        can no longer justify a candidature through a line it had written.
+
+        The migration also repairs the profiles built before this version:
+        the line of a fact that is not usable any more is removed from the
+        profile fields.
+        """
+        self._add_column_if_missing(
+            connection, "candidate_facts", "applied_field", "TEXT NOT NULL DEFAULT ''"
+        )
+        self._add_column_if_missing(
+            connection, "candidate_facts", "applied_line", "TEXT NOT NULL DEFAULT ''"
+        )
+        rows = connection.execute(
+            "SELECT * FROM candidate_facts WHERE status NOT IN (?, ?)",
+            (STATUS_APPROVED, STATUS_MODIFIED),
+        ).fetchall()
+        for row in rows:
+            fact = self._candidate_fact_from_row(row)
+            field_name, line = profile_target(fact)
+            if not field_name or not line:
+                continue
+            self._remove_profile_line(connection, field_name, line)
+
+    def _migrate_to_v11(self, connection: sqlite3.Connection) -> None:
+        """Scope the replacement of pending proposals to their own source.
+
+        One column is added to ``candidate_facts``: the key of the document
+        the facts were read from.  A new extraction only replaces the pending
+        proposals of the *same* document: pasting a second CV must never erase
+        the review of the first one.
+        """
+        self._add_column_if_missing(
+            connection, "candidate_facts", "source_key", "TEXT NOT NULL DEFAULT ''"
+        )
+
+    @staticmethod
+    def _remove_profile_line(connection: sqlite3.Connection, field_name: str, line: str) -> bool:
+        """Remove one line from a profile field, keeping the other lines."""
+        if field_name not in PROFILE_EDITABLE_FIELDS or not line:
+            return False
+        row = connection.execute("SELECT * FROM candidate_profile WHERE id = 1").fetchone()
+        if not row:
+            return False
+        current = str(row[field_name] or "")
+        updated = remove_profile_line(current, line)
+        if updated == current:
+            return False
+        connection.execute(
+            f"UPDATE candidate_profile SET {field_name} = ?, updated_at = ? WHERE id = 1",
+            (clean_text(updated, limit=PROFILE_FIELD_LIMITS.get(field_name, 0)), utc_now()),
+        )
+        return True
+
     def _seed_defaults(self, connection: sqlite3.Connection) -> None:
         now = utc_now()
         connection.execute(
@@ -937,6 +1273,11 @@ class CareerService:
     def profile_upload_temp_path(self) -> Path:
         """Return a private, opaque temporary location for one browser upload."""
         return self.documents_dir / f".profile-upload-{uuid.uuid4().hex}.part"
+
+    def evidence_upload_temp_path(self) -> Path:
+        """Return a private, opaque temporary location for one attachment upload."""
+        self.evidence_uploads_dir.mkdir(parents=True, exist_ok=True)
+        return self.evidence_uploads_dir / f".evidence-upload-{uuid.uuid4().hex}.part"
 
     @staticmethod
     def _safe_profile_source_name(raw_name: str | None, *, fallback: str) -> str:
@@ -1349,6 +1690,566 @@ class CareerService:
             connection.execute("DELETE FROM profile_imports WHERE id = ?", (identifier,))
             self._audit(connection, "profile_import_deleted", "profile_import", identifier)
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # SK-10 : profil candidat avec preuves approuvées
+    #
+    # Un fait extrait n'est jamais approuvé automatiquement : la table impose
+    # ``status = 'proposed'`` à l'insertion, et seule la décision explicite de
+    # la personne change le statut.  Seuls les faits approuvés ou corrigés
+    # peuvent ensuite justifier une correspondance ou une candidature.
+    # ─────────────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _candidate_fact_from_row(row: sqlite3.Row) -> Fact:
+        """Rebuild one fact from its stored row."""
+        evidence_data: dict[str, Any] = {}
+        try:
+            decoded = json.loads(str(row["evidence_json"] or "{}"))
+            if isinstance(decoded, dict):
+                evidence_data = decoded
+        except json.JSONDecodeError:
+            evidence_data = {}
+        meta_data: dict[str, str] = {}
+        try:
+            decoded_meta = json.loads(str(row["meta_json"] or "{}"))
+            if isinstance(decoded_meta, dict):
+                meta_data = {str(key): str(value) for key, value in decoded_meta.items()}
+        except json.JSONDecodeError:
+            meta_data = {}
+        evidence = Evidence(
+            source=str(evidence_data.get("source") or SOURCE_EMBEDDED_TEXT),
+            page=int(evidence_data.get("page") or 0),
+            page_confidence=str(evidence_data.get("page_confidence") or "unknown"),
+            start_offset=int(evidence_data.get("start_offset") or 0),
+            end_offset=int(evidence_data.get("end_offset") or 0),
+            quote=str(evidence_data.get("quote") or ""),
+            filename=str(evidence_data.get("filename") or ""),
+        )
+        return Fact(
+            id=str(row["id"]),
+            kind=str(row["kind"]),
+            label=str(row["label"]),
+            value=str(row["value"]),
+            status=str(row["status"]),
+            evidence=evidence,
+            original_label=str(row["original_label"] or ""),
+            original_value=str(row["original_value"] or ""),
+            meta=meta_data,
+            note=str(row["note"] or ""),
+            source_document=str(row["source_document"] or ""),
+            source_method=str(row["source_method"] or SOURCE_EMBEDDED_TEXT),
+            batch_id=str(row["batch_id"] or ""),
+            created_at=str(row["created_at"] or ""),
+            updated_at=str(row["updated_at"] or ""),
+            decided_at=str(row["decided_at"] or ""),
+        )
+
+    def _candidate_fact_rows(self, connection: sqlite3.Connection) -> list[sqlite3.Row]:
+        return connection.execute(
+            "SELECT * FROM candidate_facts ORDER BY created_at ASC, rowid ASC"
+        ).fetchall()
+
+    def candidate_fact_counts(self) -> dict[str, int]:
+        """Return the number of facts per status."""
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                "SELECT status, COUNT(*) AS total FROM candidate_facts GROUP BY status"
+            ).fetchall()
+        counts = {
+            STATUS_PROPOSED: 0,
+            STATUS_APPROVED: 0,
+            "rejected": 0,
+            STATUS_MODIFIED: 0,
+            "suspended": 0,
+        }
+        for row in rows:
+            counts[str(row["status"])] = int(row["total"])
+        return counts
+
+    def list_candidate_facts(self, status: str = "") -> list[dict[str, Any]]:
+        """Return the facts of the local profile, most urgent review first."""
+        wanted = clean_text(status, limit=20)
+        if wanted and wanted not in FACT_STATUSES:
+            raise UserFacingError("Ce statut de fait n’existe pas.")
+        with self._lock, self._connection() as connection:
+            if wanted:
+                rows = connection.execute(
+                    "SELECT * FROM candidate_facts WHERE status = ? ORDER BY created_at ASC, rowid ASC",
+                    (wanted,),
+                ).fetchall()
+            else:
+                rows = self._candidate_fact_rows(connection)
+        facts = [self._candidate_fact_from_row(row) for row in rows]
+        order = {STATUS_PROPOSED: 0, STATUS_MODIFIED: 1, STATUS_APPROVED: 2, "suspended": 3, "rejected": 4}
+        facts.sort(key=lambda fact: (order.get(fact.status, 9), fact.kind, fact.created_at))
+        return [serialize_fact(fact) for fact in facts]
+
+    def get_candidate_fact(self, fact_id: str) -> dict[str, Any]:
+        identifier = clean_text(fact_id, limit=80)
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM candidate_facts WHERE id = ?", (identifier,)
+            ).fetchone()
+        if not row:
+            raise UserFacingError("Ce fait de profil n’existe pas.")
+        return serialize_fact(self._candidate_fact_from_row(row))
+
+    def build_candidate_facts(
+        self,
+        *,
+        import_id: str = "",
+        text: str = "",
+        filename: str = "",
+    ) -> dict[str, Any]:
+        """Propose facts from a local CV import or from pasted text.
+
+        Nothing is approved here: every fact is stored with the ``proposed``
+        status, including the facts read by the local OCR.  The person then
+        approves, corrects, rejects or suspends each fact one by one.
+        """
+        source_text = ""
+        pages: list[str] | None = None
+        page_count: int | None = None
+        page_confidence = "exact"
+        source_method = SOURCE_EMBEDDED_TEXT
+        source_document = ""
+        source_key = ""
+
+        identifier = clean_text(import_id, limit=80)
+        if identifier:
+            with self._lock, self._connection() as connection:
+                row = connection.execute(
+                    "SELECT * FROM profile_imports WHERE id = ?", (identifier,)
+                ).fetchone()
+            if not row:
+                raise UserFacingError("Cette importation de profil n’existe pas.")
+            source_document = str(row["original_name"] or "")
+            extraction_method = str(row["extraction_method"] or SOURCE_EMBEDDED_TEXT)
+            stored_filename = str(row["stored_filename"] or "")
+            # The reading stored with the import is the one the person saw in
+            # the preview: it stays the reference of every offset.
+            stored_text = str(row["extracted_text"] or "")
+            source_key = f"import:{identifier}"
+            if extraction_method != SOURCE_EMBEDDED_TEXT:
+                # The document was read by OCR: the reading stored with the
+                # import is the one the person saw in the preview, so the
+                # facts are proposed from it and never from another reading.
+                source_text = str(row["extracted_text"] or "")
+                source_method = SOURCE_OCR
+                pages = None
+                try:
+                    page_count = int(row["ocr_pages"] or 0) or None
+                except (TypeError, ValueError):
+                    page_count = None
+            elif stored_filename:
+                path = self._profile_document_path(stored_filename)
+                if path.is_file():
+                    suffix = path.suffix.lower().lstrip(".")
+                    filetype = suffix if suffix in {"pdf", "docx", "txt"} else "txt"
+                    try:
+                        pages = extract_pages_from_bytes(path.read_bytes(), filetype)
+                    except Exception:
+                        pages = None
+                    if pages:
+                        if stored_text.strip():
+                            # The reading the person saw stays the reference
+                            # of every offset.  The re-read only brings the
+                            # pages: they are aligned on that very text, and
+                            # a page that cannot be found there is not
+                            # invented.
+                            source_text = stored_text
+                            aligned = align_page_spans(source_text, pages, confidence="exact")
+                            if aligned:
+                                # A DOCX has no page information: its single
+                                # block is an estimate, never an exact page.
+                                page_confidence = "estimated" if filetype == "docx" else "exact"
+                            else:
+                                pages = None
+                                page_confidence = "estimated"
+                        else:
+                            # No reading was stored with the import: the
+                            # document is read again and the facts are
+                            # proposed from that reading.
+                            source_text = "\n\n".join(pages)
+                            page_confidence = "estimated" if filetype == "docx" else "exact"
+            if not source_text:
+                source_text = str(row["extracted_text"] or "")
+                source_method = SOURCE_OCR if extraction_method != SOURCE_EMBEDDED_TEXT else SOURCE_EMBEDDED_TEXT
+                pages = None
+                page_confidence = "estimated"
+                try:
+                    page_count = int(row["ocr_pages"] or 0) or None
+                except (TypeError, ValueError):
+                    page_count = None
+        else:
+            source_text = str(text or "").replace("\x00", "").strip()
+            source_document = clean_text(filename, limit=180) or "texte-profil"
+            # Two pasted texts are two documents, even when they share the
+            # same name: the pending proposals of one must not erase the
+            # review of the other.  The same text under the same name is the
+            # same document and replaces its own pending proposals.
+            digest = hashlib.sha256(f"{source_document}\n{source_text}".encode("utf-8")).hexdigest()
+            source_key = "text:" + digest[:16]
+
+        if not source_text.strip():
+            raise UserFacingError(
+                "Le document ne contient pas de texte exploitable pour proposer des faits."
+            )
+
+        batch_id = f"batch_{uuid.uuid4().hex}"
+        now = utc_now()
+        facts = build_fact_proposals(
+            source_text,
+            filename=source_document,
+            source_method=source_method,
+            pages=pages,
+            page_count=page_count,
+            page_confidence=page_confidence,
+            batch_id=batch_id,
+            created_at=now,
+        )
+        if not facts:
+            raise UserFacingError(
+                "Aucune rubrique Formation, Expérience, Compétences ou Langues n’a été trouvée dans ce document."
+            )
+
+        with self._lock, self._connection() as connection:
+            # A new extraction replaces the pending proposals of the *same*
+            # document only.  Two different documents never erase each
+            # other, even when they share the same name.
+            connection.execute(
+                """
+                DELETE FROM candidate_facts
+                WHERE status = 'proposed' AND (source_key = ? OR (source_key = '' AND source_document = ?))
+                """,
+                (source_key, source_document),
+            )
+            for fact in facts:
+                serialized = serialize_fact(fact)
+                connection.execute(
+                    """
+                    INSERT INTO candidate_facts (
+                        id, batch_id, kind, label, value, status, original_label,
+                        original_value, evidence_json, meta_json, note,
+                        source_document, source_method, source_key,
+                        created_at, updated_at, decided_at
+                    ) VALUES (?, ?, ?, ?, ?, 'proposed', '', '', ?, ?, '', ?, ?, ?, ?, ?, NULL)
+                    """,
+                    (
+                        fact.id,
+                        batch_id,
+                        fact.kind,
+                        fact.label,
+                        fact.value,
+                        json.dumps(serialized["evidence"], ensure_ascii=False),
+                        json.dumps(serialized["meta"], ensure_ascii=False),
+                        source_document,
+                        source_method,
+                        source_key,
+                        now,
+                        now,
+                    ),
+                )
+            self._audit(connection, "candidate_facts_proposed", "candidate_facts", batch_id)
+
+        return {
+            "batch_id": batch_id,
+            "facts": [serialize_fact(fact) for fact in facts],
+            "counts": self.candidate_fact_counts(),
+            "source": {
+                "document": source_document,
+                "method": source_method,
+                "from_ocr": source_method == SOURCE_OCR,
+                "pages_known": bool(pages),
+                "source_key": source_key,
+            },
+            "disclaimer": (
+                "Aucun fait n’est validé automatiquement. Un fait proposé ne peut pas "
+                "justifier une correspondance ou une candidature tant que tu ne l’as pas approuvé."
+            ),
+        }
+
+    def decide_candidate_fact(
+        self,
+        fact_id: str,
+        decision: str,
+        *,
+        value: str = "",
+        note: str = "",
+    ) -> dict[str, Any]:
+        """Apply one explicit decision of the person on one fact."""
+        identifier = clean_text(fact_id, limit=80)
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM candidate_facts WHERE id = ?", (identifier,)
+            ).fetchone()
+            if not row:
+                raise UserFacingError("Ce fait de profil n’existe pas.")
+            fact = self._candidate_fact_from_row(row)
+            try:
+                updated = apply_decision(fact, decision, value=value, note=note, now=utc_now())
+            except ValueError as error:
+                raise UserFacingError(str(error)) from error
+            connection.execute(
+                """
+                UPDATE candidate_facts
+                SET label = ?, value = ?, status = ?, original_label = ?, original_value = ?,
+                    note = ?, updated_at = ?, decided_at = ?
+                WHERE id = ?
+                """,
+                (
+                    updated.label,
+                    updated.value,
+                    updated.status,
+                    updated.original_label,
+                    updated.original_value,
+                    updated.note,
+                    updated.updated_at,
+                    updated.decided_at,
+                    identifier,
+                ),
+            )
+            self._audit(connection, f"candidate_fact_{updated.status}", "candidate_fact", identifier)
+            if not updated.is_usable:
+                # A fact that is no longer approved must stop justifying a
+                # candidature: the line it had written in the profile goes.
+                self._revoke_fact_contribution(connection, identifier)
+            elif updated.status == STATUS_MODIFIED:
+                # A correction replaces what the fact had written.
+                self._refresh_fact_contribution(connection, updated)
+        return {
+            "fact": serialize_fact(updated),
+            "counts": self.candidate_fact_counts(),
+        }
+
+    def _revoke_fact_contribution(self, connection: sqlite3.Connection, fact_id: str) -> None:
+        """Remove from the profile what a fact had written when it was applied.
+
+        The line is only removed when the fact really wrote it: a line the
+        person had written themselves is never touched.  When another usable
+        fact carries the same content, the line stays and that fact takes
+        over the responsibility for it.
+        """
+        row = connection.execute(
+            "SELECT applied_field, applied_line FROM candidate_facts WHERE id = ?", (fact_id,)
+        ).fetchone()
+        if not row:
+            return
+        field_name = str(row["applied_field"] or "")
+        line = str(row["applied_line"] or "")
+        if field_name and line:
+            self._remove_profile_line(connection, field_name, line)
+            successor = self._successor_fact_for(connection, fact_id, field_name, line)
+            if successor:
+                # The line stays: another approved fact still justifies it.
+                self._write_profile_line(connection, field_name, line)
+                connection.execute(
+                    "UPDATE candidate_facts SET applied_field = ?, applied_line = ? WHERE id = ?",
+                    (field_name, line, successor.id),
+                )
+        connection.execute(
+            "UPDATE candidate_facts SET applied_field = '', applied_line = '' WHERE id = ?",
+            (fact_id,),
+        )
+
+    @staticmethod
+    def _successor_fact_for(
+        connection: sqlite3.Connection, fact_id: str, field_name: str, line: str
+    ) -> Fact | None:
+        """Return another usable fact that carries the same profile content."""
+        for fact in CareerService._candidate_facts_of(connection, usable_only=True):
+            if fact.id == fact_id:
+                continue
+            if profile_target(fact) == (field_name, line):
+                return fact
+        return None
+
+    def _refresh_fact_contribution(self, connection: sqlite3.Connection, fact: Fact) -> None:
+        """Re-write a corrected fact in the profile, where it had been applied."""
+        row = connection.execute(
+            "SELECT applied_line FROM candidate_facts WHERE id = ?", (fact.id,)
+        ).fetchone()
+        if not row or not str(row["applied_line"] or ""):
+            return
+        self._revoke_fact_contribution(connection, fact.id)
+        field_name, line = profile_target(fact)
+        if field_name and line:
+            self._write_profile_line(connection, field_name, line)
+            connection.execute(
+                "UPDATE candidate_facts SET applied_field = ?, applied_line = ? WHERE id = ?",
+                (field_name, line, fact.id),
+            )
+
+    @staticmethod
+    def _write_profile_line(connection: sqlite3.Connection, field_name: str, line: str) -> bool:
+        """Write one line in a profile field, keeping the field limit."""
+        if field_name not in PROFILE_EDITABLE_FIELDS or not line:
+            return False
+        row = connection.execute("SELECT * FROM candidate_profile WHERE id = 1").fetchone()
+        if not row:
+            return False
+        current = str(row[field_name] or "")
+        lines = [item for item in current.split("\n") if item.strip()]
+        if any(item.strip() == line.strip() for item in lines):
+            return False
+        limit = PROFILE_FIELD_LIMITS.get(field_name, 0)
+        if limit and len(current) + len(line) + 1 > limit:
+            return False
+        updated = "\n".join(lines + [line.strip()])
+        connection.execute(
+            f"UPDATE candidate_profile SET {field_name} = ?, updated_at = ? WHERE id = 1",
+            (updated, utc_now()),
+        )
+        return True
+
+    @staticmethod
+    def _candidate_facts_of(
+        connection: sqlite3.Connection, *, usable_only: bool = False
+    ) -> list[Fact]:
+        """Return the stored facts, optionally only the usable ones."""
+        if usable_only:
+            rows = connection.execute(
+                "SELECT * FROM candidate_facts WHERE status IN (?, ?) ORDER BY created_at ASC, rowid ASC",
+                (STATUS_APPROVED, STATUS_MODIFIED),
+            ).fetchall()
+        else:
+            rows = connection.execute(
+                "SELECT * FROM candidate_facts ORDER BY created_at ASC, rowid ASC"
+            ).fetchall()
+        return [CareerService._candidate_fact_from_row(row) for row in rows]
+
+    def delete_candidate_fact(self, fact_id: str) -> None:
+        """Delete one fact and its evidence from the local profile."""
+        identifier = clean_text(fact_id, limit=80)
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT id FROM candidate_facts WHERE id = ?", (identifier,)
+            ).fetchone()
+            if not row:
+                raise UserFacingError("Ce fait de profil n’existe pas.")
+            self._revoke_fact_contribution(connection, identifier)
+            connection.execute("DELETE FROM candidate_facts WHERE id = ?", (identifier,))
+            self._audit(connection, "candidate_fact_deleted", "candidate_fact", identifier)
+
+    def usable_candidate_facts(self) -> list[Fact]:
+        """Return the facts the person approved; the only usable ones."""
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                "SELECT * FROM candidate_facts WHERE status IN (?, ?) ORDER BY created_at ASC, rowid ASC",
+                (STATUS_APPROVED, STATUS_MODIFIED),
+            ).fetchall()
+        return [self._candidate_fact_from_row(row) for row in rows]
+
+    def active_candidate_profile(self) -> dict[str, Any]:
+        """Return the active profile: the approved facts and their evidence."""
+        facts = self.usable_candidate_facts()
+        payload = export_profile(CandidateProfile(facts=tuple(facts)))
+        payload["counts"] = self.candidate_fact_counts()
+        payload["pending_count"] = payload["counts"].get(STATUS_PROPOSED, 0)
+        payload["usable_count"] = len(facts)
+        return payload
+
+    def apply_candidate_facts(self, fact_ids: list[str]) -> dict[str, Any]:
+        """Copy approved facts into the local profile fields.
+
+        Only the facts the person approved (or corrected) can be applied: a
+        proposed, rejected or suspended fact never rewrites the profile.
+        """
+        identifiers = [clean_text(item, limit=80) for item in fact_ids if clean_text(item, limit=80)]
+        if not identifiers:
+            raise UserFacingError("Sélectionne au moins un fait approuvé à appliquer au profil.")
+        if len(identifiers) > 60:
+            raise UserFacingError("Trop de faits ont été envoyés.")
+        with self._lock, self._connection() as connection:
+            placeholders = ",".join("?" for _ in identifiers)
+            rows = connection.execute(
+                f"SELECT * FROM candidate_facts WHERE id IN ({placeholders})", identifiers
+            ).fetchall()
+            found = {str(row["id"]) for row in rows}
+            missing = [item for item in identifiers if item not in found]
+            if missing:
+                raise UserFacingError("Un fait sélectionné n’existe pas.")
+            facts = [self._candidate_fact_from_row(row) for row in rows]
+            blocked = [fact for fact in facts if not fact.is_usable]
+            if blocked:
+                raise UserFacingError(
+                    "Seuls les faits approuvés ou corrigés peuvent être appliqués au profil."
+                )
+            profile = self._row_dict(
+                connection.execute("SELECT * FROM candidate_profile WHERE id = 1").fetchone()
+            )
+            merged, contributions, applied = merge_usable_facts_with_sources(profile, facts)
+            changed: dict[str, str] = {}
+            for field_name in (
+                "education",
+                "experience",
+                "skills",
+                "languages",
+                "contact_email",
+                "contact_phone",
+            ):
+                new_value = str(merged.get(field_name, ""))
+                if new_value != str(profile.get(field_name, "")):
+                    changed[field_name] = self._clean_profile_editable_value(field_name, new_value)
+            if changed:
+                now = utc_now()
+                assignments = ", ".join(f"{field} = :{field}" for field in changed)
+                connection.execute(
+                    f"UPDATE candidate_profile SET {assignments}, updated_at = :updated_at WHERE id = 1",
+                    changed | {"updated_at": now},
+                )
+                self._audit(connection, "candidate_facts_applied", "candidate_profile", "1")
+            # What each fact really wrote is remembered: a later decision can
+            # then take it back out of the profile.
+            for fact_id, (field_name, line) in contributions.items():
+                connection.execute(
+                    "UPDATE candidate_facts SET applied_field = ?, applied_line = ? WHERE id = ?",
+                    (field_name, line, fact_id),
+                )
+        return {
+            "profile": self.get_profile(),
+            "applied": len(applied),
+            "written": len(contributions),
+            "ignored": len(identifiers) - len(applied),
+            "counts": self.candidate_fact_counts(),
+        }
+
+    def export_candidate_profile(self) -> Path:
+        """Write the portable profile: every fact with its evidence and status."""
+        created = datetime.now().strftime("%Y%m%d-%H%M%S")
+        target = self.export_dir / f"profil_candidat_{created}_{uuid.uuid4().hex[:8]}.json"
+        with self._lock, self._connection() as connection:
+            rows = self._candidate_fact_rows(connection)
+        facts = tuple(self._candidate_fact_from_row(row) for row in rows)
+        payload = export_profile(
+            CandidateProfile(facts=facts),
+            generated_at=utc_now(),
+            source_document=rows[0]["source_document"] if rows else "",
+        )
+        payload["counts"] = self.candidate_fact_counts()
+        # The export may hold facts coming from several documents: they are
+        # all listed, so the portable profile never pretends a single source.
+        payload["source_documents"] = sorted(
+            {str(row["source_document"] or "") for row in rows if str(row["source_document"] or "")}
+        )
+        target.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        try:
+            os.chmod(target, 0o600)
+        except OSError:
+            pass
+        return target
+
+    def _profile_for_matching(self, profile: dict[str, Any]) -> dict[str, Any]:
+        """Return the profile used for the matching and the candidature drafts.
+
+        Only the facts the person approved are added.  A proposed, rejected or
+        suspended fact can never justify a candidature.
+        """
+        facts = self.usable_candidate_facts()
+        if not facts:
+            return profile
+        return merge_usable_facts(profile, facts)
+
     @staticmethod
     def _intake_answers(value: str) -> dict[str, str]:
         try:
@@ -1614,6 +2515,171 @@ class CareerService:
                 raise UserFacingError("Cette séance d’entretien n’existe pas.")
             self._audit(connection, "interview_session_deleted", "interview_session", identifier)
 
+    # -- SPEC-010 : préparation d'entretien ciblée -------------------------
+    def interview_prep_context(self) -> PrepContext:
+        """Expose the local offer/profile resolution used by the preparation."""
+        return PrepContext(
+            load_offer=self.get_job,
+            load_profile=lambda profile_id: self.get_profile(),
+        )
+
+    def _interview_prep_view(self, preparation: Preparation) -> dict[str, Any]:
+        payload = serialize_session(preparation.session)
+        records = preparation.questions
+        payload["technical_questions"] = [
+            serialize_question(records[question.id])
+            for question in preparation.session.technical_questions
+            if question.id in records
+        ]
+        payload["behavioral_questions"] = [
+            serialize_question(records[question.id])
+            for question in preparation.session.behavioral_questions
+            if question.id in records
+        ]
+        payload["gap_questions"] = [
+            serialize_question(records[question.id])
+            for question in preparation.session.gap_questions
+            if question.id in records
+        ]
+        payload["mode"] = preparation.mode
+        payload["offer"] = dict(preparation.offer)
+        payload["questions"] = [serialize_question(record) for record in records.values()]
+        payload["simulation_count"] = self.interview_prep_store.count_simulations(
+            preparation.session.session_id
+        )
+        payload["disclaimer"] = (
+            "Préparation d’entretien locale et déterministe : elle ne prédit aucune embauche, "
+            "n’invente aucun fait et ne contacte aucun service externe."
+        )
+        return payload
+
+    def create_interview_prep_session(
+        self,
+        offer_id: Any,
+        profile_id: Any = "user_profile",
+        mode: Any = "standard",
+    ) -> dict[str, Any]:
+        """Build one targeted preparation from a stored offer and the profile."""
+        identifier = clean_text(offer_id, limit=80)
+        if not identifier:
+            raise UserFacingError("Choisis une offre Career pour préparer l’entretien.")
+        job = self.get_job(identifier)
+        profile = self.get_profile()
+        preparation = build_preparation(
+            str(job.get("id") or identifier),
+            clean_text(profile_id, limit=80) or "user_profile",
+            clean_text(mode, limit=40) or "standard",
+            offer=job,
+            profile=profile,
+            intake=self.get_intake(),
+            session_id=f"interview_prep_{uuid.uuid4().hex}",
+            created_at=utc_now(),
+        )
+        self.interview_prep_store.save_session(
+            session_id=preparation.session.session_id,
+            offer_id=str(job.get("id") or identifier),
+            profile_id=preparation.session.profile_id,
+            mode=preparation.mode,
+            payload=preparation.to_payload(),
+            company=str(job.get("company") or ""),
+            title=str(job.get("title") or ""),
+        )
+        with self._lock, self._connection() as connection:
+            self._audit(
+                connection,
+                "interview_prep_created",
+                "interview_prep_session",
+                preparation.session.session_id,
+            )
+        return self._interview_prep_view(preparation)
+
+    def get_interview_prep_session(self, session_id: str) -> dict[str, Any]:
+        identifier = clean_text(session_id, limit=80)
+        payload = self.interview_prep_store.get_payload(identifier)
+        if payload is None:
+            raise UserFacingError("Cette préparation d’entretien n’existe pas.")
+        return self._interview_prep_view(Preparation.from_payload(payload))
+
+    def list_interview_prep_sessions(self, limit: int = 30) -> list[dict[str, Any]]:
+        return self.interview_prep_store.list_sessions(limit=limit)
+
+    def delete_interview_prep_session(self, session_id: str) -> None:
+        self.interview_prep_store.delete_session(session_id)
+
+    def simulate_interview_prep(self, session_id: str, question_id: Any, user_answer: Any) -> dict[str, Any]:
+        """Score one rehearsal answer against a prepared question."""
+        identifier = clean_text(session_id, limit=80)
+        payload = self.interview_prep_store.get_payload(identifier)
+        if payload is None:
+            raise UserFacingError("Cette préparation d’entretien n’existe pas.")
+        preparation = Preparation.from_payload(payload)
+        feedback = simulate_interview_answer(
+            preparation,
+            clean_text(question_id, limit=120),
+            clean_text(user_answer, limit=6_000),
+            profile=self.get_profile(),
+        )
+        serialized = serialize_feedback(feedback)
+        self.interview_prep_store.append_simulation(
+            session_id=identifier,
+            question_id=feedback.question_id,
+            score=feedback.score,
+            payload=serialized,
+        )
+        return serialized
+
+    def list_interview_prep_simulations(self, session_id: str) -> dict[str, Any]:
+        identifier = clean_text(session_id, limit=80)
+        if self.interview_prep_store.get_session(identifier) is None:
+            raise UserFacingError("Cette préparation d’entretien n’existe pas.")
+        return {
+            "session_id": identifier,
+            "simulations": self.interview_prep_store.list_simulations(identifier),
+        }
+
+    def export_interview_prep(self, session_id: str, export_format: str = "md") -> Path:
+        """Write the preparation as Markdown or PDF in the private export folder."""
+        normalized_format = clean_text(export_format, limit=8).lower() or "md"
+        if normalized_format not in {"md", "pdf"}:
+            raise UserFacingError(
+                "Format de préparation d’entretien non pris en charge. Choisis Markdown ou PDF."
+            )
+        identifier = clean_text(session_id, limit=80)
+        payload = self.interview_prep_store.get_payload(identifier)
+        if payload is None:
+            raise UserFacingError("Cette préparation d’entretien n’existe pas.")
+        preparation = Preparation.from_payload(payload)
+        markdown = render_markdown(
+            preparation,
+            self.interview_prep_store.list_simulations(identifier),
+        )
+        safe_company = re_sub_filename(str(preparation.offer.get("company") or "entretien"))
+        safe_title = re_sub_filename(str(preparation.offer.get("title") or "preparation"))
+        target = self.export_dir / (
+            f"entretien_{safe_company}_{safe_title}_{uuid.uuid4().hex[:8]}.{normalized_format}"
+        )
+        if normalized_format == "md":
+            target.write_text(markdown, encoding="utf-8")
+        else:
+            document_title = (
+                f"Préparation d'entretien — {preparation.offer.get('company') or 'Poste ciblé'} — "
+                f"{preparation.offer.get('title') or 'offre'}"
+            )
+            try:
+                write_pdf(markdown=markdown, title=document_title, language="fr", target=target)
+            except Exception as error:
+                target.unlink(missing_ok=True)
+                raise UserFacingError(
+                    "La fiche de préparation d’entretien n’a pas pu être générée localement."
+                ) from error
+        try:
+            os.chmod(target, 0o600)
+        except OSError:
+            pass
+        with self._lock, self._connection() as connection:
+            self._audit(connection, "interview_prep_exported", "export", target.name)
+        return target
+
     def _application_context(self, job_id: str, language: Any) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], str]:
         identifier = clean_text(job_id, limit=80)
         normalized_language = normalize_language(language)
@@ -1631,7 +2697,12 @@ class CareerService:
             # The CV and the cover letter quote the same canonical
             # requirements as every other screen of the workspace.
             job["offer_intelligence"] = snapshot
-        return profile, self._serialize_intake_row(intake_row), job, normalized_language
+        return (
+            self._profile_for_matching(profile),
+            self._serialize_intake_row(intake_row),
+            job,
+            normalized_language,
+        )
 
     def create_application_draft(
         self,
@@ -2330,6 +3401,13 @@ class CareerService:
             }
         )
         self._prep_cache.add(job_id)
+        # SPEC-011 — the facts matched by the preparation panel propose an
+        # automatic link in the traceability registry.  The link stays
+        # "pending": only the person can confirm it.
+        try:
+            self.sync_traceability_evidence(job_id, analysis.get("matched_elements"))
+        except Exception:
+            self._record_traceability_failure("evidence", job_id)
         return analysis
 
     @staticmethod
@@ -2909,7 +3987,17 @@ class CareerService:
                         # Future connectors receive their own source descriptor.
                         descriptor = GreenhouseBoard(source_id, company, parse_greenhouse_board_token(source.get("board_token"))) if provider == "greenhouse" else source
                         outcome["attempted"] = True
-                        result = connector.discover_internships(descriptor, selection_brief=brief, deadline=deadline)
+                        geo_kwargs = callable_geo_kwargs(
+                            connector.discover_internships,
+                            countries_exclude=brief.get("countries_exclude"),
+                            countries_include=brief.get("countries_include"),
+                        )
+                        result = connector.discover_internships(
+                            descriptor,
+                            selection_brief=brief,
+                            deadline=deadline,
+                            **geo_kwargs,
+                        )
                         if not isinstance(result, DiscoveryPayload) or not isinstance(result.jobs, tuple) or any(not isinstance(job, dict) for job in result.jobs):
                             raise PublicSourceError("Le connecteur n’a pas renvoyé un résultat d’exploration valide.", code="invalid_payload")
                         counts = (result.raw_count, result.evaluated_count, result.invalid_count,
@@ -3190,12 +4278,15 @@ class CareerService:
                 ),
             )
 
-    def discover_opportunities(self, *, force: bool = False) -> dict[str, Any]:
+    def discover_opportunities(self, *, force: bool = False, max_parallel: int = 1) -> dict[str, Any]:
         """Refresh explicitly configured official boards after a user action.
 
         A source failure is isolated: existing data survives unchanged, while
         other enabled boards continue.  There is no automatic scheduler and
         no provider/model call anywhere in this workflow.
+
+        ``max_parallel`` never exceeds two simultaneous sources: the bound is
+        a resource guarantee for the local machine, not a tuning knob.
         """
         if not self._discovery_lock.acquire(blocking=False):
             raise UserFacingError("Une recherche d’opportunités est déjà en cours. Attends sa fin avant de relancer.")
@@ -3219,203 +4310,453 @@ class CareerService:
                 raise UserFacingError("Ajoute d’abord au moins un board Greenhouse public à suivre.")
 
             outcomes: list[dict[str, Any]] = []
-            for row in sources:
-                source = dict(row)
-                source_id = str(source["id"])
-                selection_key = f"stage_search_selection:{source_id}"
-                started_at = utc_now()
-                if (
-                    not force
-                    and self._discovery_cache_valid(str(source["last_success_at"]))
-                    and cached_selections.get(selection_key) == selection_fingerprint
-                ):
-                    run_id = self._record_discovery_run(
-                        source_id,
-                        status="cached",
-                        started_at=started_at,
-                        finished_at=utc_now(),
-                        message="Résultats conservés : vérification réussie il y a moins de 10 minutes.",
-                    )
+            bounded_parallel = max(1, min(int(max_parallel), MAX_PARALLEL_SOURCES))
+            if bounded_parallel > 1 and len(sources) > 1:
+                # At most two official sources are read at the same time. The
+                # bound is a resource guarantee, not a tuning knob.
+                with ThreadPoolExecutor(max_workers=bounded_parallel) as executor:
+                    futures = [
+                        executor.submit(
+                            self._refresh_discovery_source,
+                            row,
+                            brief,
+                            force=force,
+                            cached_selections=cached_selections,
+                            selection_fingerprint=selection_fingerprint,
+                        )
+                        for row in sources
+                    ]
+                    outcomes = [future.result() for future in futures]
+            else:
+                for row in sources:
                     outcomes.append(
-                        {
-                            "source_id": source_id,
-                            "company": source["company"],
-                            "status": "cached",
-                            "run_id": run_id,
-                            "message": "Résultats récents conservés (cache de 10 minutes).",
-                            "verified_at": source["last_success_at"],
-                        }
-                    )
-                    continue
-
-                run_id = self._record_discovery_run(source_id, status="running", started_at=started_at)
-                with self._lock, self._connection() as connection:
-                    connection.execute(
-                        "UPDATE discovery_sources SET last_checked_at = ?, updated_at = ? WHERE id = ?",
-                        (started_at, started_at, source_id),
-                    )
-                try:
-                    board = GreenhouseBoard(
-                        id=source_id,
-                        company=str(source["company"]),
-                        board_token=str(source["board_token"]),
-                    )
-                    ranked_discovery = getattr(self.discovery_connector, "discover_ranked", None)
-                    if callable(ranked_discovery):
-                        result = ranked_discovery(board, selection_brief=brief)
-                    else:
-                        # Retain the original injectable connector contract.
-                        # Production Greenhouse always uses ranked discovery;
-                        # legacy fixtures/connectors return their own payload.
-                        result = self.discovery_connector.discover(board)
-                except Exception as caught:
-                    # A connector is isolated from the rest of the local
-                    # tracker.  The public implementation raises
-                    # ``PublicSourceError`` for expected source failures, but
-                    # an unexpected parser/transport defect must still close
-                    # this run cleanly rather than leaving it marked running
-                    # or surfacing a server error to the browser.
-                    error = (
-                        caught
-                        if isinstance(caught, PublicSourceError)
-                        else PublicSourceError(
-                            "Cette source officielle a rencontré une erreur locale inattendue. Les offres déjà enregistrées sont conservées.",
-                            code="unexpected",
+                        self._refresh_discovery_source(
+                            row,
+                            brief,
+                            force=force,
+                            cached_selections=cached_selections,
+                            selection_fingerprint=selection_fingerprint,
                         )
                     )
-                    message = clean_text(str(error), limit=1_000)
-                    self._finish_discovery_run(
-                        run_id,
-                        status="error",
-                        found_count=0,
-                        imported_count=0,
-                        updated_count=0,
-                        skipped_count=0,
-                        message=message,
-                    )
-                    with self._lock, self._connection() as connection:
-                        connection.execute(
-                            """
-                            UPDATE discovery_sources
-                            SET last_error_code = ?, last_error_at = ?, updated_at = ? WHERE id = ?
-                            """,
-                            (clean_text(getattr(error, "code", "error"), limit=80), utc_now(), utc_now(), source_id),
-                        )
-                        self._audit(connection, "discovery_source_error", "discovery_source", source_id)
-                    outcomes.append(
-                        {
-                            "source_id": source_id,
-                            "company": source["company"],
-                            "status": "error",
-                            "run_id": run_id,
-                            "message": message,
-                            "verified_at": source["last_success_at"],
-                        }
-                    )
-                    continue
-
-                imported = updated = 0
-                skipped = result.invalid_count
-                seen_at = result.verified_at
-                availability = self._current_availability_values()
-                for raw_job in result.jobs:
-                    try:
-                        payload = dict(raw_job)
-                        raw_source_id = clean_text(payload.get("source_id"), limit=240)
-                        if not raw_source_id:
-                            skipped += 1
-                            continue
-                        payload["source_id"] = f"{source_id}:{raw_source_id}"
-                        imported_job = self.import_job(payload, availability=availability)
-                        if imported_job["created"]:
-                            imported += 1
-                        else:
-                            updated += 1
-                        with self._lock, self._connection() as connection:
-                            connection.execute(
-                                """
-                                UPDATE jobs
-                                SET discovery_source_id = ?, last_seen_at = ?, last_verified_at = ?
-                                WHERE id = ?
-                                """,
-                                (source_id, seen_at, seen_at, imported_job["id"]),
-                            )
-                    except UserFacingError:
-                        # One malformed remote posting must not prevent other
-                        # official postings on the same board from being saved.
-                        skipped += 1
-
-                with self._lock, self._connection() as connection:
-                    # A successful full feed no longer showing an earlier role
-                    # is evidence only that it was not observed now.  It is not
-                    # safe to call the role closed automatically.
-                    # Exclusion from a ranked top-150 or a malformed source
-                    # row is not evidence that an earlier posting vanished.
-                    # Preserve its last verified state and tracking instead.
-                    if not result.truncated and not result.invalid_count:
-                        connection.execute(
-                            """
-                            UPDATE jobs SET source_status = 'unknown', updated_at = ?
-                            WHERE discovery_source_id = ? AND last_seen_at != ? AND source_status = 'open'
-                            """,
-                            (utc_now(), source_id, seen_at),
-                        )
-                    connection.execute(
-                        """
-                        UPDATE discovery_sources
-                        SET last_success_at = ?, last_error_code = '', last_error_at = '', updated_at = ?
-                        WHERE id = ?
-                        """,
-                        (seen_at, utc_now(), source_id),
-                    )
-                    # An additive setting, not a schema replacement. This
-                    # fingerprint also makes an in-flight search using an old
-                    # brief non-cacheable after the person saves new criteria.
-                    connection.execute(
-                        """
-                        INSERT INTO career_settings (setting_key, setting_value) VALUES (?, ?)
-                        ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value
-                        """,
-                        (selection_key, selection_fingerprint),
-                    )
-                    self._audit(connection, "discovery_source_refreshed", "discovery_source", source_id)
-                status = "partial" if skipped else "success"
-                message = f"{len(result.jobs)} offre(s) publiée(s) vérifiée(s), {imported} nouvelle(s), {updated} actualisée(s)."
-                if skipped:
-                    message += f" {skipped} entrée(s) source ignorée(s) car incomplète(s) ou invalide(s)."
-                if result.truncated:
-                    message += (
-                        f" Les 150 offres les plus pertinentes parmi {result.evaluated_count} entrées admissibles "
-                        "ont été conservées après classement local selon tes critères "
-                        "(ordre neutre et déterministe sans critères). "
-                        "Les autres offres déjà suivies restent conservées."
-                    )
-                self._finish_discovery_run(
-                    run_id,
-                    status=status,
-                    found_count=len(result.jobs),
-                    imported_count=imported,
-                    updated_count=updated,
-                    skipped_count=skipped,
-                    message=message,
-                )
-                outcomes.append(
-                    {
-                        "source_id": source_id,
-                        "company": source["company"],
-                        "status": status,
-                        "run_id": run_id,
-                        "found_count": len(result.jobs),
-                        "imported_count": imported,
-                        "updated_count": updated,
-                        "skipped_count": skipped,
-                        "verified_at": seen_at,
-                        "message": message,
-                    }
-                )
             return {"outcomes": outcomes, "sources": self.list_discovery_sources()}
         finally:
             self._discovery_lock.release()
+
+    def _refresh_discovery_source(
+        self,
+        row: sqlite3.Row,
+        brief: dict[str, Any],
+        *,
+        force: bool,
+        cached_selections: dict[str, str],
+        selection_fingerprint: str,
+    ) -> dict[str, Any]:
+        """Read one official board and record what it changed.
+
+        A source failure is isolated: the offers already stored survive, and
+        the other boards continue. The method never sends anything.
+        """
+        source = dict(row)
+        source_id = str(source["id"])
+        selection_key = f"stage_search_selection:{source_id}"
+        started_at = utc_now()
+        if (
+            not force
+            and self._discovery_cache_valid(str(source["last_success_at"]))
+            and cached_selections.get(selection_key) == selection_fingerprint
+        ):
+            run_id = self._record_discovery_run(
+                source_id,
+                status="cached",
+                started_at=started_at,
+                finished_at=utc_now(),
+                message="Résultats conservés : vérification réussie il y a moins de 10 minutes.",
+            )
+            return {
+                    "source_id": source_id,
+                    "company": source["company"],
+                    "status": "cached",
+                    "run_id": run_id,
+                    "message": "Résultats récents conservés (cache de 10 minutes).",
+                    "verified_at": source["last_success_at"],
+            }
+
+        run_id = self._record_discovery_run(source_id, status="running", started_at=started_at)
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                "UPDATE discovery_sources SET last_checked_at = ?, updated_at = ? WHERE id = ?",
+                (started_at, started_at, source_id),
+            )
+        try:
+            board = GreenhouseBoard(
+                id=source_id,
+                company=str(source["company"]),
+                board_token=str(source["board_token"]),
+            )
+            ranked_discovery = getattr(self.discovery_connector, "discover_ranked", None)
+            if callable(ranked_discovery):
+                geo_kwargs = callable_geo_kwargs(
+                    ranked_discovery,
+                    countries_exclude=brief.get("countries_exclude", []),
+                    countries_include=brief.get("countries_include", []),
+                )
+                result = ranked_discovery(board, selection_brief=brief, **geo_kwargs)
+            else:
+                # Retain the original injectable connector contract.
+                # Production Greenhouse always uses ranked discovery;
+                # legacy fixtures/connectors return their own payload.
+                result = self.discovery_connector.discover(board)
+        except Exception as caught:
+            # A connector is isolated from the rest of the local
+            # tracker.  The public implementation raises
+            # ``PublicSourceError`` for expected source failures, but
+            # an unexpected parser/transport defect must still close
+            # this run cleanly rather than leaving it marked running
+            # or surfacing a server error to the browser.
+            error = (
+                caught
+                if isinstance(caught, PublicSourceError)
+                else PublicSourceError(
+                    "Cette source officielle a rencontré une erreur locale inattendue. Les offres déjà enregistrées sont conservées.",
+                    code="unexpected",
+                )
+            )
+            message = clean_text(str(error), limit=1_000)
+            self._finish_discovery_run(
+                run_id,
+                status="error",
+                found_count=0,
+                imported_count=0,
+                updated_count=0,
+                skipped_count=0,
+                message=message,
+            )
+            with self._lock, self._connection() as connection:
+                connection.execute(
+                    """
+                    UPDATE discovery_sources
+                    SET last_error_code = ?, last_error_at = ?, updated_at = ? WHERE id = ?
+                    """,
+                    (clean_text(getattr(error, "code", "error"), limit=80), utc_now(), utc_now(), source_id),
+                )
+                self._audit(connection, "discovery_source_error", "discovery_source", source_id)
+            return {
+                    "source_id": source_id,
+                    "company": source["company"],
+                    "status": "error",
+                    "run_id": run_id,
+                    "message": message,
+                    "verified_at": source["last_success_at"],
+            }
+
+        imported = updated = 0
+        skipped = result.invalid_count
+        seen_at = result.verified_at
+        availability = self._current_availability_values()
+        for raw_job in result.jobs:
+            try:
+                payload = dict(raw_job)
+                raw_source_id = clean_text(payload.get("source_id"), limit=240)
+                if not raw_source_id:
+                    skipped += 1
+                    continue
+                payload["source_id"] = f"{source_id}:{raw_source_id}"
+                imported_job = self.import_job(payload, availability=availability)
+                if imported_job["created"]:
+                    imported += 1
+                else:
+                    updated += 1
+                with self._lock, self._connection() as connection:
+                    connection.execute(
+                        """
+                        UPDATE jobs
+                        SET discovery_source_id = ?, last_seen_at = ?, last_verified_at = ?
+                        WHERE id = ?
+                        """,
+                        (source_id, seen_at, seen_at, imported_job["id"]),
+                    )
+            except UserFacingError:
+                # One malformed remote posting must not prevent other
+                # official postings on the same board from being saved.
+                skipped += 1
+
+        with self._lock, self._connection() as connection:
+            # A successful full feed no longer showing an earlier role
+            # is evidence only that it was not observed now.  It is not
+            # safe to call the role closed automatically.
+            # Exclusion from a ranked top-150 or a malformed source
+            # row is not evidence that an earlier posting vanished.
+            # Preserve its last verified state and tracking instead.
+            if not result.truncated and not result.invalid_count:
+                connection.execute(
+                    """
+                    UPDATE jobs SET source_status = 'unknown', updated_at = ?
+                    WHERE discovery_source_id = ? AND last_seen_at != ? AND source_status = 'open'
+                    """,
+                    (utc_now(), source_id, seen_at),
+                )
+            connection.execute(
+                """
+                UPDATE discovery_sources
+                SET last_success_at = ?, last_error_code = '', last_error_at = '', updated_at = ?
+                WHERE id = ?
+                """,
+                (seen_at, utc_now(), source_id),
+            )
+            # An additive setting, not a schema replacement. This
+            # fingerprint also makes an in-flight search using an old
+            # brief non-cacheable after the person saves new criteria.
+            connection.execute(
+                """
+                INSERT INTO career_settings (setting_key, setting_value) VALUES (?, ?)
+                ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value
+                """,
+                (selection_key, selection_fingerprint),
+            )
+            self._audit(connection, "discovery_source_refreshed", "discovery_source", source_id)
+        status = "partial" if skipped else "success"
+        message = f"{len(result.jobs)} offre(s) publiée(s) vérifiée(s), {imported} nouvelle(s), {updated} actualisée(s)."
+        if skipped:
+            message += f" {skipped} entrée(s) source ignorée(s) car incomplète(s) ou invalide(s)."
+        if result.truncated:
+            message += (
+                f" Les 150 offres les plus pertinentes parmi {result.evaluated_count} entrées admissibles "
+                "ont été conservées après classement local selon tes critères "
+                "(ordre neutre et déterministe sans critères). "
+                "Les autres offres déjà suivies restent conservées."
+            )
+        self._finish_discovery_run(
+            run_id,
+            status=status,
+            found_count=len(result.jobs),
+            imported_count=imported,
+            updated_count=updated,
+            skipped_count=skipped,
+            message=message,
+        )
+        return {
+            "source_id": source_id,
+            "company": source["company"],
+            "status": status,
+            "run_id": run_id,
+            "found_count": len(result.jobs),
+            "imported_count": imported,
+            "updated_count": updated,
+            "skipped_count": skipped,
+            "verified_at": seen_at,
+            "message": message,
+        }
+
+    # ------------------------------------------------------------------
+    # Daily digest (SK-09): what appeared, what changed, what expires.
+    # ------------------------------------------------------------------
+
+    def _daily_digest_ttl(self) -> int:
+        """Return the configured lifetime of the digest cache, in seconds."""
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT setting_value FROM career_settings WHERE setting_key = ?",
+                (DAILY_DIGEST_TTL_SETTING,),
+            ).fetchone()
+        stored = clean_text(row["setting_value"], limit=32) if row else ""
+        if stored:
+            try:
+                return normalize_ttl(int(stored))
+            except (TypeError, ValueError):
+                pass
+        return normalize_ttl(self.daily_digest_ttl_seconds)
+
+    def update_daily_digest_settings(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Store an explicit cache lifetime for the daily digest."""
+        seconds = self._bounded_int(
+            payload.get("ttl_seconds"), MIN_TTL_SECONDS, MAX_TTL_SECONDS, "La durée du cache"
+        )
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO career_settings (setting_key, setting_value) VALUES (?, ?)
+                ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value
+                """,
+                (DAILY_DIGEST_TTL_SETTING, str(seconds)),
+            )
+            self._audit(connection, "daily_digest_settings_updated", "preferences", "daily_digest")
+        return {"ttl_seconds": seconds, "min_ttl_seconds": MIN_TTL_SECONDS, "max_ttl_seconds": MAX_TTL_SECONDS}
+
+    def _daily_digest_state(self) -> dict[str, Any]:
+        """Read the stored digest state; a damaged value never breaks the screen."""
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT setting_value FROM career_settings WHERE setting_key = ?",
+                (DAILY_DIGEST_SETTING,),
+            ).fetchone()
+        state = empty_daily_digest_state()
+        if row:
+            try:
+                decoded = json.loads(str(row["setting_value"]))
+            except (TypeError, ValueError):
+                decoded = None
+            if isinstance(decoded, dict):
+                state.update(decoded)
+        if not isinstance(state.get("tracks"), dict):
+            state["tracks"] = {}
+        if not isinstance(state.get("digest"), dict):
+            state["digest"] = {}
+        # A run still marked as running never completed: the screen says so
+        # instead of presenting a half-refresh as a finished one.
+        if clean_text(state.get("status"), limit=40) == "running":
+            state["partial"] = True
+        return state
+
+    def _store_daily_digest_state(self, state: dict[str, Any]) -> None:
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO career_settings (setting_key, setting_value) VALUES (?, ?)
+                ON CONFLICT(setting_key) DO UPDATE SET setting_value = excluded.setting_value
+                """,
+                (DAILY_DIGEST_SETTING, json.dumps(state, ensure_ascii=False)),
+            )
+
+    def _explorer_outcomes(self) -> list[dict[str, Any]]:
+        """Return the outcome of every curated source read during the last exploration."""
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                "SELECT setting_value FROM career_settings WHERE setting_key = ?",
+                (EXPLORATION_LAST_SETTING,),
+            ).fetchone()
+        if not row:
+            return []
+        try:
+            snapshot = json.loads(str(row["setting_value"]))
+        except (TypeError, ValueError):
+            return []
+        outcomes = snapshot.get("outcomes") if isinstance(snapshot, dict) else None
+        if not isinstance(outcomes, list):
+            return []
+        return [item for item in outcomes if isinstance(item, dict)]
+
+    def _daily_digest_matches(self) -> list[dict[str, Any]]:
+        """Rank every stored offer against the saved criteria, exactly like the tracker."""
+        payload = self.list_stage_matches()
+        matches = payload.get("matches")
+        return [item for item in matches if isinstance(item, dict)] if isinstance(matches, list) else []
+
+    def _build_daily_digest(self, state: dict[str, Any], now: datetime, matches: list[dict[str, Any]]) -> dict[str, Any]:
+        """Project the digest from the local facts; no request is ever made here."""
+        return project_digest(
+            matches=matches,
+            sources=self.list_discovery_sources(),
+            explorer_outcomes=self._explorer_outcomes(),
+            state=state,
+            now=now,
+            ttl_seconds=self._daily_digest_ttl(),
+        )
+
+    def daily_digest(self) -> dict[str, Any]:
+        """Read the daily digest.
+
+        This call never performs any network request and never writes to the
+        database: opening the page cannot read a source behind the user's
+        back.  A cached digest is served as long as it is fresh; otherwise the
+        digest is rebuilt from the facts already stored locally and the screen
+        says that a manual refresh is expected.
+        """
+        state = self._daily_digest_state()
+        ttl = self._daily_digest_ttl()
+        now = datetime.now(timezone.utc)
+        cached = state.get("digest") if isinstance(state.get("digest"), dict) else {}
+        expires = parse_moment(state.get("expires_at"))
+        if cached and expires is not None and now < expires:
+            return {**cached, "cache_status": "fresh", "requires_refresh": False, "ttl_seconds": ttl}
+        digest = self._build_daily_digest(state, now, self._daily_digest_matches())
+        return {
+            **digest,
+            "cache_status": "expired" if expires is not None else "missing",
+            "requires_refresh": True,
+            "ttl_seconds": ttl,
+        }
+
+    def get_daily_digest(self, *, force_refresh: bool = False) -> dict[str, Any]:
+        """Compatibility entry point shared by SPEC-005 and SK-09."""
+        return self.refresh_daily_digest(force=True) if force_refresh else self.daily_digest()
+
+    def refresh_daily_digest(
+        self,
+        *,
+        force: bool = False,
+        max_parallel: int = MAX_PARALLEL_SOURCES,
+        include_boards: bool = True,
+        include_curated: bool = True,
+    ) -> dict[str, Any]:
+        """Explicitly refresh the official sources, then rebuild the digest.
+
+        This is the only entry point allowed to read a public source, and it
+        is never called when the page opens.  The run is marked as started
+        before the first request, so an interruption leaves a visible trace
+        instead of a silent half-refresh.
+        """
+        state = self._daily_digest_state()
+        ttl = self._daily_digest_ttl()
+        now = datetime.now(timezone.utc)
+        cached = state.get("digest") if isinstance(state.get("digest"), dict) else {}
+        expires = parse_moment(state.get("expires_at"))
+        if cached and expires is not None and now < expires and not force:
+            # The cache is still valid: an explicit refresh inside the TTL
+            # must not query a source again.
+            return {**cached, "cache_status": "fresh", "requires_refresh": False, "refreshed": False, "ttl_seconds": ttl}
+
+        interrupted = clean_text(state.get("status"), limit=40) == "running"
+        notes: list[str] = []
+        if interrupted:
+            notes.append(
+                "Une actualisation précédente avait été interrompue. Les données déjà enregistrées sont conservées et le résultat est signalé comme partiel."
+            )
+        state["status"] = "running"
+        state["started_at"] = moment_text(now)
+        state["interrupted_at"] = clean_text(state.get("started_at"), limit=40) if interrupted else ""
+        state["partial"] = interrupted
+        self._store_daily_digest_state(state)
+
+        if include_boards:
+            try:
+                self.discover_opportunities(force=True, max_parallel=max_parallel)
+            except UserFacingError as error:
+                notes.append(clean_text(str(error), limit=300))
+        if include_curated:
+            try:
+                self.explore_internships(force=True)
+            except UserFacingError as error:
+                notes.append(clean_text(str(error), limit=300))
+
+        finished = datetime.now(timezone.utc)
+        # The refresh time is part of the digest it produces.
+        state["last_refresh"] = moment_text(finished)
+        # The run that just finished is complete; the interrupted previous one
+        # stays visible in the notes.
+        state["partial"] = False
+        matches = self._daily_digest_matches()
+        digest = self._build_daily_digest(state, finished, matches)
+        if notes:
+            digest["notes"] = list(digest.get("notes") or []) + notes
+        # The comparison state is replaced only after the changes have been
+        # named, so a refresh reports exactly what it changed.
+        state["tracks"] = build_tracks(matches)
+        state["digest"] = digest
+        state["status"] = "completed"
+        state["built_at"] = moment_text(finished)
+        state["expires_at"] = moment_text(finished + timedelta(seconds=ttl))
+        state["partial"] = False
+        state["note"] = " ".join(notes)
+        self._store_daily_digest_state(state)
+        return {**digest, "cache_status": "fresh", "requires_refresh": False, "refreshed": True, "ttl_seconds": ttl}
+
+    def record_daily_digest_visit(self) -> dict[str, Any]:
+        """Record that the digest was shown, so the next one reports what appeared since."""
+        state = self._daily_digest_state()
+        now = datetime.now(timezone.utc)
+        state["last_visit"] = moment_text(now)
+        self._store_daily_digest_state(state)
+        return {"last_visit": state["last_visit"], "recorded": True}
 
     def _replace_preferences(
         self,
@@ -3652,7 +4993,79 @@ class CareerService:
         result = self.get_job(job_id)
         result["created"] = created
         result["duplicate"] = not created
+        # SPEC-011 — the requirements of the offer enter the traceability
+        # registry as soon as the offer is stored.  A registry failure never
+        # invalidates an import: the traceability is a view, the offer is the
+        # source of truth.
+        try:
+            self.sync_traceability_requirements(job_id)
+        except Exception:
+            self._record_traceability_failure("requirements", job_id)
         return result
+
+    def _record_traceability_failure(self, kind: str, job_id: str) -> None:
+        """Leave a trace of a traceability sync failure in the audit log.
+
+        The traceability registry is a *view* of the offer, never a blocker:
+        a failure must not invalidate an import.  But it must not be silent
+        either — the local audit log records that the synchronisation failed
+        so the registry can be rebuilt.
+        """
+        try:
+            with self._lock, self._connection() as connection:
+                self._audit(connection, f"traceability_{kind}_sync_failed", "job", job_id)
+        except Exception:
+            pass
+
+    def sync_traceability_requirements(self, job_id: str) -> dict[str, Any]:
+        """Register the SK-02 requirements of a stored offer (SPEC-011).
+
+        The extraction is deterministic and local: the registry receives the
+        verbatim requirement, its locator and its modality mapped to the
+        registry vocabulary.  Nothing is invented and re-importing the same
+        offer never duplicates a trace (the trace id is derived from
+        ``(source, requirement_id)``).
+
+        The analysis of a *complete* extraction also supersedes the
+        requirements the offer no longer states: they leave the coverage
+        denominator instead of remaining permanent gaps.  A truncated
+        extraction never supersedes anything.
+        """
+        job = self.get_job(job_id)
+        analysis = analyze_offer(job)
+        return self.traceability.register_offer_analysis(
+            analysis, actor="system", supersede_missing=True
+        )
+
+    def sync_traceability_evidence(
+        self, job_id: str, matched_elements: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any]:
+        """Propose the automatic evidence links of one offer (SK-21 → SPEC-011).
+
+        The links are *proposals*: they stay ``pending`` until the person
+        confirms or rejects them.  A machine never declares a requirement
+        covered on its own.
+        """
+        if not matched_elements:
+            return {
+                "linked": [],
+                "linked_count": 0,
+                "pending_count": 0,
+                "considered": 0,
+                "skipped": 0,
+                "evidence_count": 0,
+            }
+        evidences = [
+            {
+                "evidence_id": f"profile:{job_id}:{index}",
+                "claim": clean_text(item.get("requirement"), limit=600),
+                "quote": clean_text(item.get("evidence"), limit=4_000),
+                "kind": clean_text(item.get("profile_field"), limit=60) or "profile",
+            }
+            for index, item in enumerate(matched_elements)
+            if isinstance(item, dict) and item.get("requirement") and item.get("evidence")
+        ]
+        return self.traceability.auto_link(evidences, actor="system")
 
     def _normalize_job(self, payload: dict[str, Any], *, availability: dict[str, Any]) -> dict[str, Any]:
         company = clean_text(payload.get("company"), limit=240)
@@ -3801,7 +5214,6 @@ class CareerService:
             "version": job.get("offer_intelligence_version"),
             "history": history,
         }
-
     def build_apply_kit(
         self,
         job_id: str,
@@ -4017,7 +5429,7 @@ class CareerService:
             }
             intake_row = connection.execute("SELECT * FROM career_intake WHERE id = 1").fetchone()
         return {
-            "profile": profile,
+            "profile": self._profile_for_matching(profile),
             "preferences": self._serialize_preferences(preference_rows, settings),
             "intake": self._serialize_intake_row(intake_row) if intake_row else {},
         }
@@ -5149,6 +6561,583 @@ class CareerService:
             self._audit(connection, "application_kit_texts_updated", "application", identifier)
         return self.get_application_kit(identifier, str(draft_row["language"]) if draft_row else "fr")
 
+    # --------------------------------------------------- SK-11 verifiable dossier
+
+    def _dossier_profile_facts(self) -> list[dict[str, Any]]:
+        """Approved facts of the local profile, one per line of each section.
+
+        The local Career profile is written by the person, so every line is an
+        approved fact.  When the SK-10 candidate profile (facts approved with
+        their provenance) becomes available, it must be preferred here: this
+        method is the single integration point between the two.
+        """
+        profile = self.get_profile()
+        sections = (
+            ("education", "education"),
+            ("experience", "experience"),
+            ("skills", "skills"),
+            ("languages", "languages"),
+            ("projects", "projects"),
+            ("certifications", "certifications"),
+        )
+        facts: list[dict[str, Any]] = []
+        for field, category in sections:
+            value = clean_text(profile.get(field), limit=12_000)
+            for raw_line in value.splitlines():
+                text = clean_text(raw_line.strip(" \u2022-\t"), limit=1_000)
+                if not text:
+                    continue
+                # The identifier is derived from the content: reordering the
+                # profile lines never invalidates a proof, while editing or
+                # deleting a line does - which is exactly what must happen.
+                digest = hashlib.sha256(f"{category}|{text}".encode("utf-8")).hexdigest()[:12]
+                facts.append(
+                    {
+                        "fact_id": f"profile_{digest}",
+                        "value": text,
+                        "quote": text,
+                        "category": category,
+                        "status": "approved",
+                        "source": "profile",
+                    }
+                )
+        return facts
+
+    def _dossier_base_cv(self) -> str:
+        """The CV as the workspace knows it today — the "before" of the comparison."""
+        profile = self.get_profile()
+        parts: list[str] = []
+        for field in ("education", "experience", "skills", "languages"):
+            value = clean_text(profile.get(field), limit=12_000)
+            if value:
+                parts.append(f"## {field}\n{value}")
+        return "\n\n".join(parts)
+
+    @staticmethod
+    def _dossier_payload(dossier: Any) -> dict[str, Any]:
+        """The JSON-safe payload returned by the dossier endpoints."""
+        return {
+            "application_id": "",
+            "job_id": "",
+            "language": dossier.language,
+            "language_source": dossier.language_source,
+            "version": dossier.version,
+            "artifacts": [artifact.to_dict() for artifact in dossier.artifacts],
+            "recommendations": [item.to_dict() for item in dossier.recommendations],
+            "coverage": [item.to_dict() for item in dossier.coverage],
+            "diff": [item.to_dict() for item in dossier.diff],
+            "verification": dossier.verification.to_dict(),
+            "history": [entry.to_dict() for entry in dossier.history],
+            "export_allowed": dossier.export_allowed,
+            "automatic_submission": dossier.automatic_submission,
+            "disclaimer": (
+                "Dossier local et vérifiable : chaque affirmation factuelle cite un fait de profil approuvé. "
+                "Aucun envoi automatique ; la candidature est déposée par toi uniquement."
+            ),
+        }
+
+    def _store_application_dossier(
+        self,
+        application_id: str,
+        job_id: str,
+        dossier: Any,
+    ) -> dict[str, Any]:
+        """Persist one dossier version and return its payload."""
+        payload = self._dossier_payload(dossier)
+        payload["application_id"] = application_id
+        payload["job_id"] = job_id
+        now = utc_now()
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO application_dossiers
+                    (id, application_id, job_id, language, language_source, version,
+                     dossier_json, verification_json, export_allowed, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    f"dossier_{uuid.uuid4().hex}",
+                    application_id,
+                    job_id,
+                    dossier.language,
+                    dossier.language_source,
+                    int(dossier.version),
+                    json.dumps(dossier.to_dict(), ensure_ascii=False),
+                    json.dumps(dossier.verification.to_dict(), ensure_ascii=False),
+                    1 if dossier.export_allowed else 0,
+                    now,
+                    now,
+                ),
+            )
+            self._application_event(
+                connection,
+                application_id,
+                job_id,
+                "dossier_built",
+                json.dumps(
+                    {
+                        "version": int(dossier.version),
+                        "language": dossier.language,
+                        "language_source": dossier.language_source,
+                        "export_allowed": dossier.export_allowed,
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+            self._audit(connection, "application_dossier_built", "application", application_id)
+        return payload
+
+    def build_application_dossier(self, application_id: str, language: Any = None) -> dict[str, Any]:
+        """Build the verifiable application dossier for one tracked application.
+
+        The dossier is regenerated locally from the recorded offer and the
+        approved profile facts; it is never submitted anywhere.
+        """
+        identifier = clean_text(application_id, limit=80)
+        with self._lock, self._connection() as connection:
+            application = connection.execute(
+                "SELECT job_id FROM applications WHERE id = ?", (identifier,)
+            ).fetchone()
+            if not application:
+                raise UserFacingError("Cette candidature Career n\u2019existe pas.")
+            job_id = str(application["job_id"])
+            job_row = connection.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
+            if not job_row:
+                raise UserFacingError("Cette offre Career n\u2019existe pas.")
+            previous = connection.execute(
+                """
+                SELECT version FROM application_dossiers
+                WHERE application_id = ? ORDER BY version DESC LIMIT 1
+                """,
+                (identifier,),
+            ).fetchone()
+            previous_row = connection.execute(
+                """
+                SELECT dossier_json FROM application_dossiers
+                WHERE application_id = ? ORDER BY version DESC LIMIT 1
+                """,
+                (identifier,),
+            ).fetchone()
+        offer = dict(job_row)
+        version = int(previous["version"]) + 1 if previous else 1
+        history: list[Any] = []
+        if previous_row:
+            try:
+                stored = json.loads(str(previous_row["dossier_json"]))
+            except json.JSONDecodeError:
+                stored = {}
+            history = list(dossier_from_dict(stored).history) if isinstance(stored, dict) else []
+        dossier = build_dossier(
+            offer,
+            self._dossier_profile_facts(),
+            language=language,
+            base_cv=self._dossier_base_cv(),
+            version=version,
+            generated_at=utc_now(),
+            history=history,
+        )
+        return self._store_application_dossier(identifier, job_id, dossier)
+
+    def get_application_dossier(self, application_id: str) -> dict[str, Any]:
+        """Read the latest stored dossier of one application (read-only)."""
+        identifier = clean_text(application_id, limit=80)
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM application_dossiers
+                WHERE application_id = ? ORDER BY version DESC LIMIT 1
+                """,
+                (identifier,),
+            ).fetchone()
+            versions = connection.execute(
+                """
+                SELECT version, language, language_source, export_allowed, created_at
+                FROM application_dossiers WHERE application_id = ? ORDER BY version DESC
+                """,
+                (identifier,),
+            ).fetchall()
+        if not row:
+            raise UserFacingError("Aucun dossier de candidature n\u2019a encore \u00e9t\u00e9 g\u00e9n\u00e9r\u00e9 pour cette candidature.")
+        try:
+            stored = json.loads(str(row["dossier_json"]))
+        except json.JSONDecodeError:
+            stored = {}
+        dossier = dossier_from_dict(stored)
+        payload = self._dossier_payload(dossier)
+        payload["application_id"] = identifier
+        payload["job_id"] = clean_text(row["job_id"], limit=120)
+        payload["versions"] = [dict(version) for version in versions]
+        payload["created_at"] = clean_text(row["created_at"], limit=40)
+        payload["updated_at"] = clean_text(row["updated_at"], limit=40)
+        return payload
+
+    def list_application_dossier_versions(self, application_id: str) -> list[dict[str, Any]]:
+        """The version history of one dossier, newest first."""
+        identifier = clean_text(application_id, limit=80)
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT version, language, language_source, export_allowed, created_at, updated_at
+                FROM application_dossiers WHERE application_id = ? ORDER BY version DESC
+                """,
+                (identifier,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def update_application_dossier(
+        self, application_id: str, edits: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Save edited dossier bodies and verify them again.
+
+        An affirmation the person wrote and cannot prove becomes
+        ``unsupported`` and blocks the final export.
+        """
+        identifier = clean_text(application_id, limit=80)
+        if not isinstance(edits, dict):
+            raise UserFacingError("Les modifications du dossier sont invalides.")
+        known = {
+            "cv_recommendations",
+            "adapted_cv",
+            "cover_letter",
+            "prep_sheet",
+            "interview_questions",
+            "checklist",
+        }
+        cleaned: dict[str, str] = {}
+        for key, value in edits.items():
+            if key not in known:
+                raise UserFacingError(f"Le livrable « {key} » n\u2019existe pas dans ce dossier.")
+            if not isinstance(value, str):
+                raise UserFacingError(f"Le livrable « {key} » doit contenir du texte.")
+            cleaned[key] = value[:400_000]
+        if not cleaned:
+            raise UserFacingError("Aucune modification \u00e0 enregistrer.")
+        current = self.get_application_dossier(identifier)
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT dossier_json FROM application_dossiers
+                WHERE application_id = ? ORDER BY version DESC LIMIT 1
+                """,
+                (identifier,),
+            ).fetchone()
+        if not row:
+            raise UserFacingError("Aucun dossier de candidature n\u2019existe pour cette candidature.")
+        try:
+            stored = json.loads(str(row["dossier_json"]))
+        except json.JSONDecodeError:
+            stored = {}
+        dossier = dossier_from_dict(stored)
+        # The edited bodies are verified against the **current** approved
+        # facts: a fact that was edited or removed from the profile stops
+        # proving the sentences that cited it.
+        current_facts = facts_from_profile(self._dossier_profile_facts())
+        updated = with_artifacts(dossier, cleaned, facts=current_facts)
+        updated = replace(
+            updated,
+            version=int(current.get("version", 1)) + 1,
+            history=dossier.history
+            + (
+                DossierVersion(
+                    version=int(current.get("version", 1)) + 1,
+                    language=updated.language,
+                    language_source=updated.language_source,
+                    supported_count=updated.verification.supported_count,
+                    unsupported_count=updated.verification.unsupported_count,
+                    to_verify_count=updated.verification.to_verify_count,
+                    generated_at=utc_now(),
+                    summary="Version \u00e9dit\u00e9e par la personne, v\u00e9rifi\u00e9e \u00e0 nouveau.",
+                ),
+            ),
+        )
+        return self._store_application_dossier(identifier, str(current.get("job_id", "")), updated)
+
+    def export_application_dossier(self, application_id: str) -> dict[str, Any]:
+        """Write the dossier to the local export folder.
+
+        The export is refused while an affirmation is not proved, and it never
+        submits anything: it only writes local files.
+        """
+        identifier = clean_text(application_id, limit=80)
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM application_dossiers
+                WHERE application_id = ? ORDER BY version DESC LIMIT 1
+                """,
+                (identifier,),
+            ).fetchone()
+        if not row:
+            raise UserFacingError("Aucun dossier de candidature n\u2019existe pour cette candidature.")
+        try:
+            stored = json.loads(str(row["dossier_json"]))
+        except json.JSONDecodeError:
+            stored = {}
+        dossier = dossier_from_dict(stored)
+        # The export is checked against the **current** approved facts: a fact
+        # edited or removed from the profile since the dossier was built stops
+        # proving the sentences that cited it, and the export is refused.
+        dossier = replace(
+            dossier,
+            facts=facts_from_profile(self._dossier_profile_facts()),
+        )
+        target = self.export_dir / f"dossier_{identifier}"
+        written = export_application_dossier_files(dossier, target)
+        with self._lock, self._connection() as connection:
+            self._application_event(
+                connection,
+                identifier,
+                clean_text(row["job_id"], limit=120),
+                "dossier_exported",
+                json.dumps({"version": int(row["version"])}, ensure_ascii=False),
+            )
+            self._audit(connection, "application_dossier_exported", "application", identifier)
+        return {
+            "application_id": identifier,
+            "version": int(row["version"]),
+            "files": written,
+            "export_allowed": True,
+            "automatic_submission": False,
+        }
+    # ------------------------------------------------------------------
+    # Evidence-backed CV review workspace (SPEC-004)
+    #
+    # The targeted generator writes files; the review workspace shows every
+    # adaptation, its local proof and its decision, and gates the DOCX
+    # export.  The proposal is rebuilt from the current profile and offer on
+    # every read, then the stored decisions are replayed on top of it, so a
+    # decision always applies to the exact wording the person read.
+    # ------------------------------------------------------------------
+
+    def _cv_review_variant(self, job_id: str, variant_id: Any):
+        """Resolve the reviewed CV variant: explicit, then latest, then advised."""
+
+        requested = clean_text(variant_id, limit=40)
+        if requested:
+            return self._variant_config(requested)
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT variant FROM application_drafts
+                WHERE job_id = ? AND variant != ''
+                ORDER BY created_at DESC, rowid DESC LIMIT 1
+                """,
+                (job_id,),
+            ).fetchone()
+        known = {variant.id for variant in ALL_VARIANTS}
+        if row is not None and str(row["variant"]) in known:
+            return self._variant_config(str(row["variant"]))
+        advised = clean_text(self.get_job_prep(job_id).get("recommended_variant"), limit=40)
+        return self._variant_config(advised if advised in known else "m_a")
+
+    def _cv_review_source_document(self) -> str:
+        """Name of the CV the current profile comes from, for traceability."""
+
+        with self._lock, self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT original_name FROM profile_imports
+                WHERE source_kind = 'cv'
+                ORDER BY CASE status WHEN 'applied' THEN 0 ELSE 1 END,
+                         created_at DESC
+                LIMIT 1
+                """
+            ).fetchone()
+        return clean_text(row["original_name"], limit=200) if row is not None else ""
+
+    def _cv_review_workspace(
+        self, application_id: str, language: Any = "fr", variant_id: Any = ""
+    ):
+        """Build the review workspace of one application and replay decisions.
+
+        The proposal is rebuilt from the current offer and profile on every
+        read, then the decisions recorded for this exact variant are replayed
+        on top of it.  When the state file is missing or unreadable, the
+        decisions are rebuilt from the immutable history instead of being
+        silently lost.
+        """
+
+        from .cv_review import build_workspace, merge_decisions, replay_events
+
+        identifier = clean_text(application_id, limit=80)
+        application = self.get_application(identifier)
+        job_id = str(application["job_id"])
+        selected = self._cv_review_variant(job_id, variant_id)
+        profile = self.get_profile()
+        job = self.get_job(job_id)
+        prep = self.get_job_prep(job_id)
+        job.update(prep)
+        job["qualification"] = qualify_offer(job).to_dict()
+        cv_analysis = self._current_cv_analysis()
+        coverage = compute_coverage(job, cv_analysis, profile, selected)
+        gaps = generate_diff(coverage, cv_analysis, profile, selected)
+        coverage = replace(
+            coverage,
+            gaps=gaps,
+            recommended_variant=selected,
+            variant_rationale=(
+                f"Variante {selected.label} sélectionnée explicitement ; "
+                "couverture recalculée sur les preuves locales."
+            ),
+        )
+        fresh = build_workspace(
+            identifier,
+            job=job,
+            job_id=job_id,
+            variant=selected,
+            language=normalize_language(language),
+            profile=profile,
+            coverage=coverage,
+            created_at=utc_now(),
+            source_document=self._cv_review_source_document(),
+        )
+        # The immutable history is the source of truth: the decisions are
+        # replayed from it, and the state file is only a snapshot used when
+        # no history exists yet.  A state file that lags behind the history
+        # can therefore never hide a decision.
+        events = read_events(self.review_dir, identifier, selected.id)
+        if events:
+            return replay_events(fresh, events)
+        saved = load_workspace(self.review_dir, identifier, selected.id)
+        if saved is not None and saved.variant_id == selected.id:
+            return merge_decisions(fresh, saved)
+        return fresh, []
+
+    def get_cv_review_workspace(
+        self, application_id: str, language: Any = "fr", variant: Any = ""
+    ) -> dict[str, Any]:
+        """Return the complete review workspace of one application."""
+
+        from .cv_review import serialize_workspace
+
+        workspace, _invalidated = self._cv_review_workspace(application_id, language, variant)
+        return serialize_workspace(workspace)
+
+    def decide_cv_review_block(
+        self,
+        application_id: str,
+        block_id: str,
+        status: Any,
+        user_text: Any = "",
+        language: Any = "fr",
+        variant: Any = "",
+        reviewed_text: Any = "",
+    ) -> dict[str, Any]:
+        """Record one decision on one block and keep the history immutable.
+
+        The whole read-modify-write runs under the service lock, so two
+        simultaneous decisions cannot overwrite each other.  The event is
+        appended to the immutable history **before** the state snapshot is
+        written: if that write fails, the decision is still traceable and the
+        next read replays it from the history.
+        """
+
+        from .cv_review import apply_decision, export_warnings, find_block, serialize_workspace
+        from .cv_review import REVIEWED_TEXT_LIMIT
+
+        identifier = clean_text(application_id, limit=80)
+        target = clean_text(block_id, limit=120)
+        if not target:
+            raise UserFacingError("Le bloc à trancher n’est pas identifié.")
+        with self._lock:
+            workspace, _invalidated = self._cv_review_workspace(identifier, language, variant)
+            previous = find_block(workspace, target)
+            if previous is None:
+                raise UserFacingError("Ce bloc n’existe plus dans la revue de ce CV.")
+            seen = clean_text(reviewed_text, limit=REVIEWED_TEXT_LIMIT)
+            if seen and seen != previous.proposed_text:
+                raise UserFacingError(
+                    "Ce bloc a changé depuis la dernière lecture : relis la proposition avant de trancher."
+                )
+            decided_at = utc_now()
+            try:
+                updated = apply_decision(
+                    workspace,
+                    target,
+                    str(status or ""),
+                    user_text=str(user_text or ""),
+                    decided_at=decided_at,
+                )
+            except ValueError as error:
+                raise UserFacingError(str(error)) from error
+            try:
+                events = read_events(self.review_dir, identifier, workspace.variant_id)
+                append_event(
+                    self.review_dir,
+                    ReviewEvent(
+                        event_id=f"rev_{uuid.uuid4().hex}",
+                        application_id=identifier,
+                        block_id=target,
+                        from_status=previous.status,
+                        to_status=str(status or ""),
+                        user_text=clean_text(user_text, limit=4_000) if str(status or "") == "modified" else "",
+                        decided_at=decided_at,
+                        decided_by="user",
+                        sequence=len(events) + 1,
+                        variant_id=workspace.variant_id,
+                        proposed_text=previous.proposed_text,
+                    ),
+                )
+            except OSError as error:
+                raise UserFacingError("La décision n’a pas pu être enregistrée localement.") from error
+            warnings: list[str] = []
+            try:
+                save_workspace(self.review_dir, updated)
+            except OSError:
+                # The decision is in the immutable history: it stays effective
+                # even if the snapshot could not be written.
+                warnings.append(
+                    "L’instantané local de la revue n’a pas pu être écrit ; la décision reste tracée dans l’historique."
+                )
+        with self._lock, self._connection() as connection:
+            self._audit(connection, "application_cv_review_decided", "application", identifier)
+        return serialize_workspace(updated, warnings=list(export_warnings(updated)) + warnings)
+
+    def cv_review_history(
+        self, application_id: str, variant: Any = ""
+    ) -> list[dict[str, Any]]:
+        """Return the immutable decision history of one application."""
+
+        identifier = clean_text(application_id, limit=80)
+        application = self.get_application(identifier)
+        selected = self._cv_review_variant(str(application["job_id"]), variant)
+        return [event.to_dict() for event in read_events(self.review_dir, identifier, selected.id)]
+
+    def export_cv_review(
+        self, application_id: str, language: Any = "fr", variant: Any = ""
+    ) -> Path:
+        """Export the reviewed CV as a DOCX, or refuse when a block is missing."""
+
+        from .cv_review import can_export, render_workspace_markdown
+
+        workspace, _invalidated = self._cv_review_workspace(application_id, language, variant)
+        allowed, blockers = can_export(workspace)
+        if not allowed:
+            raise UserFacingError(
+                "Export bloqué tant que la revue n’est pas terminée : " + " ".join(blockers)
+            )
+        markdown = render_workspace_markdown(workspace)
+        title = clean_text(workspace.header.display_name, limit=160) or "CV revu"
+        safe_application = re.sub(r"[^A-Za-z0-9_-]+", "-", workspace.application_id)[:40] or "application"
+        target = (
+            self.export_dir
+            / "cv_review"
+            / f"cv-revu-{safe_application}-{uuid.uuid4().hex[:8]}.docx"
+        )
+        try:
+            write_docx(
+                markdown=markdown,
+                title=title,
+                language=workspace.language,
+                target=target,
+            )
+        except Exception as error:
+            target.unlink(missing_ok=True)
+            raise UserFacingError("Le CV revu n’a pas pu être généré localement.") from error
+        with self._lock, self._connection() as connection:
+            self._audit(connection, "application_cv_review_exported", "application", workspace.application_id)
+        return target
+
     @staticmethod
     def _dashboard_action(
         identifier: str,
@@ -5471,12 +7460,29 @@ class CareerService:
         return {
             "ocr": self.ocr.status(),
             "guided_intake": True,
+            "candidate_profile": {
+                "enabled": True,
+                "local_only": True,
+                "field_by_field_review": True,
+                "ocr_auto_approved": False,
+                "statuses": ["proposed", "approved", "rejected", "modified", "suspended"],
+                "portable_export": True,
+            },
             "application_studio": {"local_drafts": True, "formats": ["md", "html", "docx", "pdf"]},
             "interview_coach": {
                 "enabled": True,
                 "local_text_only": True,
                 "modes": sorted(INTERVIEW_MODES),
                 "difficulties": list(DIFFICULTIES),
+                "provider_required": False,
+                "recruitment_probability": False,
+            },
+            "interview_prep": {
+                "enabled": True,
+                "local_text_only": True,
+                "modes": ["standard", "finance"],
+                "finance_banks": 8,
+                "formats": ["md", "pdf"],
                 "provider_required": False,
                 "recruitment_probability": False,
             },
@@ -5504,6 +7510,22 @@ class CareerService:
                 "ai_required": False,
                 "local_only": True,
                 "invented_facts": False,
+            },
+            "daily_digest": {
+                "enabled": True,
+                "local_only": True,
+                "manual_trigger_only": True,
+                "cache_seconds": self._daily_digest_ttl(),
+                "max_parallel_sources": MAX_PARALLEL_SOURCES,
+                "network_on_page_load": False,
+                "invented_facts": False,
+            },
+            "evidence_center": {
+                "enabled": True,
+                "local_only": True,
+                "auto_approval": False,
+                "network_calls": False,
+                "formats": ["json", "markdown"],
             },
         }
 
@@ -5597,6 +7619,181 @@ class CareerService:
         sheet.freeze_panes = "A2"
         sheet.auto_filter.ref = sheet.dimensions
         workbook.save(target)
+
+    # ── Centre de preuves (SPEC-008) ───────────────────────────────────────
+    # Une seule instance par profil : le centre de preuves est la source de
+    # vérité unique des preuves du candidat. Il n'approuve rien tout seul.
+
+    def evidence_center(self) -> EvidenceCenter:
+        """Return the single evidence center of this profile."""
+        return self._evidence_center
+
+    def list_evidence(
+        self,
+        *,
+        query: str = "",
+        evidence_type: str = "",
+        confidence: str = "",
+        approved: bool | None = None,
+        blocked: bool | None = None,
+        expired: bool | None = None,
+        used: str = "",
+    ) -> list[dict[str, Any]]:
+        """Return the evidences matching the filters."""
+        items = self._evidence_center.list_evidence(
+            query=query,
+            evidence_type=evidence_type,
+            confidence=confidence,
+            approved=approved,
+            blocked=blocked,
+            expired=expired,
+            used=used,
+        )
+        return [item.to_dict() for item in items]
+
+    def add_evidence(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Register one evidence in the local center.
+
+        A proof is never born approved : the only decisions that change a
+        status are ``mark_evidence_approved`` and the import of a fact the
+        person already approved elsewhere (SK-10).
+        """
+        item = EvidenceItem(
+            id="",
+            claim=clean_text(payload.get("claim"), limit=400),
+            source_document=clean_text(payload.get("source_document"), limit=260),
+            source_location=clean_text(payload.get("source_location"), limit=260),
+            quote=clean_text(payload.get("quote"), limit=4_000),
+            evidence_type=clean_text(payload.get("evidence_type"), limit=40),
+            confidence=clean_text(payload.get("confidence"), limit=40),
+            approved=False,
+            created_at="",
+            updated_at="",
+            tags=[str(tag) for tag in (payload.get("tags") or [])],
+            expires_at=clean_text(payload.get("expires_at"), limit=32),
+        )
+        identifier = self._evidence_center.add_evidence(item)
+        return self.get_evidence(identifier)
+
+    def get_evidence(self, evidence_id: str) -> dict[str, Any]:
+        """Return one evidence, serialized for the local API."""
+        item = self._evidence_center.get_evidence(evidence_id)
+        if item is None:
+            raise UserFacingError("Cette preuve n’existe pas.")
+        return item.to_dict()
+
+    def update_evidence(self, evidence_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """Apply the editable fields of one evidence."""
+        self._evidence_center.update_evidence(evidence_id, payload or {})
+        return self.get_evidence(evidence_id)
+
+    def delete_evidence(self, evidence_id: str) -> bool:
+        """Remove one evidence from the local center."""
+        return self._evidence_center.delete_evidence(evidence_id)
+
+    def mark_evidence_approved(self, evidence_id: str, approved: bool) -> dict[str, Any]:
+        """Record the person's approval decision on one evidence."""
+        self._evidence_center.mark_approved(evidence_id, approved)
+        return self.get_evidence(evidence_id)
+
+    def set_evidence_blocked(self, evidence_id: str, blocked: bool) -> dict[str, Any]:
+        """Block (or unblock) the usage of one evidence."""
+        self._evidence_center.set_blocked(evidence_id, blocked)
+        return self.get_evidence(evidence_id)
+
+    def record_evidence_usage(self, evidence_id: str, target: str, context: str = "") -> dict[str, Any]:
+        """Record that an evidence was used in a CV or a cover letter."""
+        self._evidence_center.record_usage(evidence_id, target, context)
+        return self.get_evidence(evidence_id)
+
+    def attach_evidence_document(self, evidence_id: str, source_path: Path, original_name: str = "") -> dict[str, Any]:
+        """Attach a local document to one evidence (copied, never referenced)."""
+        self._evidence_center.attach_document(evidence_id, str(source_path), original_name)
+        return self.get_evidence(evidence_id)
+
+    def merge_evidence(self, evidence_ids: list[str], keep_id: str) -> dict[str, Any]:
+        """Merge duplicated proofs into one identifier, keeping every source."""
+        self._evidence_center.merge_evidence(evidence_ids, keep_id)
+        return self.get_evidence(keep_id)
+
+    def evidence_stats(self) -> dict[str, Any]:
+        """Return the counters of the center and the coverage of the profile."""
+        stats = self._evidence_center.get_usage_stats().to_dict()
+        profile = self.get_profile()
+        declared = [
+            entry.strip()
+            for entry in str(profile.get("skills") or "").replace("\n", ",").split(",")
+            if entry.strip()
+        ]
+        stats["profile_coverage"] = self._evidence_center.get_claim_coverage(declared)
+        stats["profile_claims"] = len(declared)
+        return stats
+
+    def ingest_candidate_facts(self, facts: list[dict[str, Any]]) -> dict[str, Any]:
+        """Import SK-10 candidate facts into the local evidence center.
+
+        The adapter reads the serialized contract of the candidate profile:
+        the center can be used before, with or after the SK-10 module lands.
+        A fact that is not a proof (a contact, a date) is skipped, never
+        transformed.  The import is **idempotent** : replaying it refreshes
+        the same proofs instead of creating duplicates.
+        """
+        added: list[str] = []
+        refreshed: list[str] = []
+        skipped = 0
+        for fact in facts or []:
+            item = evidence_from_candidate_fact(fact)
+            if item is None:
+                skipped += 1
+                continue
+            known = self._evidence_center.get_evidence(item.id) if item.id else None
+            try:
+                identifier = self._evidence_center.upsert_evidence(item)
+            except UserFacingError:
+                skipped += 1
+                continue
+            (refreshed if known is not None else added).append(identifier)
+        return {"added": added, "refreshed": refreshed, "skipped": skipped}
+
+    def ingest_fit_verdicts(self, verdicts: list[dict[str, Any]]) -> dict[str, Any]:
+        """Import SK-03 requirement-fit verdicts into the local center."""
+        added: list[str] = []
+        refreshed: list[str] = []
+        skipped = 0
+        for verdict in verdicts or []:
+            item = evidence_from_fit_verdict(verdict)
+            if item is None:
+                skipped += 1
+                continue
+            known = self._evidence_center.get_evidence(item.id) if item.id else None
+            try:
+                identifier = self._evidence_center.upsert_evidence(item)
+            except UserFacingError:
+                skipped += 1
+                continue
+            (refreshed if known is not None else added).append(identifier)
+        return {"added": added, "refreshed": refreshed, "skipped": skipped}
+
+    def export_evidence(self, export_format: str = "json") -> Path:
+        """Write the portable export of the center (JSON + readable document)."""
+        wanted = clean_text(export_format, limit=20).lower() or "json"
+        if wanted not in {"json", "markdown"}:
+            raise UserFacingError("Le format d’export doit être « json » ou « markdown ».")
+        created = datetime.now().strftime("%Y%m%d-%H%M%S")
+        stem = f"preuves_candidat_{created}_{uuid.uuid4().hex[:8]}"
+        json_path = self.export_dir / f"{stem}.json"
+        markdown_path = self.export_dir / f"{stem}.md"
+        json_path.write_text(
+            json.dumps(self._evidence_center.export_payload(), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        markdown_path.write_text(self._evidence_center.export_markdown(), encoding="utf-8")
+        for path in (json_path, markdown_path):
+            try:
+                os.chmod(path, 0o600)
+            except OSError:
+                pass
+        return markdown_path if wanted == "markdown" else json_path
 
     def export_personal_data(self) -> Path:
         created = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -5694,6 +7891,12 @@ class CareerService:
                     for row in profile_import_rows
                 ],
                 "career_intake": self._serialize_intake_row(intake_row) if intake_row else {},
+                "candidate_facts": [
+                    serialize_fact(self._candidate_fact_from_row(row))
+                    for row in connection.execute(
+                        "SELECT * FROM candidate_facts ORDER BY created_at ASC"
+                    ).fetchall()
+                ],
                 "application_drafts": [
                     self._serialize_application_draft(row, include_content=True) for row in draft_rows
                 ],
@@ -5710,6 +7913,15 @@ class CareerService:
                         "SELECT * FROM career_audit_log ORDER BY created_at ASC"
                     ).fetchall()
                 ],
+                "evidence": self._evidence_center.export_payload(),
+                # The CV review workspace is personal data too: it holds the
+                # wording of the CV and the decisions taken on it.
+                "cv_review": list_workspaces(self.review_dir),
+                # SPEC-011 — the traceability registry holds requirement texts,
+                # evidence citations taken from the profile and the audit
+                # history: that is personal data and belongs in the copy the
+                # person downloads, exactly like the other sections.
+                "traceability": self._traceability_export(),
                 "exported_at": utc_now(),
             }
         target.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -5718,6 +7930,124 @@ class CareerService:
         except OSError:
             pass
         return target
+
+    # -- SPEC-006 : freshness, completeness and provenance of an offer ---
+
+    def _offer_quality_catalog(self) -> "_OfferQualityCatalog":
+        """Return the lightweight view of the offers used by the assessment."""
+
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, source_name, source_id, official_url, company, title, city, country,
+                       posted_date, deadline_date, start_date, end_date, duration_months,
+                       employment_type, requirements, source_status, last_verified_at, updated_at
+                FROM jobs
+                """
+            ).fetchall()
+        return _OfferQualityCatalog([dict(row) for row in rows])
+
+    def get_offer_quality(self, offer_id: str) -> dict[str, Any]:
+        """Return the quality verdict of one offer (SPEC-006).
+
+        The endpoint is read-only: it never writes a snapshot and never
+        performs a network request.  The changes it reports are the ones
+        observed since the last refresh.
+        """
+
+        job = self.get_job(offer_id)
+        catalog = self._offer_quality_catalog()
+        store = self.offer_quality_store
+        store.load()
+        previous = store.facts(offer_id)
+        snapshot = store.snapshot(offer_id) or {}
+        cached_freshness = snapshot.get("freshness") if isinstance(snapshot.get("freshness"), dict) else {}
+        quality = assess_offer(
+            job,
+            offer_id=offer_id,
+            previous=previous,
+            duplicates=catalog.duplicates_of(offer_id),
+            source_url_status=cached_freshness.get("source_url_status"),
+            verified_at=cached_freshness.get("last_verified_at"),
+            deadline_hint=deadline_hint_from_text(job),
+        )
+        return quality.to_dict()
+
+    def refresh_offer_quality(self, offer_ids: list[str], *, force: bool = False) -> dict[str, Any]:
+        """Re-assess the given offers and store what changed.
+
+        ``force`` asks for a real verification of the source URL: it is the
+        only path that performs a network request, and it stays explicit.
+        """
+
+        identifiers = [clean_text(offer_id, limit=120) for offer_id in offer_ids if clean_text(offer_id, limit=120)]
+        if not identifiers:
+            raise UserFacingError("Sélectionnez au moins une offre à rafraîchir.")
+        catalog = self._offer_quality_catalog()
+        store = self.offer_quality_store
+        store.load()
+        results: list[dict[str, Any]] = []
+        for offer_id in identifiers:
+            job = self.get_job(offer_id)
+            snapshot = store.snapshot(offer_id) or {}
+            cached_freshness = snapshot.get("freshness") if isinstance(snapshot.get("freshness"), dict) else {}
+            status: int | None = cached_freshness.get("source_url_status")
+            verified_at = cached_freshness.get("last_verified_at")
+            probed = False
+            if force and clean_text(job.get("official_url"), limit=2_000):
+                probed_status = self.offer_quality_probe(job["official_url"])
+                probed = probed_status is not None
+                if probed:
+                    status = int(probed_status)
+                    verified_at = utc_now()
+            quality = assess_offer(
+                job,
+                offer_id=offer_id,
+                previous=store.facts(offer_id),
+                duplicates=catalog.duplicates_of(offer_id),
+                source_url_status=status,
+                verified_at=verified_at,
+                deadline_hint=deadline_hint_from_text(job),
+            )
+            changes = [change.to_dict() for change in quality.freshness.changes_since_last_check]
+            store.record(
+                offer_id,
+                quality=quality.to_dict(),
+                facts=offer_facts(job),
+                changes=changes,
+                assessed_at=quality.assessed_at,
+            )
+            results.append(
+                {
+                    "offer_id": offer_id,
+                    "changed": bool(changes),
+                    "changes": changes,
+                    "verified_online": probed,
+                    "reverification_due": is_refresh_due(verified_at),
+                    "quality": quality.to_dict(),
+                }
+            )
+        store.save(utc_now())
+        return {
+            "refreshed_at": utc_now(),
+            "forced": bool(force),
+            "count": len(results),
+            "changed": sum(1 for item in results if item["changed"]),
+            "offers": results,
+        }
+
+    def offer_quality_history(self, offer_id: str) -> dict[str, Any]:
+        """Return the changes detected for one offer (SPEC-006)."""
+
+        identifier = clean_text(offer_id, limit=120)
+        store = self.offer_quality_store
+        store.load()
+        history = store.history(identifier)
+        return {
+            "offer_id": identifier,
+            "history": list(reversed(history)),
+            "count": len(history),
+        }
 
     def reset_personal_data(self, confirmation: str) -> None:
         if confirmation != DELETE_CONFIRMATION:
@@ -5733,6 +8063,7 @@ class CareerService:
             except OSError as error:
                 raise UserFacingError("Un document de profil n’a pas pu être supprimé.") from error
             connection.execute("DELETE FROM profile_imports")
+            connection.execute("DELETE FROM candidate_facts")
             connection.execute("DELETE FROM application_drafts")
             connection.execute("DELETE FROM interview_sessions")
             connection.execute("DELETE FROM career_intake")
@@ -5747,11 +8078,45 @@ class CareerService:
             connection.execute("DELETE FROM career_audit_log")
             self._seed_defaults(connection)
             self._audit(connection, "career_data_reset", "career", "all")
+        # The interview-preparation rehearsals live in their own private file.
+        # A reset is an explicit request to erase the whole Career space.
+        self.interview_prep_store.clear()
+        # SPEC-011 — the traceability registry holds derived personal data
+        # (requirements, quotes, history): it is erased with everything else.
+        # The check is on the *file*, not on the in-memory handle: the
+        # database may come from an earlier session even when this process
+        # never opened the traceability view, and a deletion request must
+        # leave no requirement text and no citation on the disk.
+        try:
+            if self._traceability is not None or self.traceability_db_path().exists():
+                self.traceability.reset()
+        except Exception:
+            pass
         for path in self.export_dir.glob("career_*"):
             try:
                 path.unlink()
             except OSError:
                 pass
+        for pattern in ("career_*", "preuves_candidat_*"):
+            for path in self.export_dir.glob(pattern):
+                try:
+                    path.unlink()
+                except OSError:
+                    pass
+        # Reviewed CV files are nested below exports/cv_review.  They contain
+        # the candidate wording and review decisions, so the same explicit
+        # reset must erase the whole application-owned subtree.
+        review_exports = self.export_dir / "cv_review"
+        try:
+            if review_exports.is_dir():
+                shutil.rmtree(review_exports)
+        except OSError:
+            pass
+        # The freshness snapshots of SPEC-006 are private Career data too.
+        try:
+            self.offer_quality_store.path.unlink(missing_ok=True)
+        except OSError:
+            pass
         # Delete interrupted upload parts and any prior opaque source left by
         # an interrupted process. This directory is exclusively Career-owned.
         for pattern in (".profile-upload-*.part", "profile_*"):
@@ -5767,6 +8132,37 @@ class CareerService:
                     path.unlink()
             except OSError:
                 pass
+        # Le centre de preuves est une source de données à part entière : une
+        # suppression explicite du Career l'efface aussi, avec ses pièces
+        # jointes et son historique de fusion.
+        for path in self.evidence_attachments_dir.glob("*"):
+            try:
+                if path.is_file():
+                    path.unlink()
+            except OSError:
+                pass
+        # The review workspace holds the CV wording and the decisions taken on
+        # it: a reset of the Career space erases them too.
+        for path in self.review_dir.glob("*"):
+            try:
+                if path.is_file():
+                    path.unlink()
+            except OSError:
+                pass
+        for path in self.evidence_uploads_dir.glob("*"):
+            try:
+                if path.is_file():
+                    path.unlink()
+            except OSError:
+                pass
+        for path in (self.evidence_db_path, Path(f"{self.evidence_db_path}-wal"), Path(f"{self.evidence_db_path}-shm")):
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        # Le schéma est recréé immédiatement : le centre de preuves reste
+        # utilisable, il est simplement vide.
+        self._evidence_store.ensure_schema()
         # A reset is an explicit request to erase the Career space, so remove
         # the snapshots created by this application too.  Restrict the match
         # to our own naming convention: a person may keep another SQLite file
