@@ -103,7 +103,7 @@ def test_v7_migration_creates_private_backup_and_preserves_jobs(tmp_path) -> Non
     migrated = CareerService(tmp_path)
 
     with sqlite3.connect(migrated.db_path) as connection:
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 8
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
         assert connection.execute(
             "SELECT company FROM jobs WHERE id = ?", (created["id"],)
         ).fetchone()[0] == "Synthetic Bank"
@@ -114,7 +114,9 @@ def test_v7_migration_creates_private_backup_and_preserves_jobs(tmp_path) -> Non
             )
         }
     assert "job_qualification_snapshots" in tables
-    backups = list(migrated.backups_dir.glob("career-before-v7-to-v8-*.sqlite3"))
+    backups = list(
+        migrated.backups_dir.glob(f"career-before-v7-to-v{SCHEMA_VERSION}-*.sqlite3")
+    )
     assert len(backups) == 1
     assert backups[0].stat().st_mode & 0o077 == 0
 

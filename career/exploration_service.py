@@ -822,6 +822,26 @@ class ExplorationService:
         for group in deduplicate_jobs(records):
             best = group["best"]
             representative = candidates[int(best["_candidate_index"])]
+            # A duplicate can carry a date passage that the elected record
+            # does not. Preserve the union of cited temporal facts before the
+            # merged offer is persisted; deduplication must remove duplicate
+            # rows, never discard stronger source evidence.
+            temporal_facts: list[dict[str, Any]] = []
+            temporal_keys: set[str] = set()
+            for view in group["provenances"]:
+                record = view.get("record") if isinstance(view, dict) else None
+                qualification = record.get("qualification") if isinstance(record, dict) else None
+                facts = qualification.get("temporal_facts") if isinstance(qualification, dict) else None
+                for fact in facts if isinstance(facts, list) else []:
+                    if not isinstance(fact, dict):
+                        continue
+                    key = json.dumps(fact, sort_keys=True, ensure_ascii=False)
+                    if key in temporal_keys:
+                        continue
+                    temporal_keys.add(key)
+                    temporal_facts.append(dict(fact))
+            if temporal_facts:
+                representative.qualification["temporal_facts"] = temporal_facts[:50]
             provenances = [
                 {
                     "source_name": item.get("source_name", ""),

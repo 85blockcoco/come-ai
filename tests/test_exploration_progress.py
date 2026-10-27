@@ -103,7 +103,7 @@ def test_runtime_dedup_keeps_cross_source_provenance_and_location_conflicts():
         _Candidate(
             job={"company": "Synthetic Bank", "title": "Corporate Finance Intern", "source_name": "greenhouse",
                  "source_id": "gh-1", "official_url": shared_url, "city": "London", "country": "United Kingdom"},
-            match={}, classification={}, qualification={}, key=(0,),
+            match={}, classification={}, qualification={"temporal_facts": [{"fact_type": "start", "quote": "January 2027"}]}, key=(0,),
         ),
         _Candidate(
             job={"company": "Synthetic Bank", "title": "Corporate Finance Intern", "source_name": "lever",
@@ -121,6 +121,7 @@ def test_runtime_dedup_keeps_cross_source_provenance_and_location_conflicts():
         "greenhouse:gh-1": "London",
         "lever:lever-1": "Manchester",
     }
+    assert evidence["temporal_facts"] == [{"fact_type": "start", "quote": "January 2027"}]
 
 
 def wait_until(predicate, timeout: float = 10.0) -> bool:
@@ -155,14 +156,27 @@ def test_a_run_walks_through_the_real_phases_and_counts_real_work(tmp_path: Path
         # Three postings were really read: the counters follow the work.
         assert final["offers_read"] == 3
         assert final["offers_qualified"] == 3
-        assert final["offers_persisted"] == 3
+        # The three source rows describe the same employer/title/location.
+        # The deduplication phase retains one local offer and keeps all three
+        # source identities as provenance instead of inflating the database.
+        assert final["offers_deduplicated"] == 1
+        assert final["offers_persisted"] == 1
         assert len(transport.calls) == 2
-        assert len(service.list_jobs()) == 3
+        assert len(service.list_jobs()) == 1
         stored = service.get_job(service.list_jobs()[0]["id"])
         temporal_facts = stored["qualification_facts"]["temporal_facts"]
         assert stored["qualification_facts"]["source_provenance"]
-        assert stored["source_material"]["material"]["source_fields"]["greenhouse"]["title"] == "Corporate Finance Intern"
-        assert stored["qualification_facts"]["source_provenance"][0]["source_id"] == "a1"
+        assert stored["title"] == "Corporate Finance Intern"
+        # Greenhouse's bounded source-material contract stores exact fields
+        # transmitted by the feed. The canonical title lives on the offer;
+        # the raw posting id remains available here for source inspection.
+        assert stored["source_material"]["material"]["source_fields"]["greenhouse"]["id"] in {
+            "a1", "a2", "b1"
+        }
+        assert {
+            item["source_id"]
+            for item in stored["qualification_facts"]["source_provenance"]
+        } == {"a1", "a2", "b1"}
         assert any(
             fact["fact_type"] == "start"
             and fact["value"] == {"day": None, "month": 1, "year": 2027}
@@ -178,7 +192,7 @@ def test_a_run_walks_through_the_real_phases_and_counts_real_work(tmp_path: Path
             response = client.get(f"/api/career/stage-search/coverage?run_id={final['run_id']}")
         assert response.status_code == 200
         assert response.json()["run_id"] == final["run_id"]
-        assert response.json()["metrics"]["synthetic"]["offers_post_dedup"] == 3
+        assert response.json()["metrics"]["synthetic"]["offers_post_dedup"] == 1
         # The published snapshot is the one of this run.
         assert service.get_exploration()["run_id"] == final["run_id"]
     finally:

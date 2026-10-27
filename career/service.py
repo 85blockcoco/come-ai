@@ -1379,7 +1379,11 @@ class CareerService:
                 # error as a text-less PDF. It is safe to try on-device OCR
                 # only for the private file just uploaded by this endpoint.
                 text = ""
-            if suffix == ".pdf" and len(text) < 120:
+            # OCR is a fallback for a genuinely text-less PDF. A short but
+            # valid embedded CV (for example a concise two-page résumé) must
+            # keep its native page boundaries and must not be relabelled as
+            # OCR merely because it contains fewer than 120 characters.
+            if suffix == ".pdf" and not text.strip():
                 ocr_result: OCRResult = self.ocr.extract_pdf(destination)
                 text = ocr_result.text
                 extraction_method = ocr_result.engine
@@ -1825,12 +1829,16 @@ class CareerService:
                 raise UserFacingError("Cette importation de profil n’existe pas.")
             source_document = str(row["original_name"] or "")
             extraction_method = str(row["extraction_method"] or SOURCE_EMBEDDED_TEXT)
+            is_ocr_extraction = (
+                extraction_method != SOURCE_EMBEDDED_TEXT
+                and not extraction_method.startswith("cv_quality_")
+            )
             stored_filename = str(row["stored_filename"] or "")
             # The reading stored with the import is the one the person saw in
             # the preview: it stays the reference of every offset.
             stored_text = str(row["extracted_text"] or "")
             source_key = f"import:{identifier}"
-            if extraction_method != SOURCE_EMBEDDED_TEXT:
+            if is_ocr_extraction:
                 # The document was read by OCR: the reading stored with the
                 # import is the one the person saw in the preview, so the
                 # facts are proposed from it and never from another reading.
@@ -1874,7 +1882,7 @@ class CareerService:
                             page_confidence = "estimated" if filetype == "docx" else "exact"
             if not source_text:
                 source_text = str(row["extracted_text"] or "")
-                source_method = SOURCE_OCR if extraction_method != SOURCE_EMBEDDED_TEXT else SOURCE_EMBEDDED_TEXT
+                source_method = SOURCE_OCR if is_ocr_extraction else SOURCE_EMBEDDED_TEXT
                 pages = None
                 page_confidence = "estimated"
                 try:
