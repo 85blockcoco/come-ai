@@ -41,6 +41,115 @@
 
   const num = (value) => new Intl.NumberFormat("fr-FR").format(Number(value) || 0);
 
+  /* ---------- Accessibilité : annonces et notifications ---------- */
+
+  let announceTimer = null;
+  let toastTimer = null;
+
+  /* Région live unique : les changements de vue, filtres, copies et erreurs
+     sont annoncés sans déplacer le focus. */
+  function announce(message) {
+    const node = $("#srAnnounce");
+    if (!node || !message) return;
+    node.textContent = "";
+    clearTimeout(announceTimer);
+    announceTimer = setTimeout(() => { node.textContent = String(message); }, 60);
+  }
+
+  function notify(message, kind = "info") {
+    const toast = $("#toast");
+    if (!toast) return;
+    toast.textContent = String(message);
+    toast.classList.toggle("error", kind === "error");
+    toast.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toast.hidden = true; }, kind === "error" ? 8000 : 4500);
+    announce(message);
+  }
+
+  const focusablesIn = (root) => [...root.querySelectorAll(
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+  )].filter((node) => node.getClientRects().length > 0);
+
+  /* ---------- Dialogues accessibles (focus piégé, Échap, restitution) ---------- */
+
+  let dialogSeq = 0;
+  let activeDialog = null;
+
+  function mountDialog(overlay, box, options = {}) {
+    const heading = box.querySelector("h2");
+    const titleId = heading ? `dialog-title-${++dialogSeq}` : null;
+    if (heading) heading.id = titleId;
+    box.setAttribute("role", "dialog");
+    box.setAttribute("aria-modal", "true");
+    if (titleId) box.setAttribute("aria-labelledby", titleId);
+    else box.setAttribute("aria-label", options.label || "Fenêtre de dialogue");
+    box.setAttribute("tabindex", "-1");
+
+    const previous = document.activeElement;
+    const closeButton = el("button", {
+      type: "button", class: "ghost-btn modal-close-x", "aria-label": "Fermer la fenêtre",
+    }, "✕ Fermer");
+    box.prepend(closeButton);
+
+    if (activeDialog) activeDialog.close({ restore: false });
+    document.body.append(overlay);
+    box.focus();
+
+    let closed = false;
+    function close({ restore = true } = {}) {
+      if (closed) return;
+      closed = true;
+      document.removeEventListener("keydown", onKeydown, true);
+      overlay.remove();
+      if (activeDialog?.overlay === overlay) activeDialog = null;
+      if (restore && previous && typeof previous.focus === "function") previous.focus();
+      if (typeof options.onClose === "function") options.onClose();
+    }
+
+    function onKeydown(event) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        close();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const items = focusablesIn(box);
+      if (!items.length) {
+        event.preventDefault();
+        box.focus();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      const current = document.activeElement;
+      if (event.shiftKey && (current === first || current === box)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && current === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    closeButton.addEventListener("click", () => close());
+    overlay.addEventListener("click", (event) => { if (event.target === overlay) close(); });
+    document.addEventListener("keydown", onKeydown, true);
+    overlay.__close = close;
+    activeDialog = { overlay, close };
+    return { overlay, box, close };
+  }
+
+  function closeDialogButton(label = "Fermer") {
+    return el("button", {
+      type: "button", class: "ghost-btn modal-close", onclick: (event) => {
+        const overlay = event.currentTarget.closest(".modal-overlay");
+        if (overlay?.__close) overlay.__close();
+      },
+    }, label);
+  }
+
   async function api(path, options) {
     const response = await fetch(path, {
       headers: { "Content-Type": "application/json" },
@@ -70,7 +179,7 @@
     memory: { title: "Mémoire", subtitle: "sources locales indexées · citables · supprimables" },
   };
 
-  function setView(view) {
+  function setView(view, options = {}) {
     state.view = view;
     for (const button of document.querySelectorAll(".nav-item")) {
       if (button.dataset.view === view) button.setAttribute("aria-current", "page");
@@ -83,8 +192,13 @@
     $("#viewSubtitle").textContent = VIEWS[view].subtitle;
     $("#searchBox").hidden = view !== "offers";
     $("#scroll").scrollTop = 0;
+    document.title = `${VIEWS[view].title} — NAGE`;
     render(view);
     history.replaceState(null, "", `#${view}`);
+    if (options.focus) {
+      $("#viewTitle").focus({ preventScroll: true });
+      announce(`${VIEWS[view].title}. ${VIEWS[view].subtitle}`);
+    }
   }
 
   /* ---------- Données ---------- */
@@ -100,6 +214,7 @@
 
   async function loadAll() {
     setStatus("pending", "Connexion…");
+    $("#main").setAttribute("aria-busy", "true");
     // Rendu progressif : chaque source s'affiche dès qu'elle arrive (l'API
     // pipeline peut prendre ~13 s ; inutile de bloquer tout l'écran).
     const results = await Promise.allSettled(
@@ -114,13 +229,19 @@
     const failed = results.filter((r) => r.status === "rejected").length;
     setStatus(failed === 0 ? "online" : failed >= results.length ? "offline" : "pending",
       failed === 0 ? "Local · 127.0.0.1" : `${results.length - failed}/${results.length} sources`);
+    $("#main").removeAttribute("aria-busy");
     renderBadges();
     render(state.view);
+    announce(failed === 0
+      ? "Données chargées."
+      : `${results.length - failed} sources sur ${results.length} chargées.`);
   }
 
   async function refresh() {
     const button = $("#refreshBtn");
     button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    announce("Actualisation des données…");
     try {
       await Promise.allSettled(Object.values(loaders).map(async (load) => {
         await load();
@@ -129,8 +250,12 @@
       }));
       renderBadges();
       render(state.view);
+      notify("Données actualisées.");
+    } catch (error) {
+      notify(`Actualisation partielle : ${error.message}`, "error");
     } finally {
       button.disabled = false;
+      button.removeAttribute("aria-busy");
     }
   }
 
@@ -163,7 +288,9 @@
     else if (view === "memory") renderMemory();
   }
 
-  const loading = () => el("div", { class: "card skeleton" }, el("i"), el("i"), el("i"));
+  const loading = () => el("div", {
+    class: "card skeleton", role: "status", "aria-label": "Chargement des données",
+  }, el("i", { "aria-hidden": "true" }), el("i", { "aria-hidden": "true" }), el("i", { "aria-hidden": "true" }));
 
   function greeting() {
     const hour = new Date().getHours();
@@ -236,7 +363,12 @@
       el("div", {
         class: "action-row", role: "button", tabindex: "0",
         onclick: () => openTarget(item.target_view),
-        onkeydown: (event) => { if (event.key === "Enter" || event.key === " ") openTarget(item.target_view); },
+        onkeydown: (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openTarget(item.target_view);
+          }
+        },
       },
         el("span", { class: "action-rank" }, String(index + 1)),
         el("div", { class: "action-body" },
@@ -274,13 +406,19 @@
           : null,
       ),
       el("div", { class: "pipeline-progress" },
-        el("div", { class: "bar" }, el("i", { style: `width:${progress}%` })),
-        el("small", {}, `${progress} %`),
+        el("div", {
+          class: "bar", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": "100",
+          "aria-valuenow": String(progress), "aria-label": `Progression du dossier ${item.title || ""}`.trim(),
+        }, el("i", { style: `width:${progress}%`, "aria-hidden": "true" })),
+        el("small", { "aria-hidden": "true" }, `${progress} %`),
       ),
       el("div", { class: "offer-tags" },
         item.deadline_date ? el("span", { class: "chip amber" }, `échéance ${item.deadline_date}`) : null,
         item.official_url
-          ? el("a", { class: "chip violet", href: item.official_url, target: "_blank", rel: "noopener" }, "offre ↗")
+          ? el("a", {
+              class: "chip violet", href: item.official_url, target: "_blank", rel: "noopener",
+              "aria-label": `Ouvrir l’offre ${item.title || ""} dans un nouvel onglet`.trim(),
+            }, "offre ↗")
           : null,
         el("button", { class: "chip green", type: "button", title: "Préparer le dossier (CV+lettre+checklist)",
           onclick: (event) => { event.stopPropagation(); showApplyKit(item.job_id, item.title); } }, "préparer"),
@@ -337,23 +475,34 @@
         el("h2", {}, "Toutes les offres"),
         el("span", { class: "hint" }, `${filtered.length} / ${jobs.length}`)),
       el("div", { class: "card" }, filtered.length
-        ? filtered.slice(0, 120).map((job) => el("div", {
-            class: "offer-row", role: "link", tabindex: "0",
-            onclick: () => job.official_url && window.open(job.official_url, "_blank", "noopener"),
-            onkeydown: (event) => { if (event.key === "Enter" && job.official_url) window.open(job.official_url, "_blank", "noopener"); },
-          },
-            el("span", { class: "offer-logo" }, (job.company || "?").slice(0, 1).toUpperCase()),
-            el("div", { class: "offer-main" },
-              el("strong", {}, job.title || "Offre"),
-              el("span", {}, [job.company, job.city, job.job_family].filter(Boolean).join(" · ") || "—"),
-            ),
-            el("div", { class: "offer-tags" },
-              job.source_status ? el("span", { class: `chip ${job.source_status === "open" ? "green" : "amber"}` }, job.source_status) : null,
-              job.calendar_status && job.calendar_status !== "to_verify"
-                ? el("span", { class: "chip" }, job.calendar_status)
-                : null,
-            ),
-          ))
+        ? filtered.slice(0, 120).map((job) => {
+            const attrs = { class: "offer-row" };
+            if (job.official_url) {
+              attrs.role = "link";
+              attrs.tabindex = "0";
+              attrs["aria-label"] = `${job.title || "Offre"} — ${job.company || "entreprise inconnue"} (ouvre l’offre dans un nouvel onglet)`;
+              attrs.onclick = () => window.open(job.official_url, "_blank", "noopener");
+              attrs.onkeydown = (event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  window.open(job.official_url, "_blank", "noopener");
+                }
+              };
+            }
+            return el("div", attrs,
+              el("span", { class: "offer-logo", "aria-hidden": "true" }, (job.company || "?").slice(0, 1).toUpperCase()),
+              el("div", { class: "offer-main" },
+                el("strong", {}, job.title || "Offre"),
+                el("span", {}, [job.company, job.city, job.job_family].filter(Boolean).join(" · ") || "—"),
+              ),
+              el("div", { class: "offer-tags" },
+                job.source_status ? el("span", { class: `chip ${job.source_status === "open" ? "green" : "amber"}` }, job.source_status) : null,
+                job.calendar_status && job.calendar_status !== "to_verify"
+                  ? el("span", { class: "chip" }, job.calendar_status)
+                  : null,
+              ),
+            );
+          })
         : emptyState("Aucune correspondance", "Modifie le filtre pour retrouver une offre.")),
     );
   }
@@ -364,23 +513,36 @@
     host.dataset.mounted = "1";
     host.replaceChildren(
       el("div", { class: "card assistant-wrap" },
-        el("div", { class: "chat-log", id: "chatLog" },
+        el("div", {
+          class: "chat-log", id: "chatLog", role: "log", "aria-live": "polite",
+          "aria-relevant": "additions", "aria-label": "Conversation avec NAGE", tabindex: "0",
+        },
           el("div", { class: "msg ai" },
             el("div", { class: "bubble" },
               "NAGE en ligne. Je peux analyser une offre, préparer un dossier, résumer un document ou chercher dans ta mémoire. Le mode Hors ligne est actif par défaut : rien ne quitte ton Mac. La réponse locale peut prendre jusqu’à une minute."),
             el("small", {}, "NAGE · local"),
           ),
         ),
-        el("form", { class: "composer", id: "chatForm" },
-          el("textarea", { id: "chatInput", rows: "2", placeholder: "Demande-moi quelque chose… (Entrée pour envoyer)" }),
+        el("form", { class: "composer", id: "chatForm", "aria-label": "Envoyer un message à NAGE" },
+          el("span", { class: "sr-only", id: "chatHint" }, "Entrée pour envoyer, Maj+Entrée pour un retour à la ligne."),
+          el("textarea", {
+            id: "chatInput", rows: "2", placeholder: "Demande-moi quelque chose… (Entrée pour envoyer)",
+            "aria-label": "Message à NAGE", "aria-describedby": "chatHint",
+          }),
           el("div", { class: "composer-row" },
             el("div", { class: "modes", role: "group", "aria-label": "Mode de l’assistant" },
               [["offline", "Hors ligne"], ["automatic", "Automatique"]].map(([mode, label]) =>
                 el("button", {
                   type: "button", class: mode === "offline" ? "on" : "",
+                  "aria-pressed": mode === "offline" ? "true" : "false",
                   onclick: (event) => {
                     state.chatMode = mode;
-                    for (const b of event.currentTarget.parentElement.children) b.classList.toggle("on", b === event.currentTarget);
+                    for (const b of event.currentTarget.parentElement.children) {
+                      const active = b === event.currentTarget;
+                      b.classList.toggle("on", active);
+                      b.setAttribute("aria-pressed", active ? "true" : "false");
+                    }
+                    announce(`Mode assistant : ${label}.`);
                   },
                 }, label))),
             el("button", { type: "submit", class: "send-btn" },
@@ -418,9 +580,9 @@
     input.value = "";
     input.style.height = "auto";
     state.chat.push({ role: "user", content: message });
-    const typing = el("div", { class: "msg ai", id: "typing" },
+    const typing = el("div", { class: "msg ai", id: "typing", role: "status", "aria-label": "NAGE réfléchit" },
       el("div", { class: "bubble" },
-        el("span", { class: "typing" }, el("i"), el("i"), el("i"))),
+        el("span", { class: "typing", "aria-hidden": "true" }, el("i"), el("i"), el("i"))),
       el("small", {}, "réflexion…"));
     $("#chatLog").append(typing);
     $("#chatLog").scrollTop = $("#chatLog").scrollHeight;
@@ -549,8 +711,20 @@
       el("div", { class: "section-title" }, el("h2", {}, "Candidatures envoyées"), el("span", { class: "hint" }, "confirmation humaine · relance à copier")),
       el("div", { class: "card" }, items.length ? items.map((it) => el("div", { class: "pipeline-item" },
         el("div", { class: "pipeline-main" }, el("strong", {}, it.title || "Dossier"), el("span", {}, `${it.company || "—"} · envoyé ${it.sent_at || "—"}`), el("div", { class: "next" }, `relance prévue : ${it.follow_up_due || "—"}`)),
-        el("div", { class: "pipeline-progress" }, el("div", { class: "bar" }, el("i", { style: `width:${Math.min(100, it.progress_percent || 100)}%` })), el("small", {}, it.channel || "site")),
-        el("div", { class: "offer-tags" }, it.follow_up_draft ? el("button", { class: "chip green", type: "button", onclick: () => copyText(it.follow_up_draft) }, "copier relance") : null),
+        el("div", { class: "pipeline-progress" },
+          el("div", {
+            class: "bar", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": "100",
+            "aria-valuenow": String(Math.min(100, it.progress_percent || 100)),
+            "aria-label": `Progression de la candidature ${it.title || ""}`.trim(),
+          }, el("i", { style: `width:${Math.min(100, it.progress_percent || 100)}%`, "aria-hidden": "true" })),
+          el("small", {}, it.channel || "site")),
+        el("div", { class: "offer-tags" }, it.follow_up_draft
+          ? el("button", {
+              class: "chip green", type: "button",
+              "aria-label": `Copier la relance pour ${it.title || "cette candidature"}`,
+              onclick: () => copyText(it.follow_up_draft, `Relance copiée pour ${it.title || "cette candidature"}.`),
+            }, "copier relance")
+          : null),
       )) : emptyState("Aucun envoi confirmé", "Marque une candidature « envoyé » pour la suivre ici.")),
       el("p", { class: "note tight" }, t.honesty || "Sont listées les candidatures déclarées envoyées."),
     );
@@ -559,8 +733,8 @@
   async function showApplyKit(jobId, title) {
     let kit;
     try { kit = await api(`/api/career/apply-kit/${jobId}`, { method: "POST", body: "{}" }); }
-    catch (e) { alert(`Dossier indisponible : ${e.message}`); return; }
-    const overlay = el("div", { class: "modal-overlay", onclick: (ev) => { if (ev.target === overlay) overlay.remove(); } });
+    catch (e) { notify(`Dossier indisponible : ${e.message}`, "error"); return; }
+    const overlay = el("div", { class: "modal-overlay" });
     const readiness = Number(kit.readiness || 0);
     const box = el("div", { class: "card modal-box" },
       el("div", { class: "section-title", style: "margin-top:0" }, el("h2", {}, `Dossier prêt — ${title || "offre"}`), el("span", { class: "hint" }, `readiness ${readiness} %`)),
@@ -571,7 +745,10 @@
       ),
       el("div", { class: "section-title" }, el("h2", {}, "Pièces à télécharger"), el("span", { class: "hint" }, "PDF + DOCX")),
       el("div", { class: "offer-tags", style: "flex-wrap:wrap;gap:6px" },
-        Object.entries(kit.export_urls || {}).map(([k, u]) => el("a", { class: "chip green", href: u, target: "_blank", rel: "noopener" }, `${k} ↗`))),
+        Object.entries(kit.export_urls || {}).map(([k, u]) => el("a", {
+          class: "chip green", href: u, target: "_blank", rel: "noopener",
+          "aria-label": `Télécharger ${k} dans un nouvel onglet`,
+        }, `${k} ↗`))),
       el("div", { class: "section-title" }, el("h2", {}, "Checklist humaine"), el("span", { class: "hint" }, "à valider avant envoi")),
       el("div", { class: "quick-list" }, (kit.checklist || []).map((c) =>
         el("div", { class: "quick-row" },
@@ -580,17 +757,17 @@
           c.note ? el("span", { class: "quick-label" }, c.note) : null,
         ))),
       kit.deep_link ? el("a", { class: "ghost-btn", href: kit.deep_link, target: "_blank", rel: "noopener", style: "margin-top:12px;display:inline-flex" }, "Ouvrir le formulaire officiel ↗") : null,
-      el("button", { class: "ghost-btn", type: "button", onclick: () => overlay.remove(), style: "margin-top:12px" }, "Fermer"),
+      closeDialogButton(),
     );
     overlay.append(box);
-    document.body.append(overlay);
+    mountDialog(overlay, box, { label: "Dossier de candidature prêt" });
   }
 
   async function showAtsGuide(jobId, title) {
     let g;
     try { g = await api(`/api/career/ats-guide/${jobId}`); }
-    catch (e) { alert(`Guide indisponible : ${e.message}`); return; }
-    const overlay = el("div", { class: "modal-overlay", onclick: (ev) => { if (ev.target === overlay) overlay.remove(); } });
+    catch (e) { notify(`Guide indisponible : ${e.message}`, "error"); return; }
+    const overlay = el("div", { class: "modal-overlay" });
     const box = el("div", { class: "card modal-box" },
       el("div", { class: "section-title", style: "margin-top:0" }, el("h2", {}, `Guide ATS — ${g.title || title || "offre"}`), el("span", { class: "hint" }, `${g.platform || "custom"} · ${g.estimated_minutes || "?"} min`)),
       el("div", { class: "offer-tags", style: "margin-bottom:10px" },
@@ -605,34 +782,82 @@
             st.tips ? el("div", { class: "note tight", style: "margin-top:4px" }, st.tips) : null),
         ))),
       g.apply_url ? el("a", { class: "ghost-btn", href: g.apply_url, target: "_blank", rel: "noopener", style: "margin-top:12px;display:inline-flex" }, "Ouvrir le formulaire officiel ↗") : null,
-      el("button", { class: "ghost-btn", type: "button", onclick: () => overlay.remove(), style: "margin-top:12px" }, "Fermer"),
+      closeDialogButton(),
     );
     overlay.append(box);
-    document.body.append(overlay);
+    mountDialog(overlay, box, { label: "Guide de candidature ATS" });
   }
 
   async function showQuickAnswers(jobId, title) {
     let data;
     try { data = await api(`/api/career/quick-answers/${jobId}`); }
-    catch (e) { alert(`Réponses indisponibles : ${e.message}`); return; }
-    const overlay = el("div", { class: "modal-overlay", onclick: (ev) => { if (ev.target === overlay) overlay.remove(); } });
+    catch (e) { notify(`Réponses indisponibles : ${e.message}`, "error"); return; }
+    const overlay = el("div", { class: "modal-overlay" });
     const box = el("div", { class: "card modal-box" },
       el("div", { class: "section-title", style: "margin-top:0" }, el("h2", {}, `Réponses types — ${title || "offre"}`), el("span", { class: "hint" }, `${data.answers?.length ?? 0} questions`)),
       el("div", { class: "quick-list" }, (data.answers || []).map((a) =>
         el("div", { class: "quick-row" },
           el("div", { class: "quick-label" }, a.label || a.question || "—"),
           el("div", { class: "quick-value" }, a.value || "(à compléter)"),
-          el("button", { class: "chip", type: "button", onclick: () => copyText(a.value || "") }, "copier"),
+          el("button", {
+            class: "chip", type: "button",
+            "aria-label": `Copier la réponse : ${a.label || a.question || "question"}`,
+            onclick: () => copyText(a.value || "", "Réponse copiée."),
+          }, "copier"),
           el("span", { class: `chip ${a.confidence === "exact" ? "green" : a.confidence === "derived" ? "amber" : "red"}` }, a.confidence || "—"),
         ))),
-      el("button", { class: "ghost-btn", type: "button", onclick: () => overlay.remove(), style: "margin-top:12px" }, "Fermer"),
+      closeDialogButton(),
     );
     overlay.append(box);
-    document.body.append(overlay);
+    mountDialog(overlay, box, { label: "Réponses types" });
+  }
+
+  /* Remplace window.prompt : dialogue étiqueté, focus piégé, Échap = annuler. */
+  function askChannel(title) {
+    return new Promise((resolve) => {
+      const overlay = el("div", { class: "modal-overlay" });
+      let settled = false;
+      const select = el("select", { id: "channelSelect", name: "channel" },
+        el("option", { value: "site" }, "Site de l’entreprise"),
+        el("option", { value: "email" }, "E-mail"),
+        el("option", { value: "portal" }, "Portail / ATS"),
+      );
+      const form = el("form", { class: "channel-form" },
+        el("label", { for: "channelSelect" }, "Canal d’envoi"),
+        select,
+        el("div", { class: "channel-actions" },
+          el("button", { type: "submit", class: "send-btn" }, "Enregistrer l’envoi"),
+          el("button", {
+            type: "button", class: "ghost-btn",
+            onclick: () => finish(null),
+          }, "Annuler"),
+        ),
+      );
+      const box = el("div", { class: "card modal-box" },
+        el("div", { class: "section-title", style: "margin-top:0" },
+          el("h2", {}, `Marquer envoyé — ${title || "cette offre"}`),
+          el("span", { class: "hint" }, "confirmation humaine")),
+        el("p", { class: "note tight" },
+          "Aucun envoi automatique : cette action enregistre seulement ta confirmation, avec la date du jour."),
+        form,
+      );
+      overlay.append(box);
+      const dialog = mountDialog(overlay, box, { onClose: () => finish(null) });
+      function finish(value) {
+        if (settled) return;
+        settled = true;
+        dialog.close();
+        resolve(value);
+      }
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        finish(select.value);
+      });
+    });
   }
 
   async function markSent(jobId, title) {
-    const channel = prompt(`Canal d'envoi pour « ${title || "cette offre"} » ?\n(site / email / portal)`, "site");
+    const channel = await askChannel(title);
     if (!channel) return;
     const iso = new Date().toISOString().slice(0, 19) + "Z";
     try {
@@ -640,15 +865,32 @@
       await loaders.tracker();
       renderBadges();
       if (state.view === "tracking") renderTracking();
-      alert("Envoi enregistré. Tu peux le suivre dans « Suivi ».");
-    } catch (e) { alert(`Échec : ${e.message}`); }
+      notify("Envoi enregistré. Tu peux le suivre dans « Suivi ».");
+    } catch (e) { notify(`Échec de l’enregistrement : ${e.message}`, "error"); }
   }
 
-  function copyText(text) {
-    if (!text) return;
-    (navigator.clipboard?.writeText ? navigator.clipboard.writeText(text) : Promise.resolve())
-      .then(() => {}).catch(() => {});
-    const ta = document.createElement("textarea"); ta.value = text; document.body.append(ta); ta.select(); document.execCommand("copy"); ta.remove();
+  function copyText(text, successMessage = "Texte copié.") {
+    if (!text) {
+      notify("Rien à copier.", "error");
+      return;
+    }
+    const fallback = () => {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.className = "sr-only";
+      document.body.append(ta);
+      ta.select();
+      let ok = false;
+      try { ok = document.execCommand("copy"); } catch { ok = false; }
+      ta.remove();
+      notify(ok ? successMessage : "Copie impossible : sélectionne le texte manuellement.", ok ? "info" : "error");
+    };
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(() => notify(successMessage)).catch(fallback);
+    } else {
+      fallback();
+    }
   }
 
   function emptyState(title, detail) {
@@ -658,12 +900,50 @@
   /* ---------- Démarrage ---------- */
 
   for (const button of document.querySelectorAll(".nav-item")) {
-    button.addEventListener("click", () => setView(button.dataset.view));
+    button.addEventListener("click", () => setView(button.dataset.view, { focus: true }));
   }
+
+  /* Navigation clavier dans la barre latérale : flèches = déplacement du
+     focus, Entrée/Espace = activation (comportement natif du bouton). */
+  const nav = $(".nav");
+  nav?.addEventListener("keydown", (event) => {
+    const items = [...nav.querySelectorAll(".nav-item")];
+    const index = items.indexOf(document.activeElement);
+    if (index === -1) return;
+    let next = null;
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % items.length;
+    else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (index - 1 + items.length) % items.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = items.length - 1;
+    if (next === null) return;
+    event.preventDefault();
+    items[next].focus();
+  });
+
+  $(".skip-link")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    const main = $("#main");
+    main.focus();
+    main.scrollIntoView({ block: "start" });
+    announce("Contenu principal.");
+  });
+
+  window.addEventListener("hashchange", () => {
+    const view = (location.hash || "#today").slice(1);
+    if (VIEWS[view] && view !== state.view) setView(view);
+  });
+
   $("#refreshBtn").addEventListener("click", refresh);
+
+  let filterTimer = null;
   $("#searchInput").addEventListener("input", (event) => {
     state.filter = event.target.value;
     renderOffers();
+    clearTimeout(filterTimer);
+    filterTimer = setTimeout(() => {
+      const shown = document.querySelectorAll("#view-offers .offer-row").length;
+      announce(`${shown} offre${shown > 1 ? "s" : ""} affichée${shown > 1 ? "s" : ""}.`);
+    }, 450);
   });
 
   const initial = (location.hash || "#today").slice(1);
