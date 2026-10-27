@@ -1,46 +1,40 @@
-# RAPPORT CODEX — 2026-10-27 (mise à jour thème UI)
+# RAPPORT CODEX — 2026-10-27 16:40 CET
 
 ## 1. Livré (avec preuve)
 | Commit | Contenu (1 ligne) | Fichiers | Tests verts (nom test) | Durée |
 |---|---|---|---|---|
-| `0766122` | SPEC-044 adapté: kit conditionné par qualification et source officielle vérifiée | `career/apply_kit.py`, service/router, tests | `tests/test_apply_kit.py` — 7 passed au lot initial | 21,36 s au rejeu précédent |
-| `215b316` | Pipeline: index d'étapes et calcul limité aux données consommées | `career/cv_fit.py`, `career/offer_qualification.py`, `career/service.py`, tests | pipeline/Stage Hunter — 67 passed; qualification/pipeline — 49 passed; Ruff vert | 89,38 s / 39,67 s |
-| `33d72c7` | Dossiers à jour, revue liée à la version affichée, ouverture concurrente idempotente et blocage des documents incomplets | `career/application_studio.py`, `career/apply_kit.py`, `career/router.py`, `career/service.py`, tests Apply Kit/Kit | `tests/test_apply_kit.py tests/test_career_application_kit.py tests/test_send_confirmation.py` — 64 passed; Ruff et diff-check verts | 17,49 s |
-| `a177000` | Corrige la checklist et le blocage d'échéance (états canoniques open/closed) après constat navigateur | `career/apply_kit.py`, `tests/test_apply_kit.py` | `tests/test_apply_kit.py` — 10 passed après deux régressions rouges; Ruff vert | 3,33 s |
-
-| `7379599` | SPEC-046 intégré avec liens publiés, preuve de source et refus des destinations suspectes | `career/ats_guide.py`, service/router, tests/fixtures et rapport | `tests/test_career_ats_guide.py` — 63 passed après campagne de refus rouge; Ruff vert | 3,95 s |
-| `94dd041` | Ajout du sélecteur d’apparence persistant et du thème professionnel clair NAGE Studio, sans remplacer NAGE Terminal | `desktop_static/index.html`, `app.js`, `app.css`, test shell | `tests/test_desktop_app.py` — 2 passed; `node --check`; Ruff test et diff-check verts | 23,08 s pytest |
+| `94dd041` | Sélecteur persistant NAGE Terminal / NAGE Studio et thème professionnel clair | `desktop_static/index.html`, `desktop_static/app.js`, `desktop_static/app.css`, `tests/test_desktop_app.py` | `tests/test_desktop_app.py` inclus dans le run final | run final ci-dessous |
+| `48ca9eb` | Preuve navigateur du parcours candidature en trois interactions, sans envoi automatique | rapport P0, preuve JSON, coordination | 34 tests P0 au lot initial; persistance Uvicorn et console navigateur vérifiées | 13,86 s au lot initial |
+| `2a00644` | Alignement isolé de toute la consolidation Career avec `origin/main` | 304 chemins du merge, conflits résolus sélectivement | lots cœur, connecteurs et P0 exécutés avant commit | voir section 3 |
+| `f7682ed` | Réintégration des commits P0 et NAGE Studio postérieurs à la base d’alignement | Career, desktop, rapports et tests | run consolidé final: **1 416 passed**; Ruff et contrôles JS verts | **56,54 s** pytest; 57,69 s réel |
 
 ## 2. En cours maintenant
 | Tâche | % fait | Temps passé | Temps restant estimé | Blocage ? |
 |---|---:|---|---|---|
-| Contrat pipeline `< 3 s` | 4 derniers relevés ponctuels sous le seuil (4/4) | commandes chronométrées ci-dessous | stabilité sous charge non estimée | pas d'échec dans ces trois mesures; pas une preuve de stabilité générale |
-| Raccordement app P0 / recette trois interactions | validé sur fixture synthétique fraîche | 468 ms jusqu’au dossier complet lors de l’interaction 1 | terminé pour le P0 testé | aucun blocage observé ; aucune candidature réelle testée |
-| Alignement sur le vrai `origin/main` GitHub | non mesuré | merge-tree sans changement d'index effectué | non estimé avant résolution | main `69fc924` non ancêtre; 35 chemins conflictuels constatés, aucun merge appliqué |
-| SPEC-044..047 | 4/4 contributions disponibles revues et intégrées/adaptées côté backend | non mesuré | recette UI en cours | aucun blocage de publication SPEC-046 |
-| Recette visuelle NAGE Studio | validée sur `/app#applications` au port isolé 18924 | non mesuré | terminé pour ce lot | menu visible, application immédiate et persistance vérifiée après rechargement; aucune action métier déclenchée |
+| Candidate unique alignée sur GitHub `origin/main` | 100 % techniquement; publication en cours | deux merges isolés et validation ciblée | quelques minutes pour push/vérification distante | aucun conflit restant; `main` n’est pas modifiée |
+| P0 candidature en trois interactions | 100 % du scénario synthétique défini | navigateur + HTTP + redémarrage | recette réelle employeur volontairement hors périmètre | aucune soumission automatique autorisée |
+| Style professionnel NAGE Studio | 100 % du lot demandé | implémentation + tests + navigateur | terminé | aucun avertissement/erreur console observé |
+| Campagne globale hors Career/P0 | non incluse dans ce lot ciblé | aucune suite complète relancée | à planifier séparément | cette preuve ne couvre pas tous les modules historiques |
 
 ## 3. Performances mesurées
 | Métrique | Avant | Après | Comment mesuré |
 |---|---|---|---|
-| `/api/career/application-pipeline` — serveur partagé `127.0.0.1:8765` | 9 990 ms à 17:41 (ancien relevé, PAS ATTEINT) | 2 120 ms au dernier relevé; précédent trio 2 230 / 2 360 / 2 230 ms | `/usr/bin/time curl -sf http://127.0.0.1:8765/api/career/application-pipeline -o /dev/null`; 26/10 22:23:27–22:23:29 CET, code 0; précédents relevés 18:44–18:46 CET. Le process partagé n'a pas été redémarré par Codex; la variation n'est pas attribuée au code candidat. |
-| `/api/career/apply-kit/{job_id}` — candidate isolée | ancien relevé de réouverture 643 ms (scénario différent) | première requête 245 ms; réouverture 151 ms; HTTP 200 | TestClient FastAPI, SQLite/profil/offre synthétiques temporaires; même draft et même review_token; approbation toujours fausse |
-| Pipeline HTTP candidate — 1 000 offres synthétiques | pas de mesure appariée avant le lot perf | 1 452 / 1 308 / 1 227 ms; médiane 1 308 ms | TestClient au lot précédent, 3 réponses 200; cette mesure n'a pas été rejouée après le lot 33d72c7 |
+| `/api/career/application-pipeline` | 9 990 ms, ancien serveur partagé du 26/10 | **11,841 ms à froid; 9,923 et 9,978 ms à chaud** | `curl -sf -o /dev/null -w '%{time_total}' http://127.0.0.1:18928/api/career/application-pipeline`, serveur Uvicorn isolé et base synthétique vide, 27/10 vers 16:38 CET |
+| Démarrage/routes locales | non apparié | health 288 ms; `/app` 6,8 ms; `/career` 3,7 ms; HTTP 200 | serveur isolé `create_app(base_dir=/tmp/come-ai-align-…)`, port 18928 |
+| Run ciblé consolidé | lots séparés | **1 416 passed** | pytest explicite sur qualification, dates, géographie, déduplication, connecteurs, application kit/pipeline, UX et desktop |
 
 ## 4. État 24 h de ta prod
-- commits aujourd'hui : 37 avant le commit de ce rapport (`git rev-list --count --since='2026-10-26 00:00:00 +0100' HEAD`).
-- lignes ajoutées / supprimées : 5 444 / 162 (`git diff --stat HEAD~37..HEAD`, mesuré avant ce rapport; 43 fichiers).
-- tests verts: nouvelle intégration ATS: `tests/test_career_ats_guide.py` — 63 passed en 3,95 s, Ruff vert; correctif précédent `tests/test_apply_kit.py` — 10 passed en 3,33 s, Ruff Career et diff-check verts. Lot précédent: `/Users/comedelavenne/AI-Excel-Agent/.venv/bin/python -m pytest tests/test_apply_kit.py tests/test_career_application_kit.py tests/test_send_confirmation.py -q` — 64 passed en 17,49 s. Les régressions de fraîcheur/revue/contrat ont d'abord échoué puis sont passées; les deux nouvelles régressions deadline ont aussi été reproduites rouges puis corrigées. Aucune suite complète lancée.
-- preuve GitHub: push puis `git ls-remote --heads origin codex/v3-stable-consolidation` ont confirmé `7379599d126b9f71869a6fa5d13a441ec50b9a26`. `origin` est GitHub; le remote local `coordination` a aussi reçu le push.
-- recette actualisée dans `docs/agent-reports/P0-UI-CANDIDATE-2026-10-26.md`: parcours navigateur frais en trois interactions, 0 erreur/avertissement console et persistance après vrai redémarrage Uvicorn. `34 passed` en 13,86 s ciblent le shell, la destination manuelle et la confirmation. Les données sont synthétiques.
+- commits aujourd’hui avant ce rapport : 6.
+- diff de la candidate alignée contre `origin/main` : 151 fichiers, 20 136 ajouts, 375 suppressions (`git diff --shortstat origin/main...HEAD`).
+- ascendance : `origin/main...HEAD` = `0 106`; la candidate contient donc le `main` GitHub actuel sans le modifier.
+- tests verts : **1 416 passed en 56,54 s**; deux tests géographiques ont d’abord reproduit une divergence de contrat, ont été corrigés puis rejoués verts. `ruff check career/`, `node --check career_static/career.js`, `node --check desktop_static/app.js` et `git diff --check` sont verts.
+- navigateur réel : `/app#applications` sur 18928, bascule vers NAGE Studio puis rechargement; valeur `studio` persistée, sélecteur toujours sur « NAGE Studio », zéro log console warn/error.
 
-## 5. Ce que j'attends d'OpenCode
-- Côme a explicitement choisi « Codex prend l’UI dans sa candidate » à 22:08: la lane desktop/app de la candidate est maintenant reprise par Codex. Le snapshot 8716c11 est conservé comme base. Ne pas lancer de modifications concurrentes sur ces fichiers; le checkout partagé et l’orchestrateur restent préservés.
-- Transmettre les nouveaux travaux par commits identifiés; les constats navigateur restent dans `docs/agent-reports/P0-UI-CANDIDATE-2026-10-26.md`. Aucune consommation OpenCode Go lancée par Codex.
+## 5. Ce que j’attends d’OpenCode
+- Aucun travail requis pour ce lot. Ne pas modifier concurremment la candidate pendant la publication et la vérification du SHA.
 
 ## 6. Risques / blocages
-- Les quatre relevés ponctuels de référence respectent `< 3 s` dans la charge observée; la résistance à une charge variable reste à vérifier. Les requêtes n'ont pas lu de corps de réponse ni exposé de donnée personnelle.
-- La preuve précédente de push allait d'abord au clone local. Ce point est corrigé: le push direct GitHub du SHA 33d72c7 est maintenant vérifié. La vérification précédente d'ascendance utilisait aussi le main local; le vrai main GitHub `69fc924` diverge et doit être examiné avant de déclarer la candidate prête à fusionner.
-- Les appels historiques d'approbation restent compatibles; le nouveau parcours UI doit transmettre draft_id et review_token pour vérifier la version effectivement relue.
-- P0 navigateur désormais VALIDÉ sur fixture synthétique : les anciens défauts `prompt()`, canal et dispatch Suivi ne sont plus reproduits. La page publique officielle de la fixture a été chargée en lecture seule ; aucune donnée, aucun formulaire et aucune candidature ne lui ont été transmis. Cette preuve ne vaut pas soumission réelle ni confirmation de réception employeur.
-- Aucune soumission automatique, aucune donnée personnelle réelle en fixture, aucun changement de schéma SQLite. `main` et le code partagé en cours d'exécution n'ont pas été modifiés par Codex.
+- La mesure pipeline sur base synthétique vide prouve largement le contrat `< 3 s`, mais ne remplace pas un benchmark chargé avec 1 000 offres après cet alignement.
+- Le run de 1 416 tests est une campagne ciblée large, pas la suite complète du dépôt.
+- Le parcours en trois interactions reste volontairement un scénario synthétique et manuel : aucune candidature réelle, aucune donnée personnelle et aucun formulaire employeur n’ont été envoyés.
+- `main` demeure inchangée. Toute convergence de `main` nécessite toujours une décision humaine distincte.
