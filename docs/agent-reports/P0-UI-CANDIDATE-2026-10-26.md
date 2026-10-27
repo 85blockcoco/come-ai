@@ -1,51 +1,69 @@
-# P0 candidature facile — recette du 26 octobre 2026
+# P0 candidature facile — recette actualisée au 27 octobre 2026
 
-**Verdict: parcours navigateur trois interactions NON VALIDÉ.**
+**Verdict actuel : parcours navigateur en trois interactions VALIDÉ sur fixture synthétique isolée.**
 
-## Périmètre effectivement exécuté
+Le verdict négatif du 26 octobre portait sur le snapshot UI `f8344ba`. Il est
+conservé plus bas comme historique, mais il ne décrit plus la candidate
+`codex/v3-stable-consolidation` depuis le correctif `5d44474`.
 
-- Backend candidat `33d72c7`, puis correctif d'échéance `a177000` après redémarrage.
-- UI desktop figée au commit OpenCode `f8344bad0e2c9036f95fa435e11db718f31dd138`.
-- Serveur Uvicorn isolé `127.0.0.1:18924`, DB temporaire, profil et offres marqués synthétiques, fournisseur simulé. Le port habituel 8765 est resté intact.
-- La fixture du chemin nominal utilise la logique canonique de source/qualification; readiness=100, aucun block_reason. Les URLs ATS sont synthétiques et n'ont pas été ouvertes. Aucun dépôt externe.
+## Preuve navigateur fraîche
 
-## Preuves HTTP API
+- Candidate : `c0be89df45d7a1f7cd424fb312a9ce7923b936ae`.
+- Serveur Uvicorn isolé : `127.0.0.1:18927`.
+- Base temporaire distincte : une offre, un profil et un dossier explicitement
+  synthétiques ; fournisseur de modèle simulé.
+- État de départ observé : « Dossier à préparer », action « Préparer en anglais ».
+- Aucun kit n'avait été généré par API avant cette seconde recette fraîche.
 
-| Vérification exécutée | Résultat |
+| Interaction humaine | Résultat observé |
 |---|---|
-| POST Apply Kit, langue `en` | 200, documents complets, approbation initiale fausse |
-| POST approbation avec draft_id et review_token | 200, version affichée approuvée |
-| POST déclaration humaine `channel=website` | 201; aucun envoi externe |
-| Rejeu identique de déclaration | 201, created=false; un seul suivi |
-| Exports CV/lettre PDF et DOCX | quatre HTTP 200; signatures PDF et archive DOCX vérifiées |
-| Arrêt gracieux puis redémarrage réel d'Uvicorn | déclaration et suivi uniques conservés; stage submitted |
-| Relecture de l'échéance après correctif | checklist cohérente avec la date future |
+| 1. `Préparer en anglais` | Modal complet en 468 ms : CV, lettre, quatre exports, réponses, guide, provenance et avertissement « aucun envoi automatique » |
+| 2. `J’ai relu mon dossier · Ouvrir le site officiel` | Revue de la version exacte enregistrée ; bouton de confirmation activé ; destination officielle ouverte dans un onglet séparé |
+| 3. `J’ai envoyé ma candidature` | Déclaration synthétique enregistrée localement ; navigation automatique vers Suivi ; une ligne « envoi déclaré » et une date de relance apparaissent |
 
-[Résultats API](p0-e2e-2026-10-26/api-three-actions.json) et [preuve de redémarrage](p0-e2e-2026-10-26/restart-proof.json).
+Après l'interaction 3 :
 
-Ces appels HTTP ne sont pas présentés comme un parcours navigateur réussi.
+- `consoleIssues = 0` pour les niveaux erreur et avertissement ;
+- la page Suivi contient exactement le dossier synthétique ;
+- l'API locale expose `stage=submitted` et un seul suivi ;
+- après arrêt réel puis redémarrage d'Uvicorn sur la même base temporaire, la
+  ligne et l'état « envoi déclaré » sont toujours présents ;
+- aucune requête de soumission de formulaire n'a été effectuée par Côme AI.
 
-## Constats navigateur réels (IAB)
+Le clic 2 a chargé en lecture seule la page publique correspondant à la
+destination officielle de la fixture. Aucune donnée personnelle, document,
+champ de formulaire ou candidature ne lui a été transmis. Le clic 3 a agi
+uniquement sur l'API locale de la fixture.
 
-1. Navigation Candidatures et clic Préparer: modal chargé, quatre liens d'export présents.
-2. Langue du dossier: non proposée explicitement par ce snapshot UI (POST `{}`; français implicite).
-3. Aperçu des documents et approbation de version: absents du modal; il ouvre directement un lien officiel sans POST /approve.
-4. Clic « marqué envoyé »: erreur JavaScript `prompt() is not supported`, app.js:608. Aucun POST de confirmation n'a été déclenché. Le code utilise en outre `site`, refusé par le contrat API qui attend `website`.
-5. Navigation Suivi après déclaration synthétique par API et redémarrage: page vide. Cause confirmée: `render(view)` ne dispatch pas `tracking` vers `renderTracking()`.
-6. Export CV PDF cliqué dans le navigateur: attente d'événement download expirée après 10 s. Le téléchargement navigateur n'est donc pas prouvé; les quatre exports HTTP ci-dessus sont valides.
-7. Viewport 325 px: scrollWidth=613 px; sept boutons de navigation sans nom accessible. searchBox.hidden=true, mais computed display=flex.
-8. Viewport desktop 1460×950: la colonne du libellé « Contrat, dates et durée… » mesure 21 px contre 583 px pour la note; le texte devient une colonne de lettres.
+Preuve structurée :
+`docs/agent-reports/p0-e2e-2026-10-27/browser-three-interactions.json`.
 
-[Console navigateur](p0-e2e-2026-10-26/browser-errors-f8344ba.json).
+## Responsive NAGE Studio
 
-![Modal étroit, snapshot UI f8344ba](p0-e2e-2026-10-26/modal-f8344ba.png)
+La page Candidatures a aussi été mesurée à `390 × 844` :
 
-![Modal desktop, même snapshot après correction backend d'échéance](p0-e2e-2026-10-26/modal-desktop-f8344ba.png)
+- `innerWidth = body.scrollWidth = documentElement.scrollWidth = 390` ;
+- aucun débordement horizontal ;
+- tous les boutons visibles ont un nom accessible ;
+- `theme=studio` et le choix persiste après rechargement.
 
-## Suite attribuée
+## Tests ciblés rejoués
 
-OpenCode: langue explicite, aperçu/revue/version, confirmation dans le modal sans prompt/alert, dispatch Suivi, followup_draft, export navigateur, responsive et noms accessibles. Codex: backend et tests; aucun fichier desktop partagé modifié.
+```text
+python -m pytest -q tests/test_desktop_app.py \
+  tests/test_career_manual_destination.py tests/test_send_confirmation.py
+34 passed in 13.86s (temps réel 15.09s)
+```
 
-Le backend des échéances a été corrigé après reproduction de deux tests rouges: `tests/test_apply_kit.py` passe maintenant 10 tests en 3,33 s; Ruff Career est vert. Le lot précédent de fraîcheur/revue passe 64 tests ciblés en 17,49 s.
+`node --check desktop_static/app.js`, Ruff sur Career et les trois fichiers de
+tests, puis `git diff --check` sont également verts. Aucune suite complète n'a
+été lancée pendant que les autres workers utilisaient la machine.
 
-La recette doit être rejouée sur le prochain commit UI. Le serveur et l'onglet de cette recette ont été arrêtés/fermés; le viewport d'origine a été restauré. Aucune suite complète exécutée.
+## Historique du constat corrigé
+
+Le snapshot `f8344ba` échouait réellement le 26 octobre : `prompt()` non pris
+en charge, mauvais canal `site`, écran Suivi non dispatché, absence de revue de
+version et débordement mobile. Ces défauts avaient alors conduit au verdict
+« non validé ». La recette fraîche ci-dessus démontre que la candidate actuelle
+ne reproduit plus ces blocages ; elle ne prétend pas valider une candidature
+réelle ni la réception par un employeur.

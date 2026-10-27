@@ -1,0 +1,24 @@
+{
+  "date": "2026-10-27",
+  "candidate_sha": "c0be89df45d7a1f7cd424fb312a9ce7923b936ae",
+  "server": "http://127.0.0.1:18927",
+  "fixture": "synthetic_only",
+  "starting_state": "application_without_generated_kit",
+  "human_interactions": [
+    {"number": 1, "control": "Préparer en anglais", "result": "complete_review_dialog", "elapsed_ms": 468},
+    {"number": 2, "control": "J’ai relu mon dossier · Ouvrir le site officiel", "result": "exact_draft_reviewed_and_manual_destination_opened"},
+    {"number": 3, "control": "J’ai envoyé ma candidature", "result": "synthetic_local_declaration_visible_in_tracking"}
+  ],
+  "browser_console_errors_or_warnings": 0,
+  "automatic_submission": false,
+  "personal_data_transmitted": false,
+  "external_form_interaction": false,
+  "persisted_after_real_server_restart": true,
+  "mobile": {
+    "viewport": {"width": 390, "height": 844},
+    "body_scroll_width": 390,
+    "document_scroll_width": 390,
+    "visible_buttons_named": true
+  },
+  "targeted_tests": {"passed": 34, "pytest_seconds": 13.86, "wall_seconds": 15.09}
+}

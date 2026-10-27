@@ -61,6 +61,7 @@ from workspace_core import (
 
 WEB_STATIC_DIR = Path(__file__).resolve().parent / "web_static"
 V5_STATIC_DIR = Path(__file__).resolve().parent / "v5_static"
+DESKTOP_STATIC_DIR = Path(__file__).resolve().parent / "desktop_static"
 UPLOAD_CHUNK_SIZE = 1_024 * 1_024
 MAX_CHAT_CHARS = 12_000
 MAX_UPLOAD_FILES = 12
@@ -517,6 +518,35 @@ def create_app(
         """The new unified local shell; V3 remains available at `/`."""
         return FileResponse(V5_STATIC_DIR / "index.html", media_type="text/html; charset=utf-8")
 
+    @app.get("/app")
+    async def desktop_homepage() -> FileResponse:
+        return FileResponse(DESKTOP_STATIC_DIR / "index.html", media_type="text/html; charset=utf-8")
+
+    @app.get("/api/app/missions")
+    async def desktop_missions() -> dict[str, Any]:
+        def snapshot() -> dict[str, Any]:
+            try:
+                registry = json.loads((DESKTOP_STATIC_DIR.parent / "missions_registry.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                return {"available": False, "counts": {}, "missions": [], "workers": None, "load": None}
+            missions = registry.get("missions", []) if isinstance(registry, dict) else []
+            missions = [item for item in missions if isinstance(item, dict)] if isinstance(missions, list) else []
+            counts: dict[str, int] = {}
+            done = {str(item.get("id")) for item in missions if item.get("status") == "done"}
+            pending = []
+            for item in missions:
+                status = str(item.get("status") or "unknown")
+                counts[status] = counts.get(status, 0) + 1
+                if status != "done":
+                    dependencies = item.get("dependencies")
+                    dependencies = dependencies if isinstance(dependencies, list) else []
+                    pending.append({
+                        "id": str(item.get("id") or ""), "title": str(item.get("title") or ""),
+                        "status": status, "blocked_by": [str(value) for value in dependencies if str(value) not in done],
+                    })
+            return {"available": True, "counts": counts, "missions": pending, "workers": None, "load": None}
+        return await run_in_threadpool(snapshot)
+
     @app.get("/api/health")
     async def health() -> dict[str, Any]:
         provider = runtime.agent.provider_status()
@@ -906,6 +936,7 @@ def create_app(
     app.include_router(create_developer_router(get_workshop))
     app.mount("/static", StaticFiles(directory=WEB_STATIC_DIR), name="static")
     app.mount("/v5-static", StaticFiles(directory=V5_STATIC_DIR), name="v5-static")
+    app.mount("/app-static", StaticFiles(directory=DESKTOP_STATIC_DIR), name="app-static")
     app.mount("/career-static", StaticFiles(directory=CAREER_STATIC_DIR), name="career-static")
     return app
 
