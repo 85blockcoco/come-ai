@@ -3516,6 +3516,20 @@ function renderStagePrep(prep) {
   const preferredCount = requirementItems.filter((item) => requirementPriorityLabel(item) === "Souhaité").length;
   requirementSummary.textContent = `${requirementItems.length} exigence(s) détectée(s) · ${requiredCount} obligatoire(s) · ${preferredCount} souhaitée(s) · le reste à vérifier.`;
   target.append(requirementSummary);
+  const coverage = prep.cv_coverage || {};
+  const coverageBlock = make("section", "", "cv-coverage-card");
+  const coveragePercent = Math.max(0, Math.min(100, Number(coverage.coverage_percent || 0)));
+  coverageBlock.append(
+    make("strong", `Couverture factuelle du CV : ${coveragePercent} %`),
+    make("span", `${coverage.supported || 0}/${coverage.requirements_total || 0} exigence(s) étayée(s) par ton profil · ${coverage.to_verify || 0} à vérifier`),
+  );
+  const coverageTrack = make("div", "", "cv-coverage-track");
+  const coverageFill = make("span", "", "cv-coverage-fill");
+  coverageFill.style.width = `${coveragePercent}%`;
+  coverageTrack.append(coverageFill);
+  coverageBlock.append(coverageTrack);
+  coverageBlock.append(make("small", coverage.disclaimer || "Cette mesure ne prédit pas une embauche."));
+  target.append(coverageBlock);
   if (job.official_url) {
     const link = make("a", "Ouvrir l’offre officielle conservée", "secondary-button external-link");
     link.href = job.official_url;

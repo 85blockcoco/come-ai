@@ -271,6 +271,11 @@ details summary:focus-visible { border-radius: 5px; outline-offset: 4px; }
 .empty-state strong { color: var(--accent-dark); font-size: .88rem; }
 .empty-state span { margin: 4px auto 10px; max-width: 48rem; }
 .empty-state .primary-button { display: inline-flex; align-items: center; justify-content: center; min-height: 35px; }
+.cv-coverage-card { display: grid; gap: 5px; margin: 10px 0 13px; padding: 11px 12px; border: 1px solid #cfe7d9; border-radius: 11px; background: #f5fcf8; }
+.cv-coverage-card strong { color: var(--accent-dark); font-size: .8rem; }
+.cv-coverage-card span, .cv-coverage-card small { color: var(--muted); font-size: .7rem; line-height: 1.35; }
+.cv-coverage-track { height: 8px; overflow: hidden; border-radius: 999px; background: #dbeee3; }
+.cv-coverage-fill { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #f0ad4e 0%, #10a875 70%, #087f5b 100%); transition: width .4s ease; }
 .roadmap-panel { max-width: 800px; }
 .roadmap-panel h2 { margin: 4px 0 8px; }
 .roadmap-panel p:not(.eyebrow) { color: var(--muted); line-height: 1.55; }
