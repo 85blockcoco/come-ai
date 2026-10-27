@@ -2605,6 +2605,11 @@ function stageOfferFactValue(job, qualification, key) {
   }
   if (key === "deadline") return formatStageDate(job.deadline_date);
   if (key === "language") return job.languages_required || facts.language || "À vérifier";
+  if (key === "education") return job.role_level || facts.education_level || facts.education || "À vérifier";
+  if (key === "skills") {
+    const requirements = stageRequirementSnippets(job);
+    return requirements.length ? requirements.slice(0, 3).join(" · ") : "À vérifier";
+  }
   return "À vérifier";
 }
 
@@ -2621,7 +2626,8 @@ function stageOfferOverview(job, qualification) {
     ["Contrat", "contract", "briefcase"], ["Localisation", "location", "pin"],
     ["Publication", "publication", "calendar"], ["Début", "start", "play"],
     ["Fin", "end", "finish"], ["Durée", "duration", "clock"],
-    ["Candidater avant", "deadline", "deadline"], ["Langue", "language", "language"],
+    ["Candidater avant", "deadline", "deadline"], ["Langue demandée", "language", "language"],
+    ["Niveau / diplôme", "education", "education"], ["Compétences / prérequis", "skills", "skills"],
   ];
   const grid = make("dl", "", "stage-offer-facts");
   const missing = [];
@@ -2803,10 +2809,30 @@ function renderStageMatches(payload) {
     prep.type = "button";
     prep.addEventListener("click", () => loadStagePrep(match.job.id));
     actions?.append(prep);
-    const detail = make("button", "Détail", "secondary-button");
+    const cv = make("button", "Adapter mon CV", "primary-button");
+    cv.type = "button";
+    cv.title = "Analyser cette offre et afficher les adaptations de CV vérifiables";
+    cv.addEventListener("click", () => loadStagePrep(match.job.id));
+    actions?.append(cv);
+    const detail = make("button", "Voir la fiche complète", "secondary-button");
     detail.type = "button";
     detail.addEventListener("click", () => loadStageDetail(match.job.id));
     actions?.append(detail);
+    const openDetail = (event) => {
+      if (event.target.closest("button, a, input, select, textarea, details, summary")) return;
+      loadStageDetail(match.job.id);
+    };
+    card.classList.add("is-clickable");
+    card.setAttribute("tabindex", "0");
+    card.setAttribute("role", "button");
+    card.setAttribute("aria-label", `Voir la fiche complète de ${match.job.title || "l’offre"} chez ${match.job.company || "l’entreprise"}`);
+    card.addEventListener("click", openDetail);
+    card.addEventListener("keydown", (event) => {
+      if ((event.key === "Enter" || event.key === " ") && !event.target.closest("button, a, input, select, textarea")) {
+        event.preventDefault();
+        loadStageDetail(match.job.id);
+      }
+    });
     wrapper.append(card);
     target.append(wrapper);
   });
@@ -3227,6 +3253,7 @@ function renderApplicationPipeline(payload) {
     [summary.urgent_deadlines || 0, "échéances proches"],
     [summary.passed_deadlines || 0, "échéances dépassées"],
     [summary.sources_to_verify || 0, "sources à vérifier"],
+    [summary.languages_to_confirm || 0, "langues de kit à confirmer"],
   ].forEach(([value, label]) => {
     const card = make("article", "", "pipeline-summary-card");
     card.append(make("strong", String(value)), make("span", label));
@@ -3299,6 +3326,10 @@ function renderApplicationPipeline(payload) {
       ),
       make("p", deadlineLabel, `pipeline-deadline is-${item.deadline_status || "unknown"}`),
       make("p", sourceTrustLabel, `pipeline-source-trust is-${item.source_trust_status || "missing"}`),
+      make("p", item.kit_language_status === "confirmed"
+        ? `Langue du kit : ${item.kit_language_label}`
+        : item.kit_ready ? "Langue du kit : à confirmer" : "Langue du kit : choisie lors de la préparation",
+      "application-meta"),
     );
     const progress = make("div", "", "pipeline-progress");
     progress.setAttribute("role", "progressbar");
@@ -3443,6 +3474,10 @@ function renderStagePrep(prep) {
   target.hidden = false;
   const job = prep.job || {};
   target.append(make("h4", `${job.title || "Offre"} — ${job.company || "Entreprise"}`));
+  target.append(stageOfferOverview(job, {
+    ...(job.qualification_facts || {}),
+    ...(prep.qualification || {}),
+  }));
   if (job.official_url) {
     const link = make("a", "Ouvrir l’offre officielle conservée", "secondary-button external-link");
     link.href = job.official_url;

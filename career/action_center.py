@@ -23,6 +23,15 @@ STAGE_PRESENTATION: dict[str, tuple[str, int]] = {
     "tracking_created": ("Kit et suivi créés", 85),
 }
 
+_KIT_LANGUAGE_LABELS = {
+    "fr": "Français",
+    "en": "English",
+    "de": "Deutsch",
+    "it": "Italiano",
+    "es": "Español",
+    "nl": "Nederlands",
+}
+
 _CLOSED_TRACKING = frozenset({"rejected", "refused", "withdrawn"})
 _SUBMITTED_TRACKING = frozenset({"submitted", "submitted_confirmed"})
 _PASSIVE_ACTIONS = frozenset({"closed", "deadline_passed", "monitor_response"})
@@ -79,6 +88,8 @@ def project_pipeline_item(
     readiness = clean_text(item.get("readiness"), limit=80)
     stage_label, progress = STAGE_PRESENTATION.get(stage, ("État à vérifier", 0))
     kit_ready = bool(item.get("kit_generated_at"))
+    kit_language = clean_text(item.get("kit_language"), limit=12).lower()
+    kit_language_status = "confirmed" if kit_ready and kit_language else "to_confirm" if kit_ready else "not_ready"
     tracking_exists = bool(item.get("application_id") or tracking)
     can_open_official_source = bool(clean_text(item.get("official_url"), limit=2_000))
     source_verified = bool(item.get("source_verified"))
@@ -113,6 +124,9 @@ def project_pipeline_item(
         blockers.append("L’éligibilité du profil doit être confirmée avant de préparer le dossier.")
     elif readiness == "profile_to_complete":
         blockers.append("Le profil approuvé ne contient pas encore toutes les preuves nécessaires.")
+
+    if kit_ready and not kit_language:
+        blockers.append("La langue du kit doit être confirmée avant la relecture finale.")
 
     if tracking in _CLOSED_TRACKING:
         selected = _action(
@@ -256,6 +270,9 @@ def project_pipeline_item(
             "blockers": blockers,
             "tracking_exists": tracking_exists,
             "kit_ready": kit_ready,
+            "kit_language": kit_language or None,
+            "kit_language_label": _KIT_LANGUAGE_LABELS.get(kit_language, kit_language or "À confirmer"),
+            "kit_language_status": kit_language_status,
             "can_open_official_source": can_open_official_source,
             "source_trust_status": source_trust_status,
             "deadline_date": deadline_date,
@@ -338,6 +355,7 @@ def build_application_action_center(
             "urgent_deadlines": sum(item["deadline_status"] == "urgent" for item in projected),
             "passed_deadlines": sum(item["deadline_status"] == "passed" for item in projected),
             "sources_to_verify": sum(item["source_trust_status"] != "verified" for item in projected),
+            "languages_to_confirm": sum(item["kit_language_status"] == "to_confirm" for item in projected),
         },
         "available_actions": sorted(action_codes),
         "automatic_submission": False,

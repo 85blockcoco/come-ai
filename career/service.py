@@ -2315,6 +2315,9 @@ class CareerService:
                 "variant": item.variant.id if item.variant else None,
                 "variant_label": item.variant_label,
                 "kit_generated_at": item.kit_generated_at,
+                "kit_language": clean_text(
+                    draft_by_job.get(item.job_id, {}).get("language"), limit=12
+                ) or None,
                 "tracking_stage": item.tracking_stage,
                 "readiness": item.readiness,
                 "match_score": item.match_score,

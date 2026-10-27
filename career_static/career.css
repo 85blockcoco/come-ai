@@ -346,6 +346,9 @@ footer { margin: 18px 3px 0; color: var(--muted); font-size: .72rem; line-height
 .stagehunter-summary-item.warning { border-color: #f0d6ac; background: var(--warning-soft); }
 .stagehunter-summary-item.danger { border-color: #e9c4c0; background: var(--danger-soft); }
 .stagehunter-match { margin-bottom: 18px; padding: 10px; border: 1px solid #d7e6de; border-radius: 17px; background: linear-gradient(145deg, #fff, #f9fdfb); box-shadow: 0 10px 26px rgb(6 78 59 / 7%); }
+.stagehunter-match.is-selected, .stagehunter-match:focus-within { border-color: #56a77d; box-shadow: 0 12px 30px rgb(6 78 59 / 14%); }
+.stagehunter-offer-card.is-clickable { cursor: pointer; }
+.stagehunter-offer-card.is-clickable:focus { outline: 3px solid rgb(38 137 91 / 28%); outline-offset: 3px; }
 .stage-match-block { margin-bottom: 8px; padding: 10px 12px; border: 1px solid #c9ded2; border-radius: 10px; background: var(--surface-muted); }
 .stage-match-header { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
 .stage-match-header .scoring-title { margin: 0; }
@@ -363,6 +366,8 @@ footer { margin: 18px 3px 0; color: var(--muted); font-size: .72rem; line-height
 .stage-offer-fact[data-icon="finish"]::before { content: "■"; font-size: .55rem; }
 .stage-offer-fact[data-icon="clock"]::before { content: "◷"; }
 .stage-offer-fact[data-icon="language"]::before { content: "A"; font-size: .62rem; }
+.stage-offer-fact[data-icon="education"]::before { content: "◇"; }
+.stage-offer-fact[data-icon="skills"]::before { content: "✦"; }
 .stage-offer-fact dt { overflow: hidden; color: var(--muted); font-size: .64rem; font-weight: 700; letter-spacing: .025em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
 .stage-offer-fact dd { overflow: hidden; margin: 2px 0 0; color: var(--ink); font-size: .76rem; font-weight: 720; line-height: 1.3; text-overflow: ellipsis; }
 .stage-offer-fact.is-missing { border-style: dashed; border-color: #ead6b5; background: #fffaf2; }

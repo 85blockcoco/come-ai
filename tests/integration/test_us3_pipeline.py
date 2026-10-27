@@ -41,6 +41,9 @@ def test_pipeline_endpoint_tracks_full_local_cycle(tmp_path: Path) -> None:
     assert item["kit_ready"] is True
     assert item["deadline_date"] == "2027-01-15"
     assert item["source_trust_status"] == "to_verify"
+    assert item["kit_language"] == "en"
+    assert item["kit_language_label"] == "English"
+    assert item["kit_language_status"] == "confirmed"
     assert payload["focus_plan"]["budget_minutes"] == 60
     assert payload["focus_plan"]["automatic_submission"] is False
     assert payload["focus_plan"]["items"][0]["job_id"] == job["id"]
@@ -91,3 +94,5 @@ def test_pipeline_frontend_contract_exists() -> None:
     assert 'item.next_action_code !== "deadline_passed"' in js
     assert "source_trust_status" in js
     assert "sources à vérifier" in js
+    assert "kit_language_status" in js
+    assert "langues de kit à confirmer" in js
