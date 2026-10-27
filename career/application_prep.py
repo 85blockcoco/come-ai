@@ -577,11 +577,14 @@ def prepare_application(
             }
         )
     for item in matched[:4]:
+        section = _CV_SECTION_LABELS.get(item["profile_field"], "profil")
+        action = "mets en avant" if item["profile_field"] in {"skills", "languages"} else "rends explicite dans"
         improvements.append(
             {
                 "suggestion": (
-                    f"Si ce n’est pas déjà explicite, fais apparaître « {item['matched_on'][0]} » dans la "
-                    f"section compétences du CV face à l’exigence « {clean_text(item['requirement'], limit=120)} »."
+                    f"Si ce n’est pas déjà explicite, {action} la section « {section} » du CV "
+                    f"« {item['matched_on'][0]} » face à l’exigence « {clean_text(item['requirement'], limit=120)} »; "
+                    "ne change ni le niveau ni les faits."
                 ),
                 "basis": f"profile.{item['profile_field']}",
             }

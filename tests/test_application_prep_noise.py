@@ -28,3 +28,14 @@ def test_generic_connectors_do_not_create_profile_improvement_suggestions() -> N
 
     assert "« with »" not in suggestions
     assert "M&A" in suggestions or not result["cv_improvements"]
+
+
+def test_education_evidence_is_not_mislabelled_as_a_skill() -> None:
+    result = prepare_application(
+        {"education": "Bachelor in Business Administration", "skills": "Financial modelling"},
+        {},
+        {"requirements": "Bachelor degree in business or finance"},
+    )
+
+    suggestions = " ".join(item["suggestion"] for item in result["cv_improvements"])
+    assert "section compétences" not in suggestions.casefold()
