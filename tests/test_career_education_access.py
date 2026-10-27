@@ -17,6 +17,7 @@ def block_network(monkeypatch):
 
 @pytest.mark.parametrize("text", [
     "Bachelor's degree in finance required.",
+    "BBA students are eligible for this internship.",
     "Diplôme Bac+3 requis.",
     "Niveau licence en finance requis.",
     "Vous êtes étudiant en Master 1.",
@@ -30,7 +31,7 @@ def test_explicit_bachelor_or_m1_is_preferred(text):
     assert result["evidence"] == [{"field": "description", "passage": text}]
 
 
-@pytest.mark.parametrize("text", ["Master 2", "M2", "Bac+5"])
+@pytest.mark.parametrize("text", ["Master 2", "M2", "MBA students only", "Bac+5"])
 def test_m2_is_considered_without_rejection(text):
     result = assess_education_access({"role_level": text})
     assert result["status"] == "consider"
@@ -40,7 +41,7 @@ def test_m2_is_considered_without_rejection(text):
 def test_alternative_accepts_bachelor():
     result = assess_education_access({"requirements": "Bachelor or Master 2 degree required."})
     assert result["status"] == "preferred"
-    assert result["labels"] == ["Bachelor / Bac+3", "Master 2 / Bac+5"]
+    assert result["labels"] == ["Bachelor / BBA / Bac+3", "Master 2 / MBA / Bac+5"]
 
 
 @pytest.mark.parametrize("text", [
@@ -66,7 +67,7 @@ def test_conjunction_or_ambiguous_list_does_not_imply_bachelor_access(text):
 def test_unknown_or_generic_level_remains_unconfirmed(job):
     result = assess_education_access(job)
     assert result["status"] == "to_verify"
-    assert "Master 2 / Bac+5" not in result["labels"]
+    assert "Master 2 / MBA / Bac+5" not in result["labels"]
 
 
 def test_false_friend_has_no_degree_evidence():

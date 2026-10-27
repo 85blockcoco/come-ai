@@ -2864,6 +2864,10 @@ function stageMatchEligibilityRank(match) {
   return {conforming: 0, to_verify: 1, non_conforming: 2}[status] ?? 1;
 }
 
+function stageMatchEducationRank(match) {
+  return Number((match.stage_match || match).education_access?.priority_rank ?? 2);
+}
+
 function renderStageMap(matches) {
   const map = $("#stagehunter-map");
   if (!map) return;
@@ -2909,6 +2913,8 @@ function renderStageMatches(payload) {
   const sorted = [...matches].sort((a, b) => {
     const eligibilityDelta = stageMatchEligibilityRank(a) - stageMatchEligibilityRank(b);
     if (eligibilityDelta) return eligibilityDelta;
+    const educationDelta = stageMatchEducationRank(a) - stageMatchEducationRank(b);
+    if (educationDelta) return educationDelta;
     return direction === "asc" ? stageMatchScore(a) - stageMatchScore(b) : stageMatchScore(b) - stageMatchScore(a);
   });
   renderStageMap(sorted);

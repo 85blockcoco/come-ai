@@ -3213,8 +3213,8 @@ class CareerService:
                 {"conforming": 0, "to_verify": 1, "non_conforming": 2}.get(
                     item["stage_match"].get("qualification_status"), 0
                 ),
-                -(int(item["stage_match"]["score"] or 0)),
                 (item["stage_match"].get("education_access") or {}).get("priority_rank", 2),
+                -(int(item["stage_match"]["score"] or 0)),
                 str(item["job"].get("source_name") or ""),
                 str(item["job"].get("source_id") or ""),
                 str(item["job"].get("canonical_url") or item["job"].get("official_url") or ""),

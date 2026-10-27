@@ -296,6 +296,33 @@ def test_bachelor_preference_breaks_equal_relevance_ties_without_excluding_m2():
     assert all(job["qualification"]["target_status"] == "conforming" for job in result.jobs)
 
 
+def test_bba_bac4_access_ranks_before_a_higher_scoring_mba_without_hiding_it():
+    from career.exploration import ranking_key
+
+    accessible = {
+        "company": "Accessible Bank", "source_name": "synthetic", "source_id": "bba",
+        "official_url": "https://careers.example.test/bba",
+        "qualification": {"target_status": "conforming"},
+    }
+    ambitious = {
+        "company": "Ambitious Bank", "source_name": "synthetic", "source_id": "mba",
+        "official_url": "https://careers.example.test/mba",
+        "qualification": {"target_status": "conforming"},
+    }
+    accessible_match = {
+        "score": 70, "education_access": {"status": "preferred", "priority_rank": 0}
+    }
+    ambitious_match = {
+        "score": 98, "education_access": {"status": "consider", "priority_rank": 1}
+    }
+
+    ordered = sorted(
+        [(ambitious, ambitious_match), (accessible, accessible_match)],
+        key=lambda item: ranking_key(*item),
+    )
+    assert [job["source_id"] for job, _ in ordered] == ["bba", "mba"]
+
+
 def test_configurable_fields_survive_the_real_http_request_model(tmp_path):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient

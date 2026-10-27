@@ -13,9 +13,13 @@ from typing import Any
 _FIELDS = ("role_level", "requirements", "eligibility_requirement", "description_original", "description")
 _DESCRIPTION_FIELDS = {"description_original", "description"}
 _LEVEL_PATTERNS = {
-    "Bachelor / Bac+3": re.compile(r"\bbachelor(?:['’]s)?\b|\bbac\s*\+\s*3\b|\blicence\b", re.I),
+    "Bachelor / BBA / Bac+3": re.compile(
+        r"\bbachelor(?:['’]s)?\b|\bbba\b|\bbac\s*\+\s*3\b|\blicence\b", re.I
+    ),
     "Master 1 / Bac+4": re.compile(r"\bmaster\s*(?:1|I)\b|\bm\s*1\b|\bbac\s*\+\s*4\b", re.I),
-    "Master 2 / Bac+5": re.compile(r"\bmaster\s*(?:2|II)\b|\bm\s*2\b|\bbac\s*\+\s*5\b", re.I),
+    "Master 2 / MBA / Bac+5": re.compile(
+        r"\bmaster\s*(?:2|II)\b|\bm\s*2\b|\bmba\b|\bbac\s*\+\s*5\b", re.I
+    ),
 }
 _GENERIC_MASTER = re.compile(r"\bmaster(?:['’]s)?\b(?!\s*(?:[12]|II?\b))", re.I)
 _EDUCATION = re.compile(
@@ -86,7 +90,9 @@ def assess_education_access(job: dict[str, Any], preference: str = "bachelor_m1_
                 if field in _DESCRIPTION_FIELDS and not (_EDUCATION.search(passage) or _REQUIREMENT.search(passage)):
                     continue
                 # A driving licence is unrelated to the French academic "licence".
-                if found == ["Bachelor / Bac+3"] and re.search(r"\b(?:driving|driver['’]s)\s+licence\b", passage, re.I):
+                if found == ["Bachelor / BBA / Bac+3"] and re.search(
+                    r"\b(?:driving|driver['’]s)\s+licence\b", passage, re.I
+                ):
                     continue
                 if generic:
                     found.append("Master (niveau non précisé)")
@@ -96,8 +102,8 @@ def assess_education_access(job: dict[str, Any], preference: str = "bachelor_m1_
                     if label not in labels:
                         labels.append(label)
                 evidence.append({"field": field, "passage": passage})
-                low = any(label in found for label in ("Bachelor / Bac+3", "Master 1 / Bac+4"))
-                high = "Master 2 / Bac+5" in found or advanced
+                low = any(label in found for label in ("Bachelor / BBA / Bac+3", "Master 1 / Bac+4"))
+                high = "Master 2 / MBA / Bac+5" in found or advanced
                 if _EXCLUSION.search(passage):
                     decisions.append("to_verify")
                 elif low and high:
@@ -110,7 +116,7 @@ def assess_education_access(job: dict[str, Any], preference: str = "bachelor_m1_
                         decisions.append("to_verify")
                 elif low:
                     decisions.append("preferred")
-                elif "Master 2 / Bac+5" in found:
+                elif "Master 2 / MBA / Bac+5" in found:
                     decisions.append("consider")
                 elif advanced:
                     decisions.append("outside_preference")

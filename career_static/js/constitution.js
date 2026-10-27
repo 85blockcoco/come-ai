@@ -1,5 +1,7 @@
 "use strict";
 
+(() => {
+
 /*
  * SPEC-014 — Constitution exécutable : éditeur de règles, dashboard de
  * conformité, graphe règles → entités → tests, historique et audit trail.
@@ -767,3 +769,5 @@ if (typeof module !== "undefined" && module.exports) {
     CONSTITUTION_IDENTIFIER_CATALOG,
   };
 }
+
+})();

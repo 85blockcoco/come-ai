@@ -473,16 +473,16 @@
                 <p class="fixed-period-note">Par défaut, aucune offre située en France ou à Paris n’est recommandée.</p>
                   </fieldset>
                   <div class="form-row two-columns">
-                <label>Niveau d’études déclaré<input id="stagehunter-level" maxlength="120" placeholder="Ex. Bac+5, Master 2…" /></label>
+                <label>Niveau d’études actuel<input id="stagehunter-level" maxlength="120" placeholder="Ex. Master 1 / Bac+4 (après un BBA)…" /></label>
                 <label>Langues déclarées<input id="stagehunter-languages" maxlength="1000" placeholder="Ex. anglais C1, français natif…" /></label>
                   </div>
                   <label>Préférence sur le niveau demandé dans les offres
                 <select id="stagehunter-education-preference">
-                  <option value="bachelor_m1_then_m2">Bachelor / Master 1 en priorité, Master 2 aussi</option>
+                  <option value="bachelor_m1_then_m2">BBA / Bachelor / Bac+4 en priorité, M2 / MBA aussi</option>
                   <option value="any">Tous les niveaux, sans préférence</option>
                 </select>
                   </label>
-                  <p class="fixed-period-note">Cette préférence départage les offres de pertinence équivalente. Elle ne déclare aucun diplôme à ta place et n’exclut pas les offres M2. Un niveau absent ou « Master » non précisé reste à vérifier.</p>
+                  <p class="fixed-period-note">Le classement affiche d’abord les offres accessibles avec un BBA, un Bachelor ou un niveau Bac+4. Les offres M2 / MBA restent visibles ensuite : elles ne sont jamais supprimées. Un niveau absent ou « Master » non précisé reste à vérifier.</p>
                   <label>Contraintes (facultatif)
                 <textarea id="stagehunter-constraints" rows="2" maxlength="2000" placeholder="Ex. mobilité sur Paris uniquement…"></textarea>
                   </label>
@@ -1247,6 +1247,6 @@
     <script src="/career-static/js/profile-builder.js" defer></script>
     <script src="/career-static/js/memory-panel.js" defer></script>
     <script src="/career-static/js/evidence-center.js" defer></script>
-    <script src="/career-static/js/constitution.js" defer></script>
+    <script src="/career-static/js/constitution.js?v=codex-v3-20261027-education" defer></script>
   </body>
 </html>

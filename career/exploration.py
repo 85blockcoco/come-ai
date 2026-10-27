@@ -245,7 +245,8 @@ def ranking_key(job: dict[str, Any], match: dict[str, Any]) -> tuple[Any, ...]:
     digest = hashlib.sha256(json.dumps(job, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
     status = (job.get("qualification") or {}).get("target_status")
     eligibility_order = {"conforming": 0, "to_verify": 1, "non_conforming": 2}.get(status, 0)
-    return (eligibility_order, -(int(match["score"]) if match.get("score") is not None else 0),
+    return (eligibility_order,
             (match.get("education_access") or {}).get("priority_rank", 2),
+            -(int(match["score"]) if match.get("score") is not None else 0),
             str(job.get("company") or "").casefold(), str(job.get("source_name") or ""),
             str(job.get("source_id") or ""), canonical_url(job.get("official_url")), digest)

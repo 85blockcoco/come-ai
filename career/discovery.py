@@ -597,10 +597,9 @@ class GreenhouseJobBoardConnector:
                 # geographic signal).  An offer published in a penalized
                 # country never leads the list, whatever its relevance.
                 geo_rank = 1 if geo_score < 0 else 0
-                key = (geo_rank, status_rank,
+                key = (geo_rank, status_rank, education_rank,
                        -(int(total_score) if total_score is not None else 0),
-                       -geo_score,
-                       education_rank, job_id, canonical, digest)
+                       -geo_score, job_id, canonical, digest)
                 yield key, job
 
         # nsmallest retains only a 150-item heap (O(N log 150)), not a second
