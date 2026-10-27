@@ -3530,6 +3530,17 @@ function renderStagePrep(prep) {
   coverageBlock.append(coverageTrack);
   coverageBlock.append(make("small", coverage.disclaimer || "Cette mesure ne prédit pas une embauche."));
   target.append(coverageBlock);
+  if (Number(coverage.to_verify || 0) > 0) {
+    const profileHint = make("div", "", "cv-profile-hint");
+    profileHint.append(
+      make("span", `${coverage.to_verify} élément(s) ne sont pas encore étayés par ton profil.`),
+    );
+    const profileButton = make("button", "Compléter Mon profil", "secondary-button");
+    profileButton.type = "button";
+    profileButton.addEventListener("click", () => showView("profile"));
+    profileHint.append(profileButton);
+    target.append(profileHint);
+  }
   if (job.official_url) {
     const link = make("a", "Ouvrir l’offre officielle conservée", "secondary-button external-link");
     link.href = job.official_url;

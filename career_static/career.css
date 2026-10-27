@@ -276,6 +276,8 @@ details summary:focus-visible { border-radius: 5px; outline-offset: 4px; }
 .cv-coverage-card span, .cv-coverage-card small { color: var(--muted); font-size: .7rem; line-height: 1.35; }
 .cv-coverage-track { height: 8px; overflow: hidden; border-radius: 999px; background: #dbeee3; }
 .cv-coverage-fill { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #f0ad4e 0%, #10a875 70%, #087f5b 100%); transition: width .4s ease; }
+.cv-profile-hint { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: -4px 0 12px; padding: 9px 10px; border: 1px solid #efd9b7; border-radius: 9px; color: #78420c; background: #fff8ed; font-size: .72rem; line-height: 1.35; }
+.cv-profile-hint .secondary-button { min-height: 32px; padding: 6px 9px; }
 .roadmap-panel { max-width: 800px; }
 .roadmap-panel h2 { margin: 4px 0 8px; }
 .roadmap-panel p:not(.eyebrow) { color: var(--muted); line-height: 1.55; }
