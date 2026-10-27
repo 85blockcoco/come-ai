@@ -1,0 +1,165 @@
+{
+  "generated_at": "2026-10-27T14:08:54+00:00",
+  "url": "http://127.0.0.1:58929",
+  "browser": "Chrome/156.0.8078.48",
+  "checks": [
+    {
+      "name": "langue française et titre NAGE",
+      "ok": true,
+      "detail": "lang=fr · Aujourd’hui — NAGE"
+    },
+    {
+      "name": "métadonnées viewport, theme-color et color-scheme",
+      "ok": true,
+      "detail": "color-scheme, description, theme-color, viewport"
+    },
+    {
+      "name": "repères main, nav et aside nommés",
+      "ok": true,
+      "detail": "nav='Navigation principale' · aside='Barre latérale NAGE'"
+    },
+    {
+      "name": "les vues sont des régions étiquetées, une seule visible",
+      "ok": true,
+      "detail": "7 vues · visibles=['view-today']"
+    },
+    {
+      "name": "aria-busy pendant le chargement puis retiré",
+      "ok": true,
+      "detail": "aria-busy='true' au premier rendu"
+    },
+    {
+      "name": "régions live et statut présents",
+      "ok": true,
+      "detail": "{\"announce\": {\"role\": \"status\", \"live\": \"polite\"}, \"toast\": {\"role\": \"status\", \"live\": \"polite\"}, \"status\": {\"role\": \"status\", \"live\": \"polite\"}}"
+    },
+    {
+      "name": "aucun débordement horizontal à 1440 px",
+      "ok": true,
+      "detail": "{\"scrollWidth\": 1440, \"clientWidth\": 1440}"
+    },
+    {
+      "name": "lien d'évitement visible au premier Tab",
+      "ok": true,
+      "detail": "focus='Aller au contenu principal' top=8"
+    },
+    {
+      "name": "le lien d'évitement déplace le focus sur main",
+      "ok": true,
+      "detail": "{\"id\": \"main\", \"tag\": \"MAIN\"}"
+    },
+    {
+      "name": "anneau de focus visible sur la navigation",
+      "ok": true,
+      "detail": "{\"cls\": \"nav-item\", \"outlineStyle\": \"solid\", \"outlineWidth\": \"3px\", \"outlineColor\": \"rgb(95, 227, 166)\"}"
+    },
+    {
+      "name": "navigation : 7 boutons nommés, un seul aria-current",
+      "ok": true,
+      "detail": "7 boutons · current=['today']"
+    },
+    {
+      "name": "les flèches déplacent le focus dans la navigation",
+      "ok": true,
+      "detail": "bas=applications · haut=today"
+    },
+    {
+      "name": "changement de vue : titre, région et annonce live",
+      "ok": true,
+      "detail": "titre='Candidatures' · vue=['view-applications']"
+    },
+    {
+      "name": "le titre du document suit la vue",
+      "ok": true,
+      "detail": "Missions — NAGE"
+    },
+    {
+      "name": "hashchange ouvre la vue demandée",
+      "ok": true,
+      "detail": "{\"hash\": \"#memory\", \"title\": \"Mémoire\", \"visible\": [\"view-memory\"]}"
+    },
+    {
+      "name": "aucune image sans alternative, SVG décoratifs masqués",
+      "ok": true,
+      "detail": "{\"images\": 0, \"svgs\": []}"
+    },
+    {
+      "name": "champ de recherche étiqueté, filtre annoncé",
+      "ok": true,
+      "detail": "nom='Filtrer les offres' · annonce='0 offre affichée.'"
+    },
+    {
+      "name": "tous les contrôles visibles ont un nom accessible",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "progressbar avec valeurs accessibles",
+      "ok": true,
+      "detail": "{\"now\": \"40\", \"min\": \"0\", \"max\": \"100\", \"label\": \"Progression du dossier Data Analyst\"}"
+    },
+    {
+      "name": "dialogue ATS : rôle, nom, focus initial",
+      "ok": true,
+      "detail": "{\"role\": \"dialog\", \"modal\": \"true\", \"labelledby\": \"dialog-title-1\", \"heading\": \"Guide ATS — Data Analyst\", \"focusInside\": true}"
+    },
+    {
+      "name": "piège de focus : Tab reste dans le dialogue",
+      "ok": true,
+      "detail": "0 sortie(s) de focus"
+    },
+    {
+      "name": "Échap ferme le dialogue et rend le focus",
+      "ok": true,
+      "detail": "{\"insideDialog\": false, \"title\": \"Guide de candidature (plateforme ATS)\", \"text\": \"guide\"}"
+    },
+    {
+      "name": "notification non bloquante pour la copie",
+      "ok": true,
+      "detail": "{\"role\": \"status\", \"live\": \"polite\", \"text\": \"Réponse copiée.\"}"
+    },
+    {
+      "name": "assistant : journal role=log et saisie étiquetée",
+      "ok": true,
+      "detail": "{\"role\": \"log\", \"live\": \"polite\", \"inputName\": \"Message à NAGE\", \"describedby\": \"chatHint\", \"pressed\": [\"true\", \"false\"]}"
+    },
+    {
+      "name": "aucune erreur console ni exception JavaScript",
+      "ok": true,
+      "detail": "{\"console\": [], \"page\": []}"
+    },
+    {
+      "name": "aucun dialogue natif bloquant",
+      "ok": true,
+      "detail": "0 appel(s)"
+    },
+    {
+      "name": "prefers-reduced-motion : animations neutralisées",
+      "ok": true,
+      "detail": "durée max=1e-06s · scanlines=none"
+    },
+    {
+      "name": "reflow 200 % (720 px) et 400 % (320 px) sans débordement",
+      "ok": true,
+      "detail": "{\"720\": {\"scrollWidth\": 720, \"clientWidth\": 720}, \"720-applications\": {\"scrollWidth\": 720, \"clientWidth\": 720}, \"720-offers\": {\"scrollWidth\": 720, \"clientWidth\": 720}, \"320\": {\"scrollWidth\": 320, \"clientWidth\": 320}, \"320-applications\": {\"scrollWidth\": 320, \"clientWidth\": 320}, \"320-offers\": {\"scrollWidth\": 320, \"clientWidth\": 320}}"
+    },
+    {
+      "name": "mobile 390 px : aucun débordement horizontal",
+      "ok": true,
+      "detail": "{\"scrollWidth\": 390, \"clientWidth\": 390}"
+    },
+    {
+      "name": "mobile : navigation horizontale, cibles ≥ 44 px",
+      "ok": true,
+      "detail": "{\"overflowX\": \"auto\", \"itemHeights\": [48, 48, 48, 48, 48, 48, 48], \"tooSmall\": []}"
+    },
+    {
+      "name": "mobile : dialogue ATS dans le viewport, fermeture overlay, recherche",
+      "ok": true,
+      "detail": "nom='Filtrer les offres' · 1 résultat"
+    }
+  ],
+  "total": 31,
+  "passed": 31,
+  "failed": 0
+}

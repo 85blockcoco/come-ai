@@ -282,6 +282,7 @@
   function render(view) {
     if (view === "today") renderToday();
     else if (view === "applications") renderApplications();
+    else if (view === "tracking") renderTracking();
     else if (view === "offers") renderOffers();
     else if (view === "assistant") renderAssistant();
     else if (view === "missions") renderMissions();
