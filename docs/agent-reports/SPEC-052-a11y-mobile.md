@@ -76,6 +76,10 @@ focus + Échap, sémantique clavier/progressbar/`aria-pressed`/log, absence de
 → 14 passed
 ```
 
+Suite complète : `.venv/bin/python -m pytest -q` → **3135 passed, 1 skipped**.
+`./checklist_codex.sh` (avec `VENV_PY` pointant sur le venv partagé) →
+**TOUT VERT** (pytest, DevKit 210 passed, ruff).
+
 ## Vérification CDP — `scripts/check_desktop_a11y_cdp.py` (31 contrôles)
 
 Le script démarre une instance FastAPI **isolée** :
@@ -155,6 +159,16 @@ Commande :
   (`clip-path: inset(50%)` au lieu de `display:none`).
 - `alert`/`prompt` supprimés plutôt que doublés : un seul canal d'annonce
   (région live + toast), cohérent avec une navigation entièrement clavier.
+
+## Dettes préexistantes corrigées (hors périmètre fonctionnel)
+
+- `tests/test_career_agent.py` : l'assertion `len(preferences["families"]) == 6`
+  était obsolète depuis la généralisation de `JOB_FAMILIES` (14 familles).
+  Remplacée par `len(JOB_FAMILIES)` ; l'échec a été reproduit sur `8716c11`
+  avant correction.
+- `ruff check .` : 4 erreurs préexistantes (`come_ai_web.py` imports multiples,
+  `night_supervisor.py` point-virgule et variables inutilisées) corrigées sans
+  changement de comportement produit.
 
 ## Limites
 
