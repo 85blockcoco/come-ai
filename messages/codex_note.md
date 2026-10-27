@@ -1,40 +1,42 @@
-# RAPPORT CODEX — 2026-10-27 16:40 CET
+# RAPPORT CODEX — 2026-10-27 21:10 CET
 
 ## 1. Livré (avec preuve)
 | Commit | Contenu (1 ligne) | Fichiers | Tests verts (nom test) | Durée |
 |---|---|---|---|---|
-| `94dd041` | Sélecteur persistant NAGE Terminal / NAGE Studio et thème professionnel clair | `desktop_static/index.html`, `desktop_static/app.js`, `desktop_static/app.css`, `tests/test_desktop_app.py` | `tests/test_desktop_app.py` inclus dans le run final | run final ci-dessous |
-| `48ca9eb` | Preuve navigateur du parcours candidature en trois interactions, sans envoi automatique | rapport P0, preuve JSON, coordination | 34 tests P0 au lot initial; persistance Uvicorn et console navigateur vérifiées | 13,86 s au lot initial |
-| `2a00644` | Alignement isolé de toute la consolidation Career avec `origin/main` | 304 chemins du merge, conflits résolus sélectivement | lots cœur, connecteurs et P0 exécutés avant commit | voir section 3 |
-| `f7682ed` | Réintégration des commits P0 et NAGE Studio postérieurs à la base d’alignement | Career, desktop, rapports et tests | run consolidé final: **1 416 passed**; Ruff et contrôles JS verts | **56,54 s** pytest; 57,69 s réel |
+| `eff542c` | Préserve les pages d’un CV texte court et les preuves temporelles/provenances lors de la déduplication | `career/service.py`, `career/exploration_service.py`, 2 tests | campagne complète détaillée ci-dessous : **6 437 passed, 12 skipped, 0 failed** | **443,82 s** cumul pytest |
+| `741b9ba` | Priorise BBA/Bachelor/Bac+4 sans masquer M2/MBA | Career backend, interface Career et tests | inclus dans la campagne complète | inclus ci-dessous |
+| `94dd041` | Sélecteur persistant NAGE Terminal / NAGE Studio et thème professionnel clair | desktop et test UI | inclus dans la campagne complète | inclus ci-dessous |
+| `48ca9eb` | Parcours candidature en trois interactions, sans envoi automatique | Career, desktop, rapport P0 | inclus dans la campagne complète | inclus ci-dessous |
+| `2a00644` + `f7682ed` | Alignement isolé avec `origin/main`, puis réintégration du P0 et de NAGE Studio | candidate consolidée | inclus dans la campagne complète | inclus ci-dessous |
 
 ## 2. En cours maintenant
 | Tâche | % fait | Temps passé | Temps restant estimé | Blocage ? |
 |---|---:|---|---|---|
-| Candidate unique alignée sur GitHub `origin/main` | 100 % techniquement; publication en cours | deux merges isolés et validation ciblée | quelques minutes pour push/vérification distante | aucun conflit restant; `main` n’est pas modifiée |
-| P0 candidature en trois interactions | 100 % du scénario synthétique défini | navigateur + HTTP + redémarrage | recette réelle employeur volontairement hors périmètre | aucune soumission automatique autorisée |
-| Style professionnel NAGE Studio | 100 % du lot demandé | implémentation + tests + navigateur | terminé | aucun avertissement/erreur console observé |
-| Campagne globale hors Career/P0 | non incluse dans ce lot ciblé | aucune suite complète relancée | à planifier séparément | cette preuve ne couvre pas tous les modules historiques |
+| Candidate isolée alignée sur `origin/main` | 100 % techniquement | alignement, corrections et campagne complète | publication et vérification SHA | aucun; `main` reste intacte |
+| P0 candidature en trois interactions | 100 % du scénario synthétique défini | HTTP, navigateur, persistance et tests | recette employeur réelle volontairement exclue | aucune soumission automatique autorisée |
+| Priorité d’études BBA/Bac+4 | 100 % | classement backend/client + libellés + tests | terminé | M2/MBA restent visibles |
+| Édition CV NAGE | 100 % du périmètre local | génération, modification, sauvegarde, revue invalidée et export | terminé | validation humaine requise avant usage externe |
 
 ## 3. Performances mesurées
 | Métrique | Avant | Après | Comment mesuré |
 |---|---|---|---|
-| `/api/career/application-pipeline` | 9 990 ms, ancien serveur partagé du 26/10 | **11,841 ms à froid; 9,923 et 9,978 ms à chaud** | `curl -sf -o /dev/null -w '%{time_total}' http://127.0.0.1:18928/api/career/application-pipeline`, serveur Uvicorn isolé et base synthétique vide, 27/10 vers 16:38 CET |
-| Démarrage/routes locales | non apparié | health 288 ms; `/app` 6,8 ms; `/career` 3,7 ms; HTTP 200 | serveur isolé `create_app(base_dir=/tmp/come-ai-align-…)`, port 18928 |
-| Run ciblé consolidé | lots séparés | **1 416 passed** | pytest explicite sur qualification, dates, géographie, déduplication, connecteurs, application kit/pipeline, UX et desktop |
+| `/api/career/application-pipeline` | 9 990 ms, ancien serveur partagé du 26/10 | **11,646 ms à froid; 10,916 et 8,359 ms à chaud** | `curl` sur serveur Uvicorn isolé, base synthétique vide, port 18929, 27/10 à 21:09 CET |
+| Routes applicatives locales | non apparié | `/app` 7,517 ms; `/career` 4,960 ms; HTTP 200 | même serveur isolé |
+| Campagne complète actuelle | précédent passage : 6 435 passed, 2 failed, 12 skipped | **6 437 passed, 0 failed, 12 skipped** | 6 lots couvrant les 6 449 cas collectés |
 
 ## 4. État 24 h de ta prod
-- commits aujourd’hui avant ce rapport : 6.
-- diff de la candidate alignée contre `origin/main` : 151 fichiers, 20 136 ajouts, 375 suppressions (`git diff --shortstat origin/main...HEAD`).
-- ascendance : `origin/main...HEAD` = `0 106`; la candidate contient donc le `main` GitHub actuel sans le modifier.
-- tests verts : **1 416 passed en 56,54 s**; deux tests géographiques ont d’abord reproduit une divergence de contrat, ont été corrigés puis rejoués verts. `ruff check career/`, `node --check career_static/career.js`, `node --check desktop_static/app.js` et `git diff --check` sont verts.
-- navigateur réel : `/app#applications` sur 18928, bascule vers NAGE Studio puis rechargement; valeur `studio` persistée, sélecteur toujours sur « NAGE Studio », zéro log console warn/error.
+- commits aujourd’hui avant la mise à jour de ce rapport : 9.
+- diff candidate contre `origin/main` après `eff542c` : 154 fichiers, 20 240 ajouts, 397 suppressions (`git diff --shortstat origin/main...HEAD`).
+- ascendance : `origin/main...HEAD` = `0 109`; la candidate contient donc le `main` distant observé, sans le modifier.
+- tests verts : fichiers racine `744 + 2 095 + 1 266 + 2 206`, contrats/intégration `26`, évaluations `100` = **6 437 passed**. Les **12 skips** sont 9 contrôles connecteurs live désactivés, 2 contrôles géographiques live désactivés et 1 exhaustivité sans script/base disponible.
+- contrôles statiques : `ruff check career/ ...`, `git diff --check` verts.
+- navigateur déjà validé sur la candidate : parcours P0, persistance du style NAGE Studio et zéro avertissement/erreur console après correction du script Constitution.
 
 ## 5. Ce que j’attends d’OpenCode
-- Aucun travail requis pour ce lot. Ne pas modifier concurremment la candidate pendant la publication et la vérification du SHA.
+- Aucun travail requis pour cette livraison; éviter toute modification concurrente de la candidate pendant le push et la vérification distante.
 
 ## 6. Risques / blocages
-- La mesure pipeline sur base synthétique vide prouve largement le contrat `< 3 s`, mais ne remplace pas un benchmark chargé avec 1 000 offres après cet alignement.
-- Le run de 1 416 tests est une campagne ciblée large, pas la suite complète du dépôt.
-- Le parcours en trois interactions reste volontairement un scénario synthétique et manuel : aucune candidature réelle, aucune donnée personnelle et aucun formulaire employeur n’ont été envoyés.
-- `main` demeure inchangée. Toute convergence de `main` nécessite toujours une décision humaine distincte.
+- Les 12 contrôles live ignorés ne prouvent pas la disponibilité actuelle des fournisseurs externes; la logique déterministe et les doubles synthétiques sont verts.
+- Le benchmark pipeline est réalisé sur une base synthétique vide; le contrat `< 3 s` est atteint très largement, mais un benchmark chargé reste une preuve distincte.
+- Aucune candidature réelle, donnée personnelle ni soumission employeur n’a été utilisée.
+- `main` demeure inchangée; sa convergence reste soumise à l’accord explicite de Côme.
