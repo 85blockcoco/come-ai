@@ -715,8 +715,9 @@ button, input, select, textarea { font: inherit; }
 button, a, input, select, textarea { touch-action: manipulation; }
 button:disabled { opacity: .48; cursor: not-allowed; }
 .main, .scroll, .view, .topbar-title { min-width: 0; }
-.kit-language { display: flex; flex-direction: column; gap: 5px; font-size: 11px; color: var(--mute); }
-.kit-language select { color: var(--text); background: var(--panel); border: 1px solid var(--line-hard); border-radius: 8px; padding: 8px 10px; min-height: 40px; }
+.kit-language, .theme-picker { display: flex; flex-direction: column; gap: 5px; font-size: 11px; color: var(--mute); }
+.kit-language select, .theme-picker select { color: var(--text); background: var(--panel); border: 1px solid var(--line-hard); border-radius: 8px; padding: 8px 10px; min-height: 40px; }
+.sr-only { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
 .offer-tags { flex-wrap: wrap; }
 .ghost-btn.primary { color: #04160c; background: var(--green); border-color: var(--green); font-weight: 650; }
 .ghost-btn { min-height: 40px; justify-content: center; }
@@ -811,4 +812,161 @@ button:disabled { opacity: .48; cursor: not-allowed; }
 @media (max-width: 420px) {
   .topbar-title h1 { font-size: 20px; letter-spacing: .04em; overflow-wrap: anywhere; }
   .topbar-title h1::before { content: none; }
+}
+
+/* ---------------- NAGE Studio ----------------
+   Variante claire et professionnelle. Le thème Terminal reste le rendu par
+   défaut ; cette couche ne change ni les parcours ni le contenu applicatif. */
+
+body[data-theme="studio"] {
+  color-scheme: light;
+  --nag-bg: #f3f7f4;
+  --nag-panel: #ffffff;
+  --nag-border: rgba(28, 81, 61, 0.14);
+  --nag-accent: #147d58;
+  --nag-accent-soft: rgba(20, 125, 88, 0.08);
+  --nag-ink: #17372b;
+  --nag-dim: #667a72;
+  --bg: var(--nag-bg);
+  --bg-2: #f9fbfa;
+  --panel: var(--nag-panel);
+  --panel-2: #f7faf8;
+  --line: var(--nag-border);
+  --line-hard: rgba(25, 95, 68, 0.24);
+  --green: var(--nag-accent);
+  --green-2: #0f694a;
+  --green-dim: #379272;
+  --green-deep: #e5f2eb;
+  --text: var(--nag-ink);
+  --soft: #49655a;
+  --mute: var(--nag-dim);
+  --amber: #926712;
+  --red: #b64149;
+  --radius: 12px;
+  background: #f3f7f4;
+  color: var(--text);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 14px;
+}
+
+body[data-theme="studio"]::after { display: none; }
+body[data-theme="studio"] .window { grid-template-columns: 250px minmax(0, 1fr); }
+body[data-theme="studio"] .sidebar {
+  gap: 22px;
+  padding: 22px 12px 16px;
+  border-right-color: var(--line);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 12px 0 32px rgba(38, 76, 61, 0.035);
+}
+body[data-theme="studio"] .brand { padding: 0 10px; gap: 12px; }
+body[data-theme="studio"] .brand-mark {
+  width: 40px; height: 40px; border: 0; border-radius: 12px;
+  color: #fff; background: linear-gradient(145deg, #17845e, #0f694a);
+  box-shadow: 0 8px 20px rgba(20, 125, 88, 0.17);
+}
+body[data-theme="studio"] .brand-text strong { color: var(--text); font-size: 16px; letter-spacing: .12em; }
+body[data-theme="studio"] .brand-text small { margin-top: 2px; font-size: 10px; letter-spacing: .02em; text-transform: none; }
+body[data-theme="studio"] .nav { gap: 5px; padding: 0; }
+body[data-theme="studio"] .nav-item {
+  min-height: 44px; padding: 10px 12px; border: 0; border-radius: 10px;
+  color: #557068; font-size: 13px; font-weight: 520; letter-spacing: 0;
+  text-transform: none; transition: background .16s ease, color .16s ease, transform .16s ease;
+}
+body[data-theme="studio"] .nav-item:hover { background: #eef6f1; color: var(--green-2); transform: translateX(2px); }
+body[data-theme="studio"] .nav-item[aria-current="page"] { background: #e7f3ec; color: var(--green-2); border: 0; font-weight: 650; }
+body[data-theme="studio"] .nav-item[aria-current="page"]::before { display: none; }
+body[data-theme="studio"] .nav-item svg { width: 17px; height: 17px; opacity: .72; }
+body[data-theme="studio"] .nav-badge { border: 0; border-radius: 999px; background: #d8eee2; color: #0f694a; }
+body[data-theme="studio"] .sidebar-foot { padding: 14px 10px 0; }
+body[data-theme="studio"] .status-dot,
+body[data-theme="studio"] .sidebar-links { letter-spacing: 0; text-transform: none; font-size: 11px; }
+body[data-theme="studio"] .status-dot span { border-radius: 999px; }
+
+body[data-theme="studio"] .main { background: linear-gradient(145deg, #f5f8f6 0%, #edf4f0 100%); }
+body[data-theme="studio"] .topbar {
+  align-items: center; padding: 20px 30px 17px; border-bottom-color: var(--line);
+  background: rgba(250, 252, 251, .88); backdrop-filter: blur(16px);
+}
+body[data-theme="studio"] .topbar-title h1 { color: var(--text); font-size: 23px; letter-spacing: -.02em; text-transform: none; }
+body[data-theme="studio"] .topbar-title h1::before { content: none; }
+body[data-theme="studio"] .topbar-title p { margin-top: 5px; color: var(--mute); font-size: 12px; letter-spacing: 0; text-transform: none; }
+body[data-theme="studio"] .topbar-actions { flex-wrap: wrap; justify-content: flex-end; }
+body[data-theme="studio"] .theme-picker,
+body[data-theme="studio"] .kit-language { gap: 4px; color: #667a72; font-size: 11px; font-weight: 600; }
+body[data-theme="studio"] .theme-picker select,
+body[data-theme="studio"] .kit-language select {
+  min-height: 38px; padding: 7px 30px 7px 10px; border-color: var(--line-hard);
+  border-radius: 9px; background: #fff; color: var(--text); font-size: 12px;
+}
+body[data-theme="studio"] .search { min-height: 40px; border-color: var(--line); background: #fff; box-shadow: 0 3px 12px rgba(25, 67, 50, .04); }
+body[data-theme="studio"] .search input { color: var(--text); font-size: 13px; letter-spacing: 0; }
+body[data-theme="studio"] .ghost-btn {
+  min-height: 40px; border-color: var(--line-hard); border-radius: 9px; background: #fff;
+  color: var(--green-2); font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none;
+  transition: background .16s ease, border-color .16s ease, color .16s ease, transform .16s ease;
+}
+body[data-theme="studio"] .ghost-btn:hover { background: #e7f3ec; border-color: #94c8b1; color: #0d5b41; transform: translateY(-1px); }
+body[data-theme="studio"] .ghost-btn.primary { background: var(--green); border-color: var(--green); color: #fff; }
+body[data-theme="studio"] .scroll { padding: 24px 30px 40px; }
+body[data-theme="studio"] .scroll::-webkit-scrollbar-track { background: #edf4f0; }
+body[data-theme="studio"] .scroll::-webkit-scrollbar-thumb { background: #b9cec4; border-color: #edf4f0; }
+body[data-theme="studio"] .view { animation: none; }
+
+body[data-theme="studio"] .card {
+  border-color: var(--line); border-radius: 14px; background: rgba(255, 255, 255, .96);
+  box-shadow: 0 8px 26px rgba(31, 72, 55, .055);
+}
+body[data-theme="studio"] .section-title { margin: 24px 0 10px; }
+body[data-theme="studio"] .section-title h2 { color: var(--text); font-size: 14px; letter-spacing: -.01em; text-transform: none; }
+body[data-theme="studio"] .section-title h2::before { content: none; }
+body[data-theme="studio"] .section-title .hint { font-size: 11px; letter-spacing: 0; text-transform: none; }
+body[data-theme="studio"] .kpi-card { padding: 16px; gap: 10px; }
+body[data-theme="studio"] .kpi-label,
+body[data-theme="studio"] .kpi-foot,
+body[data-theme="studio"] .mem-card small { font-size: 11px; letter-spacing: 0; text-transform: none; }
+body[data-theme="studio"] .kpi-chip { border: 0; border-radius: 999px; background: #e8f4ed; }
+body[data-theme="studio"] .kpi-value { color: var(--text); }
+body[data-theme="studio"] .chip { border-radius: 999px; background: #edf5f0; font-size: 10px; letter-spacing: 0; text-transform: none; }
+body[data-theme="studio"] .chip.green { background: #e1f2e8; }
+body[data-theme="studio"] .chip.amber { background: #fbf2dd; }
+body[data-theme="studio"] .chip.red { background: #fae9ea; }
+body[data-theme="studio"] .hero { border-color: #cfe3d8; border-radius: 16px; background: linear-gradient(120deg, #ffffff 0%, #edf7f1 100%); }
+body[data-theme="studio"] .hero h2 { color: var(--text); letter-spacing: -.02em; text-transform: none; }
+body[data-theme="studio"] .hero-side div,
+body[data-theme="studio"] .offer-logo { border-color: #cfe3d8; border-radius: 10px; background: #e8f4ed; }
+body[data-theme="studio"] .hero-side small,
+body[data-theme="studio"] .pipeline-main span,
+body[data-theme="studio"] .offer-main span { letter-spacing: 0; text-transform: none; }
+body[data-theme="studio"] .pipeline-item:hover,
+body[data-theme="studio"] .offer-row:hover { background: #f3f8f5; }
+body[data-theme="studio"] .quick-row,
+body[data-theme="studio"] .document-preview { background: #f8faf9; }
+body[data-theme="studio"] .document-text,
+body[data-theme="studio"] .document-preview pre { color: #29483c; }
+body[data-theme="studio"] .application-dialog textarea { background: #fff; }
+body[data-theme="studio"] .dialog-header,
+body[data-theme="studio"] .application-footer { background: rgba(255, 255, 255, .95); }
+body[data-theme="studio"] .dialog-close { background: #f5f8f6; }
+body[data-theme="studio"] .application-dialog::backdrop { background: rgba(21, 43, 34, .48); }
+body[data-theme="studio"] .app-notice { background: #fff; box-shadow: 0 12px 40px rgba(23, 55, 43, .18); }
+body[data-theme="studio"] .error-note { color: #8f3038; background: #fff2f3; }
+body[data-theme="studio"] .empty { letter-spacing: 0; text-transform: none; font-size: 12px; }
+body[data-theme="studio"] .empty strong { letter-spacing: 0; }
+body[data-theme="studio"] .modes button { background: #fff; letter-spacing: 0; text-transform: none; }
+body[data-theme="studio"] .modes button.on,
+body[data-theme="studio"] .send-btn { color: #fff; }
+
+@media (max-width: 1080px) {
+  body[data-theme="studio"] .window { grid-template-columns: 74px minmax(0, 1fr); }
+}
+@media (max-width: 720px) {
+  body[data-theme="studio"] .window { grid-template-columns: 56px minmax(0, 1fr); }
+  body[data-theme="studio"] .sidebar { padding: 12px 6px; }
+  body[data-theme="studio"] .topbar { padding: 16px 12px; }
+  body[data-theme="studio"] .topbar-actions { justify-content: flex-start; }
+  body[data-theme="studio"] .theme-picker,
+  body[data-theme="studio"] .kit-language { flex: 1 1 140px; }
+  body[data-theme="studio"] .theme-picker select,
+  body[data-theme="studio"] .kit-language select { width: 100%; }
+  body[data-theme="studio"] .scroll { padding: 14px 12px 28px; }
 }

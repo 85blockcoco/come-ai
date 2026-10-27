@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="dark">
+    <meta name="color-scheme" content="light dark">
     <meta name="description" content="NAGE — machine locale de candidatures : offres, dossiers, assistant, missions.">
     <title>NAGE // machine de candidatures</title>
     <link rel="icon" href="/app-static/icon.png">
@@ -73,6 +73,13 @@
             <p id="viewSubtitle">Chargement de ton espace…</p>
           </div>
           <div class="topbar-actions">
+            <label class="theme-picker" for="themeSelect">Style de l’app
+              <select id="themeSelect" aria-describedby="themeHint">
+                <option value="terminal">NAGE Terminal</option>
+                <option value="studio">NAGE Studio</option>
+              </select>
+              <span id="themeHint" class="sr-only">Modifie uniquement l’apparence et mémorise ce choix sur cet appareil.</span>
+            </label>
             <label class="kit-language" for="kitLanguage">Langue du dossier
               <select id="kitLanguage"><option value="en">Anglais</option><option value="fr">Français</option><option value="it">Italien</option><option value="de">Allemand</option></select>
             </label>

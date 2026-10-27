@@ -4,6 +4,33 @@
   "use strict";
   window.__appState = null;
 
+  const THEME_STORAGE_KEY = "nage-app-theme";
+  const THEMES = new Set(["terminal", "studio"]);
+
+  function readTheme() {
+    try {
+      const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
+      return THEMES.has(saved) ? saved : "terminal";
+    } catch {
+      return "terminal";
+    }
+  }
+
+  function applyTheme(theme, persist = true) {
+    const selected = THEMES.has(theme) ? theme : "terminal";
+    document.body.dataset.theme = selected;
+    document.documentElement.dataset.theme = selected;
+    const picker = document.querySelector("#themeSelect");
+    if (picker) picker.value = selected;
+    const meta = document.querySelector('meta[name="color-scheme"]');
+    if (meta) meta.content = selected === "studio" ? "light" : "dark";
+    if (window.__appState) window.__appState.theme = selected;
+    if (persist) {
+      try { window.localStorage.setItem(THEME_STORAGE_KEY, selected); } catch { /* stockage local indisponible */ }
+    }
+    return selected;
+  }
+
   const state = window.__appState = {
     view: "today",
     dashboard: null,
@@ -17,8 +44,11 @@
     chatMode: "offline",
     sending: false,
     kitLanguage: "en",
+    theme: readTheme(),
     errors: {},
   };
+
+  applyTheme(state.theme, false);
 
   const $ = (sel, root = document) => root.querySelector(sel);
   const el = (tag, attrs = {}, ...children) => {
@@ -777,6 +807,7 @@
   for (const button of document.querySelectorAll(".nav-item")) {
     button.addEventListener("click", () => setView(button.dataset.view));
   }
+  $("#themeSelect").addEventListener("change", (event) => applyTheme(event.target.value));
   $("#kitLanguage").addEventListener("change", (event) => { state.kitLanguage = event.target.value; render(state.view); });
   $("#refreshBtn").addEventListener("click", refresh);
   $("#searchInput").addEventListener("input", (event) => {
