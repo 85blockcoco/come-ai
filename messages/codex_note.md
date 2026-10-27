@@ -1,4 +1,4 @@
-# RAPPORT CODEX — 2026-10-26 22:23 CET
+# RAPPORT CODEX — 2026-10-27 (mise à jour thème UI)
 
 ## 1. Livré (avec preuve)
 | Commit | Contenu (1 ligne) | Fichiers | Tests verts (nom test) | Durée |
@@ -9,6 +9,7 @@
 | `a177000` | Corrige la checklist et le blocage d'échéance (états canoniques open/closed) après constat navigateur | `career/apply_kit.py`, `tests/test_apply_kit.py` | `tests/test_apply_kit.py` — 10 passed après deux régressions rouges; Ruff vert | 3,33 s |
 
 | `7379599` | SPEC-046 intégré avec liens publiés, preuve de source et refus des destinations suspectes | `career/ats_guide.py`, service/router, tests/fixtures et rapport | `tests/test_career_ats_guide.py` — 63 passed après campagne de refus rouge; Ruff vert | 3,95 s |
+| `94dd041` | Ajout du sélecteur d’apparence persistant et du thème professionnel clair NAGE Studio, sans remplacer NAGE Terminal | `desktop_static/index.html`, `app.js`, `app.css`, test shell | `tests/test_desktop_app.py` — 2 passed; `node --check`; Ruff test et diff-check verts | 23,08 s pytest |
 
 ## 2. En cours maintenant
 | Tâche | % fait | Temps passé | Temps restant estimé | Blocage ? |
@@ -17,6 +18,7 @@
 | Raccordement app P0 / recette trois interactions | 0/1 recette navigateur validée; chaîne HTTP API réussie | non mesuré | estimation annoncée à 22:08: 1 h 30 à 2 h 30 de travail effectif pour le P0, à réviser à la recette | Codex reprend la lane UI candidate sur demande explicite; correctifs en cours |
 | Alignement sur le vrai `origin/main` GitHub | non mesuré | merge-tree sans changement d'index effectué | non estimé avant résolution | main `69fc924` non ancêtre; 35 chemins conflictuels constatés, aucun merge appliqué |
 | SPEC-044..047 | 4/4 contributions disponibles revues et intégrées/adaptées côté backend | non mesuré | recette UI en cours | aucun blocage de publication SPEC-046 |
+| Recette visuelle NAGE Studio | code, serveur et assets HTTP validés; navigateur non capturé | non mesuré | une recette navigateur à rejouer | l’outil navigateur Codex a expiré trois fois avant de rendre la page; pas présenté comme validé visuellement |
 
 ## 3. Performances mesurées
 | Métrique | Avant | Après | Comment mesuré |
