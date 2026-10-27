@@ -1,17 +1,19 @@
 {
   "status": "done",
   "files_created": [
-    "career/translation_variants.py",
-    "career/lexicons/en.json",
-    "career/lexicons/de.json",
-    "career/lexicons/es.json",
-    "tests/test_translation_variants.py",
-    "docs/agent-reports/SPEC-033-translation_variants.md"
+    "desktop_static/index.html",
+    "desktop_static/app.css",
+    "desktop_static/app.js",
+    "tests/test_desktop_a11y.py",
+    "scripts/check_desktop_a11y_cdp.py",
+    "reports/spec-052-a11y-cdp.json",
+    "docs/agent-reports/SPEC-052-a11y-mobile.md",
+    "tests/test_career_agent.py",
+    "come_ai_web.py",
+    "night_supervisor.py",
+    "messages/result.json"
   ],
-  "files_modified": [
-    "career/router.py"
-  ],
-  "output": "Module traduction variantes complet : détection langue heuristique (4 langues), glossaires statiques EN/DE/ES (41 termes chacun), build_variant en 3 modes (passthrough/lexicon/arena), 2 endpoints REST, 30 tests synthétiques",
-  "logs": "pytest -q tests/test_translation_variants.py → 30 passed in 8.70s\npytest -q tests/test_cv_variants.py → 6 passed\nruff check career/translation_variants.py career/router.py → All checks passed!\ngit diff --check (fichiers mission) → propre\nSmoke: detect DE 'Wir suchen einen Analysten...' → de ✓; build m_a DE → 15 champs traduits, 0 non traduit ✓",
+  "output": "SPEC-052 livré : shell /app accessible (lien d'évitement, repères et régions live, dialogues à focus piégé + Échap, remplacement de alert/prompt, navigation clavier complète, progressbars/log/aria-pressed) et responsive mobile (breakpoints 1080/720/480 px, nav horizontale, cibles ≥ 44 px, reflow 200 %/400 %, reduced-motion/contrast/forced-colors). Vérifié par 14 tests statiques et 31 contrôles CDP Chrome headless sur backend FastAPI isolé avec API simulées. Deux dettes préexistantes de la branche ont été corrigées pour rendre la checklist verte : assertion obsolète sur le nombre de familles métier (6 → JOB_FAMILIES) et 4 erreurs ruff (import/semicolon/variables inutilisées).",
+  "logs": "pytest -q tests/test_desktop_a11y.py → 14 passed\npytest -q tests/test_career_agent.py::test_local_storage_profile_preferences_and_persistence → 1 passed\npython scripts/check_desktop_a11y_cdp.py → 31/31 contrôles réussis (Chrome 156.0.8078.48, desktop 1440×900, reflow 720/320, reduced-motion, mobile 390×844)\n./checklist_codex.sh (VENV_PY=…/.venv/bin/python) → TOUT VERT : pytest 3135 passed, 1 skipped ; DevKit 210 passed ; ruff All checks passed\nnode --check desktop_static/app.js → OK\ngit diff --check → propre\nPréexistant vérifié sur 8716c11 : test_local_storage_profile_preferences_and_persistence échouait (14 familles ≠ 6) et ruff signalait 4 erreurs hors périmètre ; corrigés sans changement de comportement produit.",
   "error": null
 }
