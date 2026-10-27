@@ -267,6 +267,10 @@ details summary:focus-visible { border-radius: 5px; outline-offset: 4px; }
 .application-actions label:has(input[type="checkbox"]) { display: flex; align-items: flex-start; flex-basis: 100%; }
 .application-actions input[type="checkbox"] { width: auto; flex-shrink: 0; }
 .empty-state { margin: 22px 4px 7px; padding: 12px; border: 1px dashed #c9ded2; border-radius: 10px; color: var(--faint); background: var(--surface-muted); font-size: .82rem; line-height: 1.45; text-align: center; }
+.empty-state strong, .empty-state span { display: block; }
+.empty-state strong { color: var(--accent-dark); font-size: .88rem; }
+.empty-state span { margin: 4px auto 10px; max-width: 48rem; }
+.empty-state .primary-button { display: inline-flex; align-items: center; justify-content: center; min-height: 35px; }
 .roadmap-panel { max-width: 800px; }
 .roadmap-panel h2 { margin: 4px 0 8px; }
 .roadmap-panel p:not(.eyebrow) { color: var(--muted); line-height: 1.55; }

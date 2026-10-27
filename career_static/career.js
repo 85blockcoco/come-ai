@@ -2783,6 +2783,16 @@ function renderStageMatches(payload) {
   renderStageMap(sorted);
   renderStageResultSummary(sorted);
   empty.hidden = sorted.length > 0;
+  if (!sorted.length) {
+    empty.replaceChildren(
+      make("strong", "Aucune offre n’est encore affichée"),
+      make("span", "Enregistre tes critères puis lance une exploration des sources publiques vérifiées."),
+    );
+    const explore = make("button", "Explorer maintenant", "primary-button");
+    explore.type = "button";
+    explore.addEventListener("click", () => $("#stagehunter-explore")?.click());
+    empty.append(explore);
+  }
   sorted.forEach((match) => {
     const wrapper = make("div", "", "stagehunter-match");
     if (match.job?.id) wrapper.dataset.jobId = match.job.id;
