@@ -2913,7 +2913,9 @@ async function loadStageDetail(jobId) {
       prep.requirements.slice(0, 10).forEach((item) => {
         const text = item?.text || String(item || "");
         const source = item?.source ? ` · source : ${item.source}` : "";
-        requirements.append(make("li", `${text}${source}`));
+        const row = renderRequirementItem(item);
+        row.append(make("small", source));
+        requirements.append(row);
       });
       container.append(requirements);
     } else {
@@ -3429,6 +3431,20 @@ function renderStagePrepList(target, title, items, renderItem) {
   target.append(section);
 }
 
+function requirementPriorityLabel(item) {
+  const modality = String(item?.modality || item?.priority || "").toLowerCase();
+  if (["required", "must", "mandatory", "obligatory"].includes(modality)) return "Obligatoire";
+  if (["preferred", "nice_to_have", "plus"].includes(modality)) return "Souhaité";
+  return "À vérifier";
+}
+
+function renderRequirementItem(item) {
+  const row = make("li", "", "stage-requirement-item");
+  row.append(chip(requirementPriorityLabel(item), requirementPriorityLabel(item) === "Obligatoire" ? "danger" : requirementPriorityLabel(item) === "Souhaité" ? "good" : "warning"));
+  row.append(make("span", item?.text || item?.requirement || String(item || "")));
+  return row;
+}
+
 function renderVariantFitAnalysis(target, prep) {
   const coverage = prep.coverage || {};
   const section = make("section", "", "stagehunter-prep-section variant-specific");
@@ -3514,7 +3530,7 @@ function renderStagePrep(prep) {
     const planSection = renderCvPlanSection(target, prep, job);
     if (planSection) target.append(planSection);
   }
-  renderStagePrepList(target, "Exigences de l’offre (texte source conservé)", prep.requirements || [], (item) => make("li", `${item.text}`));
+  renderStagePrepList(target, "Exigences de l’offre (texte source conservé)", prep.requirements || [], renderRequirementItem);
   if (prep.source_excerpt) {
     const source = make("details", "", "stagehunter-prep-section");
     source.append(make("summary", "Relire un extrait de la description source (jusqu’à 4 000 caractères)"));
