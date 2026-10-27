@@ -151,6 +151,15 @@ _REQUIREMENT_NOISE_MARKERS = (
     "copyright",
 )
 
+
+def _infer_modality(text: str) -> str:
+    normalized = normalized_text(text)
+    if any(marker in f" {normalized} " for marker in (" required ", " must ", " minimum ", " mandatory ", " requis ", " requise ")):
+        return "required"
+    if any(marker in f" {normalized} " for marker in (" preferred ", " nice to have ", " plus ", " desirable ", " souhaite ")):
+        return "preferred"
+    return "unknown"
+
 _CHECKS: tuple[dict[str, Any], ...] = (
     {
         "key": "no_invented_facts",
@@ -212,7 +221,7 @@ def extract_requirements(job: dict[str, Any]) -> list[dict[str, str]]:
             return
         if len(items) >= MAX_REQUIREMENTS:
             return
-        items.append({"text": statement, "source": source})
+        items.append({"text": statement, "source": source, "modality": _infer_modality(statement)})
 
     structured = clean_text(job.get("requirements"), limit=20_000)
     for line in structured.splitlines():
