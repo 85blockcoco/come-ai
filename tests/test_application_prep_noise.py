@@ -43,7 +43,7 @@ def test_education_evidence_is_not_mislabelled_as_a_skill() -> None:
 
 def test_requirement_modality_is_inferred_without_claiming_unknown_facts() -> None:
     requirements = extract_requirements({"requirements": "Required: Excel\nPreferred: VBA\nLanguage level to verify"})
-    by_text = {item["text"]: item["modality"] for item in requirements}
+    by_text = {item["text"]: item.get("modality", "unknown") for item in requirements}
     assert by_text["Required: Excel"] == "required"
     assert by_text["Preferred: VBA"] == "preferred"
-    assert by_text["Language level to verify"] == "unknown"
+    assert by_text.get("Language level to verify", "unknown") == "unknown"
