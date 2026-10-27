@@ -510,7 +510,9 @@ def create_app(
 
     @app.get("/api/app/missions")
     async def app_missions() -> dict:
-        import json as _json, os as _os, subprocess as _sp
+        import json as _json
+        import os as _os
+        import subprocess as _sp
         from pathlib import Path as _P
         def snapshot():
             try:

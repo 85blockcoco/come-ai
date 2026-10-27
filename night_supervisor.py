@@ -102,7 +102,8 @@ def _running_workers():
         if et:
             t = et.group(1)
             if "-" in t:
-                d, t = t.split("-"); secs += int(d) * 86400
+                d, t = t.split("-")
+                secs += int(d) * 86400
             parts = t.split(":")
             if len(parts) == 3:
                 secs += int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
@@ -137,13 +138,11 @@ def write_report() -> None:
     from collections import Counter, defaultdict
     reg = json.load(open(ROOT / "missions_registry.json", encoding="utf-8"))
     counts = Counter(m["status"] for m in reg["missions"])
-    titles = {m["id"]: m.get("title", "") for m in reg["missions"]}
     p0_left = [m["id"] for m in reg["missions"] if str(m.get("priority", "")) == "P0" and m["status"] == "pending"]
     pend = [m["id"] for m in reg["missions"] if m["status"] == "pending"]
 
     ok, fails, durs, rows = _load_24h()
     total = ok + fails
-    ok_now = [r for r in rows if r["status"] == "done"]
     med = sorted(durs)[len(durs)//2] if durs else 1500.0
     okpct = round(100 * ok / max(total, 1))
     workers = _running_workers()

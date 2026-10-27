@@ -20,7 +20,7 @@ from fastapi.testclient import TestClient
 from openpyxl import load_workbook
 from pypdf import PdfReader
 
-from career.models import availability_assessment, canonical_url, dedup_key
+from career.models import JOB_FAMILIES, availability_assessment, canonical_url, dedup_key
 from career import discovery as discovery_module
 from career import service as career_service_module
 from career.discovery import DiscoveryPayload, GreenhouseBoard, GreenhouseJobBoardConnector, PublicSourceError, parse_greenhouse_board_token, source_html_to_text
@@ -506,7 +506,9 @@ def test_local_storage_profile_preferences_and_persistence(tmp_path: Path) -> No
     initial_profile = service.get_profile()
     assert initial_profile["eligibility"] == "unknown"
     preferences = service.get_preferences()
-    assert len(preferences["families"]) == 6
+    # La taxonomie a été généralisée au-delà des six familles finance
+    # d'origine : la source de vérité reste ``JOB_FAMILIES``.
+    assert len(preferences["families"]) == len(JOB_FAMILIES)
     assert {item["priority"] for item in preferences["families"]} == {100}
     primary_locations = [item for item in preferences["locations"] if item["scope"] == "primary"]
     secondary_locations = [item for item in preferences["locations"] if item["scope"] == "secondary"]
