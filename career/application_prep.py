@@ -137,6 +137,20 @@ _SHORT_SKILL_TOKENS: frozenset[str] = frozenset(
     {"api", "aws", "cfa", "erp", "git", "sas", "sap", "sql", "vba"}
 )
 
+# Legal footers and page furniture frequently arrive in ATS descriptions as
+# if they were requirements. They are never useful CV evidence and create
+# misleading suggestions (for example, matching the word ``with``).
+_REQUIREMENT_NOISE_MARKERS = (
+    "all rights reserved",
+    "privacy policy",
+    "terms of use",
+    "equal opportunity employer",
+    "retail clients are not the intended recipients",
+    "do not act upon this communication",
+    "north wacker drive",
+    "copyright",
+)
+
 _CHECKS: tuple[dict[str, Any], ...] = (
     {
         "key": "no_invented_facts",
@@ -168,6 +182,7 @@ def _tokens(text: str) -> list[str]:
         if (len(token) >= 4 or token in _SHORT_SKILL_TOKENS)
         and token not in _GENERIC_TOKENS
         and not token.isdigit()
+        and token not in {"with", "from", "into", "than", "that", "this", "your", "their", "have", "will"}
     ]
 
 
@@ -189,6 +204,9 @@ def extract_requirements(job: dict[str, Any]) -> list[dict[str, str]]:
     def add(text: Any, source: str) -> None:
         statement = clean_text(text, limit=MAX_TEXT_LENGTH)
         if len(statement) < 4:
+            return
+        normalized_statement = normalized_text(statement)
+        if any(marker in normalized_statement for marker in _REQUIREMENT_NOISE_MARKERS):
             return
         if any(statement.casefold() == existing["text"].casefold() for existing in items):
             return
