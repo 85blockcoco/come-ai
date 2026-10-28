@@ -1702,6 +1702,22 @@ def create_career_router(
             )
         )
 
+    @router.get("/api/career/apply-kit/{job_id}/bundle.zip")
+    async def apply_kit_bundle(
+        job_id: str,
+        language: str = "fr",
+        variant: str | None = None,
+    ) -> FileResponse:
+        """SPEC-051: one grouped, deterministic ZIP for the whole dossier."""
+        path = await run_in_threadpool(
+            lambda: service.build_apply_kit_bundle(job_id, language, variant)
+        )
+        return FileResponse(
+            path,
+            filename=path.name,
+            media_type="application/zip",
+            headers={"Cache-Control": "no-store"},
+        )
     @router.get("/api/career/applications/{application_id}/kit")
     async def application_kit(application_id: str, language: str = "fr") -> Any:
         return await local(lambda: service.get_application_kit(application_id, language))

@@ -1321,7 +1321,19 @@
           el("button", { class: "inline-action", type: "button", onclick: () => { ui.close(); openCareerWorkspace("profile"); } }, "Vérifier mon profil dans NAGE →")) : null,
         el("div", { class: "document-grid" }, preview("CV", draft.cv_markdown), preview("Lettre de motivation", draft.letter_markdown)),
         el("div", { class: "download-links", "aria-label": "Télécharger les documents relus" },
-          Object.entries(kit.export_urls || {}).map(([key, url]) => el("a", { class: "ghost-btn", href: url, download: "" }, exportNames[key] || key))),
+          Object.entries(kit.export_urls || {}).map(([key, url]) => el("a", { class: "ghost-btn", href: url, download: "" }, exportNames[key] || key)),
+          el("a", {
+            class: "ghost-btn primary",
+            href: `/api/career/apply-kit/${encodeURIComponent(jobId)}/bundle.zip?language=${encodeURIComponent(kit.language || state.kitLanguage)}`,
+            download: "",
+          }, "tout télécharger (.zip)"),
+          el("button", {
+            class: "ghost-btn",
+            type: "button",
+            onclick: async () => {
+              await copyText(kitBundleText(kit, draft, title));
+            },
+          }, "copier le dossier")),
         el("details", { class: "kit-details" }, el("summary", {}, "Corriger le CV ou la lettre"),
           el("p", { class: "note" }, "Garde uniquement des faits exacts. Enregistrer des corrections annule la revue précédente."),
           el("label", {}, "CV", cvEdit), el("label", {}, "Lettre de motivation", letterEdit), save),
@@ -1393,6 +1405,31 @@
       }
       notify("Texte copié. Rien n’a été envoyé."); return true;
     } catch { notify("Copie indisponible : sélectionne le texte puis utilise ⌘C ou Ctrl+C.", true); return false; }
+  }
+
+  function kitBundleText(kit, draft, title) {
+    const checklist = Array.isArray(kit.checklist) ? kit.checklist : [];
+    const answers = kit.answers && typeof kit.answers === "object" ? kit.answers : {};
+    const lines = [
+      `DOSSIER DE CANDIDATURE — ${title || "offre"}`,
+      "Préparé localement par NAGe · aucun envoi automatique.",
+      `État de préparation : ${Number(kit.readiness || 0)} %`,
+    ];
+    if (kit.deep_link) lines.push(`Lien officiel : ${kit.deep_link}`);
+    if ((kit.block_reasons || []).length) {
+      lines.push("", "POINTS À VÉRIFIER", ...kit.block_reasons.map((reason) => `- ${reason}`));
+    }
+    const answerKeys = Object.keys(answers).sort().filter((key) => String(answers[key] || "").trim());
+    lines.push("", "RÉPONSES POUR LE FORMULAIRE");
+    lines.push(...(answerKeys.length ? answerKeys.map((key) => `- ${key} : ${answers[key]}`) : ["- Aucune réponse enregistrée."]));
+    lines.push("", "CV", String(draft?.cv_markdown || "[À compléter]"));
+    lines.push("", "LETTRE DE MOTIVATION", String(draft?.letter_markdown || "[À compléter]"));
+    lines.push("", "CHECKLIST HUMAINE");
+    lines.push(...(checklist.length
+      ? checklist.map((item) => `- [${item.done ? "x" : " "}] ${item.label || item.id || "Étape"}${item.note ? ` — ${item.note}` : ""}`)
+      : ["- Aucune checklist disponible."]));
+    lines.push("", "Relis les documents et dépose toi-même la candidature sur le site officiel.");
+    return `${lines.join("\n").trim()}\n`;
   }
 
   function emptyState(title, detail) {
