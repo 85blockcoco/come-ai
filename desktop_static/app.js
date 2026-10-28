@@ -150,21 +150,101 @@
     }, label);
   }
 
-  async function api(path, options) {
-    const response = await fetch(path, {
+  /* ---------- Progression globale (SPEC-053) ---------- */
+
+  const progress = { count: 0, timer: null };
+
+  /* La barre n'apparaît qu'après 120 ms : les réponses locales rapides ne
+     produisent donc aucun clignotement. */
+  function beginProgress() {
+    progress.count += 1;
+    if (progress.count !== 1) return;
+    clearTimeout(progress.timer);
+    progress.timer = setTimeout(() => {
+      if (!progress.count) return;
+      const bar = $("#progressBar");
+      if (bar) bar.hidden = false;
+    }, 120);
+  }
+
+  function endProgress() {
+    progress.count = Math.max(0, progress.count - 1);
+    if (progress.count) return;
+    clearTimeout(progress.timer);
+    const bar = $("#progressBar");
+    if (bar) bar.hidden = true;
+  }
+
+  /* ---------- Préchargement (SPEC-053) ---------- */
+
+  const PREFETCH_TTL_MS = 30000;
+  const PREFETCH_GRACE_MS = 1500;
+  const prefetchCache = new Map(); // path -> { at, promise }
+  const recentlyFetched = new Map(); // path -> timestamp (anti-doublon focus/clic)
+
+  function prefetchJson(path) {
+    const hit = prefetchCache.get(path);
+    if (hit && Date.now() - hit.at < PREFETCH_TTL_MS) return hit.promise;
+    const promise = fetch(path, {
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
-      ...options,
+    }).then(async (response) => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
     });
-    if (!response.ok) {
-      let detail = `HTTP ${response.status}`;
+    const entry = { at: Date.now(), promise };
+    prefetchCache.set(path, entry);
+    // Une erreur ne doit jamais rester en cache : le clic retentera la requête.
+    promise.catch(() => {
+      if (prefetchCache.get(path) === entry) prefetchCache.delete(path);
+    });
+    return promise;
+  }
+
+  /* Consomme le préchargement une seule fois : au-delà du TTL on refait la
+     requête pour ne pas afficher une donnée périmée. */
+  async function apiCached(path) {
+    const hit = prefetchCache.get(path);
+    if (hit && Date.now() - hit.at < PREFETCH_TTL_MS) {
       try {
-        const body = await response.json();
-        if (body?.detail) detail = typeof body.detail === "string" ? body.detail : detail;
-      } catch { /* corps non JSON */ }
-      throw new Error(detail);
+        return await hit.promise;
+      } finally {
+        // L'entrée reste en cache pendant la requête : un focus déclenché
+        // juste après le clic ne peut pas lancer une deuxième requête.
+        if (prefetchCache.get(path) === hit) prefetchCache.delete(path);
+        recentlyFetched.set(path, Date.now());
+      }
     }
-    return response.json();
+    return api(path);
+  }
+
+  /* Au survol/focus, on précharge les fiches détail les plus probables. */
+  function prefetchDetail(path) {
+    if (!path || prefetchCache.has(path)) return;
+    if (Date.now() - (recentlyFetched.get(path) ?? 0) < PREFETCH_GRACE_MS) return;
+    prefetchJson(path).catch(() => {});
+  }
+
+  async function api(path, options) {
+    beginProgress();
+    try {
+      const response = await fetch(path, {
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        ...options,
+      });
+      if (!response.ok) {
+        let detail = `HTTP ${response.status}`;
+        try {
+          const body = await response.json();
+          if (body?.detail) detail = typeof body.detail === "string" ? body.detail : detail;
+        } catch { /* corps non JSON */ }
+        throw new Error(detail);
+      }
+      return await response.json();
+    } finally {
+      endProgress();
+    }
   }
 
   /* ---------- Navigation ---------- */
@@ -211,6 +291,33 @@
     overview: async () => (state.overview = await api("/api/v5/overview")),
     missions: async () => (state.missions = await api("/api/app/missions")),
   };
+
+  /* Préchargement des vues : au survol/focus d'une entrée de navigation, les
+     sources encore absentes (échec réseau au démarrage, par exemple) sont
+     demandées avant le clic. Aucune requête n'est dupliquée. */
+  const VIEW_SOURCES = {
+    today: ["dashboard", "pipeline", "missions"],
+    applications: ["pipeline"],
+    tracking: ["tracker"],
+    offers: ["jobs"],
+    assistant: [],
+    missions: ["missions"],
+    memory: ["overview"],
+  };
+  const prefetchedLoaders = new Set();
+
+  function prefetchView(view) {
+    for (const name of VIEW_SOURCES[view] ?? []) {
+      if (state[name] || prefetchedLoaders.has(name)) continue;
+      prefetchedLoaders.add(name);
+      loaders[name]()
+        .then(() => {
+          renderBadges();
+          if (state.view === view) render(view);
+        })
+        .catch(() => { prefetchedLoaders.delete(name); });
+    }
+  }
 
   async function loadAll() {
     setStatus("pending", "Connexion…");
@@ -289,9 +396,45 @@
     else if (view === "memory") renderMemory();
   }
 
-  const loading = () => el("div", {
-    class: "card skeleton", role: "status", "aria-label": "Chargement des données",
-  }, el("i", { "aria-hidden": "true" }), el("i", { "aria-hidden": "true" }), el("i", { "aria-hidden": "true" }));
+  /* Squelettes structurés : la forme du contenu réel est réservée dès le
+     premier rendu, ce qui évite les sauts de mise en page à l'arrivée des
+     données. `role="status"` porte l'annonce, les blocs sont décoratifs. */
+  function skeletonCard() {
+    return el("div", { class: "card kpi-card skeleton", "aria-hidden": "true" },
+      el("span", { class: "skeleton-line w40" }),
+      el("span", { class: "skeleton-line w60" }),
+      el("span", { class: "skeleton-line w25" }),
+    );
+  }
+
+  function skeletonRow() {
+    return el("div", { class: "skeleton-row", "aria-hidden": "true" },
+      el("div", { class: "lines" },
+        el("span", { class: "skeleton-line w60" }),
+        el("span", { class: "skeleton-line w80" }),
+      ),
+      el("span", { class: "skeleton-line w40" }),
+    );
+  }
+
+  function skeletonList(rows = 3) {
+    return el("div", { class: "card", "aria-hidden": "true" },
+      Array.from({ length: rows }, skeletonRow));
+  }
+
+  function loading(view = "today") {
+    const kpis = view === "offers" ? 0 : 4;
+    return el("div", {
+      class: "skeleton-view", role: "status", "aria-live": "polite",
+      "aria-label": "Chargement des données",
+    },
+      kpis ? el("div", { class: "grid kpi", "aria-hidden": "true" },
+        Array.from({ length: kpis }, skeletonCard)) : null,
+      el("div", { class: "section-title", "aria-hidden": "true" },
+        el("span", { class: "skeleton-line w40" })),
+      skeletonList(view === "offers" ? 6 : 3),
+    );
+  }
 
   function greeting() {
     const hour = new Date().getHours();
@@ -304,7 +447,7 @@
   function renderToday() {
     const host = $("#view-today");
     if (!state.dashboard) {
-      host.replaceChildren(loading());
+      host.replaceChildren(loading("today"));
       return;
     }
     const d = state.dashboard;
@@ -424,8 +567,12 @@
         el("button", { class: "chip green", type: "button", title: "Préparer le dossier (CV+lettre+checklist)",
           onclick: (event) => { event.stopPropagation(); showApplyKit(item.job_id, item.title); } }, "préparer"),
         el("button", { class: "chip", type: "button", title: "Guide de candidature (plateforme ATS)",
+          onpointerenter: () => prefetchDetail(`/api/career/ats-guide/${item.job_id}`),
+          onfocus: () => prefetchDetail(`/api/career/ats-guide/${item.job_id}`),
           onclick: (event) => { event.stopPropagation(); showAtsGuide(item.job_id, item.title); } }, "guide"),
         el("button", { class: "chip green", type: "button", title: "Réponses types copiables",
+          onpointerenter: () => prefetchDetail(`/api/career/quick-answers/${item.job_id}`),
+          onfocus: () => prefetchDetail(`/api/career/quick-answers/${item.job_id}`),
           onclick: (event) => { event.stopPropagation(); showQuickAnswers(item.job_id, item.title); } }, "réponses"),
         el("button", { class: "chip", type: "button", title: "Marquer envoyé (confirmation humaine)",
           onclick: (event) => { event.stopPropagation(); markSent(item.job_id, item.title); } }, "marqué envoyé"),
@@ -436,7 +583,7 @@
   function renderApplications() {
     const host = $("#view-applications");
     const p = state.pipeline?.pipeline;
-    if (!p) { host.replaceChildren(loading()); return; }
+    if (!p) { host.replaceChildren(loading("applications")); return; }
     if (!p.length) {
       host.replaceChildren(el("div", { class: "card" }, emptyState(
         "Aucun dossier", "Ouvre une offre et génère un kit pour créer ton premier dossier.")));
@@ -466,7 +613,7 @@
   function renderOffers() {
     const host = $("#view-offers");
     const jobs = state.jobs?.jobs;
-    if (!jobs) { host.replaceChildren(loading()); return; }
+    if (!jobs) { host.replaceChildren(loading("offers")); return; }
     const filter = state.filter.trim().toLowerCase();
     const filtered = filter
       ? jobs.filter((job) => `${job.company} ${job.title} ${job.city} ${job.job_family}`.toLowerCase().includes(filter))
@@ -627,7 +774,7 @@
   function renderMissions() {
     const host = $("#view-missions");
     const m = state.missions;
-    if (!m) { host.replaceChildren(loading()); return; }
+    if (!m) { host.replaceChildren(loading("missions")); return; }
     if (!m.available) {
       host.replaceChildren(el("div", { class: "card" }, emptyState("Registre illisible", "missions_registry.json est absent ou invalide.")));
       return;
@@ -676,7 +823,7 @@
     const host = $("#view-memory");
     const memory = state.overview?.memory;
     const queue = state.overview?.task_queue;
-    if (!memory) { host.replaceChildren(loading()); return; }
+    if (!memory) { host.replaceChildren(loading("memory")); return; }
     host.replaceChildren(
       el("div", { class: "memory-grid" },
         el("div", { class: "card mem-card" }, el("b", {}, num(memory.source_count)), el("small", {}, "sources indexées")),
@@ -701,7 +848,7 @@
   function renderTracking() {
     const host = $("#view-tracking");
     const t = state.tracker;
-    if (!t) { host.replaceChildren(loading()); return; }
+    if (!t) { host.replaceChildren(loading("tracking")); return; }
     const items = t.items ?? [];
     host.replaceChildren(
       el("div", { class: "grid kpi" },
@@ -710,7 +857,7 @@
         el("div", { class: "card kpi-card" }, el("div", { class: "kpi-top" }, el("span", { class: "kpi-label" }, "En retard"), el("span", { class: "kpi-chip" }, "!")), el("div", { class: "kpi-value" }, String(t.totals?.overdue ?? 0)), el("div", { class: "kpi-foot" }, "relance urgente")),
       ),
       el("div", { class: "section-title" }, el("h2", {}, "Candidatures envoyées"), el("span", { class: "hint" }, "confirmation humaine · relance à copier")),
-      el("div", { class: "card" }, items.length ? items.map((it) => el("div", { class: "pipeline-item" },
+      el("div", { class: "card" }, items.length ? items.map((it) => el("div", { class: `pipeline-item${it.optimistic ? " optimistic" : ""}` },
         el("div", { class: "pipeline-main" }, el("strong", {}, it.title || "Dossier"), el("span", {}, `${it.company || "—"} · envoyé ${it.sent_at || "—"}`), el("div", { class: "next" }, `relance prévue : ${it.follow_up_due || "—"}`)),
         el("div", { class: "pipeline-progress" },
           el("div", {
@@ -719,7 +866,9 @@
             "aria-label": `Progression de la candidature ${it.title || ""}`.trim(),
           }, el("i", { style: `width:${Math.min(100, it.progress_percent || 100)}%`, "aria-hidden": "true" })),
           el("small", {}, it.channel || "site")),
-        el("div", { class: "offer-tags" }, it.follow_up_draft
+        el("div", { class: "offer-tags" }, it.optimistic
+          ? el("span", { class: "chip amber" }, "sync")
+          : null, it.follow_up_draft
           ? el("button", {
               class: "chip green", type: "button",
               "aria-label": `Copier la relance pour ${it.title || "cette candidature"}`,
@@ -731,10 +880,26 @@
     );
   }
 
+  /* Dialogue squelette : la fenêtre s'ouvre immédiatement au clic, avant la
+     réponse API, puis laisse place au contenu réel (SPEC-053). */
+  function skeletonDialog(title, hint, label) {
+    const overlay = el("div", { class: "modal-overlay" });
+    const box = el("div", { class: "card modal-box skeleton-dialog", "aria-busy": "true" },
+      el("div", { class: "section-title", style: "margin-top:0" },
+        el("h2", {}, title), el("span", { class: "hint" }, hint)),
+      skeletonList(3),
+    );
+    overlay.append(box);
+    const dialog = mountDialog(overlay, box, { label });
+    return { close: () => dialog.close() };
+  }
+
   async function showApplyKit(jobId, title) {
+    const pending = skeletonDialog(`Dossier — ${title || "offre"}`, "préparation…", "Dossier de candidature en préparation");
     let kit;
     try { kit = await api(`/api/career/apply-kit/${jobId}`, { method: "POST", body: "{}" }); }
-    catch (e) { notify(`Dossier indisponible : ${e.message}`, "error"); return; }
+    catch (e) { pending.close(); notify(`Dossier indisponible : ${e.message}`, "error"); return; }
+    pending.close();
     const overlay = el("div", { class: "modal-overlay" });
     const readiness = Number(kit.readiness || 0);
     const box = el("div", { class: "card modal-box" },
@@ -765,9 +930,11 @@
   }
 
   async function showAtsGuide(jobId, title) {
+    const pending = skeletonDialog(`Guide ATS — ${title || "offre"}`, "chargement…", "Guide de candidature en préparation");
     let g;
-    try { g = await api(`/api/career/ats-guide/${jobId}`); }
-    catch (e) { notify(`Guide indisponible : ${e.message}`, "error"); return; }
+    try { g = await apiCached(`/api/career/ats-guide/${jobId}`); }
+    catch (e) { pending.close(); notify(`Guide indisponible : ${e.message}`, "error"); return; }
+    pending.close();
     const overlay = el("div", { class: "modal-overlay" });
     const box = el("div", { class: "card modal-box" },
       el("div", { class: "section-title", style: "margin-top:0" }, el("h2", {}, `Guide ATS — ${g.title || title || "offre"}`), el("span", { class: "hint" }, `${g.platform || "custom"} · ${g.estimated_minutes || "?"} min`)),
@@ -790,9 +957,11 @@
   }
 
   async function showQuickAnswers(jobId, title) {
+    const pending = skeletonDialog(`Réponses types — ${title || "offre"}`, "chargement…", "Réponses types en préparation");
     let data;
-    try { data = await api(`/api/career/quick-answers/${jobId}`); }
-    catch (e) { notify(`Réponses indisponibles : ${e.message}`, "error"); return; }
+    try { data = await apiCached(`/api/career/quick-answers/${jobId}`); }
+    catch (e) { pending.close(); notify(`Réponses indisponibles : ${e.message}`, "error"); return; }
+    pending.close();
     const overlay = el("div", { class: "modal-overlay" });
     const box = el("div", { class: "card modal-box" },
       el("div", { class: "section-title", style: "margin-top:0" }, el("h2", {}, `Réponses types — ${title || "offre"}`), el("span", { class: "hint" }, `${data.answers?.length ?? 0} questions`)),
@@ -861,13 +1030,45 @@
     const channel = await askChannel(title);
     if (!channel) return;
     const iso = new Date().toISOString().slice(0, 19) + "Z";
+    const today = iso.slice(0, 10);
+
+    /* Mise à jour optimiste : la candidature apparaît immédiatement dans
+       « Suivi », avec un état « sync ». En cas d'échec, l'instantané précédent
+       est restauré et l'erreur est annoncée. */
+    const previousTracker = state.tracker ? structuredClone(state.tracker) : null;
+    const pipelineItem = state.pipeline?.pipeline?.find((item) => item.job_id === jobId);
+    const optimisticItem = {
+      title: title || pipelineItem?.title || "Dossier",
+      company: pipelineItem?.company || "—",
+      sent_at: today,
+      follow_up_due: "—",
+      progress_percent: 100,
+      channel,
+      follow_up_draft: "",
+      optimistic: true,
+    };
+    if (!state.tracker) state.tracker = { totals: {}, items: [] };
+    state.tracker.items = [optimisticItem, ...(state.tracker.items ?? [])];
+    state.tracker.totals = {
+      ...(state.tracker.totals ?? {}),
+      sent_without_response: (state.tracker.totals?.sent_without_response ?? 0) + 1,
+    };
+    renderBadges();
+    if (state.view === "tracking") renderTracking();
+    announce(`Envoi de ${optimisticItem.title} enregistré localement, synchronisation…`);
+
     try {
       await api(`/api/career/send-confirmation/${jobId}`, { method: "POST", body: JSON.stringify({ channel, sent_at: iso }) });
       await loaders.tracker();
       renderBadges();
       if (state.view === "tracking") renderTracking();
       notify("Envoi enregistré. Tu peux le suivre dans « Suivi ».");
-    } catch (e) { notify(`Échec de l’enregistrement : ${e.message}`, "error"); }
+    } catch (e) {
+      state.tracker = previousTracker;
+      renderBadges();
+      if (state.view === "tracking") renderTracking();
+      notify(`Échec de l’enregistrement : ${e.message}. Modification annulée.`, "error");
+    }
   }
 
   function copyText(text, successMessage = "Texte copié.") {
@@ -902,6 +1103,9 @@
 
   for (const button of document.querySelectorAll(".nav-item")) {
     button.addEventListener("click", () => setView(button.dataset.view, { focus: true }));
+    // SPEC-053 : précharger la vue avant le clic (survol ou focus clavier).
+    button.addEventListener("pointerenter", () => prefetchView(button.dataset.view));
+    button.addEventListener("focus", () => prefetchView(button.dataset.view));
   }
 
   /* Navigation clavier dans la barre latérale : flèches = déplacement du

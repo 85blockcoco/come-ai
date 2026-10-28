@@ -15,6 +15,12 @@
     <div class="ambient ambient-a" aria-hidden="true"></div>
     <div class="ambient ambient-b" aria-hidden="true"></div>
 
+    <!-- Barre de progression non bloquante : visible seulement après 120 ms,
+         pour signaler les chargements réellement perceptibles (SPEC-053). -->
+    <div class="progress-bar" id="progressBar" role="progressbar" aria-label="Chargement en cours" aria-valuetext="Chargement" hidden>
+      <i aria-hidden="true"></i>
+    </div>
+
     <div class="window">
       <aside class="sidebar" aria-label="Barre latérale NAGE">
         <div class="brand">

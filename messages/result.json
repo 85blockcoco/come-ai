@@ -4,16 +4,13 @@
     "desktop_static/index.html",
     "desktop_static/app.css",
     "desktop_static/app.js",
-    "tests/test_desktop_a11y.py",
-    "scripts/check_desktop_a11y_cdp.py",
-    "reports/spec-052-a11y-cdp.json",
-    "docs/agent-reports/SPEC-052-a11y-mobile.md",
-    "tests/test_career_agent.py",
-    "come_ai_web.py",
-    "night_supervisor.py",
+    "tests/test_desktop_perf.py",
+    "scripts/check_desktop_perf_cdp.py",
+    "reports/spec-053-perf-cdp.json",
+    "docs/agent-reports/SPEC-053-perf-ux.md",
     "messages/result.json"
   ],
-  "output": "SPEC-052 livré : shell /app accessible (lien d'évitement, repères et régions live, dialogues à focus piégé + Échap, remplacement de alert/prompt, navigation clavier complète, progressbars/log/aria-pressed) et responsive mobile (breakpoints 1080/720/480 px, nav horizontale, cibles ≥ 44 px, reflow 200 %/400 %, reduced-motion/contrast/forced-colors). Vérifié par 14 tests statiques et 31 contrôles CDP Chrome headless sur backend FastAPI isolé avec API simulées. Deux dettes préexistantes de la branche ont été corrigées pour rendre la checklist verte : assertion obsolète sur le nombre de familles métier (6 → JOB_FAMILIES) et 4 erreurs ruff (import/semicolon/variables inutilisées).",
-  "logs": "pytest -q tests/test_desktop_a11y.py → 14 passed\npytest -q tests/test_career_agent.py::test_local_storage_profile_preferences_and_persistence → 1 passed\npython scripts/check_desktop_a11y_cdp.py → 31/31 contrôles réussis (Chrome 156.0.8078.48, desktop 1440×900, reflow 720/320, reduced-motion, mobile 390×844)\n./checklist_codex.sh (VENV_PY=…/.venv/bin/python) → TOUT VERT : pytest 3135 passed, 1 skipped ; DevKit 210 passed ; ruff All checks passed\nnode --check desktop_static/app.js → OK\ngit diff --check → propre\nPréexistant vérifié sur 8716c11 : test_local_storage_profile_preferences_and_persistence échouait (14 familles ≠ 6) et ruff signalait 4 erreurs hors périmètre ; corrigés sans changement de comportement produit.",
+  "output": "SPEC-053 livré : performance perçue du shell /app. Squelettes structurés par vue (tableau, détail, KPI, listes) affichés immédiatement puis remplacés par les données, squelettes dans les dialogues de détail au lieu d'un vide, mise à jour optimiste de l'envoi (markSent) avec rollback complet en cas d'échec, préchargement des vues et des détails au survol/focus avec TTL 30 s et grâce de 1,5 s pour éviter les requêtes en double après clic, et barre de progression globale différée de 120 ms pour éviter le clignotement (role=progressbar, aria-valuetext, hidden). Vérifié par 17 tests statiques et 15 contrôles CDP Chrome headless sur backend FastAPI isolé avec API simulée à 600 ms de latence.",
+  "logs": "pytest -q tests/test_desktop_perf.py tests/test_desktop_a11y.py → 31 passed\npython scripts/check_desktop_perf_cdp.py → 15/15 contrôles réussis (Chrome headless, latence simulée 600 ms : squelettes visibles avant données, aucun état vide intermédiaire, optimiste immédiat + rollback sur échec, préchargement sans requête dupliquée au clic, barre de progression différée)\nruff check desktop_static scripts/check_desktop_perf_cdp.py tests/test_desktop_perf.py → All checks passed\ngit diff --check → propre\nAucun log de debug résiduel dans desktop_static/app.js.",
   "error": null
 }

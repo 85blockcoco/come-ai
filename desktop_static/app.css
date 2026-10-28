@@ -710,6 +710,66 @@ body::after {
 .skeleton i:nth-child(3) { width: 48%; }
 @keyframes scan { from { background-position: 0 0; } to { background-position: 24px 0; } }
 
+/* Squelettes structurés (SPEC-053) : ils reprennent la forme du contenu réel
+   (KPI, lignes, barres) pour que la mise en page ne saute pas à l'arrivée des
+   données. Purement décoratifs : aria-hidden, le statut est porté par le
+   conteneur `role="status"`. */
+.skeleton-view { display: flex; flex-direction: column; gap: 14px; }
+.skeleton-view .skeleton { padding: 14px; }
+.skeleton-line {
+  display: block; height: 9px; border-radius: 3px;
+  background: linear-gradient(90deg, rgba(0, 212, 122, .05), rgba(0, 212, 122, .26), rgba(0, 212, 122, .05));
+  background-size: 220% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+.skeleton-line.w25 { width: 25%; }
+.skeleton-line.w40 { width: 40%; }
+.skeleton-line.w60 { width: 60%; }
+.skeleton-line.w80 { width: 80%; }
+.skeleton-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) 120px; gap: 12px;
+  align-items: center; padding: 14px 16px; border-top: 1px solid var(--line);
+}
+.skeleton-row:first-child { border-top: 0; }
+.skeleton-row .lines { display: flex; flex-direction: column; gap: 8px; }
+.skeleton-kpi { display: flex; flex-direction: column; gap: 10px; }
+.skeleton-kpi .skeleton-line:last-child { height: 18px; }
+.skeleton-dialog .skeleton-row { grid-template-columns: minmax(0, 1fr); }
+@keyframes shimmer {
+  from { background-position: 120% 0; }
+  to { background-position: -120% 0; }
+}
+
+/* Barre de progression globale : 2 px, non bloquante, masquée par défaut.
+   Elle n'apparaît qu'après un délai côté JS pour éviter le clignotement. */
+.progress-bar {
+  position: fixed; inset: 0 0 auto 0; height: 2px; z-index: 150;
+  background: rgba(0, 212, 122, 0.12); overflow: hidden;
+}
+.progress-bar i {
+  display: block; height: 100%; width: 40%;
+  background: linear-gradient(90deg, transparent, var(--green-2), transparent);
+  animation: progress-slide 1s ease-in-out infinite;
+}
+@keyframes progress-slide {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(310%); }
+}
+
+/* Mise à jour optimiste (SPEC-053) : la ligne apparaît immédiatement puis se
+   synchronise ; un état visuel discret indique qu'elle n'est pas confirmée. */
+.pipeline-item.optimistic {
+  background: rgba(0, 212, 122, 0.06);
+  box-shadow: inset 3px 0 0 var(--green-dim);
+}
+.pipeline-item.optimistic .pipeline-main > span::after {
+  content: " · sync";
+  color: var(--amber);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 .error-note {
   margin: 10px 0 0;
   padding: 9px 11px;

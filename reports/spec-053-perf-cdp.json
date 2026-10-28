@@ -1,0 +1,85 @@
+{
+  "generated_at": "2026-10-28T15:02:38+00:00",
+  "url": "http://127.0.0.1:60496",
+  "browser": "Chrome/156.0.8078.73",
+  "checks": [
+    {
+      "name": "01. squelette visible avant la réponse API",
+      "ok": true,
+      "detail": "{\"busy\": \"true\", \"skeleton\": 1, \"label\": \"Chargement des donn\\u00e9es\"}"
+    },
+    {
+      "name": "02. barre de progression différée de 120 ms",
+      "ok": true,
+      "detail": "visible=True"
+    },
+    {
+      "name": "03. squelette structuré (lignes + KPI)",
+      "ok": true,
+      "detail": "{\"rows\": 3, \"kpis\": 4, \"hidden\": \"true\"}"
+    },
+    {
+      "name": "04. chargement terminé : squelette et barre disparus",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "05. squelette spécifique à la vue Offres (6 lignes)",
+      "ok": true,
+      "detail": "lignes=6"
+    },
+    {
+      "name": "06. aucune erreur JavaScript au chargement",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "07. survol « guide » : requête avant le clic",
+      "ok": true,
+      "detail": "requêtes=1"
+    },
+    {
+      "name": "08. clic « guide » : préchargement consommé, pas dupliqué",
+      "ok": true,
+      "detail": "requêtes=1 · titre='GUIDE ATS — DATA ANALYST'"
+    },
+    {
+      "name": "09. focus clavier : préchargement des « réponses »",
+      "ok": true,
+      "detail": "requêtes=1"
+    },
+    {
+      "name": "10. « préparer » ouvre un dialogue squelette immédiat",
+      "ok": true,
+      "detail": "aria-busy=true"
+    },
+    {
+      "name": "11. le contenu réel remplace le squelette",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "12. envoi : ligne optimiste avant la réponse API",
+      "ok": true,
+      "detail": "ligne optimiste + badge sync visibles"
+    },
+    {
+      "name": "13. confirmation : l'état optimiste disparaît",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "14. échec API : la ligne est annulée",
+      "ok": true,
+      "detail": "Échec de l’enregistrement : panne simulée. Modification annulée."
+    },
+    {
+      "name": "15. aucun envoi automatique sans validation",
+      "ok": true,
+      "detail": "requêtes=0"
+    }
+  ],
+  "total": 15,
+  "passed": 15,
+  "failed": 0
+}
