@@ -242,7 +242,9 @@
         el("div", { class: "hero-side" },
           el("div", {}, el("b", {}, num(d.jobs_total)), el("small", {}, "offres")),
           el("div", {}, el("b", {}, num(active)), el("small", {}, "dossiers en cours")),
-          el("div", {}, el("b", {}, `${state.missions?.counts?.done ?? "—"}/${state.missions ? Object.values(state.missions.counts).reduce((a, b) => a + b, 0) : "—"}`), el("small", {}, "missions")),
+          state.missions?.available
+            ? el("div", {}, el("b", {}, `${state.missions.counts?.done ?? 0}/${Object.values(state.missions.counts || {}).reduce((a, b) => a + b, 0)}`), el("small", {}, "missions"))
+            : el("div", {}, el("b", {}, "Local"), el("small", {}, "données privées")),
         ),
       ),
       el("div", { class: "grid kpi mt-14" },
@@ -295,7 +297,7 @@
 
   function missionStrip() {
     const m = state.missions;
-    if (!m?.available) return emptyState("Flotte indisponible", "Le registre des missions n’est pas lisible.");
+    if (!m?.available) return emptyState("Atelier au repos", "Aucune mission technique n’est active. Cela n’affecte pas tes candidatures.");
     const total = Object.values(m.counts).reduce((a, b) => a + b, 0);
     return el("div", { class: "mission-strip" },
       el("div", {}, el("b", {}, `${m.counts.done ?? 0}/${total}`), el("small", {}, "missions livrées")),
