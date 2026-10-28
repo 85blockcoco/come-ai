@@ -502,13 +502,47 @@ async function traceabilityRefresh() {
 }
 
 function traceabilityInit() {
-  const apply = document.querySelector("#traceability-apply");
-  if (apply) {
-    apply.addEventListener("click", () => {
+  const filters = document.querySelector("#traceability-filters");
+  if (filters) {
+    filters.addEventListener("submit", (event) => {
+      event.preventDefault();
       traceabilityState.filters = traceabilityReadFilters();
       traceabilityRefresh();
     });
   }
+  const reset = document.querySelector("#traceability-filter-reset");
+  if (reset) {
+    reset.addEventListener("click", () => {
+      if (filters) filters.reset();
+      traceabilityState.filters = traceabilityReadFilters();
+      traceabilityRefresh();
+    });
+  }
+  const selectAll = document.querySelector("#traceability-select-all");
+  if (selectAll) {
+    selectAll.addEventListener("change", () => {
+      traceabilityState.selected.clear();
+      if (selectAll.checked) {
+        traceabilityState.requirements.forEach((item) => traceabilityState.selected.add(item.trace_id));
+      }
+      traceabilityRenderList();
+    });
+  }
+  const waive = document.querySelector("#traceability-batch-waive");
+  if (waive) waive.addEventListener("click", () => traceabilityBatch("waive"));
+  const exportFile = (format) => {
+    const link = document.createElement("a");
+    link.href = `${TRACEABILITY_API}/export?export_format=${format}`;
+    link.download = `nage-tracabilite.${format}`;
+    link.hidden = true;
+    document.body.append(link);
+    link.click();
+    link.remove();
+  };
+  const exportJson = document.querySelector("#traceability-export-json");
+  const exportCsv = document.querySelector("#traceability-export-csv");
+  if (exportJson) exportJson.addEventListener("click", () => exportFile("json"));
+  if (exportCsv) exportCsv.addEventListener("click", () => exportFile("csv"));
   document.querySelectorAll("[data-traceability-batch]").forEach((button) => {
     button.addEventListener("click", () => traceabilityBatch(button.dataset.traceabilityBatch));
   });

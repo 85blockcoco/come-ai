@@ -5,26 +5,27 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
-    <title>Côme AI Career — espace local</title>
-    <link rel="stylesheet" href="/career-static/career.css?v=codex-v3-20261025-rc10" />
+    <title>NAGE Career — espace local</title>
+    <link rel="stylesheet" href="/career-static/career.css?v=nage-studio-20261028" />
     <link rel="stylesheet" href="/career-static/cv_plan.css?v=codex-v3-20261025-rc10" />
     <link rel="stylesheet" href="/career-static/traceability.css" />
+    <link rel="stylesheet" href="/career-static/constitution.css" />
   </head>
   <body>
     <a class="skip-link" href="#career-main">Aller au contenu Career</a>
     <div class="career-shell">
       <header class="career-topbar">
         <div class="brand">
-          <div class="brand-mark" aria-hidden="true">C</div>
+          <div class="brand-mark" aria-hidden="true">N</div>
           <div>
-            <p class="eyebrow">Côme AI</p>
-            <h1>Côme AI <span>Career</span></h1>
+            <p class="eyebrow">NAGE</p>
+            <h1>NAGE <span>Career</span></h1>
             <p class="subtitle">Ton espace local pour organiser des offres, préparer des candidatures factuelles et t’entraîner. Aucune candidature n’est envoyée automatiquement.</p>
           </div>
         </div>
         <div class="top-actions">
           <span class="privacy-badge"><span aria-hidden="true">●</span> Données locales</span>
-          <a class="back-link" href="/v5">← Espace personnel V5</a>
+          <a class="back-link" href="/app">← Accueil NAGE</a>
           <a class="back-link" href="/">← Analyse &amp; documents</a>
         </div>
       </header>
@@ -905,36 +906,39 @@
         </section>
 
         <section id="view-constitution" class="career-view" tabindex="-1" hidden aria-labelledby="constitution-title">
-          <h2 id="constitution-title">Constitution</h2>
-          <p class="panel-help">Inspecte, vérifie et versionne les règles locales appliquées par Career.</p>
-          <div id="constitution-health"></div>
-          <div id="constitution-rules"></div>
-          <div id="constitution-graph"></div>
-          <div id="constitution-dashboard"></div>
-          <form id="constitution-editor" class="form-stack">
-            <input name="rule_id" placeholder="Identifiant de règle" required />
-            <input name="name" placeholder="Nom" required />
-            <select name="domain"><option value="matching">Matching</option><option value="privacy">Confidentialité</option><option value="export">Export</option></select>
-            <textarea name="description" placeholder="Description"></textarea>
-            <textarea name="rationale" placeholder="Justification"></textarea>
-            <input id="constitution-expression" name="expression" list="constitution-identifiers" placeholder="matching.score >= 45" required />
-            <datalist id="constitution-identifiers"></datalist>
-            <select name="severity"><option value="info">Information</option><option value="warning">Avertissement</option><option value="error">Erreur</option><option value="critical">Critique</option></select>
-            <input name="scope" placeholder="offer, matching" />
-            <input name="tags" placeholder="score, seuil" />
-            <textarea name="remediation" placeholder="Action corrective"></textarea>
-            <input name="author" value="local" />
-            <input name="approver" value="relecture" />
-            <textarea name="context" placeholder='{"matching":{"score":70}}'>{}</textarea>
-            <div class="inline-actions"><button type="submit">Enregistrer</button><button id="constitution-approve" type="button">Approuver</button><button id="constitution-check-expression" type="button">Vérifier</button><button id="constitution-preview-expression" type="button">Prévisualiser</button></div>
-            <p id="constitution-editor-status"></p><pre id="constitution-check"></pre><pre id="constitution-preview"></pre>
-          </form>
-          <form id="constitution-validator" class="form-stack">
-            <input name="entity_id" placeholder="Identifiant de l’entité" /><select name="entity_type"><option value="offer">Offre</option><option value="profile">Profil</option></select><input name="ruleset_id" value="career.core" /><textarea name="entity">{}</textarea><button id="constitution-validate" type="button">Valider l’entité</button>
-          </form>
-          <pre id="constitution-validation-result"></pre>
-          <button id="constitution-generate-tests" type="button">Générer les tests</button><pre id="constitution-generated"></pre>
-          <div id="constitution-history"></div><div id="constitution-audit"></div>
+          <section class="panel constitution-hero">
+            <div><p class="eyebrow">Gouvernance locale</p><h2 id="constitution-title">Constitution</h2><p>Inspecte, vérifie et versionne les règles locales appliquées par NAGE Career.</p></div>
+            <span class="local-tag">Règles explicables</span>
+          </section>
+          <section class="panel constitution-panel"><div class="panel-heading"><div><p class="eyebrow">État</p><h3>Santé des règles</h3></div></div><div id="constitution-health"></div><div id="constitution-dashboard"></div></section>
+          <section class="panel constitution-panel"><div class="panel-heading"><div><p class="eyebrow">Registre</p><h3>Règles actives</h3></div></div><div id="constitution-rules" class="constitution-table-wrap"></div><div id="constitution-graph"></div></section>
+          <section class="panel constitution-panel">
+            <div class="panel-heading"><div><p class="eyebrow">Éditeur</p><h3>Créer ou réviser une règle</h3></div><span class="local-tag">Validation humaine</span></div>
+            <form id="constitution-editor" class="form-stack constitution-editor">
+              <div class="form-row two-columns"><label>Identifiant de règle<input name="rule_id" placeholder="matching.score.minimum" required /></label><label>Nom de la règle<input name="name" placeholder="Score minimal" required /></label></div>
+              <div class="form-row two-columns"><label>Domaine<select name="domain"><option value="matching">Matching</option><option value="privacy">Confidentialité</option><option value="export">Export</option></select></label><label>Sévérité<select name="severity"><option value="info">Information</option><option value="warning">Avertissement</option><option value="error">Erreur</option><option value="critical">Critique</option></select></label></div>
+              <label>Description<textarea name="description" placeholder="Ce que cette règle garantit"></textarea></label>
+              <label>Justification<textarea name="rationale" placeholder="Pourquoi cette règle existe"></textarea></label>
+              <label>Expression<input id="constitution-expression" name="expression" list="constitution-identifiers" placeholder="matching.score >= 45" required /></label>
+              <datalist id="constitution-identifiers"></datalist>
+              <div class="form-row two-columns"><label>Périmètre<input name="scope" placeholder="offer, matching" /></label><label>Tags<input name="tags" placeholder="score, seuil" /></label></div>
+              <label>Action corrective<textarea name="remediation" placeholder="Action à réaliser en cas d’échec"></textarea></label>
+              <div class="form-row two-columns"><label>Auteur<input name="author" value="local" /></label><label>Approbateur<input name="approver" value="relecture" /></label></div>
+              <label>Contexte de test JSON<textarea name="context" placeholder='{"matching":{"score":70}}'>{}</textarea></label>
+              <div class="inline-actions"><button class="primary-button" type="submit">Enregistrer</button><button class="secondary-button" id="constitution-approve" type="button">Approuver</button><button class="quiet-button" id="constitution-check-expression" type="button">Vérifier</button><button class="quiet-button" id="constitution-preview-expression" type="button">Prévisualiser</button></div>
+              <p id="constitution-editor-status" role="status"></p><pre id="constitution-check"></pre><pre id="constitution-preview"></pre>
+            </form>
+          </section>
+          <section class="panel constitution-panel">
+            <div class="panel-heading"><div><p class="eyebrow">Banc d’essai</p><h3>Valider une entité synthétique</h3></div></div>
+            <form id="constitution-validator" class="form-stack">
+              <div class="form-row three-columns"><label>Identifiant<input name="entity_id" placeholder="Identifiant de l’entité" /></label><label>Type<select name="entity_type"><option value="offer">Offre</option><option value="profile">Profil</option></select></label><label>Jeu de règles<input name="ruleset_id" value="career.core" /></label></div>
+              <label>Entité JSON<textarea name="entity">{}</textarea></label><button class="primary-button" id="constitution-validate" type="button">Valider l’entité</button>
+            </form>
+            <pre id="constitution-validation-result"></pre>
+            <button class="secondary-button" id="constitution-generate-tests" type="button">Générer les tests</button><pre id="constitution-generated"></pre>
+          </section>
+          <section class="panel constitution-panel"><div class="panel-heading"><div><p class="eyebrow">Historique</p><h3>Versions et audit</h3></div></div><div id="constitution-history"></div><div id="constitution-audit" class="constitution-table-wrap"></div></section>
         </section>
         <section id="view-dependencies" class="career-view" tabindex="-1" hidden aria-labelledby="dependencies-title"><h2 id="dependencies-title">Dépendances</h2><div id="dependencies-app"></div></section>
         <section id="view-settings" class="career-view" tabindex="-1" hidden aria-labelledby="settings-title">
@@ -1114,7 +1118,21 @@
             <p id="traceability-empty" class="empty-state" hidden>Aucune exigence pour l’instant. Les exigences apparaissent quand une offre est analysée par le registre.</p>
           </section>
 
-          <section id="traceability-detail" class="panel traceability-detail" hidden aria-live="polite" aria-labelledby="traceability-detail-title"></section>
+          <section id="traceability-gaps-panel" class="panel traceability-panel" aria-labelledby="traceability-gaps-title">
+            <div class="panel-heading compact-heading">
+              <div><p class="eyebrow">Points à traiter</p><h3 id="traceability-gaps-title">Exigences obligatoires sans preuve</h3></div>
+              <span class="local-tag">Aucune déduction automatique</span>
+            </div>
+            <div id="traceability-gaps" class="traceability-list"></div>
+          </section>
+
+          <section id="traceability-detail-panel" class="panel traceability-detail" hidden aria-live="polite" aria-labelledby="traceability-detail-title">
+            <div class="panel-heading compact-heading">
+              <div><p class="eyebrow">Détail de l’exigence</p><h3 id="traceability-detail-title">Exigence</h3></div>
+              <button id="traceability-detail-close" class="quiet-button" type="button">Fermer</button>
+            </div>
+            <div id="traceability-detail"></div>
+          </section>
         </section>
 
         <section id="view-interviews" class="career-view" tabindex="-1" hidden aria-labelledby="interviews-title">
@@ -1231,7 +1249,7 @@
       </main>
 
       <footer>
-        <span>Côme AI Career fonctionne localement par défaut : OCR macOS, profil, pertinence, candidatures et coach textuel. Les boards publics ne sont lus qu’après ton clic ; aucun dépôt de candidature n’est automatisé.</span>
+        <span>NAGE Career fonctionne localement par défaut : OCR macOS, profil, pertinence, candidatures et coach textuel. Les boards publics ne sont lus qu’après ton clic ; aucun dépôt de candidature n’est automatisé.</span>
       </footer>
     </div>
     <script src="/career-static/cv_plan.js?v=codex-v3-20261025-rc10" defer></script>

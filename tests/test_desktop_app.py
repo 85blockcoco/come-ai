@@ -27,11 +27,13 @@ def test_desktop_shell_and_assets_are_served_with_local_protections(tmp_path, mo
         script = client.get("/app-static/app.js").text
         stylesheet = client.get("/app-static/app.css").text
         assert 'const THEME_STORAGE_KEY = "nage-app-theme-v2"' in script
+        assert 'const LANGUAGE_STORAGE_KEY = "nage-kit-language-v1"' in script
         assert 'return THEMES.has(saved) ? saved : "studio"' in script
         assert '"/career#career/profile"' in script
         assert '"/career#career/stagehunter"' in script
         assert 'body[data-theme="studio"]' in stylesheet
         assert 'window.addEventListener("hashchange"' in script
+        assert 'history.pushState(null, "", destination)' in script
         assert client.get("/app", headers={"Host": "attacker.example.test"}).status_code == 400
 
 

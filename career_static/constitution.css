@@ -1,0 +1,39 @@
+/* NAGE Career — gouvernance locale et règles explicables. */
+.constitution-hero { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 24px; border-color: #cce5d7; background: linear-gradient(125deg, #fff, #f3fbf6); }
+.constitution-hero h2 { margin-top: 3px; font-size: clamp(1.25rem, 2vw, 1.55rem); letter-spacing: -.025em; }
+.constitution-hero p:not(.eyebrow) { margin-top: 6px; color: var(--muted); font-size: .84rem; }
+.constitution-panel { margin-top: 16px; padding: 19px; }
+.constitution-table-wrap { max-width: 100%; overflow-x: auto; border: 1px solid var(--border); border-radius: 11px; }
+.constitution-table { width: 100%; min-width: 680px; border-collapse: collapse; color: var(--ink); background: #fff; font-size: .75rem; }
+.constitution-table th, .constitution-table td { padding: 10px 11px; border-bottom: 1px solid #e1ece6; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.constitution-table th { color: var(--accent-dark); background: #f1f8f4; font-size: .7rem; letter-spacing: .035em; text-transform: uppercase; }
+.constitution-table tr:last-child td { border-bottom: 0; }
+.constitution-rule-link { padding: 0; border: 0; color: var(--accent-dark); background: transparent; font: inherit; font-weight: 750; text-align: left; text-decoration: underline; text-decoration-color: #9dcab3; text-underline-offset: 3px; }
+.constitution-rule-link:hover { color: var(--accent); }
+.constitution-metric { display: inline-grid; min-width: 130px; margin: 0 8px 8px 0; padding: 13px; border: 1px solid #d8e8df; border-radius: 11px; background: var(--surface-muted); }
+.constitution-metric strong { color: var(--accent-dark); font-size: 1.25rem; }
+.constitution-metric span { color: var(--muted); font-size: .7rem; }
+.constitution-note, .constitution-empty { margin: 9px 0; color: var(--muted); font-size: .76rem; line-height: 1.5; }
+.constitution-score { margin-bottom: 12px; padding: 13px; border: 1px solid #c9ded2; border-radius: 11px; background: var(--surface-soft); color: var(--accent-dark); font-weight: 750; }
+.constitution-alerts, .constitution-violations { display: grid; gap: 7px; margin: 10px 0; padding: 0; list-style: none; }
+.constitution-alert, .constitution-ok { padding: 9px 11px; border-radius: 9px; font-size: .76rem; }
+.constitution-alert { color: var(--warning); background: var(--warning-soft); }
+.constitution-ok { color: var(--good); background: var(--good-soft); }
+.constitution-svg { width: 100%; min-height: 280px; margin-top: 12px; border: 1px solid var(--border); border-radius: 11px; background: #fbfefc; }
+.constitution-edge { stroke: #a8cdb8; stroke-width: 1.5; }
+.constitution-node { fill: #e7f5ee; stroke: #047857; stroke-width: 1.5; }
+.constitution-label { fill: #264c3d; font-size: 11px; }
+.constitution-editor pre, .constitution-panel > pre { max-width: 100%; margin: 10px 0; padding: 12px; overflow: auto; border: 1px solid #dce9e2; border-radius: 9px; color: #29463b; background: #f8fbf9; font: .73rem/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.constitution-timeline { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.constitution-timeline-item { padding: 11px 13px; border-left: 3px solid #8fc9aa; border-radius: 0 9px 9px 0; background: #f5faf7; font-size: .76rem; }
+.constitution-diff { margin-top: 5px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .7rem; }
+
+@media (max-width: 680px) {
+  .constitution-hero { align-items: flex-start; flex-direction: column; padding: 18px; }
+  .constitution-panel { padding: 15px; }
+  .constitution-table { min-width: 620px; }
+}
+
+@media (forced-colors: active) {
+  .constitution-table-wrap, .constitution-metric, .constitution-score, .constitution-svg { border: 1px solid CanvasText; }
+}

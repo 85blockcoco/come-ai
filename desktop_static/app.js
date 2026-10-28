@@ -5,7 +5,9 @@
   window.__appState = null;
 
   const THEME_STORAGE_KEY = "nage-app-theme-v2";
+  const LANGUAGE_STORAGE_KEY = "nage-kit-language-v1";
   const THEMES = new Set(["terminal", "studio"]);
+  const KIT_LANGUAGES = new Set(["en", "fr", "it", "de"]);
 
   function readTheme() {
     try {
@@ -31,6 +33,15 @@
     return selected;
   }
 
+  function readKitLanguage() {
+    try {
+      const saved = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+      return KIT_LANGUAGES.has(saved) ? saved : "en";
+    } catch {
+      return "en";
+    }
+  }
+
   const state = window.__appState = {
     view: "today",
     dashboard: null,
@@ -43,7 +54,7 @@
     chat: [],
     chatMode: "offline",
     sending: false,
-    kitLanguage: "en",
+    kitLanguage: readKitLanguage(),
     theme: readTheme(),
     errors: {},
   };
@@ -103,7 +114,8 @@
     memory: { title: "Mémoire", subtitle: "Les sources locales utilisées pour t’aider" },
   };
 
-  function setView(view) {
+  function setView(view, historyMode = "push") {
+    if (!VIEWS[view]) return;
     state.view = view;
     for (const button of document.querySelectorAll(".nav-item")) {
       if (button.dataset.view === view) button.setAttribute("aria-current", "page");
@@ -117,7 +129,9 @@
     $("#searchBox").hidden = view !== "offers";
     $("#scroll").scrollTop = 0;
     render(view);
-    history.replaceState(null, "", `#${view}`);
+    const destination = `#${view}`;
+    if (historyMode === "replace") history.replaceState(null, "", destination);
+    else if (historyMode === "push" && location.hash !== destination) history.pushState(null, "", destination);
   }
 
   /* ---------- Données ---------- */
@@ -149,11 +163,17 @@
 
   async function refresh() {
     const button = $("#refreshBtn");
+    const label = $("span", button);
+    const previous = label.textContent;
     button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    label.textContent = "Actualisation…";
     try {
       await loadAll();
     } finally {
       button.disabled = false;
+      button.removeAttribute("aria-busy");
+      label.textContent = previous;
     }
   }
 
@@ -826,7 +846,12 @@
     button.addEventListener("click", () => setView(button.dataset.view));
   }
   $("#themeSelect").addEventListener("change", (event) => applyTheme(event.target.value));
-  $("#kitLanguage").addEventListener("change", (event) => { state.kitLanguage = event.target.value; render(state.view); });
+  $("#kitLanguage").value = state.kitLanguage;
+  $("#kitLanguage").addEventListener("change", (event) => {
+    state.kitLanguage = KIT_LANGUAGES.has(event.target.value) ? event.target.value : "en";
+    try { window.localStorage.setItem(LANGUAGE_STORAGE_KEY, state.kitLanguage); } catch { /* stockage local indisponible */ }
+    render(state.view);
+  });
   $("#refreshBtn").addEventListener("click", refresh);
   $("#searchInput").addEventListener("input", (event) => {
     state.filter = event.target.value;
@@ -834,10 +859,10 @@
   });
 
   const initial = (location.hash || "#today").slice(1);
-  setView(VIEWS[initial] ? initial : "today");
+  setView(VIEWS[initial] ? initial : "today", "replace");
   window.addEventListener("hashchange", () => {
     const requested = (location.hash || "#today").slice(1);
-    if (VIEWS[requested] && requested !== state.view) setView(requested);
+    if (VIEWS[requested] && requested !== state.view) setView(requested, "none");
   });
   loadAll();
   setInterval(() => {

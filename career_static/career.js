@@ -292,7 +292,7 @@ function showView(viewName, { focus = true, updateHash = true } = {}) {
   if (viewName === "profile") {
     window.careerProfileBuilder?.refresh?.();
   }
-  document.title = `${labelForView(viewName)} — Côme AI Career`;
+  document.title = `${labelForView(viewName)} — NAGE Career`;
   if (updateHash && window.location.hash !== `#career/${viewName}`) {
     internalHashChange = true;
     window.location.hash = `career/${viewName}`;
@@ -4002,7 +4002,7 @@ async function bootstrap() {
     resumeExplorationIfNeeded();
     const requested = window.location.hash.replace("#career/", "");
     if (careerViews.has(requested)) showView(requested, { focus: false, updateHash: false });
-    else document.title = "Tableau de bord — Côme AI Career";
+    else document.title = "Tableau de bord — NAGE Career";
   } catch (error) {
     setMessage(error.message, true);
   } finally {

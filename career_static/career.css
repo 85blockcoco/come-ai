@@ -62,9 +62,10 @@ h1 span { color: var(--accent); }
 .status-badge.ready { color: var(--good); background: var(--good-soft); }
 .status-badge.warn { color: var(--warning); background: var(--warning-soft); }
 .career-tabs { display: flex; gap: 5px; overflow-x: auto; margin: 18px 0 12px; padding: 4px; border: 1px solid var(--border); border-radius: 13px; background: rgb(255 255 255 / 78%); scrollbar-color: #a8cdb8 transparent; }
-.career-tab { flex: 1 0 max-content; min-height: 40px; padding: 8px 14px; border: 0; border-radius: 9px; color: var(--muted); background: transparent; font-size: .81rem; font-weight: 720; white-space: nowrap; }
+.career-tab { flex: 1 0 max-content; min-height: 44px; padding: 9px 14px; border: 0; border-radius: 9px; color: var(--muted); background: transparent; font-size: .81rem; font-weight: 720; white-space: nowrap; }
 .career-tab:hover { color: var(--accent-dark); background: var(--accent-soft); }
 .career-tab.active { color: #fff; background: var(--accent); box-shadow: 0 5px 14px rgb(4 120 87 / 22%); }
+.career-tab:nth-child(8) { margin-left: 6px; border-left: 1px solid var(--border); border-radius: 0 9px 9px 0; }
 .career-loading, .career-message { margin: 0 0 12px; padding: 9px 11px; border: 1px solid #cbead8; border-radius: 10px; color: var(--accent-dark); background: var(--surface-soft); font-size: .78rem; line-height: 1.4; }
 .career-loading[hidden], .career-message:empty { display: none; }
 .career-message.error { border-color: #e7b2ad; color: var(--danger); background: var(--danger-soft); }
@@ -154,14 +155,14 @@ h1 span { color: var(--accent); }
 .form-stack label, .field-label { display: grid; gap: 5px; color: var(--ink); font-size: .76rem; font-weight: 680; }
 .field-label span { color: var(--muted); font-weight: 400; }
 input, select, textarea { width: 100%; border: 1px solid #c8d9d1; border-radius: 9px; outline: none; color: var(--ink); background: #fcfefd; font-size: .82rem; }
-input, select { min-height: 36px; padding: 7px 9px; }
+input, select { min-height: 42px; padding: 8px 10px; }
 textarea { min-height: 55px; padding: 9px; resize: vertical; line-height: 1.4; }
 input:focus, select:focus, textarea:focus { border-color: #10b981; box-shadow: 0 0 0 3px rgb(16 185 129 / 15%); }
 input:disabled, select:disabled, textarea:disabled { cursor: not-allowed; color: var(--muted); background: #f1f6f3; }
 .form-row { display: grid; gap: 9px; }
 .two-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .three-columns { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.primary-button, .secondary-button, .danger-button { min-height: 40px; padding: 8px 12px; border-radius: 9px; font-size: .78rem; font-weight: 750; text-align: center; }
+.primary-button, .secondary-button, .danger-button { min-height: 44px; padding: 9px 14px; border-radius: 10px; font-size: .8rem; font-weight: 750; text-align: center; }
 .primary-button { border: 0; color: #fff; background: var(--accent); box-shadow: 0 7px 17px rgb(4 120 87 / 22%); }
 .primary-button:hover { background: var(--accent-dark); }
 .secondary-button { border: 1px solid #b9ddca; color: var(--accent-dark); background: #f1fbf5; }
@@ -235,7 +236,7 @@ details summary:focus-visible { border-radius: 5px; outline-offset: 4px; }
 .filter-row { flex-wrap: wrap; gap: 8px; margin: 12px 0; }
 .filter-row select { width: auto; min-width: 150px; }
 .filter-search { flex: 1 1 230px; }
-.job-list, .application-list { display: grid; gap: 10px; }
+.job-list, .application-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; }
 .job-card, .application-card { padding: 14px; border: 1px solid #dce9e2; border-radius: 12px; background: #fff; }
 .job-card-header, .application-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .job-card h3, .application-card h3 { font-size: .94rem; line-height: 1.35; }
@@ -334,9 +335,13 @@ footer { margin: 18px 3px 0; color: var(--muted); font-size: .72rem; line-height
 
 /* Stage Hunter: the five-step journey reuses the existing Career visual
    language; only the layout of the new blocks is defined here. */
+#view-stagehunter > .panel { margin-bottom: 18px; padding: clamp(18px, 2.4vw, 28px); }
+#view-stagehunter > .panel > h3 { margin: 4px 0 16px; font-size: 1.12rem; letter-spacing: -.018em; }
+#view-stagehunter fieldset { min-width: 0; margin: 0; padding: 15px 16px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-muted); }
+#view-stagehunter legend { padding: 0 7px; color: var(--accent-dark); font-size: .78rem; font-weight: 750; }
 .stagehunter-domains { display: flex; flex-wrap: wrap; gap: 7px 14px; }
-.stagehunter-domain { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--ink); }
-.stagehunter-domain input { width: 16px; min-height: 16px; accent-color: var(--accent); }
+.stagehunter-domain { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 5px 3px; font-size: .8rem; color: var(--ink); }
+.stagehunter-domain input { width: 18px; min-height: 18px; accent-color: var(--accent); }
 .stagehunter-defaults-note { padding: 11px 13px; border: 1px solid #c9ded2; border-radius: 11px; color: var(--accent-dark); background: var(--surface-soft); font-size: .8rem; line-height: 1.5; }
 .stagehunter-advanced { border: 1px solid var(--border); border-radius: 12px; background: var(--surface-muted); }
 .stagehunter-advanced > summary { display: flex; align-items: baseline; flex-wrap: wrap; gap: 5px 10px; min-height: 44px; padding: 11px 14px; color: var(--accent-dark); cursor: pointer; font-size: .82rem; font-weight: 740; }
@@ -372,7 +377,7 @@ footer { margin: 18px 3px 0; color: var(--muted); font-size: .72rem; line-height
 .stagehunter-summary-item.good { border-color: #b9dfca; background: var(--good-soft); }
 .stagehunter-summary-item.warning { border-color: #f0d6ac; background: var(--warning-soft); }
 .stagehunter-summary-item.danger { border-color: #e9c4c0; background: var(--danger-soft); }
-.stagehunter-match { margin-bottom: 18px; padding: 10px; border: 1px solid #d7e6de; border-radius: 17px; background: linear-gradient(145deg, #fff, #f9fdfb); box-shadow: 0 10px 26px rgb(6 78 59 / 7%); }
+.stagehunter-match { min-width: 0; margin-bottom: 18px; padding: 10px; border: 1px solid #d7e6de; border-radius: 17px; background: linear-gradient(145deg, #fff, #f9fdfb); box-shadow: 0 10px 26px rgb(6 78 59 / 7%); }
 .stage-match-block { margin-bottom: 8px; padding: 10px 12px; border: 1px solid #c9ded2; border-radius: 10px; background: var(--surface-muted); }
 .stage-match-header { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
 .stage-match-header .scoring-title { margin: 0; }

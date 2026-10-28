@@ -18,7 +18,7 @@
 (function () {
   const API_ROOT = "/api/career/evidence-freshness";
   const VIEW_NAME = "evidence-freshness";
-  const VIEW_TITLE = "Fraîcheur des preuves — Côme AI Career";
+  const VIEW_TITLE = "Fraîcheur des preuves — NAGE Career";
 
   /* ——— Vocabulaire local (français) ——— */
 

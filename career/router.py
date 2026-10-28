@@ -1103,7 +1103,7 @@ def create_career_router(
     async def health() -> dict[str, Any]:
         capabilities = await local(service.local_capabilities)
         return {
-            "module": "Côme AI Career 4.1",
+            "module": "NAGE Career 4.1",
             "mode": "local par défaut",
             "network_connectors": capabilities["discovery"]["enabled"],
             "automated_submission": False,
