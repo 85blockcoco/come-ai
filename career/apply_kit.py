@@ -33,6 +33,9 @@ class ApplyKit:
     checklist: list[dict[str, Any]]
     deep_link: str | None
     export_urls: dict[str, str]
+    # Persisted draft behind ``export_urls``; ``None`` when no draft exists.
+    # Kept last so positional construction of the original fields still works.
+    draft_id: str | None = None
 
 
 _REQUIRED_PROFILE_FIELDS: tuple[str, ...] = (
@@ -284,4 +287,5 @@ def build_apply_kit(
         checklist=checklist,
         deep_link=deep_link,
         export_urls=export_urls,
+        draft_id=draft_id,
     )

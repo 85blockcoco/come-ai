@@ -56,6 +56,7 @@ from .application_studio import (
     scan_kit_placeholders,
 )
 from .calendar_export import build_deadline_calendar_ics
+from .bundle_export import render_bundle_text, write_bundle_archive
 from .application_dashboard import (
     CHECKLIST_EVENT_TYPE,
     CHECKLIST_KEYS,
@@ -2327,6 +2328,53 @@ class CareerService:
             language=language,
         )
         return asdict(kit)
+
+    def build_apply_kit_bundle(
+        self,
+        job_id: str,
+        language: str = "fr",
+        variant: str | None = None,
+        profile: Any = None,
+    ) -> Path:
+        """Export every piece of one dossier as a single deterministic ZIP.
+
+        The archive reuses the exact documents exposed by the per-document
+        download links (CV/letter in PDF and DOCX) and adds ``dossier.txt`` so
+        the pasted/copied dossier and the downloaded archive tell the same
+        story.  No submission, no network call, no data outside the workspace.
+        """
+
+        identifier = clean_text(job_id, limit=80)
+        kit = self.build_apply_kit(identifier, language, variant, profile=profile)
+        job = self.get_job(identifier)
+        draft_id = str(kit.get("draft_id") or "").strip()
+        if not draft_id:
+            raise UserFacingError(
+                "Le dossier n’a pas pu être exporté : aucun brouillon local n’est disponible."
+            )
+
+        entries: dict[str, bytes] = {}
+        for kind, label in (("cv", "cv"), ("letter", "lettre")):
+            for export_format in ("pdf", "docx"):
+                path = self.export_application_draft(draft_id, kind, export_format)
+                entries[f"{label}.{export_format}"] = path.read_bytes()
+        if not entries:  # pragma: no cover - defensive
+            raise UserFacingError("Le dossier ne contient aucun document exportable.")
+
+        safe_company = re_sub_filename(str(job.get("company") or "entreprise"))
+        safe_title = re_sub_filename(str(job.get("title") or "offre"))
+        target = self.studio_dir / (
+            f"dossier_{safe_company}_{safe_title}_{uuid.uuid4().hex[:8]}.zip"
+        )
+        write_bundle_archive(target, entries, text=render_bundle_text(kit, job))
+        with self._lock, self._connection() as connection:
+            self._audit(
+                connection,
+                "application_draft_exported_bundle",
+                "application_draft",
+                draft_id,
+            )
+        return target
 
     def get_application_sprint(self, *, limit: int = 12) -> dict[str, Any]:
         # Ranking and preparation normalize many of the same short job and

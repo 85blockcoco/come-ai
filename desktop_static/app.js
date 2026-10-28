@@ -570,6 +570,20 @@
         el("div", { class: "card kpi-card" }, el("div", { class: "kpi-top" }, el("span", { class: "kpi-label" }, "Checklist"), el("span", { class: "kpi-chip" }, "✓")), el("div", { class: "kpi-value" }, `${(kit.checklist || []).filter((c) => c.done).length}/${(kit.checklist || []).length}`), el("div", { class: "kpi-foot" }, "items validés")),
       ),
       el("div", { class: "section-title" }, el("h2", {}, "Pièces à télécharger"), el("span", { class: "hint" }, "PDF + DOCX")),
+      el("div", { class: "bundle-actions" },
+        el("a", {
+          class: "chip green",
+          href: `/api/career/apply-kit/${encodeURIComponent(jobId)}/bundle.zip`,
+          download: "",
+          title: "Télécharger toutes les pièces dans une archive ZIP",
+        }, "tout télécharger (.zip)"),
+        el("button", {
+          class: "chip green",
+          type: "button",
+          title: "Copier le dossier complet en un clic",
+          onclick: (ev) => copyText(kitBundleText(kit, title), ev.currentTarget),
+        }, "copier le dossier"),
+      ),
       el("div", { class: "offer-tags", style: "flex-wrap:wrap;gap:6px" },
         Object.entries(kit.export_urls || {}).map(([k, u]) => el("a", { class: "chip green", href: u, target: "_blank", rel: "noopener" }, `${k} ↗`))),
       el("div", { class: "section-title" }, el("h2", {}, "Checklist humaine"), el("span", { class: "hint" }, "à valider avant envoi")),
@@ -644,11 +658,58 @@
     } catch (e) { alert(`Échec : ${e.message}`); }
   }
 
-  function copyText(text) {
+  function kitBundleText(kit, title) {
+    const variant = kit.variant || {};
+    const letter = kit.letter || {};
+    const answers = kit.answers || {};
+    const checklist = kit.checklist || [];
+    const lines = [
+      `DOSSIER DE CANDIDATURE — ${title || "offre"}`,
+      "Généré localement · aucun envoi automatique.",
+      `Readiness : ${Number(kit.readiness || 0)} %`,
+    ];
+    if (variant.label) lines.push(`Variante : ${variant.label}`);
+    if (kit.deep_link) lines.push(`Lien officiel : ${kit.deep_link}`);
+    if ((kit.block_reasons || []).length) {
+      lines.push("Points à vérifier :", ...kit.block_reasons.map((reason) => `- ${reason}`));
+    }
+    lines.push("", "RÉPONSES PRÉREMPLIES");
+    const answerLines = Object.keys(answers).sort().filter((key) => String(answers[key] || "").trim());
+    lines.push(...(answerLines.length ? answerLines.map((key) => `- ${key} : ${answers[key]}`) : ["- Aucune réponse enregistrée."]));
+    lines.push(
+      "", "LETTRE DE MOTIVATION",
+      String(letter.letter_markdown || letter.markdown || "[Lettre à compléter]"),
+      "", "CV (Markdown)",
+      String(letter.cv_markdown || "[CV à compléter]"),
+      "", "CHECKLIST HUMAINE",
+    );
+    lines.push(...(checklist.length
+      ? checklist.map((item) => `- [${item.done ? "x" : " "}] ${item.label || item.id || "Étape"}${item.note ? ` — ${item.note}` : ""}`)
+      : ["- Aucune checklist."]));
+    lines.push("", "RAPPEL", "La candidature est déposée manuellement sur le site officiel. Relis chaque preuve chiffrée avant l’envoi.");
+    return `${lines.join("\n").trim()}\n`;
+  }
+
+  function copyText(text, button) {
     if (!text) return;
-    (navigator.clipboard?.writeText ? navigator.clipboard.writeText(text) : Promise.resolve())
-      .then(() => {}).catch(() => {});
-    const ta = document.createElement("textarea"); ta.value = text; document.body.append(ta); ta.select(); document.execCommand("copy"); ta.remove();
+    const flash = () => {
+      if (!button) return;
+      if (!button.dataset.originalLabel) button.dataset.originalLabel = button.textContent;
+      button.textContent = "copié ✓";
+      clearTimeout(button._copyTimer);
+      button._copyTimer = setTimeout(() => { button.textContent = button.dataset.originalLabel || "copier"; }, 1600);
+    };
+    const fallback = () => {
+      try {
+        const ta = document.createElement("textarea"); ta.value = text; document.body.append(ta); ta.select(); document.execCommand("copy"); ta.remove();
+        return true;
+      } catch { return false; }
+    };
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(flash).catch(() => { if (fallback()) flash(); });
+    } else if (fallback()) {
+      flash();
+    }
   }
 
   function emptyState(title, detail) {
