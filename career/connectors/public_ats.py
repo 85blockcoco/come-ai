@@ -212,18 +212,13 @@ class PublicATSConnector:
                         excluded_by_country.get(country_canonical, 0) + 1
                     )
                     continue
-                classification = classify_internship(job)
-                qualification = qualify_offer(
-                    job,
-                    allowed_contract_types=brief.get("contract_types"),
-                    allowed_start_months=brief.get("start_months"),
-                    minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
-                    excluded_countries=brief.get("excluded_countries"),
-                    excluded_cities=brief.get("excluded_cities"),
-                    require_known_location=brief.get("require_known_location", False),
-                ).to_dict()
-                job["qualification"] = qualification
-                target = qualification["target_status"]
+                # Connectors only transmit normalized source facts.  The
+                # shared admission layer owns contract, date, domain and
+                # geography decisions so Lever cannot drift from Greenhouse
+                # or the local explorer.
+                verdict = admit_offer(job, brief, source_verified=True)
+                qualification = verdict.get("qualification") or {}
+                target = qualification.get("target_status")
                 confirmed += int(target == "conforming")
                 uncertain += int(target == "to_verify")
                 excluded += int(target == "non_conforming")
@@ -233,8 +228,8 @@ class PublicATSConnector:
                     filtered += 1
                     continue
                 relevant += 1
-                job = verdict["job"]
-                ranked.append((ranking_key(job, verdict["match"]), {"job": job, "match": verdict["match"]}))
+                admitted_job = verdict["job"]
+                ranked.append((ranking_key(admitted_job, verdict["match"]), {"job": admitted_job, "match": verdict["match"]}))
         selected = heapq.nsmallest(self.max_results, ranked, key=lambda item: item[0])
         self._last_metrics = {
             "raw_count": raw_count,
