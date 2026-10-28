@@ -22,6 +22,7 @@ from career.send_confirmation import (
     add_business_days,
     build_followup_draft,
     compute_follow_up_due,
+    elapsed_waiting_days,
     latest_followup_on,
     latest_send_evidence,
     send_record_from_payload,
@@ -340,6 +341,17 @@ def test_apply_tracker_marks_recent_sends_as_upcoming(tmp_path) -> None:
     assert item["status"] == "upcoming"
     assert item["overdue"] is False
     assert item["days_waiting"] == 0
+
+
+def test_waiting_days_counts_elapsed_time_not_calendar_midnights() -> None:
+    sent_at = datetime(2026, 10, 27, 23, 30, tzinfo=UTC)
+
+    assert elapsed_waiting_days(
+        sent_at, now=datetime(2026, 10, 28, 0, 30, tzinfo=UTC)
+    ) == 0
+    assert elapsed_waiting_days(
+        sent_at, now=datetime(2026, 10, 28, 23, 30, tzinfo=UTC)
+    ) == 1
 
 
 # ---------------------------------------------------------------------------

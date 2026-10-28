@@ -295,6 +295,20 @@ def send_record_to_dict(record: SendRecord, *, note: str | None = None) -> dict[
     return payload
 
 
+def elapsed_waiting_days(sent_at: datetime, *, now: datetime) -> int:
+    """Return complete UTC days elapsed since a declared send.
+
+    Calendar-date subtraction is wrong around midnight: an application sent
+    one hour ago can have a different date from the local machine and must
+    still report zero waiting days.  The tracker therefore counts complete
+    24-hour periods between two timezone-aware instants.
+    """
+    sent_utc = sent_at.astimezone(timezone.utc)
+    now_utc = now.astimezone(timezone.utc)
+    elapsed_seconds = (now_utc - sent_utc).total_seconds()
+    return max(int(elapsed_seconds // timedelta(days=1).total_seconds()), 0)
+
+
 def build_followup_draft(
     *,
     title: str,

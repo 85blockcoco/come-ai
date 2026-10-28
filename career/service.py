@@ -107,6 +107,7 @@ from .send_confirmation import (
     SendConfirmationError,
     SendEvidence,
     build_followup_draft,
+    elapsed_waiting_days,
     evidence_fingerprint,
     evidence_payload,
     latest_followup_on,
@@ -6163,7 +6164,8 @@ class CareerService:
         l'échéance de relance croissante, puis le titre. Aucune relance n'est
         envoyée — chaque entrée porte un brouillon local à copier.
         """
-        today = date.today()
+        current_time = datetime.now(timezone.utc)
+        today = current_time.date()
         with self._lock, self._connection() as connection:
             rows = connection.execute(
                 """
@@ -6209,7 +6211,7 @@ class CareerService:
                         "sent_at": record.sent_at.isoformat(),
                         "follow_up_due": record.follow_up_due.isoformat(),
                         "follow_up_due_date": due_day.isoformat(),
-                        "days_waiting": max((today - record.sent_at.date()).days, 0),
+                        "days_waiting": elapsed_waiting_days(record.sent_at, now=current_time),
                         "status": "due" if due_day <= today else "upcoming",
                         "overdue": due_day < today,
                         "followup_draft": draft,
