@@ -4,6 +4,16 @@
 
 Ce document décrit les livraisons acceptées et celles encore séparées. Il ne remplace pas les résultats d’exécution. Toute future session doit le lire, contrôler `git status` dans chaque worktree concerné et annoncer un périmètre limité avant de modifier des fichiers.
 
+## Point de reprise vérifié — 28 octobre 2026
+
+- **Lot intégré :** `eaa1c3e2b7e8c101a357aebd445b7e342b9dcbf1` — `SPEC-044 apply kit ready`.
+- **Fonction réellement disponible :** endpoint local `POST /api/career/apply-kit/{job_id}` qui assemble, pour une offre existante, la variante de CV, la lettre dans la langue demandée, les réponses copiables, la checklist de vérification, le lien officiel et les URLs d'export. Le code n'envoie ni candidature, ni e-mail, ni message.
+- **Composition conservée :** la logique de rapprochement des exigences déjà présente dans `CareerService` a été conservée lors de l'intégration ; le nouveau service est ajouté séparément dans `career/apply_kit.py`.
+- **Tests ciblés après intégration :** `80 passed` en `15.06 s` (apply kit, préparation CV, action center, pipeline US3, explorateur web et Stage Hunter). `py_compile`, `node --check career_static/career.js` et `git diff --check` réussis.
+- **Non-régression mesurée :** `main` avant lot : `2837 passed, 19 failed, 9 skipped`; candidat avec lot : `2841 passed, 19 failed, 10 skipped`. Aucun des 19 échecs existants n'a été créé par ce lot ; les quatre tests supplémentaires sont verts et un test reste volontairement ignoré selon son contrat.
+- **Vérification HTTP :** `/career` et `/v5` ont répondu `200` sur le serveur lancé depuis `main-live`. Le serveur de développement peut s'arrêter avec le shell de vérification ; le lanceur NAGE reste la voie recommandée.
+- **Limites ouvertes :** les 19 échecs de la baseline restent à traiter séparément (connecteur Lever, admission/triage de sources, filtres de localisation, tests historiques de provenance et évaluations). Aucun autre worktree divergent n'est fusionné automatiquement.
+
 ## État accepté de main
 
 - **Career Stage Hunter livré** : commit métier `fe798858d51dfa4facccdad325b8b87ec62744a9`, intégré par avance rapide de `main` à `fb9dbba9fc8dce2c89407d8c91ba348fce84e40c`. Les sections plus bas décrivant la copie Career « préparée » sont historiques et remplacées par cette acceptation.
