@@ -13,6 +13,7 @@ Ce document décrit les livraisons acceptées et celles encore séparées. Il ne
 - **Non-régression mesurée :** `main` avant lot : `2837 passed, 19 failed, 9 skipped`; candidat avec lot : `2841 passed, 19 failed, 10 skipped`. Aucun des 19 échecs existants n'a été créé par ce lot ; les quatre tests supplémentaires sont verts et un test reste volontairement ignoré selon son contrat.
 - **Vérification HTTP :** `/career` et `/v5` ont répondu `200` sur le serveur lancé depuis `main-live`. Le serveur de développement peut s'arrêter avec le shell de vérification ; le lanceur NAGE reste la voie recommandée.
 - **Limites ouvertes :** les 19 échecs de la baseline restent à traiter séparément (connecteur Lever, admission/triage de sources, filtres de localisation, tests historiques de provenance et évaluations). Aucun autre worktree divergent n'est fusionné automatiquement.
+- **Correctif suivant :** `cd70316` — le connecteur public ATS Lever passe désormais par l'admission partagée (`admit_offer`) au lieu d'un verdict inexistant. Les 6 tests de contrats CDD/CDI/VIE (Greenhouse et Lever) sont verts ; ce correctif ne modifie ni les critères ni le transport réseau.
 
 ## État accepté de main
 
