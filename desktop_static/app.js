@@ -4,20 +4,20 @@
   "use strict";
   window.__appState = null;
 
-  const THEME_STORAGE_KEY = "nage-app-theme";
+  const THEME_STORAGE_KEY = "nage-app-theme-v2";
   const THEMES = new Set(["terminal", "studio"]);
 
   function readTheme() {
     try {
       const saved = window.localStorage.getItem(THEME_STORAGE_KEY);
-      return THEMES.has(saved) ? saved : "terminal";
+      return THEMES.has(saved) ? saved : "studio";
     } catch {
-      return "terminal";
+      return "studio";
     }
   }
 
   function applyTheme(theme, persist = true) {
-    const selected = THEMES.has(theme) ? theme : "terminal";
+    const selected = THEMES.has(theme) ? theme : "studio";
     document.body.dataset.theme = selected;
     document.documentElement.dataset.theme = selected;
     const picker = document.querySelector("#themeSelect");
@@ -94,13 +94,13 @@
   /* ---------- Navigation ---------- */
 
   const VIEWS = {
-    today: { title: "Aujourd’hui", subtitle: "état du système · ce qui compte maintenant" },
-    applications: { title: "Candidatures", subtitle: "chaque dossier, son étape, sa prochaine action" },
-    tracking: { title: "Suivi", subtitle: "envois déclarés · relances à copier" },
-    offers: { title: "Offres", subtitle: "offres suivies · filtre instantané" },
-    assistant: { title: "Terminal", subtitle: "assistant local · aucun cloud par défaut" },
-    missions: { title: "Missions", subtitle: "flotte de construction · preuves vérifiées" },
-    memory: { title: "Mémoire", subtitle: "sources locales indexées · citables · supprimables" },
+    today: { title: "Aujourd’hui", subtitle: "Les prochaines étapes utiles, au même endroit" },
+    applications: { title: "Mes candidatures", subtitle: "Chaque dossier, son avancement et sa prochaine action" },
+    tracking: { title: "Suivi", subtitle: "Tes envois, réponses et relances à venir" },
+    offers: { title: "Offres", subtitle: "Les opportunités à examiner et à préparer" },
+    assistant: { title: "Assistant", subtitle: "Un espace privé pour analyser et préparer tes candidatures" },
+    missions: { title: "Atelier", subtitle: "État technique et améliorations de NAGE" },
+    memory: { title: "Mémoire", subtitle: "Les sources locales utilisées pour t’aider" },
   };
 
   function setView(view) {
@@ -202,7 +202,7 @@
 
   function greeting() {
     const hour = new Date().getHours();
-    if (hour < 6) return "Système actif";
+    if (hour < 6) return "Bienvenue";
     if (hour < 12) return "Bonjour";
     if (hour < 18) return "Bon après-midi";
     return "Bonsoir";
@@ -229,10 +229,15 @@
     host.replaceChildren(
       el("div", { class: "card hero" },
         el("div", {},
-          el("h2", {}, `${greeting()} — cap du jour.`),
+          el("span", { class: "eyebrow" }, "Ton espace carrière"),
+          el("h2", {}, `${greeting()}, voici ton cap du jour.`),
           el("p", {}, d.action_plan?.[0]
             ? `Priorité : ${d.action_plan[0].title.toLowerCase()}. ${d.action_plan[0].detail || ""}`
-            : "Rien d’urgent : avance sur une offre, un dossier ou une mission."),
+            : "Rien d’urgent. Tu peux explorer des offres ou avancer sur un dossier."),
+          el("div", { class: "hero-actions" },
+            el("button", { class: "ghost-btn primary", type: "button", onclick: () => setView("offers") }, "Explorer les offres"),
+            el("button", { class: "ghost-btn", type: "button", onclick: () => setView("applications") }, "Voir mes candidatures"),
+          ),
         ),
         el("div", { class: "hero-side" },
           el("div", {}, el("b", {}, num(d.jobs_total)), el("small", {}, "offres")),
@@ -258,8 +263,8 @@
         el("span", { class: "hint" }, `${active} actifs`)),
       el("div", { class: "card" }, p.length ? p.slice(0, 4).map(pipelineRow) : emptyState(
         "Aucun dossier ouvert", "Génère un kit depuis une offre pour démarrer.")),
-      el("div", { class: "section-title" }, el("h2", {}, "Flotte de missions"),
-        el("span", { class: "hint" }, "construit l’app en continu")),
+      el("div", { class: "section-title technical-section" }, el("h2", {}, "État de l’atelier"),
+        el("span", { class: "hint" }, "informations techniques")),
       el("div", { class: "card" }, missionStrip()),
     );
   }
@@ -283,7 +288,8 @@
   }
 
   function openTarget(target) {
-    if (target === "discover") window.open("/career", "_blank", "noopener");
+    if (target === "discover") window.open("/career#career/stagehunter", "_blank", "noopener");
+    else if (target === "profile") window.open("/career#career/profile", "_blank", "noopener");
     else if (target === "applications") setView("applications");
   }
 
@@ -330,8 +336,12 @@
     const p = state.pipeline?.pipeline;
     if (!p) { host.replaceChildren(unavailable("pipeline")); return; }
     if (!p.length) {
-      host.replaceChildren(el("div", { class: "card" }, emptyState(
-        "Aucun dossier", "Ouvre une offre et génère un kit pour créer ton premier dossier.")));
+      host.replaceChildren(el("div", { class: "card empty-card" },
+        emptyState("Ton espace candidatures est prêt", "Commence par sélectionner une offre. NAGE préparera le dossier, mais rien ne sera envoyé sans toi."),
+        el("div", { class: "empty-actions" },
+          el("button", { class: "ghost-btn primary", type: "button", onclick: () => setView("offers") }, "Choisir une offre"),
+          el("a", { class: "ghost-btn", href: "/career#career/stagehunter", target: "_blank", rel: "noopener" }, "Rechercher des offres"),
+        )));
       return;
     }
     const stages = new Map();
@@ -364,8 +374,14 @@
       ? jobs.filter((job) => `${job.company} ${job.title} ${job.city} ${job.job_family}`.toLowerCase().includes(filter))
       : jobs;
     host.replaceChildren(
+      ...(jobs.length ? [] : [el("div", { class: "onboarding-card" },
+        el("span", { class: "eyebrow" }, "Première étape"),
+        el("h2", {}, "Ajoute des offres qui te correspondent"),
+        el("p", {}, "NAGE privilégie les stages accessibles à ton niveau, tout en conservant les opportunités plus ambitieuses. Les critères inconnus restent signalés, jamais supposés compatibles."),
+        el("a", { class: "ghost-btn primary", href: "/career#career/stagehunter", target: "_blank", rel: "noopener" }, "Ouvrir la recherche guidée"),
+      )]),
       el("div", { class: "section-title no-gap" },
-        el("h2", {}, "Toutes les offres"),
+        el("h2", {}, jobs.length ? "Toutes les offres" : "Offres enregistrées"),
         el("span", { class: "hint" }, `${filtered.length} / ${jobs.length}`)),
       el("div", { class: "card" }, filtered.length
         ? filtered.slice(0, 120).map((job) => el("div", {
@@ -386,7 +402,7 @@
                 : null,
             ),
           ))
-        : emptyState("Aucune correspondance", "Modifie le filtre pour retrouver une offre.")),
+        : emptyState(jobs.length ? "Aucune correspondance" : "Aucune offre enregistrée", jobs.length ? "Modifie le filtre pour retrouver une offre." : "Les offres ajoutées depuis la recherche guidée apparaîtront ici.")),
     );
   }
 
@@ -817,6 +833,10 @@
 
   const initial = (location.hash || "#today").slice(1);
   setView(VIEWS[initial] ? initial : "today");
+  window.addEventListener("hashchange", () => {
+    const requested = (location.hash || "#today").slice(1);
+    if (VIEWS[requested] && requested !== state.view) setView(requested);
+  });
   loadAll();
   setInterval(() => {
     if (state.view === "today" || state.view === "missions") {

@@ -18,16 +18,20 @@ def test_desktop_shell_and_assets_are_served_with_local_protections(tmp_path, mo
         assert 'lang="fr"' in page.text
         assert "Navigation principale" in page.text
         assert 'id="themeSelect"' in page.text
-        assert '<option value="terminal">NAGE Terminal</option>' in page.text
-        assert '<option value="studio">NAGE Studio</option>' in page.text
+        assert '<option value="studio" selected>Studio professionnel</option>' in page.text
+        assert '<option value="terminal">Terminal</option>' in page.text
         assert "/app-static/app.js" in page.text
         assert "content-security-policy" in page.headers
         for asset in ("app.js", "app.css", "icon.png"):
             assert client.get("/app-static/" + asset).status_code == 200
         script = client.get("/app-static/app.js").text
         stylesheet = client.get("/app-static/app.css").text
-        assert 'const THEME_STORAGE_KEY = "nage-app-theme"' in script
+        assert 'const THEME_STORAGE_KEY = "nage-app-theme-v2"' in script
+        assert 'return THEMES.has(saved) ? saved : "studio"' in script
+        assert '"/career#career/profile"' in script
+        assert '"/career#career/stagehunter"' in script
         assert 'body[data-theme="studio"]' in stylesheet
+        assert 'window.addEventListener("hashchange"' in script
         assert client.get("/app", headers={"Host": "attacker.example.test"}).status_code == 400
 
 

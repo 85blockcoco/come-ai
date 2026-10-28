@@ -3,9 +3,10 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="color-scheme" content="light dark">
+    <meta name="color-scheme" content="light">
+    <meta name="theme-color" content="#f5f8f6">
     <meta name="description" content="NAGE — machine locale de candidatures : offres, dossiers, assistant, missions.">
-    <title>NAGE // machine de candidatures</title>
+    <title>NAGE — mes candidatures</title>
     <link rel="icon" href="/app-static/icon.png">
     <link rel="stylesheet" href="/app-static/app.css">
   </head>
@@ -19,38 +20,38 @@
           <span class="brand-mark" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none"><path d="M4 20V4h3.4l9.2 11.6V4H20v16h-3.4L7.4 8.4V20H4z" fill="currentColor"/></svg>
           </span>
-          <span class="brand-text"><strong>NAGE</strong><small>machine de candidatures</small></span>
+          <span class="brand-text"><strong>NAGE</strong><small>Ton copilote carrière</small></span>
         </div>
 
         <nav class="nav" aria-label="Navigation principale">
-          <button class="nav-item" data-view="today" aria-label="Aujourd’hui" aria-current="page">
+          <button class="nav-item" data-view="today" aria-label="Aujourd’hui" title="Aujourd’hui" aria-current="page">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.2l8-6.6 8 6.6V20a1 1 0 01-1 1h-4.6v-5.4H9.6V21H5a1 1 0 01-1-1v-8.8z"/></svg>
             <span>Aujourd’hui</span>
           </button>
-          <button class="nav-item" data-view="applications" aria-label="Candidatures">
+          <button class="nav-item" data-view="applications" aria-label="Candidatures" title="Candidatures">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14a1 1 0 01-1 1H7a1 1 0 01-1-1V4a1 1 0 011-1zm7 1.5V8h3.5L14 4.5zM8.6 12h6.8v1.6H8.6V12zm0 4h6.8v1.6H8.6V16z"/></svg>
             <span>Candidatures</span>
             <em class="nav-badge" id="badgeApplications" hidden>0</em>
           </button>
-          <button class="nav-item" data-view="tracking" aria-label="Suivi">
+          <button class="nav-item" data-view="tracking" aria-label="Suivi" title="Suivi">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5a1 1 0 011-1zm2 4h10v1.6H7V8zm0 3.6h10V13.2H7v-1.6zm0 3.6h6.4v1.6H7v-1.6z"/></svg>
             <span>Suivi</span>
             <em class="nav-badge" id="badgeTracking" hidden>0</em>
           </button>
-          <button class="nav-item" data-view="offers" aria-label="Offres">
+          <button class="nav-item" data-view="offers" aria-label="Offres" title="Offres">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5A2.5 2.5 0 016.5 4h11A2.5 2.5 0 0120 6.5v11a2.5 2.5 0 01-2.5 2.5h-11A2.5 2.5 0 014 17.5v-11zM8 9h8V7.4H8V9zm0 3.8h8v-1.6H8v1.6zm0 3.8h5.4v-1.6H8v1.6z"/></svg>
             <span>Offres</span>
           </button>
-          <button class="nav-item" data-view="assistant" aria-label="Assistant">
+          <button class="nav-item" data-view="assistant" aria-label="Assistant" title="Assistant">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a8.6 8.6 0 00-8.6 8.6c0 1.6.4 3 1.2 4.3L3.4 21l5.4-1.1a8.6 8.6 0 104.2-16.9H12z"/></svg>
             <span>Assistant</span>
           </button>
-          <button class="nav-item" data-view="missions" aria-label="Missions">
+          <button class="nav-item" data-view="missions" aria-label="Atelier" title="Atelier technique">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6l2.3 2.3 3.2-.4 1.2 3 3 1.2-.4 3.2 2.3 2.3-2.3 2.3.4 3.2-3 1.2-1.2 3-3.2-.4L12 21.4l-2.3-2.3-3.2.4-1.2-3-3-1.2.4-3.2L.4 12l2.3-2.3-.4-3.2 3-1.2 1.2-3 3.2.4L12 2.6zm-1 5.9v4.2l3.4 2 .8-1.4-2.6-1.5V8.5H11z"/></svg>
-            <span>Missions</span>
+            <span>Atelier</span>
             <i class="pulse" id="fleetPulse" hidden></i>
           </button>
-          <button class="nav-item" data-view="memory" aria-label="Mémoire">
+          <button class="nav-item" data-view="memory" aria-label="Mémoire" title="Mémoire locale">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.2c-4.9 0-8.8 3.9-8.8 8.8s3.9 8.8 8.8 8.8 8.8-3.9 8.8-8.8S16.9 3.2 12 3.2zm0 2.2a6.6 6.6 0 016.6 6.6c0 1.5-.5 2.9-1.4 4L11 9.3V6.7a6.6 6.6 0 011 0zM9.5 7.6v6.1l5.6 5.2c-1 .4-2 .6-3.1.6a6.6 6.6 0 01-6.6-6.6c0-2.2 1.1-4.2 2.8-5.4l1.3-.9z"/></svg>
             <span>Mémoire</span>
           </button>
@@ -73,14 +74,14 @@
             <p id="viewSubtitle">Chargement de ton espace…</p>
           </div>
           <div class="topbar-actions">
-            <label class="theme-picker" for="themeSelect">Style de l’app
+            <label class="theme-picker" for="themeSelect">Apparence
               <select id="themeSelect" aria-describedby="themeHint">
-                <option value="terminal">NAGE Terminal</option>
-                <option value="studio">NAGE Studio</option>
+                <option value="studio" selected>Studio professionnel</option>
+                <option value="terminal">Terminal</option>
               </select>
               <span id="themeHint" class="sr-only">Modifie uniquement l’apparence et mémorise ce choix sur cet appareil.</span>
             </label>
-            <label class="kit-language" for="kitLanguage">Langue du dossier
+            <label class="kit-language" for="kitLanguage">Dossier en
               <select id="kitLanguage"><option value="en">Anglais</option><option value="fr">Français</option><option value="it">Italien</option><option value="de">Allemand</option></select>
             </label>
             <label class="search" id="searchBox" hidden>
