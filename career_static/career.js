@@ -2047,9 +2047,14 @@ function renderApplicationKit(kit, container) {
         ["cover_letter", "Lettre ciblée DOCX"],
         ["prep_sheet", "Fiche de préparation"],
       ].forEach(([key, label]) => {
-        if (targetedArtifacts[key]) {
-          artifactList.append(make("li", `${label} — ${targetedArtifacts[key]}`));
-        }
+        if (!targetedArtifacts[key]) return;
+        const item = make("li");
+        const link = make("a", `Télécharger — ${label}`, "secondary-button link-button");
+        link.href = `/api/career/applications/${encodeURIComponent(application.id)}/artifacts/${key}`;
+        link.download = "";
+        link.dataset.artifact = key;
+        item.append(link);
+        artifactList.append(item);
       });
       documents.append(
         make("p", `Variante générée : ${kit.variant_label || kit.variant}`, "application-meta"),

@@ -18,3 +18,7 @@ __pycache__/
 
 # Environnement virtuel local
 .venv/
+
+# Preuves E2E (rapport et captures regénérés à chaque exécution)
+e2e-report.html
+tests/e2e/artifacts/

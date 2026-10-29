@@ -1,0 +1,14 @@
+{
+  "company": "Morgan Stanley (synthetic)",
+  "title": "Equity Research Analyst Internship (synthetic)",
+  "source_status": "open",
+  "employment_type": "internship",
+  "city": "London",
+  "country": "United Kingdom",
+  "official_url": "https://careers.example.test/ms-equity-research-intern",
+  "job_family": "Markets / Quant",
+  "duration_months": 6,
+  "requirements": "Python\nStatistics\nTime series analysis\nBloomberg\nQuantitative research",
+  "languages_required": "English",
+  "description_original": "Requirements\nPython\nStatistics\nTime series analysis\nBloomberg\nQuantitative research\n\nYou will build data-driven equity research models."
+}

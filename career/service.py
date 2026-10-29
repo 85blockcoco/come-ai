@@ -4335,8 +4335,9 @@ class CareerService:
             edits.update(self._kit_content_edits(str(row["detail"])))
         kit_texts.update(edits)
         draft = self._serialize_application_draft(draft_row, include_content=True) if draft_row else None
+        draft_variant = clean_text(str(draft_row["variant"]), limit=40) if draft_row else ""
         unverified = self._kit_unverified_requirements(profile, intake, kit_job)
-        return {
+        result = {
             "application": {
                 "id": identifier,
                 "job_id": job_id,
@@ -4364,6 +4365,54 @@ class CareerService:
                 "Aucun envoi automatique ; la candidature est déposée par toi uniquement."
             ),
         }
+        if draft_variant:
+            # Expose the deterministic paths of the downloadable files for the
+            # currently selected variant so the applications view can offer real
+            # download links. Generation stays in the explicit kit action; the
+            # download endpoint re-creates a missing file on demand.
+            variant = self._variant_config(draft_variant)
+            output_dir = self.base_dir / "output" / "career" / "kits" / f"{job_id}_{variant.id}"
+            result["variant"] = variant.id
+            result["variant_label"] = variant.label
+            result["artifacts"] = {
+                "cv": str(output_dir / "cv.docx"),
+                "cover_letter": str(output_dir / "cover_letter.docx"),
+                "prep_sheet": str(output_dir / "prep_sheet.md"),
+            }
+        return result
+
+    def application_artifact_path(self, application_id: str, kind: str) -> Path:
+        """Return one generated kit artifact for a tracked application.
+
+        The path is always re-derived from the application's own job and latest
+        draft variant, then confined to the local kits directory. A caller can
+        therefore never request an arbitrary file through this endpoint.
+        """
+        if kind not in {"cv", "cover_letter", "prep_sheet"}:
+            raise UserFacingError("Ce document du kit n’est pas reconnu.")
+        identifier = clean_text(application_id, limit=80)
+        with self._lock, self._connection() as connection:
+            application = connection.execute(
+                "SELECT job_id FROM applications WHERE id = ?", (identifier,)
+            ).fetchone()
+            if not application:
+                raise UserFacingError("Cette candidature Career n’existe pas.")
+            draft = connection.execute(
+                """
+                SELECT variant FROM application_drafts WHERE job_id = ?
+                ORDER BY created_at DESC, application_drafts.rowid DESC LIMIT 1
+                """,
+                (str(application["job_id"]),),
+            ).fetchone()
+        variant = clean_text(draft["variant"], limit=40) if draft else "m_a"
+        generated = self._generate_targeted_kit_files(str(application["job_id"]), variant or "m_a")
+        path = Path(str(generated["artifacts"][kind])).resolve()
+        kits_root = (self.base_dir / "output" / "career" / "kits").resolve()
+        if kits_root != path.parent and kits_root not in path.parents:
+            raise UserFacingError("Ce document du kit n’est pas disponible.")
+        if not path.is_file():
+            raise UserFacingError("Ce document du kit n’est pas disponible.")
+        return path
 
     def update_kit_texts(self, application_id: str, texts: dict[str, Any]) -> dict[str, Any]:
         """Save one explicit edit of the kit texts as a JSON event row.
