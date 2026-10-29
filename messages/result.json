@@ -7,6 +7,6 @@
     "docs/agent-reports/SK-12-RELEASE_GATE.md"
   ],
   "output": "Gate de release Career de bout en bout via serveur loopback et client HTTP réel : profil approuvé, exploration succès/partiel/indisponible, qualification et offres adverses, dédup, matching, fiche, kit et trois exports, pipeline, approbation/reçu/relance, entretien, redémarrage, hors ligne, navigateur Chromium réel et classes de mesure synthetic/app-verified/live/unmeasured séparées. Aucun envoi, aucune soumission, aucune source live sans opt-in.",
-  "logs": "pytest cible: 18 passed in 23.66s (tests/test_release_gate.py + US1/US2/US3 + apply kit). CLI avec navigateur: PASS 19 pass, 0 fail, 1 skip (live non demandee). ruff career/release_gate.py scripts/release_gate.py tests/test_release_gate.py: All checks passed.",
+  "logs": "pytest -q tests/test_release_gate.py -> 4 passed in 28.74s; pytest -q tests/test_release_gate.py tests/test_apply_kit.py tests/test_career_application_kit.py -> 26 passed in 65.66s (aucune regression); python scripts/release_gate.py (Chromium reel) -> PASS 19 pass, 0 fail, 1 skip, rc=0; ruff check career/release_gate.py scripts/release_gate.py tests/test_release_gate.py -> All checks passed; checklist_codex.sh secrets -> TOUT VERT; git diff --check -> propre. Note: 9 erreurs ruff globales preexistantes hors perimetre (career/connectors/*, career/discovery.py), aucun fichier modifie par fcc12c2.",
   "error": null
 }
