@@ -41,3 +41,15 @@ Règle : un fichier n’a qu’un propriétaire. Si Codex doit toucher
   les commits prêts à intégrer.
 - Priorité backend : images des missions 39 → 51, 66 → 68 → 72 (dépendances).
 - Ne pas lancer la suite complète : `pytest -q tests/test_<zone>.py` suffit.
+
+## Transfert du 29/10 16:15 — 12 missions passées à Codex
+
+Ordre de reprise, dépendances et règles : voir `messages/handoff_codex_missions.md`.
+
+- 7 missions échouées au retry max (39, 66, 70, 71, 73, 74, 77) → **Codex**,
+  flotte suspendue sur ces lots (charge machine trop élevée).
+- 5 missions en attente de dépendance (51, 68, 72, 79, 80) → se débloquent
+  automatiquement quand la mission amont est `done`.
+- Codex signale chaque livraison dans `messages/codex_mission_<n>.md` ;
+  OpenCode vérifie (branche sur origin + tests ciblés) puis marque `done`
+  dans `missions_registry.json` — seul écrivain du registre.
