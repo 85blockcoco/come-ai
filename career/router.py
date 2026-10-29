@@ -240,6 +240,8 @@ class SectorFaqPayload(BaseModel):
     offers: list[dict[str, Any]] = Field(default_factory=list)
     profile: dict[str, Any] = Field(default_factory=dict)
     sector: str = Field(default="", max_length=160)
+    top_n: int = Field(default=20, ge=0, le=100)
+    max_questions: int = Field(default=8, ge=0, le=20)
 
 
 def create_career_router(
@@ -729,14 +731,26 @@ def create_career_router(
         return await local(
             lambda: service.mine_sector_faq(
                 payload.offers,
-                profile=payload.profile or None,
+                payload.profile or None,
                 sector=payload.sector or None,
+                top_n=payload.top_n,
+                max_questions=payload.max_questions,
             )
         )
 
     @router.get("/api/career/faq-mine")
-    async def mine_sector_faq_from_jobs() -> Any:
-        return await local(lambda: service.mine_sector_faq())
+    async def mine_sector_faq_from_jobs(
+        sector: str = Query(default="", max_length=160),
+        top_n: int = Query(default=20, ge=1, le=100),
+        max_questions: int = Query(default=8, ge=0, le=20),
+    ) -> Any:
+        return await local(
+            lambda: service.mine_sector_faq(
+                sector=sector or None,
+                top_n=top_n,
+                max_questions=max_questions,
+            )
+        )
 
     @router.get("/api/career/export/{export_format}")
     async def export_applications(export_format: str) -> FileResponse:

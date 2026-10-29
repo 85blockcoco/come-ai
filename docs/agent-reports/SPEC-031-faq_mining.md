@@ -2,21 +2,23 @@
 
 ## Livré
 
-- Module `career/faq_mining.py` : `SectorFaq`, `mine_sector_faq()`, `cluster_intents()`, `expected_questions()`.
-- Fixture synthétique `tests/fixtures/faq_offers_synthetic.json`.
-- Tests `tests/test_faq_mining.py` (cas limites + adversarial).
-- Endpoints REST : `POST/GET /api/career/faq-mine` via `create_app()`.
-- Capability `faq_mining` exposée dans `/api/career/health`.
+- `career/faq_mining.py` : extraction déterministe des attentes par secteur/famille de poste,
+  clustering d'intentions (`cluster_intents`), questions probables (`expected_questions`,
+  `question_for_intent`), FAQ sectorielle (`mine_sector_faq`, `mine_all_sector_faqs`) et
+  éléments de réponse issus du profil (`profile_answer_elements`).
+- `tests/test_faq_mining.py` + `tests/fixtures/faq_offers_synthetic.json` : 9 tests synthétiques
+  (contrat, fréquences, déterminisme, adversarial, REST).
+- Endpoints REST `/api/career/faq-mine` (POST explicite, GET offres locales) via `create_app()`.
+- Rapport présent.
 
 ## Décisions
 
-- Clustering déterministe par secteur/famille de poste (`sector`, `job_family`, ...).
-- Termes = tokens normalisés des attentes, fréquences triées par fréquence puis terme.
-- Questions probables générées à partir des termes dominants + questions génériques sectorielles.
-- Réponses issues des preuves du profil (snippets contenant le terme).
+- Aucun appel réseau, aucun modèle, aucune horloge : clustering par vocabulaire d'intentions versionné.
+- Anti-invention : les réponses profil sont des extraits verbatim ; liste vide si aucune preuve.
+- Bornes de sécurité (`MAX_OFFERS`, etc.) et validation FastAPI (`top_n`, `max_questions`).
 
 ## Limites
 
-- Tokenisation lexicale simple (pas de NLP avancé).
-- Pas d'appel réseau ni de modèle.
-- `top_n` par défaut = 10 termes.
+- Heuristique par mots-clés normalisés ; pas d'analyse sémantique.
+- `sector` manquant côté GET renvoie `[]` si aucune offre locale.
+- `schema_version` inchangé (7).

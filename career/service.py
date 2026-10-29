@@ -4535,6 +4535,7 @@ class CareerService:
                 "ai_required": False,
                 "local_only": True,
                 "deterministic": True,
+                "invented_facts": False,
             },
         }
 
@@ -4544,11 +4545,12 @@ class CareerService:
             offers = self.list_jobs()
         if profile is None:
             profile = self.get_profile()
-        from .faq_mining import mine_sector_faq as _mine
+        from .faq_mining import mine_sector_faq as _mine, mine_all_sector_faqs as _mine_all
 
-        faqs = _mine(offers, profile=profile, sector=sector, **kwargs)
-        if not isinstance(faqs, list):
-            faqs = [faqs]
+        if sector is None or str(sector).strip() == "":
+            faqs = _mine_all(offers, profile, **kwargs)
+        else:
+            faqs = [_mine(offers, profile, sector=sector, **kwargs)]
         return [faq.to_dict() if hasattr(faq, "to_dict") else faq for faq in faqs]
 
     def export_deadline_calendar(self) -> Path:
