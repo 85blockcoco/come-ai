@@ -77,5 +77,6 @@
 ## 6. Risques / blocages
 - Le tuteur conversationnel local nécessite un service Ollama disponible ; lecture, structuration, analyse Excel, quiz, corrections et progression restent utilisables sans modèle.
 - La première CI complète a exposé 3 régressions sur 6 458 cas ; elles sont corrigées et couvertes avant la seconde CI.
+- La seconde CI a confirmé 6 446 tests verts et exposé une unique référence Constitution déplacée vers une ligne vide ; la référence vise de nouveau le code actif et son test dédié passe.
 - Aucun original personnel n’est modifié ; les huit documents sont copiés dans les données locales ignorées par Git.
 - Aucune soumission de candidature, aucun envoi de document et aucun fournisseur cloud n’est déclenché par ce parcours.

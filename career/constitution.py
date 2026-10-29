@@ -1585,7 +1585,7 @@ DEFAULT_RULES: tuple[dict[str, Any], ...] = (
         "scope": ["offer"],
         "tags": ["contrat"],
         "severity": "error",
-        "source_reference": "career/offer_qualification.py:263-264",
+        "source_reference": "career/offer_qualification.py:387-391",
         "source_symbol": "qualify_offer",
         "status": "active",
     },
