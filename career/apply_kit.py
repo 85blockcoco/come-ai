@@ -41,6 +41,9 @@ class ApplyKit:
     fact_checks: dict[str, Any] = dataclass_field(default_factory=dict)
     review_token: str | None = None
     ats_guide: dict[str, Any] | None = None
+    # Step 2 of the one-click kit: the dossier is generated, then audited before
+    # any export.  ``None`` only when no generated text exists to audit.
+    quality_audit: dict[str, Any] | None = None
 
 
 _REQUIRED_PROFILE_FIELDS: tuple[str, ...] = (
@@ -203,6 +206,85 @@ def _readiness(
     return score, block_reasons
 
 
+def _quality_audit(
+    profile: Mapping[str, Any],
+    intake: Mapping[str, Any],
+    job: Mapping[str, Any],
+    letter: Mapping[str, Any] | None,
+    prepped: Mapping[str, Any],
+    service: Any = None,
+) -> dict[str, Any] | None:
+    """Run the deterministic dossier audit on the generated texts.
+
+    The audit is the second step of the one-click kit: the person sees the
+    quality report *before* choosing to export.  It never rewrites the draft
+    and never calls a provider.
+    """
+
+    if not isinstance(letter, Mapping):
+        return None
+    cv_markdown = str(letter.get("cv_markdown") or "").strip()
+    letter_markdown = str(letter.get("letter_markdown") or letter.get("markdown") or "").strip()
+    if not cv_markdown and not letter_markdown:
+        return None
+    try:
+        from career.dossier_quality import audit_dossier
+    except Exception:  # pragma: no cover - defensive
+        return None
+
+    intake_answers = intake.get("answers") if isinstance(intake.get("answers"), Mapping) else {}
+    extra_facts: list[dict[str, Any]] = []
+    for question, answer in intake_answers.items():
+        value = str(answer or "").strip()
+        if not value:
+            continue
+        extra_facts.append(
+            {
+                "fact_id": f"intake_{len(extra_facts):04d}",
+                "category": "answer",
+                "value": value,
+                "quote": f"{question} : {value}",
+                "level": "declared",
+                "source": "intake",
+                "topic": str(question),
+            }
+        )
+    requirements = prepped.get("requirements") if isinstance(prepped, Mapping) else []
+    if not isinstance(requirements, list):
+        requirements = []
+    context = {
+        "entities": [
+            str(job.get(key)).strip()
+            for key in ("company", "title", "city", "country", "source_name")
+            if str(job.get(key) or "").strip()
+        ],
+        "terms": [
+            str(job.get(key)).strip()
+            for key in ("requirements", "description_original", "description", "missions")
+            if str(job.get(key) or "").strip()
+        ],
+        "numbers": [
+            str(job.get(key)).strip()
+            for key in ("deadline_date", "start_date", "end_date", "duration_months")
+            if str(job.get(key) or "").strip()
+        ],
+    }
+    try:
+        report = audit_dossier(
+            cv=cv_markdown,
+            letter=letter_markdown,
+            profile=profile,
+            extra_facts=extra_facts,
+            requirements=requirements,
+            recurring_answers=intake_answers,
+            context=context,
+            evidence_service=service,
+        )
+    except Exception:  # pragma: no cover - defensive
+        return None
+    return report.to_dict()
+
+
 def _checklist(
     profile: Mapping[str, Any],
     job: Mapping[str, Any],
@@ -211,6 +293,7 @@ def _checklist(
     unverified: list[dict[str, Any]],
     *,
     exports_ready: bool | None,
+    quality_audit: Mapping[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     items.append(
@@ -238,6 +321,30 @@ def _checklist(
         }
     )
     items.append({"id": "letter", "label": "Lettre adaptée générée", "done": letter is not None, "note": ""})
+    if isinstance(quality_audit, Mapping):
+        score = quality_audit.get("score")
+        verdict = str(quality_audit.get("verdict") or "")
+        export_allowed = bool(quality_audit.get("export_allowed"))
+        items.append(
+            {
+                "id": "quality_audit",
+                "label": "Étape 2 — audit qualité du dossier avant export",
+                "done": export_allowed,
+                "note": (
+                    f"Score {score}/100 — {quality_audit.get('verdict_label') or verdict}. "
+                    + ("Audit validé, relis puis exporte." if export_allowed else "Corrige les signaux avant d'exporter.")
+                ),
+            }
+        )
+    else:
+        items.append(
+            {
+                "id": "quality_audit",
+                "label": "Étape 2 — audit qualité du dossier avant export",
+                "done": False,
+                "note": "Audit indisponible : aucun texte généré à contrôler.",
+            }
+        )
     trust = job.get("official_source_trust")
     trust = trust if isinstance(trust, Mapping) else {}
     source_verified = bool(job.get("source_verified")) and trust.get("status") == "verified"
@@ -464,6 +571,8 @@ def build_apply_kit(
     if fact_checks.get("destination_error"):
         readiness = max(0, readiness - 25)
         block_reasons.append(str(fact_checks["destination_error"]))
+    answers = _answers(profile, intake, job, normalized_language)
+    quality_audit = _quality_audit(profile, intake, job, letter_payload, prep, service)
     checklist = _checklist(
         profile,
         job,
@@ -471,6 +580,7 @@ def build_apply_kit(
         letter_payload,
         unverified,
         exports_ready=exports_ready,
+        quality_audit=quality_audit,
     )
     checklist.insert(-1, {
         "id": "documents_complete",
@@ -478,7 +588,6 @@ def build_apply_kit(
         "done": not document_placeholders,
         "note": ", ".join(document_placeholders),
     })
-    answers = _answers(profile, intake, job, normalized_language)
 
     return ApplyKit(
         job_id=resolved_job_id,
@@ -496,4 +605,5 @@ def build_apply_kit(
         fact_checks=fact_checks,
         review_token=review_token,
         ats_guide=guide_payload,
+        quality_audit=quality_audit,
     )
