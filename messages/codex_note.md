@@ -80,3 +80,22 @@
 - La seconde CI a confirmé 6 446 tests verts et exposé une unique référence Constitution déplacée vers une ligne vide ; la référence vise de nouveau le code actif et son test dédié passe.
 - Aucun original personnel n’est modifié ; les huit documents sont copiés dans les données locales ignorées par Git.
 - Aucune soumission de candidature, aucun envoi de document et aucun fournisseur cloud n’est déclenché par ce parcours.
+
+---
+
+# RAPPORT CODEX — 2026-10-29 16:40 CET
+
+## Livraison UX apprentissage
+
+- Le dernier document de travail est désormais mémorisé localement et restauré après chargement; en l’absence d’historique, NAGE privilégie le document possédant déjà un parcours d’apprentissage.
+- La bibliothèque Devoirs possède un filtre instantané, un compteur de résultats et un badge `Parcours créé`.
+- Un aperçu compact expose documents, parcours, questions travaillées et notions à revoir.
+- Le sélecteur `Dossier en` est masqué hors des parcours candidature où il est pertinent.
+- Quand Ollama n’est pas configuré, les commandes conversationnelles sont désactivées avec une explication honnête; lecture, analyse, quiz et progression restent accessibles.
+
+## Preuves
+
+- `node --check desktop_static/app.js` : vert.
+- `pytest -q tests/test_desktop_app.py tests/test_study_web_integration.py` : **4 passed en 6,14 s**.
+- `ruff check tests/test_desktop_app.py` et `git diff --check` : verts.
+- Navigateur réel sur la candidate : TD4 restauré, badge de parcours visible, 4 indicateurs de progression, absence de `Dossier en`, tuteur indisponible expliqué, recherche `Eurotech` ramenant la bibliothèque de 8 à 2 documents.

@@ -6,6 +6,7 @@
 
   const THEME_STORAGE_KEY = "nage-app-theme-v2";
   const LANGUAGE_STORAGE_KEY = "nage-kit-language-v1";
+  const DOCUMENT_STORAGE_KEY = "nage-homework-document-v1";
   const THEMES = new Set(["terminal", "studio"]);
   const KIT_LANGUAGES = new Set(["en", "fr", "it", "de"]);
 
@@ -42,6 +43,11 @@
     }
   }
 
+  function readSelectedDocumentId() {
+    try { return window.localStorage.getItem(DOCUMENT_STORAGE_KEY); }
+    catch { return null; }
+  }
+
   const state = window.__appState = {
     view: "today",
     dashboard: null,
@@ -55,7 +61,8 @@
     chatMode: "offline",
     sending: false,
     documents: null,
-    selectedDocumentId: null,
+    selectedDocumentId: readSelectedDocumentId(),
+    documentFilter: "",
     documentInspection: null,
     documentAnalysis: null,
     homeworkChat: [],
@@ -67,6 +74,7 @@
     studyQuestion: null,
     studyCorrection: null,
     studyBusy: false,
+    health: null,
     careerSection: "stagehunter",
     kitLanguage: readKitLanguage(),
     theme: readTheme(),
@@ -144,6 +152,8 @@
     $("#viewTitle").textContent = VIEWS[view].title;
     $("#viewSubtitle").textContent = VIEWS[view].subtitle;
     $("#searchBox").hidden = true;
+    const languagePicker = document.querySelector(".kit-language");
+    if (languagePicker) languagePicker.hidden = !new Set(["today", "applications", "tracking", "offers", "assistant"]).has(view);
     $("#scroll").scrollTop = 0;
     render(view);
     const destination = `#${view}`;
@@ -171,6 +181,7 @@
       return state.documents;
     },
     study: async () => (state.studyOverview = await api("/api/study/overview")),
+    health: async () => (state.health = await api("/api/health")),
   };
 
   async function loadAll() {
@@ -183,6 +194,7 @@
       }),
     );
     const failed = results.filter((r) => r.status === "rejected").length;
+    restoreLearningDocument();
     setStatus(failed === 0 ? "online" : failed >= results.length ? "offline" : "pending",
       failed === 0 ? "Local · 127.0.0.1" : `${results.length - failed}/${results.length} sources`);
     renderBadges();
@@ -474,8 +486,26 @@
       state.studySession = null;
       state.studyQuestion = null;
       state.studyCorrection = null;
+      try { window.localStorage.setItem(DOCUMENT_STORAGE_KEY, fileId); } catch { /* stockage local indisponible */ }
     }
     renderHomework();
+  }
+
+  function restoreLearningDocument() {
+    if (readSelectedDocumentId() || !state.documents?.length || !state.studyOverview?.courses?.length) return;
+    const courseNames = new Set(state.studyOverview.courses.map((course) => course.title));
+    const learningFile = state.documents.find((file) => courseNames.has(file.name));
+    if (learningFile) {
+      state.selectedDocumentId = learningFile.file_id;
+      try { window.localStorage.setItem(DOCUMENT_STORAGE_KEY, learningFile.file_id); } catch { /* stockage local indisponible */ }
+    }
+  }
+
+  function localTutorStatus() {
+    if (!state.health) return { usable: true, label: "État du modèle local en cours de vérification" };
+    const ollama = state.health.providers?.ollama;
+    if (ollama?.configured && ollama?.model) return { usable: true, label: `Modèle local prêt · ${ollama.model}` };
+    return { usable: false, label: "Tuteur conversationnel en pause · aucun modèle Ollama configuré" };
   }
 
   async function uploadHomework(files) {
@@ -769,6 +799,7 @@
     const host = $("#view-homework");
     if (!state.documents) { host.replaceChildren(unavailable("documents")); return; }
     const file = selectedDocument();
+    const tutor = localTutorStatus();
     const fileInput = el("input", { class: "sr-only", type: "file", multiple: "multiple", accept: HOMEWORK_ACCEPT, id: "homeworkFileInput" });
     fileInput.addEventListener("change", () => { uploadHomework(fileInput.files); fileInput.value = ""; });
     const drop = el("div", { class: `homework-drop${state.homeworkUploading ? " busy" : ""}`, tabindex: "0", role: "button", "aria-label": "Ajouter des documents de devoir" },
@@ -784,13 +815,36 @@
     for (const type of ["dragleave", "drop"]) drop.addEventListener(type, (event) => { event.preventDefault(); drop.classList.remove("dragging"); });
     drop.addEventListener("drop", (event) => uploadHomework(event.dataTransfer.files));
 
-    const library = el("aside", { class: "homework-library", "aria-label": "Documents de travail" },
-      el("div", { class: "homework-section-heading" }, el("h2", {}, "Mes documents"), el("span", {}, String(state.documents.length))),
-      state.documents.length ? el("div", { class: "homework-files" }, state.documents.map((item) =>
-        el("button", { class: `homework-file${item.file_id === state.selectedDocumentId ? " selected" : ""}`, type: "button", onclick: () => chooseDocument(item.file_id) },
+    const filterValue = state.documentFilter.trim().toLocaleLowerCase("fr");
+    const matchingDocuments = (item) => `${item.name} ${item.type || ""}`.toLocaleLowerCase("fr").includes(filterValue);
+    const visibleCount = state.documents.filter(matchingDocuments).length;
+    const libraryCount = el("span", {}, filterValue ? `${visibleCount}/${state.documents.length}` : String(state.documents.length));
+    const filterInput = el("input", { type: "search", value: state.documentFilter, placeholder: "Rechercher un document…", "aria-label": "Rechercher dans mes documents" });
+    const noFilterResult = el("p", { class: "homework-filter-empty", hidden: visibleCount > 0 }, "Aucun document ne correspond à cette recherche.");
+    const fileList = state.documents.length ? el("div", { class: "homework-files" }, state.documents.map((item) => {
+      const course = studyCourseFor(item);
+      return el("button", { class: `homework-file${item.file_id === state.selectedDocumentId ? " selected" : ""}`, type: "button", hidden: !matchingDocuments(item), "data-document-search": `${item.name} ${item.type || ""}`.toLocaleLowerCase("fr"), onclick: () => chooseDocument(item.file_id) },
           el("span", { class: "homework-file-type" }, String(item.type || "doc").slice(0, 4).toUpperCase()),
-          el("span", {}, el("strong", {}, item.name), el("small", {}, `${formatFileSize(item.size_kb)} · ${item.modified}`)),
-        ))) : emptyState("Aucun document", "Ajoute ton sujet, ton cours ou ton fichier de calcul."),
+          el("span", {}, el("strong", {}, item.name), el("small", {}, `${formatFileSize(item.size_kb)} · ${item.modified}`), course ? el("em", { class: "homework-course-badge" }, "Parcours créé") : null),
+        );
+    })) : emptyState("Aucun document", "Ajoute ton sujet, ton cours ou ton fichier de calcul.");
+    filterInput.addEventListener("input", () => {
+      state.documentFilter = filterInput.value;
+      const query = state.documentFilter.trim().toLocaleLowerCase("fr");
+      let count = 0;
+      for (const button of fileList.querySelectorAll("[data-document-search]")) {
+        const matches = button.dataset.documentSearch.includes(query);
+        button.hidden = !matches;
+        if (matches) count += 1;
+      }
+      libraryCount.textContent = query ? `${count}/${state.documents.length}` : String(state.documents.length);
+      noFilterResult.hidden = count > 0;
+    });
+    const library = el("aside", { class: "homework-library", "aria-label": "Documents de travail" },
+      el("div", { class: "homework-section-heading" }, el("h2", {}, "Mes documents"), libraryCount),
+      state.documents.length ? el("label", { class: "homework-filter" }, el("span", { class: "sr-only" }, "Rechercher dans mes documents"), filterInput) : null,
+      fileList,
+      state.documents.length ? noFilterResult : null,
     );
 
     let workspace = el("section", { class: "homework-main" }, emptyState("Sélectionne un document", "NAGE peut lire un PDF ou Word, structurer un classeur Excel et t’aider à raisonner dessus."));
@@ -816,18 +870,35 @@
           ),
         ),
         el("div", { class: "homework-prompts", "aria-label": "Démarrages rapides" }, quickPrompts.map(([label, prompt]) =>
-          el("button", { type: "button", onclick: () => askHomework(prompt), disabled: state.homeworkSending }, label))),
+          el("button", { type: "button", onclick: () => askHomework(prompt), disabled: state.homeworkSending || !tutor.usable, title: tutor.usable ? "" : tutor.label }, label))),
         inspectionContent(state.documentInspection),
         analysisContent(state.documentAnalysis),
         studyPanel(file),
         el("section", { class: "homework-tutor" },
-          el("div", { class: "homework-section-heading" }, el("h3", {}, "Tuteur de travail"), el("span", {}, "source sélectionnée uniquement")),
+          el("div", { class: "homework-section-heading" }, el("h3", {}, "Tuteur de travail"), el("span", { class: tutor.usable ? "tutor-status ready" : "tutor-status paused" }, tutor.label)),
+          !tutor.usable ? el("div", { class: "homework-model-note", role: "status" },
+            el("strong", {}, "Les outils d’apprentissage restent disponibles."),
+            el("span", {}, "Lecture, analyse Excel, parcours, quiz et progression fonctionnent sans modèle. Démarre Ollama pour les explications libres.")) : null,
           el("div", { class: "homework-chat", "aria-live": "polite" }, homeworkConversation(), state.homeworkSending ? el("div", { class: "msg ai" }, el("div", { class: "bubble" }, "Je lis le document et je prépare une réponse vérifiable…")) : null),
           chatForm,
         ),
       );
+      chatInput.disabled = !tutor.usable;
+      chatForm.querySelector("button[type=submit]").disabled = state.homeworkSending || !tutor.usable;
     }
-    host.replaceChildren(drop, el("div", { class: "homework-layout" }, library, workspace));
+    const progress = state.studyOverview?.progress || {};
+    const progressStats = progress.stats || {};
+    const reviewCount = progress.notions_to_review?.length || 0;
+    const documentCount = state.documents.length;
+    const courseCount = state.studyOverview?.courses?.length || 0;
+    const questionsSeen = progressStats.questions_seen || 0;
+    const overview = el("section", { class: "homework-overview", "aria-label": "Aperçu de l’espace d’apprentissage" },
+      el("article", {}, el("strong", {}, num(documentCount)), el("span", {}, documentCount === 1 ? "document local" : "documents locaux")),
+      el("article", {}, el("strong", {}, num(courseCount)), el("span", {}, courseCount === 1 ? "parcours créé" : "parcours créés")),
+      el("article", {}, el("strong", {}, num(questionsSeen)), el("span", {}, questionsSeen === 1 ? "question travaillée" : "questions travaillées")),
+      el("article", { class: reviewCount ? "attention" : "" }, el("strong", {}, num(reviewCount)), el("span", {}, reviewCount === 1 ? "notion à revoir" : "notions à revoir")),
+    );
+    host.replaceChildren(drop, overview, el("div", { class: "homework-layout" }, library, workspace));
     const log = $(".homework-chat", host);
     if (log) log.scrollTop = log.scrollHeight;
   }

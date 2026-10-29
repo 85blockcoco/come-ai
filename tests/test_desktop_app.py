@@ -31,6 +31,7 @@ def test_desktop_shell_and_assets_are_served_with_local_protections(tmp_path, mo
         stylesheet = client.get("/app-static/app.css").text
         assert 'const THEME_STORAGE_KEY = "nage-app-theme-v2"' in script
         assert 'const LANGUAGE_STORAGE_KEY = "nage-kit-language-v1"' in script
+        assert 'const DOCUMENT_STORAGE_KEY = "nage-homework-document-v1"' in script
         assert 'return THEMES.has(saved) ? saved : "studio"' in script
         assert 'src: `/career?embed=app#career/${encodeURIComponent(state.careerSection)}`' in script
         assert 'openCareerWorkspace("stagehunter")' in script
@@ -42,6 +43,13 @@ def test_desktop_shell_and_assets_are_served_with_local_protections(tmp_path, mo
         assert 'allow_cloud_context: false' in script
         assert 'api("/api/study/courses"' in script
         assert '"/api/study/overview"' in script
+        assert 'health: async () => (state.health = await api("/api/health"))' in script
+        assert "restoreLearningDocument();" in script
+        assert "Rechercher un document…" in script
+        assert "Parcours créé" in script
+        assert "Tuteur conversationnel en pause" in script
+        assert "Les outils d’apprentissage restent disponibles." in script
+        assert 'languagePicker.hidden = !new Set(["today", "applications", "tracking", "offers", "assistant"]).has(view)' in script
         assert '`${option.id}. ${option.label}`' not in script
         assert "Reprendre ma séance" in script
         assert "/api/study/sessions/${encodeURIComponent(sessionId)}" in script
@@ -56,6 +64,9 @@ def test_desktop_shell_and_assets_are_served_with_local_protections(tmp_path, mo
         assert ".homework-layout" in stylesheet
         assert ".homework-drop" in stylesheet
         assert ".study-panel" in stylesheet
+        assert ".homework-overview" in stylesheet
+        assert ".homework-filter" in stylesheet
+        assert ".homework-model-note" in stylesheet
         assert 'window.addEventListener("hashchange"' in script
         assert 'history.pushState(null, "", destination)' in script
         embedded = client.get("/career?embed=app")
