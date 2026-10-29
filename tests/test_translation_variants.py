@@ -58,6 +58,11 @@ SYNTHETIC_OFFER_MIXED = (
     "Vous travaillerez with us on data-driven research."
 )
 
+# French elision: apostrophes must not hide stopwords ("l'expérience")
+SYNTHETIC_OFFER_FR_ELISION = (
+    "L'expérience de l'équipe avec ce poste est confirmée pour la mission."
+)
+
 # Edge case: very short text
 SYNTHETIC_OFFER_SHORT = "Python team"
 
@@ -99,9 +104,13 @@ def test_detect_none_text_defaults_to_french() -> None:
 
 def test_detect_mixed_fr_en_wins_on_majority_language() -> None:
     """Adversarial: mixed-language text should detect the majority language."""
-    result = detect_offer_lang(SYNTHETIC_OFFER_MIXED)
-    # The mixed text has more English stopwords than French
-    assert result in ("en", "fr")
+    # 4 English stopwords (our, team, and, with) vs 3 French (nous, le, vous)
+    assert detect_offer_lang(SYNTHETIC_OFFER_MIXED) == "en"
+
+
+def test_detect_french_elision_at_apostrophe() -> None:
+    """Adversarial: an apostrophe must not glue the stopword to its prefix."""
+    assert detect_offer_lang(SYNTHETIC_OFFER_FR_ELISION) == "fr"
 
 
 # ---------------------------------------------------------------------------
@@ -186,12 +195,22 @@ def test_build_variant_lexicon_mode_for_spanish() -> None:
     assert report.translated_fields["label"] == "Finanzas Corporativas / FP&A"
 
 
-def test_build_variant_tracks_untranslated_terms() -> None:
-    """Terms not in the lexicon should appear in untranslated."""
-    report = build_variant("m_a", "en")
-    # "PowerPoint" may or may not be translated; check the mechanism works
-    # At minimum, the section headings that ARE in lexicon should be translated
-    assert isinstance(report.untranslated, list)
+def test_build_variant_reports_and_dedupes_missing_terms(monkeypatch) -> None:
+    """Terms absent from the lexicon are reported once, never fabricated."""
+    from career import translation_variants as tv
+
+    monkeypatch.setattr(
+        tv,
+        "load_lexicon",
+        lambda lang: LexiconGL(lang=lang, terms={"Education": "Ausbildung"}),
+    )
+    report = tv.build_variant("m_a", "de")
+    # "Transaction Experience" is emitted by both section_order and
+    # section_headers: it must not appear twice in the report.
+    assert report.untranslated.count("Transaction Experience") == 1
+    assert "Professional Experience" in report.untranslated
+    assert "Education" not in report.untranslated
+    assert report.translated_fields["section:Education"] == "Ausbildung"
 
 
 def test_build_variant_unknown_variant_raises() -> None:
@@ -205,11 +224,43 @@ def test_build_variant_unknown_target_lang_raises() -> None:
         build_variant("m_a", "it")  # type: ignore[arg-type]
 
 
-def test_build_variant_arena_mode() -> None:
-    """When arena_available=True, mode is arena."""
-    report = build_variant("m_a", "en", arena_available=True)
+def test_build_variant_arena_mode_with_translator() -> None:
+    """With an injected arena translator, mode is arena and it is used."""
+    calls: list[tuple[str, str]] = []
+
+    def fake_translate(source: str, lang: str) -> str:
+        calls.append((source, lang))
+        return f"[{lang}] {source}"
+
+    report = build_variant(
+        "m_a", "en", arena_available=True, arena_translator=fake_translate
+    )
     assert report.mode == "arena"
     assert report.untranslated == []
+    assert report.translated_fields["label"] == "[en] M&A / Investment Banking"
+    assert len(calls) == len(report.translated_fields) == 15
+    assert all(lang == "en" for _, lang in calls)
+
+
+def test_build_variant_arena_reports_blank_translations() -> None:
+    """A translator that renders nothing must not pass French through as-is."""
+
+    def partial(source: str, lang: str) -> str:
+        return "" if source == "Education" else source.upper()
+
+    report = build_variant(
+        "m_a", "de", arena_available=True, arena_translator=partial
+    )
+    assert report.mode == "arena"
+    assert report.untranslated == ["Education"]
+    assert "section:Education" not in report.translated_fields
+    assert report.translated_fields["label"] == "M&A / INVESTMENT BANKING"
+
+
+def test_build_variant_arena_without_translator_falls_back_to_lexicon() -> None:
+    """arena_available alone is not a translation: fall back to the lexicon."""
+    report = build_variant("m_a", "en", arena_available=True)
+    assert report.mode == "lexicon"
 
 
 # ---------------------------------------------------------------------------
@@ -227,6 +278,8 @@ def test_all_variants_translate_to_all_languages(
     assert report.mode == "lexicon"
     # Should have translated at least the label and section headings
     assert len(report.translated_fields) > 0
+    # Every field of every built-in variant is covered by the lexicons.
+    assert report.untranslated == []
 
 
 # ---------------------------------------------------------------------------

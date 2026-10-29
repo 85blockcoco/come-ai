@@ -10,9 +10,10 @@ is ever made without an explicit arena multi-AI layer (SPEC-017).
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Callable, Literal
 
 from career.cv_variants import (
     ALL_VARIANTS,
@@ -25,7 +26,16 @@ from career.cv_variants import (
 OFFER_LANG = Literal["en", "de", "es", "fr"]
 TRANSLATION_MODE = Literal["arena", "lexicon", "passthrough"]
 
+#: A translator is any callable ``(source_text, target_lang) -> translated``.
+#: It is injected by the caller (SPEC-017 arena) so this module never opens a
+#: network connection by itself.
+ArenaTranslator = Callable[[str, str], str]
+
 _LEXICON_DIR = Path(__file__).resolve().parent / "lexicons"
+
+# Split on anything that is not a letter (apostrophes, hyphens, digits).  This
+# keeps "l'expérience" → ["l", "expérience"] instead of one opaque token.
+_WORD_RE = re.compile(r"[^\W\d_]+", re.UNICODE)
 
 # Stopword-ish heuristic tokens per language.  Enough coverage to disambiguate
 # short offer texts without any model or network call.
@@ -97,16 +107,13 @@ def detect_offer_lang(text: str) -> OFFER_LANG:
     """
     if not text:
         return "fr"
-    tokens = str(text).lower().split()
+    tokens = _WORD_RE.findall(str(text).lower())
     if not tokens:
         return "fr"
     scores: dict[str, int] = {lang: 0 for lang in ("en", "de", "es", "fr")}
     for token in tokens:
-        cleaned = "".join(ch for ch in token if ch.isalpha())
-        if not cleaned:
-            continue
         for lang, stopwords in _STOPWORDS.items():
-            if cleaned in stopwords:
+            if token in stopwords:
                 scores[lang] += 1
     best = max(scores, key=lambda lang: scores[lang])
     if scores[best] == 0:
@@ -133,12 +140,16 @@ def build_variant(
     variant_id: VariantId,
     target_lang: OFFER_LANG,
     arena_available: bool = False,
+    arena_translator: ArenaTranslator | None = None,
 ) -> VariantReport:
     """Build a translated ``VariantReport`` for a given variant + language.
 
     * ``mode="passthrough"`` when ``target_lang == "fr"`` (no translation).
-    * ``mode="arena"`` when an arena (SPEC-017) is explicitly available.
-    * ``mode="lexicon"`` otherwise — the default offline path.
+    * ``mode="arena"`` when an arena (SPEC-017) is available *and* a translator
+      callable is injected.
+    * ``mode="lexicon"`` otherwise — the default offline path, also used when
+      ``arena_available=True`` but no translator was provided (we never claim
+      a translation we did not perform).
     """
     variant: CVVariant | None = None
     for candidate in ALL_VARIANTS:
@@ -157,9 +168,14 @@ def build_variant(
             translated_fields={},
             untranslated=[],
         )
-    if arena_available:
-        return _build_arena(variant, target_lang)
+    if arena_available and arena_translator is not None:
+        return _build_arena(variant, target_lang, arena_translator)
     return _build_lexicon(variant, target_lang)
+
+
+def _dedupe(values: list[str]) -> list[str]:
+    """Drop duplicates while preserving the first-seen order."""
+    return list(dict.fromkeys(values))
 
 
 def _build_lexicon(variant: CVVariant, target_lang: OFFER_LANG) -> VariantReport:
@@ -177,24 +193,34 @@ def _build_lexicon(variant: CVVariant, target_lang: OFFER_LANG) -> VariantReport
         offer_lang=target_lang,
         mode="lexicon",
         translated_fields=translated,
-        untranslated=untranslated,
+        untranslated=_dedupe(untranslated),
     )
 
 
-def _build_arena(variant: CVVariant, target_lang: OFFER_LANG) -> VariantReport:
-    """Reserved path for SPEC-017 arena multi-AI translation.
+def _build_arena(
+    variant: CVVariant,
+    target_lang: OFFER_LANG,
+    translate: ArenaTranslator,
+) -> VariantReport:
+    """Translate a variant through an injected SPEC-017 arena translator.
 
-    The arena is not implemented in this module; the contract is kept open
-    so the router can wire it later without changing the signature.  Today
-    we fall back to the lexicon and flag every field as translated by the
-    arena (all source terms are handed to the arena, none stay untranslated
-    on the lexicon path).
+    The callable is the only way this module reaches a model; the module
+    itself performs no network I/O.  Fields the translator cannot render
+    (empty/whitespace result) are reported in ``untranslated`` instead of
+    being silently replaced by the French source.
     """
     fields = _variant_fields(variant)
-    translated = {key: value for key, value in fields.items()}
+    translated: dict[str, str] = {}
+    untranslated: list[str] = []
+    for key, source in fields.items():
+        target = translate(source, target_lang)
+        if target and str(target).strip():
+            translated[key] = str(target)
+        else:
+            untranslated.append(source)
     return VariantReport(
         offer_lang=target_lang,
         mode="arena",
         translated_fields=translated,
-        untranslated=[],
+        untranslated=_dedupe(untranslated),
     )

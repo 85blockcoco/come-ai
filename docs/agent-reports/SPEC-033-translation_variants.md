@@ -87,3 +87,31 @@ qui attend encore 6 familles alors que `JOB_FAMILIES` en compte 14 depuis le
 commit `cd0e5e8`). `ruff check .` signale 17 erreurs préexistantes dans
 `night_supervisor.py`, `design/**` et `come_ai_web.py`, aucun fichier de cette
 mission.
+
+## Suite — audit de complétude 29/10/2026
+
+Trois faiblesses corrigées :
+
+1. **Mode `arena` honnête** — `build_variant(..., arena_translator=...)` accepte
+   désormais un callable injecté par SPEC-017. `arena_available=True` sans
+   traducteur retombe sur le lexique (`mode="lexicon"`) : le module ne prétend
+   plus avoir traduit des champs qu'il n'a fait que recopier. Un traducteur qui
+   renvoie une chaîne vide alimente `untranslated` au lieu de laisser passer le
+   français.
+2. **Lexiques complets** — `quantitative` (mot-clé obligatoire de la variante
+   `markets`) manquait dans les 3 lexiques ; ajouté (`quantitative` /
+   `quantitativ` / `cuantitativo`). Un test vérifie désormais que **tous** les
+   champs des 3 variantes sont couverts en EN/DE/ES (`untranslated == []`).
+3. **Détection plus robuste** — tokenisation par expression régulière : les
+   élisions (`l'expérience`) et les traits d'union ne collent plus le mot vide à
+   son préfixe. Le test adversarial mixte FR/EN assert désormais la langue
+   majoritaire exacte (`en`, 4 stopwords EN contre 3 FR) au lieu d'accepter
+   `en` ou `fr`. `untranslated` est dédupliqué (ordre de première apparition).
+
+Tests ajoutés : élision française, arena avec traducteur, traduction vide,
+fallback sans traducteur, complétude des lexiques, déduplication.
+Résultats (29/10) : `pytest tests/test_translation_variants.py` → **36 passed** ;
+suite complète → **3126 passed, 1 failed préexistant hors périmètre** (le même
+`test_career_agent` 6 vs 14 familles) ; `ruff check` sur les fichiers mission →
+clean ; `ruff check .` → 17 erreurs préexistantes inchangées, aucune dans la
+mission.
