@@ -54,6 +54,20 @@
     chat: [],
     chatMode: "offline",
     sending: false,
+    documents: null,
+    selectedDocumentId: null,
+    documentInspection: null,
+    documentAnalysis: null,
+    homeworkChat: [],
+    homeworkSending: false,
+    homeworkUploading: false,
+    studyOverview: null,
+    studySyllabus: null,
+    studySession: null,
+    studyQuestion: null,
+    studyCorrection: null,
+    studyBusy: false,
+    careerSection: "stagehunter",
     kitLanguage: readKitLanguage(),
     theme: readTheme(),
     errors: {},
@@ -86,10 +100,12 @@
   const num = (value) => new Intl.NumberFormat("fr-FR").format(Number(value) || 0);
 
   async function api(path, options) {
+    const requestOptions = options || {};
+    const isForm = requestOptions.body instanceof FormData;
     const response = await fetch(path, {
-      headers: { "Content-Type": "application/json" },
+      headers: isForm ? undefined : { "Content-Type": "application/json", ...(requestOptions.headers || {}) },
       credentials: "same-origin",
-      ...options,
+      ...requestOptions,
     });
     if (!response.ok) {
       let detail = `HTTP ${response.status}`;
@@ -108,8 +124,9 @@
     today: { title: "Aujourd’hui", subtitle: "Les prochaines étapes utiles, au même endroit" },
     applications: { title: "Mes candidatures", subtitle: "Chaque dossier, son avancement et sa prochaine action" },
     tracking: { title: "Suivi", subtitle: "Tes envois, réponses et relances à venir" },
-    offers: { title: "Offres", subtitle: "Les opportunités à examiner et à préparer" },
+    offers: { title: "Stage Hunter", subtitle: "Trouver, qualifier et préparer des stages sans quitter NAGE" },
     assistant: { title: "Assistant", subtitle: "Un espace privé pour analyser et préparer tes candidatures" },
+    homework: { title: "Devoirs", subtitle: "Comprendre, résoudre et vérifier tes travaux à partir de tes documents" },
     missions: { title: "Atelier", subtitle: "État technique et améliorations de NAGE" },
     memory: { title: "Mémoire", subtitle: "Les sources locales utilisées pour t’aider" },
   };
@@ -126,7 +143,7 @@
     }
     $("#viewTitle").textContent = VIEWS[view].title;
     $("#viewSubtitle").textContent = VIEWS[view].subtitle;
-    $("#searchBox").hidden = view !== "offers";
+    $("#searchBox").hidden = true;
     $("#scroll").scrollTop = 0;
     render(view);
     const destination = `#${view}`;
@@ -143,6 +160,17 @@
     jobs: async () => (state.jobs = await api("/api/career/jobs?limit=300")),
     overview: async () => (state.overview = await api("/api/v5/overview")),
     missions: async () => (state.missions = await api("/api/app/missions")),
+    documents: async () => {
+      const payload = await api("/api/files");
+      state.documents = payload.files || [];
+      if (!state.documents.some((item) => item.file_id === state.selectedDocumentId)) {
+        state.selectedDocumentId = state.documents[0]?.file_id || null;
+        state.documentInspection = null;
+        state.documentAnalysis = null;
+      }
+      return state.documents;
+    },
+    study: async () => (state.studyOverview = await api("/api/study/overview")),
   };
 
   async function loadAll() {
@@ -193,6 +221,10 @@
     badge.textContent = String(active);
     const workers = state.missions?.workers ?? 0;
     $("#fleetPulse").hidden = workers <= 0;
+    const homework = $("#badgeHomework");
+    const documentCount = state.documents?.length ?? 0;
+    homework.hidden = documentCount <= 0;
+    homework.textContent = String(documentCount);
   }
 
   /* ---------- Rendu ---------- */
@@ -203,9 +235,10 @@
     else if (view === "tracking") renderTracking();
     else if (view === "offers") renderOffers();
     else if (view === "assistant") renderAssistant();
+    else if (view === "homework") renderHomework();
     else if (view === "missions") renderMissions();
     else if (view === "memory") renderMemory();
-    const key = { today: "dashboard", applications: "pipeline", tracking: "tracker", offers: "jobs", missions: "missions", memory: "overview" }[view];
+    const key = { today: "dashboard", applications: "pipeline", tracking: "tracker", offers: "jobs", homework: "documents", missions: "missions", memory: "overview" }[view];
     if (key && state.errors[key] && state[key]) {
       $("#view-" + view).prepend(el("p", { class: "error-note", role: "alert" },
         `Actualisation impossible : ${state.errors[key]}. Les dernières données reçues restent affichées. Utilise Actualiser pour réessayer.`));
@@ -310,9 +343,14 @@
   }
 
   function openTarget(target) {
-    if (target === "discover") window.open("/career#career/stagehunter", "_blank", "noopener");
-    else if (target === "profile") window.open("/career#career/profile", "_blank", "noopener");
+    if (target === "discover") openCareerWorkspace("stagehunter");
+    else if (target === "profile") openCareerWorkspace("profile");
     else if (target === "applications") setView("applications");
+  }
+
+  function openCareerWorkspace(section = "stagehunter") {
+    state.careerSection = section;
+    setView("offers");
   }
 
   function missionStrip() {
@@ -362,7 +400,7 @@
         emptyState("Ton espace candidatures est prêt", "Commence par sélectionner une offre. NAGE préparera le dossier, mais rien ne sera envoyé sans toi."),
         el("div", { class: "empty-actions" },
           el("button", { class: "ghost-btn primary", type: "button", onclick: () => setView("offers") }, "Choisir une offre"),
-          el("a", { class: "ghost-btn", href: "/career#career/stagehunter", target: "_blank", rel: "noopener" }, "Rechercher des offres"),
+          el("button", { class: "ghost-btn", type: "button", onclick: () => openCareerWorkspace("stagehunter") }, "Rechercher des offres"),
         )));
       return;
     }
@@ -383,49 +421,415 @@
       el("div", { class: "card" }, p.map(pipelineRow)),
       el("p", { class: "note" },
         "Aucun envoi automatique. Les formulaires de l’employeur sont remplis et envoyés par toi. ",
-        el("a", { class: "inline-link", href: "/career", target: "_blank", rel: "noopener" }, "Ouvrir Career pour agir →")),
+        el("button", { class: "inline-action", type: "button", onclick: () => openCareerWorkspace("stagehunter") }, "Trouver une autre offre dans Stage Hunter →")),
     );
   }
 
   function renderOffers() {
     const host = $("#view-offers");
-    const jobs = state.jobs?.jobs;
-    if (!jobs) { host.replaceChildren(unavailable("jobs")); return; }
-    const filter = state.filter.trim().toLowerCase();
-    const filtered = filter
-      ? jobs.filter((job) => `${job.company} ${job.title} ${job.city} ${job.job_family}`.toLowerCase().includes(filter))
-      : jobs;
+    const sectionLabels = {
+      stagehunter: ["Stage Hunter", "Recherche internationale, critères et classement explicable"],
+      profile: ["Mon profil", "Formation, langues, critères et CV approuvés"],
+    };
+    const [title, subtitle] = sectionLabels[state.careerSection] || sectionLabels.stagehunter;
+    $("#viewTitle").textContent = title;
+    $("#viewSubtitle").textContent = subtitle;
+    const iframe = el("iframe", {
+      class: "career-embed",
+      title,
+      src: `/career?embed=app#career/${encodeURIComponent(state.careerSection)}`,
+      loading: "eager",
+    });
     host.replaceChildren(
-      ...(jobs.length ? [] : [el("div", { class: "onboarding-card" },
-        el("span", { class: "eyebrow" }, "Première étape"),
-        el("h2", {}, "Ajoute des offres qui te correspondent"),
-        el("p", {}, "NAGE privilégie les stages accessibles à ton niveau, tout en conservant les opportunités plus ambitieuses. Les critères inconnus restent signalés, jamais supposés compatibles."),
-        el("a", { class: "ghost-btn primary", href: "/career#career/stagehunter", target: "_blank", rel: "noopener" }, "Ouvrir la recherche guidée"),
-      )]),
-      el("div", { class: "section-title no-gap" },
-        el("h2", {}, jobs.length ? "Toutes les offres" : "Offres enregistrées"),
-        el("span", { class: "hint" }, `${filtered.length} / ${jobs.length}`)),
-      el("div", { class: "card" }, filtered.length
-        ? filtered.slice(0, 120).map((job) => el("div", {
-            class: "offer-row", role: "button", tabindex: "0",
-            "aria-label": `Préparer ${job.title} en ${LANGUAGES[state.kitLanguage]}`,
-            onclick: () => showApplyKit(job.id, job.title),
-            onkeydown: (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); showApplyKit(job.id, job.title); } },
-          },
-            el("span", { class: "offer-logo" }, (job.company || "?").slice(0, 1).toUpperCase()),
-            el("div", { class: "offer-main" },
-              el("strong", {}, job.title || "Offre"),
-              el("span", {}, [job.company, job.city, job.job_family].filter(Boolean).join(" · ") || "—"),
-            ),
-            el("div", { class: "offer-tags" },
-              job.source_status ? el("span", { class: `chip ${job.source_status === "open" ? "green" : "amber"}` }, job.source_status) : null,
-              job.calendar_status && job.calendar_status !== "to_verify"
-                ? el("span", { class: "chip" }, job.calendar_status)
-                : null,
-            ),
-          ))
-        : emptyState(jobs.length ? "Aucune correspondance" : "Aucune offre enregistrée", jobs.length ? "Modifie le filtre pour retrouver une offre." : "Les offres ajoutées depuis la recherche guidée apparaîtront ici.")),
+      el("div", { class: "career-workspace-toolbar", role: "navigation", "aria-label": "Outils Career intégrés" },
+        el("button", { class: `ghost-btn ${state.careerSection === "stagehunter" ? "primary" : ""}`, type: "button", onclick: () => openCareerWorkspace("stagehunter") }, "Stage Hunter"),
+        el("button", { class: `ghost-btn ${state.careerSection === "profile" ? "primary" : ""}`, type: "button", onclick: () => openCareerWorkspace("profile") }, "Mon profil"),
+        el("span", { class: "workspace-note" }, "Tout reste dans NAGE · aucun envoi automatique"),
+      ),
+      iframe,
     );
+  }
+
+  /* ---------- Devoirs & apprentissage ---------- */
+
+  const HOMEWORK_ACCEPT = ".pdf,.docx,.pptx,.xlsx,.xlsm,.xls,.csv,.tsv,.txt,.md";
+  const TABLE_TYPES = new Set(["xlsx", "xlsm", "xls", "csv", "tsv"]);
+
+  function selectedDocument() {
+    return (state.documents || []).find((item) => item.file_id === state.selectedDocumentId) || null;
+  }
+
+  function formatFileSize(value) {
+    const kb = Number(value || 0);
+    return kb >= 1024 ? `${(kb / 1024).toFixed(1)} Mo` : `${kb.toFixed(kb >= 10 ? 0 : 1)} Ko`;
+  }
+
+  function chooseDocument(fileId) {
+    if (state.selectedDocumentId !== fileId) {
+      state.selectedDocumentId = fileId;
+      state.documentInspection = null;
+      state.documentAnalysis = null;
+      state.homeworkChat = [];
+      state.studySyllabus = null;
+      state.studySession = null;
+      state.studyQuestion = null;
+      state.studyCorrection = null;
+    }
+    renderHomework();
+  }
+
+  async function uploadHomework(files) {
+    const accepted = [...files].slice(0, 12);
+    if (!accepted.length || state.homeworkUploading) return;
+    state.homeworkUploading = true;
+    renderHomework();
+    const form = new FormData();
+    accepted.forEach((file) => form.append("files", file, file.name));
+    try {
+      const payload = await api("/api/files/upload", { method: "POST", body: form });
+      state.documents = payload.files || [];
+      const successful = (payload.results || []).filter((item) => item.file_id);
+      const failures = (payload.results || []).filter((item) => item.error);
+      if (successful.length) chooseDocument(successful[successful.length - 1].file_id);
+      failures.forEach((item) => notify(`${item.name || "Fichier"} : ${item.error}`, true));
+      if (successful.length) notify(`${successful.length} copie${successful.length > 1 ? "s" : ""} de travail ajoutée${successful.length > 1 ? "s" : ""}. Les originaux sont intacts.`);
+      renderBadges();
+    } catch (error) {
+      notify(`Import impossible : ${error.message}`, true);
+    } finally {
+      state.homeworkUploading = false;
+      renderHomework();
+    }
+  }
+
+  async function inspectHomework(analyze = false) {
+    const file = selectedDocument();
+    if (!file) return;
+    const key = analyze ? "documentAnalysis" : "documentInspection";
+    state[key] = { loading: true };
+    renderHomework();
+    try {
+      state[key] = await api(analyze ? "/api/actions/analyze" : "/api/actions/inspect", {
+        method: "POST",
+        body: JSON.stringify({ file_id: file.file_id, sheet_name: "" }),
+      });
+    } catch (error) {
+      state[key] = { error: error.message };
+    }
+    renderHomework();
+  }
+
+  function previewTable(rows) {
+    if (!Array.isArray(rows) || !rows.length) return el("p", { class: "note" }, "Aucune ligne exploitable dans cet aperçu.");
+    const columns = Object.keys(rows[0]).slice(0, 8);
+    const head = el("thead", {}, el("tr", {}, columns.map((column) => el("th", {}, column))));
+    const body = el("tbody", {}, rows.slice(0, 6).map((row) =>
+      el("tr", {}, columns.map((column) => el("td", {},
+        row[column] === null || row[column] === undefined ? "—" : String(row[column]),
+      ))),
+    ));
+    return el("div", { class: "homework-table-wrap" }, el("table", { class: "homework-table" },
+      head,
+      body,
+    ));
+  }
+
+  function inspectionContent(result) {
+    if (!result) return null;
+    if (result.loading) return loading();
+    if (result.error) return el("p", { class: "error-note", role: "alert" }, result.error);
+    if (result.kind === "document") {
+      const outline = result.outline || {};
+      return el("section", { class: "homework-reading" },
+        el("div", { class: "homework-section-heading" }, el("h3", {}, "Lecture locale"), el("span", {}, `${num(result.characters)} caractères lus`)),
+        outline.sections?.length ? el("div", { class: "homework-outline" },
+          el("h4", {}, `${outline.section_count} section${outline.section_count > 1 ? "s" : ""} repérée${outline.section_count > 1 ? "s" : ""}`),
+          el("div", { class: "homework-outline-sections" }, outline.sections.map((section) => el("span", {}, section))),
+        ) : null,
+        outline.tasks?.length ? el("div", { class: "homework-outline" },
+          el("h4", {}, `${outline.task_count} question${outline.task_count > 1 ? "s" : ""} ou tâche${outline.task_count > 1 ? "s" : ""}`),
+          el("ol", {}, outline.tasks.map((task) => el("li", {}, task))),
+        ) : null,
+        el("details", { class: "homework-source-details" },
+          el("summary", {}, "Voir le texte extrait"),
+          el("pre", { class: "homework-excerpt" }, result.excerpt || "Aucun texte exploitable. Le PDF est peut-être un scan sans couche texte."),
+          result.truncated ? el("p", { class: "note" }, "L’aperçu est raccourci à l’écran. L’assistant local peut rechercher dans le document complet dans la limite de lecture sécurisée.") : null,
+        ),
+      );
+    }
+    const sheets = result.sheets || { [result.sheet || "Tableau"]: result };
+    return el("section", { class: "homework-reading" },
+      el("div", { class: "homework-section-heading" }, el("h3", {}, "Structure du classeur"), el("span", {}, `${Object.keys(sheets).length} feuille${Object.keys(sheets).length > 1 ? "s" : ""}`)),
+      Object.entries(sheets).map(([name, sheet]) => el("details", { class: "homework-sheet", open: Object.keys(sheets)[0] === name },
+        el("summary", {}, `${name} · ${sheet.rows_sampled ?? sheet.rows ?? "?"} lignes · ${sheet.columns ?? "?"} colonnes`),
+        sheet.column_names?.length ? el("p", { class: "note" }, `Colonnes : ${sheet.column_names.join(", ")}`) : null,
+        previewTable(sheet.preview),
+      )),
+    );
+  }
+
+  function analysisContent(result) {
+    if (!result) return null;
+    if (result.loading) return loading();
+    if (result.error) return el("p", { class: "error-note", role: "alert" }, result.error);
+    const statistics = Object.entries(result.numeric_statistics || {}).slice(0, 12);
+    return el("section", { class: "homework-reading" },
+      el("div", { class: "homework-section-heading" }, el("h3", {}, `Analyse · ${result.sheet || "tableau"}`), el("span", {}, `${result.rows || 0} lignes · ${result.columns || 0} colonnes`)),
+      statistics.length ? el("div", { class: "homework-stats" }, statistics.map(([name, stat]) =>
+        el("article", {}, el("strong", {}, name), el("span", {}, `Moyenne ${stat.mean ?? "—"}`), el("small", {}, `Min ${stat.min ?? "—"} · Max ${stat.max ?? "—"} · n=${stat.count ?? "—"}`))))
+        : el("p", { class: "note" }, "Aucune colonne numérique n’a été détectée automatiquement."),
+      result.note ? el("p", { class: "note" }, result.note) : null,
+    );
+  }
+
+  function homeworkConversation() {
+    if (!state.homeworkChat.length) {
+      return el("div", { class: "homework-welcome" },
+        el("strong", {}, "Travaille avec NAGE, sans rendre un devoir à ta place."),
+        el("p", {}, "Demande une explication, un plan de résolution, un indice ou une vérification. Les réponses doivent rester fondées sur le document sélectionné et signaler ce qui manque."));
+    }
+    return state.homeworkChat.map((message) => el("div", { class: `msg ${message.role === "user" ? "me" : "ai"}` },
+      el("div", { class: "bubble" }, message.content),
+      el("small", {}, message.role === "user" ? "Toi" : message.meta || "NAGE · local"),
+    ));
+  }
+
+  async function askHomework(message) {
+    const file = selectedDocument();
+    const prompt = String(message || "").trim();
+    if (!file) { notify("Ajoute et sélectionne d’abord un document.", true); return; }
+    if (!prompt || state.homeworkSending) return;
+    state.homeworkSending = true;
+    state.homeworkChat.push({ role: "user", content: prompt });
+    renderHomework();
+    try {
+      const result = await api("/api/v5/chat", { method: "POST", body: JSON.stringify({
+        message: prompt,
+        selected_file_ids: [file.file_id],
+        history: state.homeworkChat.slice(-9).map(({ role, content }) => ({ role, content })),
+        mode: "offline",
+        provider: "ollama",
+        model: "auto",
+        allow_write: false,
+        memory_project_id: null,
+        allow_cloud_context: false,
+      }) });
+      state.homeworkChat.push({
+        role: "assistant",
+        content: result.answer || "La demande est terminée sans réponse textuelle.",
+        meta: `NAGE · ${result.provider || "local"}${result.model ? ` · ${result.model}` : ""}`,
+      });
+    } catch (error) {
+      state.homeworkChat.push({ role: "assistant", content: `Je n’ai pas pu répondre localement : ${error.message}`, meta: "Erreur locale" });
+    } finally {
+      state.homeworkSending = false;
+      renderHomework();
+    }
+  }
+
+  function studyCourseFor(file) {
+    if (!file) return null;
+    if (state.studySyllabus?.title === file.name) return state.studySyllabus;
+    return (state.studyOverview?.courses || []).find((course) => course.title === file.name) || null;
+  }
+
+  function resumableStudySession(course) {
+    if (!course) return null;
+    return (state.studyOverview?.progress?.sessions || []).find((session) =>
+      session.syllabus_id === course.id && !["terminee", "abandonnee"].includes(session.status));
+  }
+
+  async function createStudyCourse() {
+    const file = selectedDocument();
+    if (!file || state.studyBusy) return;
+    state.studyBusy = true;
+    state.studyCorrection = null;
+    renderHomework();
+    try {
+      state.studySyllabus = await api("/api/study/courses", {
+        method: "POST",
+        body: JSON.stringify({ file_id: file.file_id, requested_topics: [] }),
+      });
+      state.studyOverview = await api("/api/study/overview");
+      notify(`${state.studySyllabus.notion_count || 0} notion(s) structurée(s) pour la révision.`);
+    } catch (error) {
+      notify(`Parcours de révision indisponible : ${error.message}`, true);
+    } finally {
+      state.studyBusy = false;
+      renderHomework();
+    }
+  }
+
+  async function startStudySession(syllabusId) {
+    if (!syllabusId || state.studyBusy) return;
+    state.studyBusy = true;
+    state.studyCorrection = null;
+    renderHomework();
+    try {
+      const session = await api(`/api/study/courses/${encodeURIComponent(syllabusId)}/sessions`, {
+        method: "POST", body: JSON.stringify({ size: 5 }),
+      });
+      state.studySession = { ...session, answered: 0, report: null };
+      state.studyQuestion = session.question;
+    } catch (error) {
+      notify(`Séance impossible : ${error.message}`, true);
+    } finally {
+      state.studyBusy = false;
+      renderHomework();
+    }
+  }
+
+  async function resumeStudySession(sessionId) {
+    if (!sessionId || state.studyBusy) return;
+    state.studyBusy = true;
+    state.studyCorrection = null;
+    renderHomework();
+    try {
+      const session = await api(`/api/study/sessions/${encodeURIComponent(sessionId)}`);
+      state.studySession = { ...session, report: null };
+      state.studyQuestion = session.question;
+      notify(`Séance reprise à la question ${(session.answered || 0) + 1}.`);
+    } catch (error) {
+      notify(`Reprise impossible : ${error.message}`, true);
+    } finally {
+      state.studyBusy = false;
+      renderHomework();
+    }
+  }
+
+  async function submitStudyAnswer(value) {
+    const answer = String(value || "").trim();
+    if (!answer || !state.studySession || !state.studyQuestion || state.studyBusy) return;
+    state.studyBusy = true;
+    renderHomework();
+    try {
+      const payload = await api(`/api/study/sessions/${encodeURIComponent(state.studySession.session_id)}/answers`, {
+        method: "POST",
+        body: JSON.stringify({ question_id: state.studyQuestion.id, value: answer }),
+      });
+      state.studyCorrection = payload.correction;
+      state.studyQuestion = payload.question;
+      state.studySession.answered = (state.studySession.answered || 0) + 1;
+      state.studySession.report = payload.report;
+      state.studyOverview = await api("/api/study/overview");
+    } catch (error) {
+      notify(`Réponse non enregistrée : ${error.message}`, true);
+    } finally {
+      state.studyBusy = false;
+      renderHomework();
+    }
+  }
+
+  function studyPanel(file) {
+    const course = studyCourseFor(file);
+    const savedSession = resumableStudySession(course);
+    const notions = state.studySyllabus?.title === file.name ? (state.studySyllabus.notions || []) : [];
+    const session = state.studySession;
+    const question = state.studyQuestion;
+    const correction = state.studyCorrection;
+    const answerInput = el("textarea", { rows: "3", maxlength: "4000", placeholder: "Écris ta réponse ou ton raisonnement…" });
+    const questionForm = question ? el("form", { class: "study-question", onsubmit: (event) => { event.preventDefault(); submitStudyAnswer(answerInput.value); } },
+      el("div", { class: "study-progress" }, el("span", {}, `Question ${(session?.answered || 0) + 1} sur ${session?.total || "?"}`), el("i", {}, el("b", { style: `width:${Math.min(100, ((session?.answered || 0) / Math.max(1, session?.total || 1)) * 100)}%` }))),
+      el("h4", {}, question.prompt || "Question"),
+      question.options?.length ? el("div", { class: "study-options" }, question.options.map((option) =>
+        el("button", { type: "button", disabled: state.studyBusy, onclick: () => submitStudyAnswer(option.id) }, option.label))) : answerInput,
+      question.options?.length ? null : el("button", { class: "ghost-btn primary", type: "submit", disabled: state.studyBusy }, "Vérifier ma réponse"),
+      question.source_refs?.[0]?.citation?.label ? el("small", {}, `Source : ${question.source_refs[0].citation.label}`) : null,
+    ) : null;
+    const correctionCard = correction ? el("article", { class: `study-correction ${correction.status || ""}` },
+      el("strong", {}, correction.status === "correct" ? "Correct" : correction.status === "partiel" ? "À compléter" : correction.status === "incorrect" ? "À reprendre" : "À relire avec un humain ou le tuteur"),
+      el("p", {}, correction.explanation || "Correction enregistrée."),
+      correction.expected_answer ? el("details", {}, el("summary", {}, "Voir la réponse de référence"), el("p", {}, String(correction.expected_answer))) : null,
+      correction.errors?.length ? el("ul", {}, correction.errors.map((item) => el("li", {}, item))) : null,
+    ) : null;
+    const report = session?.report;
+    return el("section", { class: "study-panel" },
+      el("div", { class: "homework-section-heading" }, el("h3", {}, "Parcours d’apprentissage"), el("span", {}, "local · progression persistante")),
+      !course ? el("div", { class: "study-intro" },
+        el("div", {}, el("strong", {}, "Transformer ce document en cours révisable"), el("p", {}, "NAGE extrait les notions, crée des questions sourcées et mémorise uniquement ta progression locale.")),
+        el("button", { class: "ghost-btn primary", type: "button", disabled: state.studyBusy, onclick: createStudyCourse }, state.studyBusy ? "Structuration…" : "Créer mon parcours"),
+      ) : null,
+      course && !session ? el("div", { class: "study-ready" },
+        el("div", {}, el("strong", {}, course.title), el("p", {}, `${course.notion_count ?? notions.length ?? "?"} notion(s) · séances courtes et corrections vérifiables`)),
+        el("div", { class: "study-ready-actions" },
+          savedSession ? el("button", { class: "ghost-btn primary", type: "button", disabled: state.studyBusy, onclick: () => resumeStudySession(savedSession.id) }, state.studyBusy ? "Reprise…" : "Reprendre ma séance") : null,
+          el("button", { class: `ghost-btn ${savedSession ? "" : "primary"}`, type: "button", disabled: state.studyBusy, onclick: () => startStudySession(course.id) }, state.studyBusy ? "Préparation…" : "Nouvelle séance · 5 questions"),
+        ),
+      ) : null,
+      notions.length ? el("details", { class: "study-notions" }, el("summary", {}, `Voir les ${notions.length} notions détectées`),
+        el("ul", {}, notions.slice(0, 24).map((notion) => el("li", {}, el("strong", {}, notion.title), el("span", {}, notion.statement))))) : null,
+      correctionCard,
+      questionForm,
+      report ? el("div", { class: "study-report" }, el("strong", {}, "Séance terminée"), el("p", {}, `${report.answered}/${report.total} réponses enregistrées. Les notions difficiles restent planifiées pour une prochaine révision.`),
+        el("button", { class: "ghost-btn", type: "button", onclick: () => { state.studySession = null; state.studyQuestion = null; state.studyCorrection = null; renderHomework(); } }, "Terminer")) : null,
+    );
+  }
+
+  function renderHomework() {
+    const host = $("#view-homework");
+    if (!state.documents) { host.replaceChildren(unavailable("documents")); return; }
+    const file = selectedDocument();
+    const fileInput = el("input", { class: "sr-only", type: "file", multiple: "multiple", accept: HOMEWORK_ACCEPT, id: "homeworkFileInput" });
+    fileInput.addEventListener("change", () => { uploadHomework(fileInput.files); fileInput.value = ""; });
+    const drop = el("div", { class: `homework-drop${state.homeworkUploading ? " busy" : ""}`, tabindex: "0", role: "button", "aria-label": "Ajouter des documents de devoir" },
+      el("strong", {}, state.homeworkUploading ? "Copie locale en cours…" : "Ajouter un devoir ou un cours"),
+      el("span", {}, "PDF, Word, PowerPoint, Excel, CSV ou texte · 50 Mo maximum par fichier"),
+      el("small", {}, "NAGE travaille sur une copie locale et ne modifie jamais l’original."),
+      el("button", { class: "ghost-btn primary", type: "button", disabled: state.homeworkUploading, onclick: (event) => { event.stopPropagation(); fileInput.click(); } }, "Choisir des fichiers"),
+      fileInput,
+    );
+    drop.addEventListener("click", (event) => { if (event.target === drop || event.target.tagName === "STRONG" || event.target.tagName === "SPAN" || event.target.tagName === "SMALL") fileInput.click(); });
+    drop.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); fileInput.click(); } });
+    for (const type of ["dragenter", "dragover"]) drop.addEventListener(type, (event) => { event.preventDefault(); drop.classList.add("dragging"); });
+    for (const type of ["dragleave", "drop"]) drop.addEventListener(type, (event) => { event.preventDefault(); drop.classList.remove("dragging"); });
+    drop.addEventListener("drop", (event) => uploadHomework(event.dataTransfer.files));
+
+    const library = el("aside", { class: "homework-library", "aria-label": "Documents de travail" },
+      el("div", { class: "homework-section-heading" }, el("h2", {}, "Mes documents"), el("span", {}, String(state.documents.length))),
+      state.documents.length ? el("div", { class: "homework-files" }, state.documents.map((item) =>
+        el("button", { class: `homework-file${item.file_id === state.selectedDocumentId ? " selected" : ""}`, type: "button", onclick: () => chooseDocument(item.file_id) },
+          el("span", { class: "homework-file-type" }, String(item.type || "doc").slice(0, 4).toUpperCase()),
+          el("span", {}, el("strong", {}, item.name), el("small", {}, `${formatFileSize(item.size_kb)} · ${item.modified}`)),
+        ))) : emptyState("Aucun document", "Ajoute ton sujet, ton cours ou ton fichier de calcul."),
+    );
+
+    let workspace = el("section", { class: "homework-main" }, emptyState("Sélectionne un document", "NAGE peut lire un PDF ou Word, structurer un classeur Excel et t’aider à raisonner dessus."));
+    if (file) {
+      const isTable = TABLE_TYPES.has(String(file.type || "").toLowerCase());
+      const quickPrompts = [
+        ["Comprendre le sujet", "Explique précisément ce que ce devoir demande, les livrables attendus et les informations importantes du document. Signale clairement toute ambiguïté."],
+        ["Construire un plan", "Propose un plan de résolution étape par étape. Donne d’abord la méthode et les contrôles à faire, sans inventer de donnée absente."],
+        ["M’expliquer le cours", "Explique les concepts indispensables pour réussir ce devoir, avec des exemples simples reliés au document."],
+        ["Vérifier mon raisonnement", "Aide-moi à vérifier mon raisonnement. Commence par me demander ma démarche ou mon résultat, puis contrôle chaque étape à partir du document."],
+      ];
+      const chatInput = el("textarea", { rows: "3", maxlength: "12000", placeholder: "Pose une question sur ce devoir…" });
+      const chatForm = el("form", { class: "homework-composer", onsubmit: (event) => { event.preventDefault(); const prompt = chatInput.value; chatInput.value = ""; askHomework(prompt); } },
+        chatInput,
+        el("div", {}, el("span", {}, "Mode local · aucun document envoyé dans le cloud"), el("button", { class: "send-btn", type: "submit", disabled: state.homeworkSending }, state.homeworkSending ? "Réflexion…" : "Demander")),
+      );
+      workspace = el("section", { class: "homework-main" },
+        el("header", { class: "homework-document-head" },
+          el("div", {}, el("span", { class: "eyebrow" }, `${String(file.type || "document").toUpperCase()} · copie locale`), el("h2", {}, file.name), el("p", {}, `${formatFileSize(file.size_kb)} · original conservé sans modification`)),
+          el("div", { class: "homework-actions" },
+            el("button", { class: "ghost-btn", type: "button", onclick: () => inspectHomework(false) }, "Lire et structurer"),
+            isTable ? el("button", { class: "ghost-btn", type: "button", onclick: () => inspectHomework(true) }, "Analyser les chiffres") : null,
+          ),
+        ),
+        el("div", { class: "homework-prompts", "aria-label": "Démarrages rapides" }, quickPrompts.map(([label, prompt]) =>
+          el("button", { type: "button", onclick: () => askHomework(prompt), disabled: state.homeworkSending }, label))),
+        inspectionContent(state.documentInspection),
+        analysisContent(state.documentAnalysis),
+        studyPanel(file),
+        el("section", { class: "homework-tutor" },
+          el("div", { class: "homework-section-heading" }, el("h3", {}, "Tuteur de travail"), el("span", {}, "source sélectionnée uniquement")),
+          el("div", { class: "homework-chat", "aria-live": "polite" }, homeworkConversation(), state.homeworkSending ? el("div", { class: "msg ai" }, el("div", { class: "bubble" }, "Je lis le document et je prépare une réponse vérifiable…")) : null),
+          chatForm,
+        ),
+      );
+    }
+    host.replaceChildren(drop, el("div", { class: "homework-layout" }, library, workspace));
+    const log = $(".homework-chat", host);
+    if (log) log.scrollTop = log.scrollHeight;
   }
 
   function renderAssistant() {
@@ -594,8 +998,7 @@
       el("div", { class: "section-title" }, el("h2", {}, "Moteur"), el("span", { class: "hint" }, "100 % local")),
       el("div", { class: "card padded" },
         el("p", { class: "note tight" },
-          `Indexation : ${memory.engine || "—"}. Les sources restent sur ce Mac, chaque réponse cite ses passages et une suppression est définitive. `,
-          el("a", { class: "inline-link", href: "/v5", target: "_blank", rel: "noopener" }, "Gérer la mémoire dans V5 →")),
+          `Indexation : ${memory.engine || "—"}. Les sources restent sur ce Mac, chaque réponse cite ses passages et une suppression est définitive.`),
       ),
       el("div", { class: "section-title" }, el("h2", {}, "Confidentialité"), el("span", { class: "hint" }, "par défaut")),
       el("div", { class: "card padded" },
@@ -759,7 +1162,7 @@
         el("p", { class: "note" }, "Ces vérifications documentaires ne prédisent pas les chances de recrutement. Le contenu reste à relire et à adapter."),
         blocked ? el("div", { class: "error-note", role: "alert" }, el("strong", {}, "À vérifier avant de continuer"),
           el("ul", {}, (kit.block_reasons || []).map((reason) => el("li", {}, reason))),
-          el("a", { class: "inline-link", href: "/career#career/profile", target: "_blank", rel: "noopener" }, "Vérifier le profil et les critères dans Career ↗")) : null,
+          el("button", { class: "inline-action", type: "button", onclick: () => { ui.close(); openCareerWorkspace("profile"); } }, "Vérifier mon profil dans NAGE →")) : null,
         el("div", { class: "document-grid" }, preview("CV", draft.cv_markdown), preview("Lettre de motivation", draft.letter_markdown)),
         el("div", { class: "download-links", "aria-label": "Télécharger les documents relus" },
           Object.entries(kit.export_urls || {}).map(([key, url]) => el("a", { class: "ghost-btn", href: url, download: "" }, exportNames[key] || key))),

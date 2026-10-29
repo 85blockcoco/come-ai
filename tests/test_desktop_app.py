@@ -20,6 +20,9 @@ def test_desktop_shell_and_assets_are_served_with_local_protections(tmp_path, mo
         assert 'id="themeSelect"' in page.text
         assert '<option value="studio" selected>Studio professionnel</option>' in page.text
         assert '<option value="terminal">Terminal</option>' in page.text
+        assert 'data-view="homework"' in page.text
+        assert 'id="view-homework"' in page.text
+        assert "Devoirs" in page.text
         assert "/app-static/app.js" in page.text
         assert "content-security-policy" in page.headers
         for asset in ("app.js", "app.css", "icon.png"):
@@ -29,11 +32,38 @@ def test_desktop_shell_and_assets_are_served_with_local_protections(tmp_path, mo
         assert 'const THEME_STORAGE_KEY = "nage-app-theme-v2"' in script
         assert 'const LANGUAGE_STORAGE_KEY = "nage-kit-language-v1"' in script
         assert 'return THEMES.has(saved) ? saved : "studio"' in script
-        assert '"/career#career/profile"' in script
-        assert '"/career#career/stagehunter"' in script
+        assert 'src: `/career?embed=app#career/${encodeURIComponent(state.careerSection)}`' in script
+        assert 'openCareerWorkspace("stagehunter")' in script
+        assert 'openCareerWorkspace("profile")' in script
+        assert 'const HOMEWORK_ACCEPT = ".pdf,.docx,.pptx,.xlsx,.xlsm,.xls,.csv,.tsv,.txt,.md"' in script
+        assert 'await api("/api/files/upload"' in script
+        assert 'analyze ? "/api/actions/analyze" : "/api/actions/inspect"' in script
+        assert 'selected_file_ids: [file.file_id]' in script
+        assert 'allow_cloud_context: false' in script
+        assert 'api("/api/study/courses"' in script
+        assert '"/api/study/overview"' in script
+        assert '`${option.id}. ${option.label}`' not in script
+        assert "Reprendre ma séance" in script
+        assert "/api/study/sessions/${encodeURIComponent(sessionId)}" in script
+        assert "Nouvelle séance · 5 questions" in script
+        assert "NAGE travaille sur une copie locale et ne modifie jamais l’original." in script
+        assert 'target: "_blank"' not in script
+        assert "Career ↗" not in page.text
+        assert "V5 ↗" not in page.text
+        assert "V3 ↗" not in page.text
         assert 'body[data-theme="studio"]' in stylesheet
+        assert ".career-embed" in stylesheet
+        assert ".homework-layout" in stylesheet
+        assert ".homework-drop" in stylesheet
+        assert ".study-panel" in stylesheet
         assert 'window.addEventListener("hashchange"' in script
         assert 'history.pushState(null, "", destination)' in script
+        embedded = client.get("/career?embed=app")
+        assert embedded.headers["x-frame-options"] == "SAMEORIGIN"
+        assert "frame-ancestors 'self'" in embedded.headers["content-security-policy"]
+        standalone = client.get("/career")
+        assert standalone.headers["x-frame-options"] == "DENY"
+        assert "frame-ancestors 'none'" in standalone.headers["content-security-policy"]
         assert client.get("/app", headers={"Host": "attacker.example.test"}).status_code == 400
 
 

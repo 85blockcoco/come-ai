@@ -3189,7 +3189,6 @@ class CareerService:
         matches: list[dict[str, Any]] = []
         if payload["configured"]:
             for job in jobs:
-                stage_match = score_brief_match(brief, job)
                 qualification_result = qualify_offer(
                     job,
                     allowed_contract_types=brief.get("contract_types"),
@@ -3201,6 +3200,16 @@ class CareerService:
                     require_known_location=brief.get("require_known_location", True),
                     include_geo_score=_include_qualification_details,
                 )
+                matching_job = dict(job)
+                if not matching_job.get("languages_required") and qualification_result.language_requirements:
+                    matching_job["languages_required"] = qualification_result.language_requirements
+                if not matching_job.get("duration_months") and (
+                    qualification_result.duration_min_months == qualification_result.duration_max_months
+                ):
+                    matching_job["duration_months"] = qualification_result.duration_min_months
+                if not matching_job.get("end_date") and qualification_result.end_date:
+                    matching_job["end_date"] = qualification_result.end_date
+                stage_match = score_brief_match(brief, matching_job)
                 qualification = (
                     qualification_result.to_dict()
                     if _include_qualification_details
@@ -3244,6 +3253,9 @@ class CareerService:
                     require_known_location=brief.get("require_known_location", True),
                     include_geo_score=_include_qualification_details,
                 )
+                matching_job = dict(job)
+                if not matching_job.get("languages_required") and qualification_result.language_requirements:
+                    matching_job["languages_required"] = qualification_result.language_requirements
                 qualification = (
                     qualification_result.to_dict()
                     if _include_qualification_details
@@ -3251,7 +3263,7 @@ class CareerService:
                 )
                 matches.append({"job": job, "stage_match": None, "qualification": qualification,
                                 "requirement_ids": _requirement_ids_of(job),
-                                "education_access": score_brief_match(brief, job)["education_access"]})
+                                "education_access": score_brief_match(brief, matching_job)["education_access"]})
         payload["matches"] = matches
         return payload
 
@@ -3886,7 +3898,6 @@ class CareerService:
                 # snapshot was saved. Never recreate it on a read.
                 continue
             internship = classify_internship(job)
-            match = score_brief_match(brief, job)
             qualification = qualify_offer(
                 {**job, "source_verified": bool(reference.get("verified_at"))},
                 allowed_contract_types=brief.get("contract_types"),
@@ -3896,7 +3907,18 @@ class CareerService:
                 excluded_countries=brief.get("excluded_countries"),
                 excluded_cities=brief.get("excluded_cities"),
                 require_known_location=brief.get("require_known_location", True),
-            ).to_dict()
+            )
+            matching_job = dict(job)
+            if not matching_job.get("languages_required") and qualification.language_requirements:
+                matching_job["languages_required"] = qualification.language_requirements
+            if not matching_job.get("duration_months") and (
+                qualification.duration_min_months == qualification.duration_max_months
+            ):
+                matching_job["duration_months"] = qualification.duration_min_months
+            if not matching_job.get("end_date") and qualification.end_date:
+                matching_job["end_date"] = qualification.end_date
+            match = score_brief_match(brief, matching_job)
+            qualification = qualification.to_dict()
             if job.get("source_status") == "closed" or qualification["target_status"] == "non_conforming":
                 continue
             job["qualification"] = qualification

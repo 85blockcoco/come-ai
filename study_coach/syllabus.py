@@ -37,20 +37,22 @@ MAX_STATEMENTS_PER_SECTION = 6
 
 _HEADING_PATTERNS = (
     re.compile(r"^\s*(#{1,6})\s+(\S.*)$"),
-    re.compile(r"^\s*((?:chapitre|chapter|section|partie|module)\b[\s:.-]*.{0,80})$", re.IGNORECASE),
+    re.compile(r"^\s*((?:chapitre|chapter|section|partie|part|module)\b[\s:.-]*.{0,80})$", re.IGNORECASE),
     re.compile(r"^\s*(\d+(?:\.\d+)*)[.)]?\s+([A-ZÀ-ÖØ-Ý][^:]{2,80})$"),
     re.compile(r"^\s*((?:[IVXLC]+)\.)\s+([A-ZÀ-ÖØ-Ý][^:]{0,80})$"),
     re.compile(r"^\s*([A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý '\-/]{4,60})\s*$"),
 )
 
 _DEFINITION_RE = re.compile(
-    r"^(?:Le[su]?\s+|La?\s+|L'|Une?\s+|Ce[t]?\s+|Cette\s+)"
+    r"^(?:Le[su]?\s+|La?\s+|L'|Une?\s+|Ce[t]?\s+|Cette\s+|The\s+|A\s+|An\s+|This\s+|These\s+)"
     r"(?P<term>[\wÀ-ÿ'\-()]{2,30}(?:\s+[\wÀ-ÿ'\-()]{2,30}){0,5}?)\s+"
     r"(?P<verb>se\s+définit|est\s+défini|correspond\s+à|correspondent\s+à|consiste\s+en|"
     r"dépend\s+de|résulte\s+de|sert\s+à|est|sont|désigne|désignent|représente|représentent|"
     r"signifie|signifient|indique|indiquent|montre|montrent|comprend|comprennent|contient|"
     r"contiennent|définit|exprime|exprime|traduit|traduit|caractérise|caractérisent|mesure|"
-    r"mesurent|rapporte|engage|donne|permet|vaut|valent)\b",
+    r"mesurent|rapporte|engage|donne|permet|vaut|valent|is\s+defined\s+as|refers\s+to|"
+    r"corresponds\s+to|consists\s+of|depends\s+on|results\s+from|is|are|means|indicates|"
+    r"shows|includes|contains|represents|measures|equals)\b",
     re.IGNORECASE,
 )
 # Same rule without the leading ``^``: used to re-anchor a definition that a
@@ -58,6 +60,12 @@ _DEFINITION_RE = re.compile(
 # It is only ever applied through ``_definition_match``, which validates the
 # term, so an unanchored search can never accept an arbitrary fragment.
 _DEFINITION_INNER_RE = re.compile(_DEFINITION_RE.pattern[1:], _DEFINITION_RE.flags)
+_BARE_ENGLISH_DEFINITION_RE = re.compile(
+    r"^(?P<term>[A-Z][A-Za-z0-9'()\-/]{1,30}(?:\s+[A-Za-z][A-Za-z0-9'()\-/]{1,30}){0,4}?)\s+"
+    r"(?P<verb>is\s+defined\s+as|refers\s+to|corresponds\s+to|consists\s+of|depends\s+on|"
+    r"results\s+from|is|are|means|indicates|shows|includes|contains|represents|measures|equals)\b",
+    re.IGNORECASE,
+)
 
 _STRONG_DEFINITION_VERBS = {
     "defini",
@@ -68,13 +76,19 @@ _STRONG_DEFINITION_VERBS = {
     "consiste",
     "caracterise",
     "mesure",
+    "defined",
+    "refers",
+    "means",
+    "represents",
+    "measures",
 }
-_INNER_DETERMINER_RE = re.compile(r"(?:^|\s)(?:Le|La|Les|L'|Un|Une|Ce|Cet|Cette)\s", re.IGNORECASE)
-_DETERMINER_START_RE = re.compile(r"(?:\b(?:Le[su]?|La?|L'|Une?|Ce[t]?|Cette)\s+)", re.IGNORECASE)
+_INNER_DETERMINER_RE = re.compile(r"(?:^|\s)(?:Le|La|Les|L'|Un|Une|Ce|Cet|Cette|The|A|An|This|These)\s", re.IGNORECASE)
+_DETERMINER_START_RE = re.compile(r"(?:\b(?:Le[su]?|La?|L'|Une?|Ce[t]?|Cette|The|A|An|This|These)\s+)", re.IGNORECASE)
 # Words proving that the matched "term" is a clause and not a concept.
 _FORBIDDEN_TERM_WORDS = frozenset(
     """
     dont qui que quoi lequel laquelle lesquels desquelles cela celui celle on si donc alors mais or ne pas
+    whose which that who what when where because if i you your we our he she they their it this these
     """.split()
 )
 _FORMULA_LINE_RE = re.compile(r"^\s*[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ_]{1,10}\s*=\s*\S")
@@ -86,7 +100,7 @@ _GENERIC_TERM_LABELS = frozenset(
     """.split()
 )
 _LEADING_CLAUSE_RE = re.compile(
-    r"^(?:Dans|Au|Aux|Pour|Selon|Nous|Notre|Ce|Cet|Cette|En|Sur)\b[^,]{0,40},\s*", re.IGNORECASE
+    r"^(?:Dans|Au|Aux|Pour|Selon|Nous|Notre|Ce|Cet|Cette|En|Sur|In|For|According|When|Under|On)\b[^,]{0,40},\s*", re.IGNORECASE
 )
 _ABBREVIATIONS = frozenset({"etc", "p", "pp", "cf", "ex", "n", "m", "mr", "mme", "dr", "art", "fig", "env", "nb"})
 _VALUE_VERB_RE = re.compile(
@@ -95,6 +109,21 @@ _VALUE_VERB_RE = re.compile(
 )
 _GLOSSARY_RE = re.compile(r"^(?P<term>[\wÀ-ÿ'\- ]{2,42}?)\s*[:：]\s*(?P<definition>\S.{10,})$")
 _BULLET_RE = re.compile(r"^\s*(?:[-*•·]|\d+[.)])\s+(?P<content>\S.*)$")
+_INSTRUCTION_OR_QUESTION_RE = re.compile(
+    r"^(?:Q(?:uestion)?\s*\d|what\b|why\b|how\b|which\b|where\b|when\b|"
+    r"compute\b|calculate\b|explain\b|compare\b|find\b|use\b|complete\b|plot\b|"
+    r"sketch\b|reprice\b|check\b|give\b|write\b|mark\b|estimate\b|deduce\b|repeat\b|"
+    r"express\b|conclude\b|change\b|keep\b|assume\b|look\b|go\s+back\b|enter\b|"
+    r"read\b|fill\b|set\b|state\b|interpret\b|discount\b|price\b|in\s+the\s+pricer\b)",
+    re.IGNORECASE,
+)
+_NON_NOTION_CONTEXT_RE = re.compile(
+    r"^(?:day\s+\d+\b|calm\s+path\b|volatile\s+path\b|market\s+data\b|term\s+value\b|"
+    r"parameter\s+value\b|share\s+price\b|days\s+to\s+maturity\b|pricer\s+conventions\b|"
+    r"hint\b|no\s+greeks\b|with\s+the\b|rates?\s+(?:rise|fall)\b|"
+    r"[A-Z][\w.-]+\s+is\s+(?:short|long)\b|.*credit\s+spread\s+(?:widens|narrows)\b)",
+    re.IGNORECASE,
+)
 # A sentence that starts with a course heading glued to its body.
 _HEADING_PREFIX_RE = re.compile(r"^(?:\d{1,2}(?:\.\d+)*[.)]\s+|#[A-Za-z0-9 \t]{0,4})")
 
@@ -159,7 +188,7 @@ def _heading_title(line: str) -> str:
     stripped = line.strip().lstrip("#").strip()
     stripped = re.sub(r"^\d+(?:\.\d+)*[.)]?\s*", "", stripped)
     stripped = re.sub(
-        r"^(?:chapitre|chapter|section|partie|module)\b[\s:.-]*", "", stripped, flags=re.IGNORECASE
+        r"^(?:chapitre|chapter|section|partie|part|module)\b[\s:.-]*", "", stripped, flags=re.IGNORECASE
     )
     return stripped.strip().rstrip(":").strip()
 
@@ -470,7 +499,7 @@ def _collect_notions(document: StudyDocument, excerpts: _ExcerptFactory) -> tupl
             fallback_sentences = [
                 sentence
                 for sentence in _admissible_sentences(blocks[0])
-                if len(sentence) >= 60
+                if len(sentence) >= 60 and not _is_assignment_instruction(sentence)
             ]
             if fallback_sentences and not is_document_title:
                 # A cited statement is still reviewable even without a definition verb.
@@ -479,7 +508,7 @@ def _collect_notions(document: StudyDocument, excerpts: _ExcerptFactory) -> tupl
                     id="",
                     title=_fallback_title(statement, section.title),
                     statement=statement,
-                    source_refs=list(references),
+                    source_refs=list(excerpts.refs(blocks[0].start, blocks[0].end)),
                     keywords=content_words(statement, limit=10),
                     importance=1,
                     status="extraite",
@@ -583,7 +612,15 @@ def _definition_match(sentence: str) -> tuple[re.Match[str] | None, str]:
     would otherwise stop after the first glued definition.
     """
 
-    first = _DEFINITION_RE.match(sentence)
+    first = _DEFINITION_RE.match(sentence) or _BARE_ENGLISH_DEFINITION_RE.match(sentence)
+    if first is not None and first.re is _BARE_ENGLISH_DEFINITION_RE:
+        remainder = sentence[first.end():].lstrip()
+        if normalize_text(first.group("verb")) in {"is", "are"} and re.match(
+            r"^(?:short|long|a|an|the|our|your)\b", remainder, re.IGNORECASE
+        ):
+            # "Northbridge is short 10,000 calls" describes an entity and a
+            # position; it does not define the concept "Northbridge".
+            first = None
     if first and not _INNER_DETERMINER_RE.search(first.group("term")) and _acceptable_term(first.group("term")):
         return first, sentence
 
@@ -622,6 +659,18 @@ def _admissible_sentences(block: _Block) -> list[str]:
     return sentences[first_index:max(last_index, first_index)]
 
 
+def _is_assignment_instruction(sentence: str) -> bool:
+    """Keep exercise prompts out of the revision notion bank."""
+
+    stripped = sentence.strip()
+    return bool(
+        stripped.rstrip().endswith("?")
+        or _INSTRUCTION_OR_QUESTION_RE.match(stripped)
+        or _NON_NOTION_CONTEXT_RE.match(stripped)
+        or re.search(r"\bwould\b", stripped, re.IGNORECASE)
+    )
+
+
 def _candidates_for_block(block: _Block, section_title: str) -> list[dict[str, Any]]:
     """Propose notions found in one block; every candidate stays a verbatim quote."""
 
@@ -629,6 +678,8 @@ def _candidates_for_block(block: _Block, section_title: str) -> list[dict[str, A
     sentences = _admissible_sentences(block)
     if block.bullet:
         body = block.text.strip()
+        if _is_assignment_instruction(body):
+            return candidates
         if len(body) >= 20 and sentences and not (block.truncated_start or block.truncated_end):
             definition, statement = _definition_match(body)
             term = definition.group("term").strip(" .") if definition else ""
@@ -643,6 +694,10 @@ def _candidates_for_block(block: _Block, section_title: str) -> list[dict[str, A
         return candidates
 
     for sentence in sentences:
+        if _is_assignment_instruction(sentence):
+            # Assignment instructions and table labels belong in the task
+            # outline, not in the revision notion bank.
+            continue
         definition, statement = _definition_match(sentence)
         if definition and _acceptable_term(definition.group("term")):
             candidates.append(

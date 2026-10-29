@@ -1,5 +1,9 @@
 "use strict";
 
+if (new URLSearchParams(window.location.search).get("embed") === "app") {
+  document.body.dataset.embedded = "true";
+}
+
 const state = {
   preferences: null,
   jobs: [],
@@ -2699,7 +2703,16 @@ function stageOfferFactValue(job, qualification, key) {
     }
     return "À vérifier";
   }
-  if (key === "end") return formatStageDate(job.end_date || facts.end_date);
+  if (key === "end") {
+    const end = job.end_date || facts.end_date;
+    if (end) return `${formatStageDate(end)}${facts.end_date_estimated ? " · calculée" : ""}`;
+    if (Number.isInteger(facts.end_month) && Number.isInteger(facts.end_year)) {
+      const month = new Date(Date.UTC(facts.end_year, facts.end_month - 1, 1))
+        .toLocaleDateString("fr-FR", {month:"long", timeZone:"UTC"});
+      return `${month} ${facts.end_year} · calculée`;
+    }
+    return "À vérifier";
+  }
   if (key === "duration") {
     if (Number.isFinite(Number(job.duration_months)) && Number(job.duration_months) > 0) return `${Number(job.duration_months)} mois`;
     const minimum = Number(facts.duration_min_months);
@@ -2711,7 +2724,7 @@ function stageOfferFactValue(job, qualification, key) {
     return "À vérifier";
   }
   if (key === "deadline") return formatStageDate(job.deadline_date);
-  if (key === "language") return job.languages_required || facts.language || "À vérifier";
+  if (key === "language") return job.languages_required || facts.language_requirements || "À vérifier";
   return "À vérifier";
 }
 

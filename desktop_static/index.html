@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
     <meta name="theme-color" content="#f5f8f6">
-    <meta name="description" content="NAGE — machine locale de candidatures : offres, dossiers, assistant, missions.">
-    <title>NAGE — mes candidatures</title>
+    <meta name="description" content="NAGE — copilote local pour les candidatures, les devoirs et les documents.">
+    <title>NAGE — travail et candidatures</title>
     <link rel="icon" href="/app-static/icon.png">
     <link rel="stylesheet" href="/app-static/app.css">
   </head>
@@ -20,7 +20,7 @@
           <span class="brand-mark" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none"><path d="M4 20V4h3.4l9.2 11.6V4H20v16h-3.4L7.4 8.4V20H4z" fill="currentColor"/></svg>
           </span>
-          <span class="brand-text"><strong>NAGE</strong><small>Ton copilote carrière</small></span>
+          <span class="brand-text"><strong>NAGE</strong><small>Ton copilote personnel</small></span>
         </div>
 
         <nav class="nav" aria-label="Navigation principale">
@@ -38,13 +38,18 @@
             <span>Suivi</span>
             <em class="nav-badge" id="badgeTracking" hidden>0</em>
           </button>
-          <button class="nav-item" data-view="offers" aria-label="Offres" title="Offres">
+          <button class="nav-item" data-view="offers" aria-label="Stage Hunter" title="Stage Hunter">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5A2.5 2.5 0 016.5 4h11A2.5 2.5 0 0120 6.5v11a2.5 2.5 0 01-2.5 2.5h-11A2.5 2.5 0 014 17.5v-11zM8 9h8V7.4H8V9zm0 3.8h8v-1.6H8v1.6zm0 3.8h5.4v-1.6H8v1.6z"/></svg>
-            <span>Offres</span>
+            <span>Stage Hunter</span>
           </button>
           <button class="nav-item" data-view="assistant" aria-label="Assistant" title="Assistant">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a8.6 8.6 0 00-8.6 8.6c0 1.6.4 3 1.2 4.3L3.4 21l5.4-1.1a8.6 8.6 0 104.2-16.9H12z"/></svg>
             <span>Assistant</span>
+          </button>
+          <button class="nav-item" data-view="homework" aria-label="Devoirs" title="Devoirs et cours">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h10.5L20 7.5V21H5V3zm2 2v14h11V8.5H14.5V5H7zm2 6h7v1.6H9V11zm0 3.4h7V16H9v-1.6zM15.8 5.3v1.9h1.9l-1.9-1.9z"/></svg>
+            <span>Devoirs</span>
+            <em class="nav-badge" id="badgeHomework" hidden>0</em>
           </button>
           <button class="nav-item" data-view="missions" aria-label="Atelier" title="Atelier technique">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.6l2.3 2.3 3.2-.4 1.2 3 3 1.2-.4 3.2 2.3 2.3-2.3 2.3.4 3.2-3 1.2-1.2 3-3.2-.4L12 21.4l-2.3-2.3-3.2.4-1.2-3-3-1.2.4-3.2L.4 12l2.3-2.3-.4-3.2 3-1.2 1.2-3 3.2.4L12 2.6zm-1 5.9v4.2l3.4 2 .8-1.4-2.6-1.5V8.5H11z"/></svg>
@@ -59,11 +64,6 @@
 
         <div class="sidebar-foot">
           <div class="status-dot" id="statusDot" title="État du serveur local"><span></span><b id="statusText">Connexion…</b></div>
-          <div class="sidebar-links">
-            <a href="/career" title="Ouvrir l’espace Career complet">Career ↗</a>
-            <a href="/v5" title="Ouvrir l’espace V5">V5 ↗</a>
-            <a href="/" title="Ouvrir l’interface historique">V3 ↗</a>
-          </div>
         </div>
       </aside>
 
@@ -101,6 +101,7 @@
           <section class="view" id="view-tracking" hidden></section>
           <section class="view" id="view-offers" hidden></section>
           <section class="view" id="view-assistant" hidden></section>
+          <section class="view" id="view-homework" hidden></section>
           <section class="view" id="view-missions" hidden></section>
           <section class="view" id="view-memory" hidden></section>
         </div>

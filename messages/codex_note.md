@@ -42,3 +42,38 @@
 - Aucune candidature réelle, donnée personnelle ni soumission employeur n’a été utilisée.
 - Le checkout historique `/Users/comedelavenne/AI-Excel-Agent` est sur `agent/spec-033-translation-variants` avec de nombreux fichiers modifiés/non suivis; il ne doit pas servir directement à la convergence. Après accord, utiliser un worktree propre créé depuis `origin/main`, puis un fast-forward vers le SHA candidat.
 - `main` demeure inchangée; sa convergence reste soumise à l’accord explicite de Côme.
+
+---
+
+# RAPPORT CODEX — 2026-10-29 16:05 CET
+
+## 1. Livré (avec preuve)
+| Commit | Contenu (1 ligne) | Fichiers | Tests verts (nom test) | Durée |
+|---|---|---|---|---|
+| en préparation | NAGE unifié : Stage Hunter intégré, qualification stage/langue/dates, espace Devoirs et Study Coach local persistant | 20 fichiers, 1 312 ajouts, 94 suppressions | 602 tests Career/Desktop/Study, puis 12 tests incrémentaux | 185,17 s + 10,1 s |
+
+## 2. En cours maintenant
+| Tâche | % fait | Temps passé | Temps restant estimé | Blocage ? |
+|---|---:|---:|---:|---|
+| Candidate NAGE Career + Devoirs | 100 % du code et de la recette candidate | session du 29/10 | commit, push, déploiement Bureau et recette de l’instance exacte | aucun blocage code ; Ollama absent au dernier démarrage, outils déterministes disponibles |
+
+## 3. Performances mesurées
+| Métrique | Avant | Après | Comment mesuré |
+|---|---|---|---|
+| `/api/career/application-pipeline` | 13,4 s historique | 389,724 ms à froid ; 14,438 et 21,062 ms à chaud | serveur candidat isolé, port 18933, 29/10 à 16:05 CET |
+| `/api/study/overview` | nouvelle route | 17,077 ms à froid ; 5,860 et 5,699 ms à chaud | trois requêtes HTTP locales, base avec TD4 et séances persistées |
+| `/app` | non apparié | 9,891 ms à froid ; 3,748 et 3,517 ms à chaud | trois requêtes HTTP locales |
+
+## 4. État 24 h de ta prod
+- commits aujourd’hui avant cette livraison : 0 ; la livraison sera un commit atomique.
+- diff de travail : 20 fichiers, 1 312 ajouts, 94 suppressions.
+- tests verts : 602 tests ciblés Career/Desktop/Study en 183,39 s ; 12 tests incrémentaux Devoirs/Study en 8,12 s ; Ruff, `node --check` et `git diff --check` verts.
+- navigateur candidat : 8 documents réels autorisés visibles ; TD4 structuré en 5 sections et 38 tâches ; 9 notions ; séance 5 questions ; correction sourcée ; reprise persistante à la question 2/5 ; QCM sans identifiants techniques.
+
+## 5. Ce que j’attends d’OpenCode
+- Aucun travail requis pour cette livraison ; ne pas modifier la candidate pendant le déploiement.
+
+## 6. Risques / blocages
+- Le tuteur conversationnel local nécessite un service Ollama disponible ; lecture, structuration, analyse Excel, quiz, corrections et progression restent utilisables sans modèle.
+- Aucun original personnel n’est modifié ; les huit documents sont copiés dans les données locales ignorées par Git.
+- Aucune soumission de candidature, aucun envoi de document et aucun fournisseur cloud n’est déclenché par ce parcours.

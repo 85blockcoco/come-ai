@@ -153,6 +153,27 @@ génère aucun lien public.
 4. Les rapports Excel arrivent dans la section **Rapports créés** et peuvent
    être téléchargés depuis l’interface.
 
+### Devoirs et apprentissage
+
+L’interface NAGE accessible sur `/app#homework` rassemble désormais les cours
+et devoirs dans un seul parcours :
+
+1. ajoute un PDF, un document Word ou PowerPoint, un classeur Excel/CSV ou un
+   fichier texte ; NAGE travaille sur une copie locale dans `data/` et ne
+   modifie jamais l’original ;
+2. clique sur **Lire et structurer** pour repérer localement le plan, les
+   questions et les tâches sans appel à un modèle ;
+3. crée un **Parcours d’apprentissage** pour obtenir des séances courtes de
+   cinq questions, des corrections appuyées sur le texte du cours et une
+   progression persistante dans `study_data/` ;
+4. utilise le **Tuteur de travail** pour demander une explication, un plan de
+   résolution, un indice ou une vérification. Ce mode force le fournisseur
+   local Ollama et n’autorise ni écriture de fichier ni contexte cloud.
+
+Les consignes d’exercice restent dans le plan du devoir : elles ne sont pas
+transformées en fausses notions. La plateforme aide à comprendre et vérifier ;
+elle ne prétend pas rendre le devoir à la place de l’étudiant.
+
 Pour suivre des offres de stage sans utiliser Gemini, clique sur **Career
 Agent** dans l’en-tête. Les données de carrière sont isolées dans
 `career_data/`, jamais dans `data/` ou `output/`. Les CV et exports de profil

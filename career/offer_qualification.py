@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from calendar import monthrange
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import asdict, dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, Iterator
 
 from .cv_quality.conditions_extractor import extract_conditions_from_offer
@@ -32,6 +33,7 @@ from .models import (
     normalized_text,
 )
 from .offer_exhaustiveness import ExhaustivenessScore, compute_exhaustiveness
+from .offer_requirements.extract import analyze_offer
 
 
 @dataclass(frozen=True)
@@ -48,10 +50,14 @@ class QualifiedOffer:
     posted_date: str | None
     start_date: str | None
     end_date: str | None
+    end_month: int | None
+    end_year: int | None
+    end_date_estimated: bool
     start_month: int | None
     duration_min_months: int | None
     duration_max_months: int | None
     language: str | None
+    language_requirements: str | None
     country: str | None
     city: str | None
     geography_status: str
@@ -90,12 +96,63 @@ class QualifiedOffer:
 
 
 _CONTRACT_PATTERNS = (
+    ("internship", re.compile(r"\b(?:intern(?:ship)?s?|stages?|stagiaires?|praktikum|tirocinio|pr[aá]cticas?)\b", re.I)),
     ("apprenticeship", re.compile(r"\b(?:alternance|apprenticeship|apprentice|apprenti(?:e)?)\b", re.I)),
     ("graduate", re.compile(r"\bgraduate\b", re.I)),
     ("VIE", re.compile(r"\bVIE\b|volontariat international en entreprise", re.I)),
     ("permanent", re.compile(r"\b(?:CDI|permanent(?:\s+(?:role|position|contract))?|indefinite[- ]term)\b", re.I)),
     ("fixed_term", re.compile(r"\b(?:CDD|fixed[- ]term contract)\b", re.I)),
 )
+
+_LANGUAGE_ALIASES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("Anglais", ("english", "anglais", "englisch", "inglese", "ingles")),
+    ("Français", ("french", "francais", "franzosisch", "francese", "frances")),
+    ("Allemand", ("german", "allemand", "deutsch", "tedesco", "aleman")),
+    ("Italien", ("italian", "italien", "italienisch", "italiano")),
+    ("Espagnol", ("spanish", "espagnol", "spanisch", "spagnolo", "espanol")),
+    ("Mandarin", ("mandarin", "chinese", "chinois", "cinese")),
+)
+
+
+def _named_languages(text: Any) -> list[str]:
+    normalized = f" {normalized_text(text)} "
+    return [
+        label for label, aliases in _LANGUAGE_ALIASES
+        if any(f" {alias} " in normalized for alias in aliases)
+    ]
+
+
+def _extract_language_requirements(offer: dict[str, Any]) -> tuple[str | None, str, str]:
+    """Return a user-readable requirement, exact quotes and provenance source."""
+    analysis = analyze_offer(offer)
+    by_language: dict[str, str] = {}
+    quotes: list[str] = []
+    sources: list[str] = []
+    priority = {"required": 3, "preferred": 2, "contextual": 1}
+    for record in analysis.get("requirements", []):
+        if not isinstance(record, dict) or record.get("category") != "language":
+            continue
+        modality = str(record.get("modality") or "unknown")
+        if modality not in priority:
+            continue
+        names = _named_languages(record.get("text"))
+        if not names:
+            continue
+        for name in names:
+            current = by_language.get(name)
+            if current is None or priority[modality] > priority[current]:
+                by_language[name] = modality
+        quote = clean_text(record.get("text"), limit=400)
+        if quote and quote not in quotes:
+            quotes.append(quote)
+        source = clean_text(record.get("source_field"), limit=80)
+        if source and source not in sources:
+            sources.append(source)
+    if not by_language:
+        return None, "", ""
+    suffix = {"required": "requis", "preferred": "souhaité", "contextual": "mentionné"}
+    readable = " · ".join(f"{name} {suffix[modality]}" for name, modality in by_language.items())
+    return readable, " | ".join(quotes[:4]), "+".join(sources)
 
 _GEO_CRITERIA_CACHE: ContextVar[dict[tuple[tuple[str, ...], tuple[str, ...]], tuple[set[str], set[str], set[str], set[str]]] | None] = ContextVar(
     "career_geo_criteria_cache", default=None
@@ -430,7 +487,6 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
         missing.append("mois de début")
     elif "start_month" not in evidence:
         evidence["start_month"] = FactEvidence(start_month, "source_field:start_date", start_date or "")
-
     observed_start: date | None = parsed_start
     if observed_start is None and evidence.get("start_month") and evidence.get("start_year"):
         try:
@@ -489,7 +545,54 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
         low = high = None
         missing.append("durée")
 
-    language = field("language", "langue")
+    end_month = parsed_end.month if parsed_end else None
+    end_year = parsed_end.year if parsed_end else None
+    end_date_estimated = False
+    # A single explicit duration plus an explicit start is sufficient to
+    # calculate the calendar end. Month-only evidence stays month-only: no day
+    # is invented. With an exact start, the displayed end is the final day of
+    # the stated N-month period (for example 1 May + 4 months -> 31 August).
+    if parsed_end is None and type(low) is int and low == high:
+        start_year_value = parsed_start.year if parsed_start else evidence.get("start_year", FactEvidence(None, "")).value
+        start_month_value = parsed_start.month if parsed_start else abs(start_month) if start_month is not None else None
+        if type(start_year_value) is int and type(start_month_value) is int:
+            end_index = start_year_value * 12 + (start_month_value - 1) + low - 1
+            end_year, zero_based_end_month = divmod(end_index, 12)
+            end_month = zero_based_end_month + 1
+            end_date_estimated = True
+            start_quote = evidence.get("start_date") or evidence.get("start_month")
+            duration_quote = evidence.get("duration_min_months")
+            calculation_quote = " + ".join(
+                item.quote or str(item.value) for item in (start_quote, duration_quote) if item is not None
+            )
+            evidence["end_month"] = FactEvidence(
+                end_month, "calculated_from_start_and_duration", calculation_quote
+            )
+            evidence["end_year"] = FactEvidence(
+                end_year, "calculated_from_start_and_duration", calculation_quote
+            )
+            if parsed_start:
+                exclusive_index = parsed_start.year * 12 + (parsed_start.month - 1) + low
+                exclusive_year, exclusive_month_zero = divmod(exclusive_index, 12)
+                exclusive_month = exclusive_month_zero + 1
+                exclusive_day = min(parsed_start.day, monthrange(exclusive_year, exclusive_month)[1])
+                calculated_end = date(exclusive_year, exclusive_month, exclusive_day) - timedelta(days=1)
+                end_date = calculated_end.isoformat()
+                end_month = calculated_end.month
+                end_year = calculated_end.year
+                evidence["end_date"] = FactEvidence(
+                    end_date, "calculated_from_start_and_duration", calculation_quote
+                )
+            missing = [item for item in missing if item != "fin"]
+
+    language = field("language", "langue de l’annonce")
+    language_requirements, language_quote, language_source = _extract_language_requirements(offer)
+    if language_requirements:
+        evidence["language_requirements"] = FactEvidence(
+            language_requirements,
+            f"requirement_extractor:{language_source or 'description_original'}",
+            language_quote,
+        )
     country = field("country", "pays")
     city = field("city", "ville")
     # The country the source wrote decides the ranking points.  A city never
@@ -542,7 +645,7 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
         evidence["contract_type"] = FactEvidence(contract_type, label, matched.group(0))
     else:
         description_matches = [(kind, pattern.search(description)) for kind, pattern in _CONTRACT_PATTERNS
-                               if kind != "graduate"]
+                               if kind not in {"graduate", "internship"}]
         description_matches = [(kind, match) for kind, match in description_matches if match]
         description_kinds = list(dict.fromkeys(kind for kind, _ in description_matches))
         if len(description_kinds) > 1:
@@ -689,10 +792,14 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
         posted_date=posted_date,
         start_date=start_date,
         end_date=end_date,
+        end_month=end_month,
+        end_year=end_year,
+        end_date_estimated=end_date_estimated,
         start_month=abs(start_month) if start_month is not None else None,
         duration_min_months=low,
         duration_max_months=high,
         language=language,
+        language_requirements=language_requirements,
         country=country,
         city=city,
         geography_status=geography_status,

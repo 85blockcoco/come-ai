@@ -130,6 +130,46 @@ def test_explicit_month_and_year_in_title_are_start_evidence() -> None:
     assert result.provenance["start_month"].quote == "March 2027"
 
 
+def test_internship_language_and_end_period_are_derived_from_explicit_offer_facts() -> None:
+    result = qualify_offer({
+        "title": "Corporate Finance Internship",
+        "description_original": (
+            "This internship starts in May 2027 and lasts four months.\n"
+            "Requirements:\nFluent English is required.\nFrench would be a plus."
+        ),
+        "official_url": "https://careers.example.test/corporate-finance-internship",
+        "source_name": "greenhouse",
+        "source_id": "finance-internship-may-2027",
+        "source_verified": True,
+    }, as_of=date(2026, 10, 18))
+
+    assert result.contract_type == "internship"
+    assert result.duration_min_months == result.duration_max_months == 4
+    assert result.start_month == 5
+    assert result.end_date is None  # month-only source: never invent a day
+    assert (result.end_month, result.end_year) == (8, 2027)
+    assert result.end_date_estimated is True
+    assert result.language_requirements == "Anglais requis · Français souhaité"
+    assert result.provenance["end_month"].source == "calculated_from_start_and_duration"
+    assert result.provenance["language_requirements"].quote == (
+        "Fluent English is required. | French would be a plus."
+    )
+
+
+def test_exact_start_and_duration_calculate_an_explicitly_labelled_end_date() -> None:
+    result = qualify_offer({
+        "title": "Finance Internship",
+        "employment_type": "Internship",
+        "start_date": "2027-05-01",
+        "duration_months": 4,
+    }, as_of=date(2026, 10, 18))
+
+    assert result.end_date == "2027-08-31"
+    assert (result.end_month, result.end_year) == (8, 2027)
+    assert result.end_date_estimated is True
+    assert result.provenance["end_date"].source == "calculated_from_start_and_duration"
+
+
 def test_month_range_in_title_uses_first_month_but_does_not_invent_duration() -> None:
     result = qualify_offer({
         "title": "Stockholm - M&A Internship Jan-June 2027",

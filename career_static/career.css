@@ -66,6 +66,19 @@ h1 span { color: var(--accent); }
 .career-tab:hover { color: var(--accent-dark); background: var(--accent-soft); }
 .career-tab.active { color: #fff; background: var(--accent); box-shadow: 0 5px 14px rgb(4 120 87 / 22%); }
 .career-tab:nth-child(8) { margin-left: 6px; border-left: 1px solid var(--border); border-radius: 0 9px 9px 0; }
+
+body[data-embedded="true"] { min-height: 100%; background: var(--canvas); }
+body[data-embedded="true"] .skip-link,
+body[data-embedded="true"] .career-topbar,
+body[data-embedded="true"] .career-intro,
+body[data-embedded="true"] .career-tabs,
+body[data-embedded="true"] footer { display: none !important; }
+body[data-embedded="true"] .career-shell {
+  width: 100%;
+  margin: 0;
+  padding: 12px;
+}
+body[data-embedded="true"] .career-view { scroll-margin-top: 8px; }
 .career-loading, .career-message { margin: 0 0 12px; padding: 9px 11px; border: 1px solid #cbead8; border-radius: 10px; color: var(--accent-dark); background: var(--surface-soft); font-size: .78rem; line-height: 1.4; }
 .career-loading[hidden], .career-message:empty { display: none; }
 .career-message.error { border-color: #e7b2ad; color: var(--danger); background: var(--danger-soft); }

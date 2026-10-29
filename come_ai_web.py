@@ -34,6 +34,7 @@ from career.profile_import import MAX_PROFILE_IMPORT_BYTES
 from career.router import CAREER_STATIC_DIR, create_career_router
 from career.service import CareerService
 from personal_memory import PersonalMemoryError, PersonalMemoryStore
+from study_coach.errors import StudyCoachError
 from memory_storage import MemoryStorageError, MemoryStorageService
 from task_queue import (
     ACTIVE_STATUSES,
@@ -49,11 +50,13 @@ from v5_orchestrator import LocalOrchestrator
 from workspace_core import (
     MAX_IMPORT_BYTES,
     SUPPORTED_SUFFIXES,
+    TABULAR_SUFFIXES,
     AgentService,
     AppConfig,
     LocalTools,
     UserFacingError,
     Workspace,
+    extract_text,
     safe_error,
     to_jsonable,
 )
@@ -276,6 +279,23 @@ class MemoryProjectRequest(BaseModel):
     description: str = Field(default="", max_length=2_000)
 
 
+class StudyCourseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    file_id: str = Field(min_length=3, max_length=128)
+    requested_topics: list[Annotated[str, Field(min_length=1, max_length=120)]] = Field(default_factory=list, max_length=12)
+
+
+class StudySessionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    size: int = Field(default=5, ge=1, le=12)
+
+
+class StudyAnswerRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    question_id: str = Field(min_length=3, max_length=128)
+    value: str = Field(min_length=1, max_length=4_000)
+
+
 def create_app(
     base_dir: Path | None = None,
     agent_override: Any | None = None,
@@ -341,6 +361,8 @@ def create_app(
     # scans source or creates an export. It owns a separate single worker.
     workshop_instances: list[Any] = []
     workshop_lock = threading.Lock()
+    study_instances: list[Any] = []
+    study_lock = threading.RLock()
 
     def get_workshop() -> Any:
         with workshop_lock:
@@ -349,6 +371,15 @@ def create_app(
 
                 workshop_instances.append(DeveloperWorkshop(config.base_dir, busy_check=lambda: bool(_task_queue_health(runtime).get("active_count", 0))))
             return workshop_instances[0]
+
+    def get_study_coach() -> Any:
+        """Open the deterministic local Study Coach only when the user needs it."""
+        with study_lock:
+            if not study_instances:
+                from study_coach.engine import StudyCoach
+
+                study_instances.append(StudyCoach.open(config.base_dir / "study_data"))
+            return study_instances[0]
 
     def get_hybrid_chat() -> Any:
         # Construction is inert: opening the interface never loads a model or
@@ -389,6 +420,8 @@ def create_app(
                 runtime.task_runner.stop(wait=False)
             for workshop in workshop_instances:
                 workshop.close()
+            for study_coach in study_instances:
+                study_coach.close()
 
     app = FastAPI(
         title="Côme AI 5.0",
@@ -401,6 +434,7 @@ def create_app(
     app.state.career = career
     app.state.style_memory = style_memory
     app.state.get_workshop = get_workshop
+    app.state.get_study_coach = get_study_coach
     # The launcher binds Uvicorn to 127.0.0.1. This is a second line of
     # defence against unexpected Host headers when using a local browser.
     app.add_middleware(
@@ -459,10 +493,12 @@ def create_app(
             response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
-        response.headers["X-Frame-Options"] = "DENY"
+        embedded_career = path == "/career" and request.query_params.get("embed") == "app"
+        response.headers["X-Frame-Options"] = "SAMEORIGIN" if embedded_career else "DENY"
+        frame_ancestors = "'self'" if embedded_career else "'none'"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; base-uri 'none'; form-action 'self'; "
-            "frame-ancestors 'none'; img-src 'self' data:; "
+            f"frame-ancestors {frame_ancestors}; frame-src 'self'; img-src 'self' data:; "
             "style-src 'self'; script-src 'self'; connect-src 'self'"
         )
         return response
@@ -838,6 +874,125 @@ def create_app(
             runtime,
             lambda: runtime.tools.create_analysis_workbook(payload.file_id, payload.sheet_name),
         )
+
+    def study_text(file_id: str) -> tuple[str, str]:
+        """Return bounded local course text for one opaque workspace file ID."""
+        with runtime.workspace_lock:
+            path = runtime.workspace.get_path(file_id)
+            if path.suffix.lower() not in TABULAR_SUFFIXES:
+                return path.name, extract_text(path)
+            inspection = runtime.tools.inspect_file(file_id)
+        sections = [f"Document de travail : {inspection.get('file') or path.name}"]
+        sheets = inspection.get("sheets") or {inspection.get("sheet") or "Tableau": inspection}
+        for name, sheet in list(sheets.items())[:25]:
+            sections.append(f"\nFeuille : {name}")
+            columns = sheet.get("column_names") or []
+            if columns:
+                sections.append("Colonnes : " + ", ".join(str(item) for item in columns[:40]))
+            for row in (sheet.get("preview") or [])[:20]:
+                sections.append(json.dumps(row, ensure_ascii=False, default=str))
+        return path.name, "\n".join(sections)[:200_000]
+
+    @app.get("/api/study/overview")
+    async def study_overview() -> dict[str, Any]:
+        def read() -> dict[str, Any]:
+            try:
+                with study_lock:
+                    coach = get_study_coach()
+                    courses = []
+                    for item in coach.list_courses():
+                        syllabus = coach.get_syllabus(str(item.get("id") or ""))
+                        courses.append({
+                            **item,
+                            "notion_count": len(syllabus.notions),
+                            "gap_count": len(syllabus.gaps),
+                        })
+                    return {"courses": courses, "progress": coach.progress()}
+            except StudyCoachError as error:
+                raise UserFacingError(str(error)) from error
+
+        return await run_in_threadpool(read)
+
+    @app.post("/api/study/courses")
+    async def create_study_course(payload: StudyCourseRequest) -> dict[str, Any]:
+        def create() -> dict[str, Any]:
+            try:
+                title, text = study_text(payload.file_id)
+                with study_lock:
+                    syllabus = get_study_coach().ingest_course(
+                        text,
+                        title=title,
+                        source_id=payload.file_id,
+                        requested_topics=payload.requested_topics,
+                    )
+                result = syllabus.to_dict()
+                result["notion_count"] = len(syllabus.notions)
+                result["gap_count"] = len(syllabus.gaps)
+                return result
+            except StudyCoachError as error:
+                raise UserFacingError(str(error)) from error
+
+        return await run_in_threadpool(create)
+
+    @app.post("/api/study/courses/{syllabus_id}/sessions")
+    async def create_study_session(syllabus_id: str, payload: StudySessionRequest) -> dict[str, Any]:
+        def create() -> dict[str, Any]:
+            try:
+                with study_lock:
+                    coach = get_study_coach()
+                    session = coach.start_session(syllabus_id, size=payload.size)
+                    return {
+                        "session_id": session.id,
+                        "syllabus_id": session.syllabus_id,
+                        "title": session.title,
+                        "status": session.status,
+                        "total": len(session.questions),
+                        "question": coach.next_question(session.id),
+                    }
+            except StudyCoachError as error:
+                raise UserFacingError(str(error)) from error
+
+        return await run_in_threadpool(create)
+
+    @app.get("/api/study/sessions/{session_id}")
+    async def read_study_session(session_id: str) -> dict[str, Any]:
+        def read() -> dict[str, Any]:
+            try:
+                with study_lock:
+                    coach = get_study_coach()
+                    session = coach.resume_session(session_id)
+                    return {
+                        "session_id": session.id,
+                        "syllabus_id": session.syllabus_id,
+                        "title": session.title,
+                        "status": session.status,
+                        "answered": session.current_index,
+                        "total": len(session.questions),
+                        "question": coach.next_question(session.id),
+                    }
+            except StudyCoachError as error:
+                raise UserFacingError(str(error)) from error
+
+        return await run_in_threadpool(read)
+
+    @app.post("/api/study/sessions/{session_id}/answers")
+    async def answer_study_question(session_id: str, payload: StudyAnswerRequest) -> dict[str, Any]:
+        def answer() -> dict[str, Any]:
+            try:
+                with study_lock:
+                    coach = get_study_coach()
+                    correction = coach.submit_answer(session_id, payload.question_id, payload.value)
+                    next_question = coach.next_question(session_id)
+                    report = coach.session_report(session_id) if next_question is None else None
+                    return {
+                        "correction": correction.to_dict(),
+                        "question": next_question,
+                        "report": report,
+                    }
+            except StudyCoachError as error:
+                raise UserFacingError(str(error)) from error
+
+        return await run_in_threadpool(answer)
 
     @app.get("/api/outputs")
     async def list_outputs() -> dict[str, Any]:

@@ -36,10 +36,10 @@ from task_queue import redact_payload
 
 APP_NAME = "Côme AI V3"
 SUPPORTED_SUFFIXES = {
-    ".xlsx", ".xlsm", ".xls", ".csv", ".tsv", ".pdf", ".docx", ".txt", ".md"
+    ".xlsx", ".xlsm", ".xls", ".csv", ".tsv", ".pdf", ".docx", ".pptx", ".txt", ".md"
 }
 TABULAR_SUFFIXES = {".xlsx", ".xlsm", ".xls", ".csv", ".tsv"}
-TEXT_SUFFIXES = {".pdf", ".docx", ".txt", ".md"}
+TEXT_SUFFIXES = {".pdf", ".docx", ".pptx", ".txt", ".md"}
 MAX_IMPORT_BYTES = 50 * 1024 * 1024
 MAX_EXCERPT_CHARS = 16_000
 MAX_RESULT_CHARS = 28_000
@@ -47,6 +47,8 @@ MAX_DOCUMENT_TEXT_CHARS = 200_000
 MAX_PDF_PAGES = 200
 MAX_DOCX_ARCHIVE_ENTRIES = 10_000
 MAX_DOCX_UNCOMPRESSED_BYTES = 25 * 1024 * 1024
+MAX_PPTX_ARCHIVE_ENTRIES = 20_000
+MAX_PPTX_UNCOMPRESSED_BYTES = 120 * 1024 * 1024
 MAX_SPREADSHEET_ARCHIVE_ENTRIES = 20_000
 MAX_SPREADSHEET_UNCOMPRESSED_BYTES = 150 * 1024 * 1024
 MAX_ANALYSIS_ROWS = 100_000
@@ -577,6 +579,48 @@ def extract_docx_text(path: Path) -> str:
     return cap_document_text("\n".join(paragraphs))
 
 
+def extract_pptx_text(path: Path) -> str:
+    """Extract slide and speaker-note text without executing embedded content."""
+    try:
+        with zipfile.ZipFile(path) as archive:
+            entries = archive.infolist()
+            if len(entries) > MAX_PPTX_ARCHIVE_ENTRIES:
+                raise UserFacingError("Présentation trop complexe pour une lecture sûre.")
+            if sum(entry.file_size for entry in entries) > MAX_PPTX_UNCOMPRESSED_BYTES:
+                raise UserFacingError("Présentation trop volumineuse une fois décompressée.")
+
+            def ordered_xml(prefix: str) -> list[str]:
+                pattern = re.compile(rf"^{re.escape(prefix)}(\d+)\.xml$")
+                found: list[tuple[int, str]] = []
+                for entry in entries:
+                    match = pattern.match(entry.filename)
+                    if match:
+                        found.append((int(match.group(1)), entry.filename))
+                return [name for _, name in sorted(found)]
+
+            text_parts: list[str] = []
+            drawing_text = "{http://schemas.openxmlformats.org/drawingml/2006/main}t"
+            for index, name in enumerate(ordered_xml("ppt/slides/slide"), start=1):
+                root = ET.fromstring(archive.read(name))
+                values = [str(node.text or "").strip() for node in root.iter(drawing_text)]
+                values = [value for value in values if value]
+                if values:
+                    text_parts.append(f"[Diapositive {index}]\n" + "\n".join(values))
+            for index, name in enumerate(ordered_xml("ppt/notesSlides/notesSlide"), start=1):
+                root = ET.fromstring(archive.read(name))
+                values = [str(node.text or "").strip() for node in root.iter(drawing_text)]
+                values = [value for value in values if value and value != str(index)]
+                if values:
+                    text_parts.append(f"[Notes de la diapositive {index}]\n" + "\n".join(values))
+    except UserFacingError:
+        raise
+    except (OSError, zipfile.BadZipFile, ET.ParseError) as error:
+        raise UserFacingError("Présentation PowerPoint illisible ou corrompue.") from error
+    if not text_parts:
+        raise UserFacingError("Cette présentation ne contient aucun texte exploitable.")
+    return cap_document_text("\n\n".join(text_parts))
+
+
 def extract_pdf_text(path: Path) -> str:
     try:
         from pypdf import PdfReader  # type: ignore[import-not-found]
@@ -616,6 +660,8 @@ def extract_text(path: Path) -> str:
             raise UserFacingError("Document texte illisible.") from error
     if suffix == ".docx":
         return extract_docx_text(path)
+    if suffix == ".pptx":
+        return extract_pptx_text(path)
     if suffix == ".pdf":
         return extract_pdf_text(path)
     raise UserFacingError("Ce fichier ne contient pas de texte exploitable.")
@@ -625,6 +671,41 @@ def cap_document_text(text: str) -> str:
     if len(text) <= MAX_DOCUMENT_TEXT_CHARS:
         return text
     return text[:MAX_DOCUMENT_TEXT_CHARS] + "\n\n[Texte tronqué pour protéger la mémoire locale.]"
+
+
+_OUTLINE_SECTION_RE = re.compile(
+    r"^(?:\[Diapositive\s+\d+\]|(?:part|partie|chapter|chapitre|section|module|session|tutorial|"
+    r"exercise|exercice|case study)\b.{0,140})$",
+    re.IGNORECASE,
+)
+_OUTLINE_TASK_RE = re.compile(
+    r"^(?:Q(?:uestion)?\s*\d+(?:\.\d+)*\b|(?:task|tâche|problem|problème|exercise|exercice)\s*\d*\b)",
+    re.IGNORECASE,
+)
+
+
+def document_outline(text: str) -> dict[str, Any]:
+    """Extract a bounded, literal assignment/course outline without a model."""
+    lines = [re.sub(r"\s+", " ", line).strip() for line in str(text or "").splitlines()]
+    lines = [line for line in lines if line]
+    title = lines[0][:240] if lines else ""
+    sections: list[str] = []
+    tasks: list[str] = []
+    for line in lines:
+        clean = line[:700]
+        if _OUTLINE_SECTION_RE.match(clean) and clean not in sections:
+            sections.append(clean)
+        if (_OUTLINE_TASK_RE.match(clean) or (clean.endswith("?") and len(clean) >= 18)) and clean not in tasks:
+            tasks.append(clean)
+        if len(sections) >= 40 and len(tasks) >= 80:
+            break
+    return {
+        "title": title,
+        "sections": sections[:40],
+        "tasks": tasks[:80],
+        "section_count": len(sections[:40]),
+        "task_count": len(tasks[:80]),
+    }
 
 
 class LocalTools:
@@ -673,6 +754,7 @@ class LocalTools:
             "characters": len(text),
             "excerpt": text[:MAX_EXCERPT_CHARS],
             "truncated": len(text) > MAX_EXCERPT_CHARS,
+            "outline": document_outline(text),
         }
 
     def analyze_table(self, file_id: str, sheet_name: str = "") -> dict[str, Any]:
