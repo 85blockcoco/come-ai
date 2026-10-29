@@ -6,12 +6,10 @@
     "career/lexicons/de.json",
     "career/lexicons/es.json",
     "tests/test_translation_variants.py",
+    "career/router.py",
     "docs/agent-reports/SPEC-033-translation_variants.md"
   ],
-  "files_modified": [
-    "career/router.py"
-  ],
-  "output": "Module traduction variantes complet : détection langue heuristique (4 langues), glossaires statiques EN/DE/ES (41 termes chacun), build_variant en 3 modes (passthrough/lexicon/arena), 2 endpoints REST, 30 tests synthétiques",
-  "logs": "pytest -q tests/test_translation_variants.py → 30 passed in 8.70s\npytest -q tests/test_cv_variants.py → 6 passed\nruff check career/translation_variants.py career/router.py → All checks passed!\ngit diff --check (fichiers mission) → propre\nSmoke: detect DE 'Wir suchen einen Analysten...' → de ✓; build m_a DE → 15 champs traduits, 0 non traduit ✓",
+  "output": "SPEC-033 finalisé et durci : variantes traduites EN/DE/ES (détection heuristique, glossaires statiques complets, modes passthrough/lexicon/arena avec traducteur injecté, 2 endpoints REST), 36 tests synthétiques dont adversarial FR/EN et élisions.",
+  "logs": "pytest -q tests/test_translation_variants.py → 36 passed in 3.79s\npytest -q (suite complète) → 3126 passed, 1 failed préexistant hors périmètre (tests/test_career_agent.py::test_local_storage_profile_preferences_and_persistence : 6 familles attendues vs 14 dans JOB_FAMILIES)\nruff check career/translation_variants.py career/router.py tests/test_translation_variants.py → All checks passed\nruff check . → 17 erreurs préexistantes (night_supervisor.py, design/**, come_ai_web.py), aucune dans la mission\ngit diff --check (fichiers mission) → propre\ncommit 3a1d451 poussé sur origin/agent/spec-033-translation-variants (faec18e..3a1d451)",
   "error": null
 }
