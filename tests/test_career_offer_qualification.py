@@ -170,6 +170,18 @@ def test_exact_start_and_duration_calculate_an_explicitly_labelled_end_date() ->
     assert result.provenance["end_date"].source == "calculated_from_start_and_duration"
 
 
+@pytest.mark.parametrize("title", [
+    "Praktikum Risikoanalyse",
+    "Tirocinante contabilità",
+    "Prácticas de análisis",
+])
+def test_international_internship_titles_are_explicit_contract_evidence(title: str) -> None:
+    result = qualify_offer({"title": title}, as_of=date(2026, 10, 18))
+
+    assert result.contract_type == "internship"
+    assert result.provenance["contract_type"].source == "title_passage"
+
+
 def test_month_range_in_title_uses_first_month_but_does_not_invent_duration() -> None:
     result = qualify_offer({
         "title": "Stockholm - M&A Internship Jan-June 2027",

@@ -50,14 +50,10 @@ class QualifiedOffer:
     posted_date: str | None
     start_date: str | None
     end_date: str | None
-    end_month: int | None
-    end_year: int | None
-    end_date_estimated: bool
     start_month: int | None
     duration_min_months: int | None
     duration_max_months: int | None
     language: str | None
-    language_requirements: str | None
     country: str | None
     city: str | None
     geography_status: str
@@ -69,6 +65,13 @@ class QualifiedOffer:
     missing_fields: tuple[str, ...]
     provenance: dict[str, FactEvidence]
     reasons: tuple[str, ...]
+    # Additive V3 fields stay optional so historical/manual constructions keep
+    # working while qualified offers can expose calculated periods and the
+    # precise language requirement.
+    end_month: int | None = None
+    end_year: int | None = None
+    end_date_estimated: bool = False
+    language_requirements: str | None = None
     # Geographic ranking signal: points added or removed for the country the
     # source wrote, and the reason that produced them.
     geo_score: int = 0
@@ -96,7 +99,7 @@ class QualifiedOffer:
 
 
 _CONTRACT_PATTERNS = (
-    ("internship", re.compile(r"\b(?:intern(?:ship)?s?|stages?|stagiaires?|praktikum|tirocinio|pr[aá]cticas?)\b", re.I)),
+    ("internship", re.compile(r"\b(?:intern(?:ship)?s?|stages?|stagiaires?|praktikum|tirocin(?:io|ant[ei])|pr[aá]cticas?)\b", re.I)),
     ("apprenticeship", re.compile(r"\b(?:alternance|apprenticeship|apprentice|apprenti(?:e)?)\b", re.I)),
     ("graduate", re.compile(r"\bgraduate\b", re.I)),
     ("VIE", re.compile(r"\bVIE\b|volontariat international en entreprise", re.I)),

@@ -51,6 +51,7 @@
 | Commit | Contenu (1 ligne) | Fichiers | Tests verts (nom test) | Durée |
 |---|---|---|---|---|
 | en préparation | NAGE unifié : Stage Hunter intégré, qualification stage/langue/dates, espace Devoirs et Study Coach local persistant | 20 fichiers, 1 312 ajouts, 94 suppressions | 602 tests Career/Desktop/Study, puis 12 tests incrémentaux | 185,17 s + 10,1 s |
+| correctif CI de ce rapport | Rétrocompatibilité `QualifiedOffer` et reconnaissance explicite des intitulés de stage allemand, italien et espagnol | qualification, corpus gelé et tests | 58 tests ciblés (`offer_exhaustiveness`, `offer_intelligence`, `career_offer_qualification`) | 2,20 s |
 
 ## 2. En cours maintenant
 | Tâche | % fait | Temps passé | Temps restant estimé | Blocage ? |
@@ -75,5 +76,6 @@
 
 ## 6. Risques / blocages
 - Le tuteur conversationnel local nécessite un service Ollama disponible ; lecture, structuration, analyse Excel, quiz, corrections et progression restent utilisables sans modèle.
+- La première CI complète a exposé 3 régressions sur 6 458 cas ; elles sont corrigées et couvertes avant la seconde CI.
 - Aucun original personnel n’est modifié ; les huit documents sont copiés dans les données locales ignorées par Git.
 - Aucune soumission de candidature, aucun envoi de document et aucun fournisseur cloud n’est déclenché par ce parcours.
