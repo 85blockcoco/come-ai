@@ -174,7 +174,7 @@ class TranslationDetectPayload(BaseModel):
 
 
 class TranslationBuildPayload(BaseModel):
-    variant_id: str = Field(min_length=1, max_length=40)
+    variant_id: str = Field(min_length=1, max_length=40, pattern="^(m_a|markets|corporate_finance)$")
     target_lang: str = Field(min_length=2, max_length=5, pattern="^(en|de|es|fr)$")
     arena_available: bool = False
 
