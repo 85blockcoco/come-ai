@@ -144,6 +144,21 @@ class ResetPayload(BaseModel):
     confirmation: str = Field(min_length=1, max_length=100)
 
 
+class MailIngestParsePayload(BaseModel):
+    raw: str = Field(min_length=1, max_length=200_000)
+
+
+class MailIngestDetectStatePayload(BaseModel):
+    subject: str = Field(default="", max_length=500)
+    body: str = Field(default="", max_length=200_000)
+
+
+class MailIngestFilterPayload(BaseModel):
+    subject: str = Field(default="", max_length=500)
+    sender: str = Field(default="", max_length=500)
+    body: str = Field(default="", max_length=200_000)
+
+
 class ProfileTextImportPayload(BaseModel):
     source_kind: str = Field(default="linkedin_text", min_length=2, max_length=40)
     text: str = Field(min_length=1, max_length=100_000)
@@ -773,6 +788,35 @@ def create_career_router(
     async def reset_data(payload: ResetPayload) -> dict[str, bool]:
         await local(lambda: service.reset_personal_data(payload.confirmation))
         return {"deleted": True}
+
+    # --- Mail ingest (SPEC-039) ---------------------------------------------
+    @router.post("/api/career/mail-ingest/parse")
+    async def mail_ingest_parse(payload: MailIngestParsePayload) -> Any:
+        from career.mail_ingest import parse_email
+
+        parsed = await local(lambda: parse_email(payload.raw.encode("utf-8", errors="replace")))
+        import dataclasses
+
+        return dataclasses.asdict(parsed) if dataclasses.is_dataclass(parsed) else parsed
+
+    @router.post("/api/career/mail-ingest/detect-state")
+    async def mail_ingest_detect_state(payload: MailIngestDetectStatePayload) -> Any:
+        from career.mail_states import detect_state
+
+        det = await local(lambda: detect_state(payload.subject, payload.body))
+        import dataclasses
+
+        return dataclasses.asdict(det) if dataclasses.is_dataclass(det) else det
+
+    @router.post("/api/career/mail-ingest/filter")
+    async def mail_ingest_filter(payload: MailIngestFilterPayload) -> Any:
+        from career.mail_ingest import recruiter_score
+
+        score = await local(lambda: recruiter_score(
+            {"subject": payload.subject, "sender": payload.sender, "body": payload.body}
+        ))
+        is_rec = score >= 0.35
+        return {"is_recruiter": bool(is_rec), "score": score}
 
     return router
 

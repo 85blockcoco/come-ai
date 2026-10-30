@@ -427,7 +427,13 @@ def test_no_submission_or_email_route_exists() -> None:
     """Preuve statique : aucune route n'envoie de courriel ni de candidature."""
     paths = _route_paths()
     forbidden = re.compile(r"send|mail|smtp|transmit|auto-submit|autosubmit|autoapp")
-    offending = [path for path in paths if forbidden.search(path.lower())]
+    # SPEC-039 : les routes mail-ingest ne transmettent rien (lecture locale,
+    # parsing, filtrage) — elles ne sont pas des routes d'envoi.
+    allowed_prefixes = ("/api/career/mail-ingest",)
+    offending = [
+        path for path in paths
+        if forbidden.search(path.lower()) and not path.lower().startswith(allowed_prefixes)
+    ]
     assert offending == [], f"routes d'envoi interdites détectées : {offending}"
     assert "/api/career/application-kits" in paths
     assert not any(path.endswith("/submit") for path in paths)
