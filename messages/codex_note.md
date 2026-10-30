@@ -148,3 +148,10 @@
 
 - Le profil synthétique de recette est volontairement incomplet : score 0 et export bloqué, comportement attendu.
 - Aucun CV personnel, aucune candidature réelle, aucun envoi automatique et aucun fournisseur cloud n’ont été utilisés.
+
+## Déploiement Bureau vérifié
+
+- Branche poussée : `codex/nage-consolidation-20261030`, commit fonctionnel `1700dd3163362c7dadb0cd1049c134929ade28e3`, confirmé par `git ls-remote`.
+- Le checkout propre `/Users/comedelavenne/NAGE-release` utilisé par `/Users/comedelavenne/Desktop/NAGE.app` a été positionné sur ce commit; `main` reste inchangée.
+- Instance exacte `127.0.0.1:8766` : `/app` et `/career` HTTP 200; Stage Hunter intégré dans l’application; préférence `bachelor_m1_then_m2`; 29 cartes visibles; 30 actions de préparation; aucun débordement horizontal et 0 erreur console.
+- Pipeline chargé, trois mesures : **1,80 s**, **1,75 s**, **2,12 s**; objectif `< 3 s` atteint sur les trois appels.
