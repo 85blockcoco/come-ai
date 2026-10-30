@@ -391,6 +391,8 @@ footer { margin: 18px 3px 0; color: var(--muted); font-size: .72rem; line-height
 .stagehunter-summary-item.warning { border-color: #f0d6ac; background: var(--warning-soft); }
 .stagehunter-summary-item.danger { border-color: #e9c4c0; background: var(--danger-soft); }
 .stagehunter-match { min-width: 0; margin-bottom: 18px; padding: 10px; border: 1px solid #d7e6de; border-radius: 17px; background: linear-gradient(145deg, #fff, #f9fdfb); box-shadow: 0 10px 26px rgb(6 78 59 / 7%); }
+.stagehunter-rank { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 6px 10px; }
+.stagehunter-rank > strong { color: var(--accent-dark); font-size: .76rem; letter-spacing: .04em; text-transform: uppercase; }
 .stage-match-block { margin-bottom: 8px; padding: 10px 12px; border: 1px solid #c9ded2; border-radius: 10px; background: var(--surface-muted); }
 .stage-match-header { display: flex; align-items: center; justify-content: space-between; gap: 9px; }
 .stage-match-header .scoring-title { margin: 0; }

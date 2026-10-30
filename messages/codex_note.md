@@ -155,3 +155,9 @@
 - Le checkout propre `/Users/comedelavenne/NAGE-release` utilisé par `/Users/comedelavenne/Desktop/NAGE.app` a été positionné sur ce commit; `main` reste inchangée.
 - Instance exacte `127.0.0.1:8766` : `/app` et `/career` HTTP 200; Stage Hunter intégré dans l’application; préférence `bachelor_m1_then_m2`; 29 cartes visibles; 30 actions de préparation; aucun débordement horizontal et 0 erreur console.
 - Pipeline chargé, trois mesures : **1,80 s**, **1,75 s**, **2,12 s**; objectif `< 3 s` atteint sur les trois appels.
+
+## Classement visible des meilleures offres
+
+- Chaque carte Stage Hunter affiche maintenant son rang (`Choix #N`) et un statut explicite : `Accessible BBA / Bac+4`, `Ambitieux M2 / MBA`, `Niveau à vérifier` ou `Hors préférence`.
+- Le résumé compte séparément les offres accessibles et ambitieuses; les M2/MBA restent affichées.
+- Preuves : **110 tests** Stage Hunter/éducation/Desktop verts en 16,39 s; navigateur candidate sans erreur console, rang et résumé visibles.

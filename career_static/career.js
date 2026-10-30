@@ -2804,15 +2804,19 @@ function renderStageResultSummary(matches) {
   const target = $("#stagehunter-result-summary");
   if (!target) return;
   target.replaceChildren();
-  const counts = {conforming:0, to_verify:0, non_conforming:0, sourced:0};
+  const counts = {conforming:0, to_verify:0, non_conforming:0, sourced:0, accessible:0, ambitious:0};
   matches.forEach((match) => {
     const status = (match.stage_match || match.qualification || {}).qualification_status
       || (match.qualification || {}).target_status || "to_verify";
     counts[status] = (counts[status] || 0) + 1;
     if (match.job?.official_url && match.job?.source_name && match.job.source_name !== "manual") counts.sourced += 1;
+    const education = (match.stage_match || match).education_access?.status;
+    if (education === "preferred") counts.accessible += 1;
+    if (education === "consider") counts.ambitious += 1;
   });
   const items = [
     [matches.length, "offres affichées", ""], [counts.conforming, "conformes", "good"],
+    [counts.accessible, "accessibles maintenant", "good"], [counts.ambitious, "ambitieuses M2 / MBA", "warning"],
     [counts.to_verify, "à vérifier", "warning"], [counts.non_conforming, "non conformes", "danger"],
     [counts.sourced, "avec source officielle liée", ""],
   ];
@@ -2881,6 +2885,17 @@ function stageMatchEducationRank(match) {
   return Number((match.stage_match || match).education_access?.priority_rank ?? 2);
 }
 
+function stageEducationBadge(match) {
+  const education = (match.stage_match || match).education_access || {};
+  const presentation = {
+    preferred: ["Accessible BBA / Bac+4", "good"],
+    consider: ["Ambitieux M2 / MBA", "warning"],
+    outside_preference: ["Hors préférence", "danger"],
+    to_verify: ["Niveau à vérifier", "warning"],
+  }[education.status] || ["Niveau à vérifier", "warning"];
+  return chip(presentation[0], presentation[1]);
+}
+
 function renderStageMap(matches) {
   const map = $("#stagehunter-map");
   if (!map) return;
@@ -2933,9 +2948,12 @@ function renderStageMatches(payload) {
   renderStageMap(sorted);
   renderStageResultSummary(sorted);
   empty.hidden = sorted.length > 0;
-  sorted.forEach((match) => {
+  sorted.forEach((match, index) => {
     const wrapper = make("div", "", "stagehunter-match");
     if (match.job?.id) wrapper.dataset.jobId = match.job.id;
+    const rank = make("div", "", "stagehunter-rank");
+    rank.append(make("strong", `Choix #${index + 1}`), stageEducationBadge(match));
+    wrapper.append(rank);
     if (match.stage_match || match.qualification) {
       const displayedMatch = {
         ...(match.stage_match || {

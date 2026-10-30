@@ -38,6 +38,16 @@ def test_stage_search_exposes_accessible_progress_and_result_summary() -> None:
     assert 'id="stagehunter-result-summary"' in html
 
 
+def test_stage_results_make_education_priority_and_rank_visible() -> None:
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert "Accessible BBA / Bac+4" in source
+    assert "Ambitieux M2 / MBA" in source
+    assert "Niveau à vérifier" in source
+    assert "Choix #" in source
+    assert "accessibles maintenant" in source
+    assert "ambitieuses M2 / MBA" in source
+
+
 def test_stagehunter_keeps_first_run_criteria_visible_and_advanced_filters_collapsible() -> None:
     html = HTML.read_text(encoding="utf-8")
     core_criteria = html.index('id="stagehunter-start-date"')
