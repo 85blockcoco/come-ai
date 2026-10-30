@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "note": "Données 100% synthétiques pour les tests du journal d'audit (SPEC-035). Aucune offre, entreprise ou personne réelle.",
+  "entries": [
+    {
+      "decision_id": "dec-syn-001",
+      "decision_type": "offer_ranked",
+      "context": {
+        "job_id": "syn-job-001",
+        "company": "Société Fictive Alpha",
+        "title": "Stage Corporate Finance",
+        "city": "Londres",
+        "country": "United Kingdom",
+        "factors": {"localisation": 0.9, "famille_metier": 0.8, "langue": 0.4}
+      },
+      "outcome": {"score": 86, "status": "shortlist_suggested", "rank": 1},
+      "at": "2026-10-20T09:00:00+00:00"
+    },
+    {
+      "decision_id": "dec-syn-002",
+      "decision_type": "offer_ranked",
+      "context": {
+        "job_id": "syn-job-002",
+        "company": "Société Fictive Beta",
+        "title": "Stage M&A",
+        "city": "Amsterdam",
+        "country": "Netherlands",
+        "factors": {"localisation": 0.75, "famille_metier": 0.9}
+      },
+      "outcome": {"score": 74, "status": "to_verify", "rank": 2},
+      "at": "2026-10-20T09:05:00+00:00"
+    },
+    {
+      "decision_id": "dec-syn-003",
+      "decision_type": "followup_scheduled",
+      "context": {
+        "application_id": "syn-app-001",
+        "job_id": "syn-job-001",
+        "company": "Société Fictive Alpha",
+        "days_since_submission": 10,
+        "policy": "relance_manuelle_unique"
+      },
+      "outcome": {"status": "followup_proposed", "channel": "manuel", "reasons": ["aucune réponse après 10 jours", "candidature confirmée reçue"]},
+      "at": "2026-10-30T18:30:00+00:00"
+    },
+    {
+      "decision_id": "dec-syn-004",
+      "decision_type": "arena_verdict",
+      "context": {
+        "job_id": "syn-job-002",
+        "arena_run_id": "arena-syn-001",
+        "variant": "m_a",
+        "contenders": ["cv_a", "cv_b"]
+      },
+      "outcome": {"winner": "cv_b", "score": 0.62, "status": "verdict_recorded", "reasons": ["vocabulaire offre mieux couvert", "résultats chiffrés présents"]},
+      "at": "2026-10-31T08:15:00+00:00"
+    },
+    {
+      "decision_id": "dec-syn-005",
+      "decision_type": "cv_variant_selected",
+      "context": {
+        "job_id": "syn-job-003",
+        "company": "Société Fictive Gamma",
+        "title": "Stage Analyse Financière",
+        "job_family": "corporate_finance"
+      },
+      "outcome": {"variant": "m_a", "scores": {"m_a": 0.81, "markets": 0.44}, "status": "variant_selected"},
+      "at": "2026-11-01T10:00:00+00:00"
+    },
+    {
+      "decision_id": "dec-syn-006",
+      "decision_type": "offer_ranked",
+      "context": {
+        "job_id": "syn-job-004",
+        "company": "Société Fictive Delta",
+        "title": "Stage Trading",
+        "city": "Paris",
+        "country": "France",
+        "factors": {"localisation": 0.1, "famille_metier": 0.7}
+      },
+      "outcome": {"score": 41, "status": "excluded_by_preferences", "rank": 9},
+      "at": "2026-11-02T11:20:00+00:00"
+    },
+    {
+      "decision_id": "dec-syn-007",
+      "decision_type": "letter_reviewed",
+      "context": {
+        "application_id": "syn-app-002",
+        "job_id": "syn-job-002",
+        "company": "Société Fictive Beta"
+      },
+      "outcome": {"status": "approved_local", "edition_chars": 1280},
+      "at": "2026-11-03T14:45:00+00:00"
+    },
+    {
+      "decision_id": "dec-syn-008",
+      "decision_type": "followup_scheduled",
+      "context": {
+        "application_id": "syn-app-003",
+        "job_id": "syn-job-003",
+        "company": "Société Fictive Gamma",
+        "days_since_submission": 3
+      },
+      "outcome": {"status": "followup_deferred", "channel": "manuel", "reasons": ["délai de politesse non écoulé"]},
+      "at": "2026-11-04T09:10:00+00:00"
+    }
+  ]
+}

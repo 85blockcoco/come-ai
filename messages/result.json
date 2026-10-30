@@ -1,15 +1,13 @@
 {
   "status": "done",
   "files_created": [
-    "career/translation_variants.py",
-    "career/lexicons/en.json",
-    "career/lexicons/de.json",
-    "career/lexicons/es.json",
-    "tests/test_translation_variants.py",
+    "career/audit_journal.py",
     "career/router.py",
-    "docs/agent-reports/SPEC-033-translation_variants.md"
+    "tests/test_audit_journal.py",
+    "tests/fixtures/audit_synthetic.json",
+    "docs/agent-reports/SPEC-035-audit_journal.md"
   ],
-  "output": "SPEC-033 finalisé : variantes traduites EN/DE/ES (détection heuristique, glossaires statiques complets, modes passthrough/lexicon/arena avec traducteur injecté, 2 endpoints REST), 36 tests synthétiques dont adversarial FR/EN et élisions.",
-  "logs": "pytest -q tests/test_translation_variants.py → 36 passed in 6.81s\npytest -q (suite complète) → 3126 passed, 1 failed préexistant hors périmètre (tests/test_career_agent.py::test_local_storage_profile_preferences_and_persistence : 6 familles attendues vs 14 dans JOB_FAMILIES)\nruff check career/translation_variants.py career/router.py tests/test_translation_variants.py → All checks passed\ngit diff --check (fichiers mission) → propre",
+  "output": "Module audit journal append-only avec chaînage sha256, recherche/filtre, explication et routes REST lecture seule (23 tests verts).",
+  "logs": "pytest tests/test_audit_journal.py -> 23 passed\nruff check career/audit_journal.py career/router.py tests/test_audit_journal.py -> All checks passed\ngit diff --check -> clean",
   "error": null
 }

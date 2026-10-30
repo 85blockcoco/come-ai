@@ -955,6 +955,56 @@ def create_career_router(
         )))
         return report
 
+    # --- Audit journal (SPEC-035) --------------------------------------------
+    @router.get("/api/career/audit-journal")
+    async def audit_journal_list(
+        decision_type: str = Query(default=""),
+        query: str = Query(default=""),
+        limit: int = Query(default=50, ge=1, le=200),
+        offset: int = Query(default=0, ge=0),
+    ) -> Any:
+        from career.audit_journal import AuditJournal
+
+        journal = AuditJournal(service.data_dir / "audit")
+
+        def _list() -> dict[str, Any]:
+            result = journal.search(query=query, decision_type=decision_type, limit=limit, offset=offset)
+            return {
+                "total": result["total"],
+                "entries": result["entries"],
+                "stats": journal.stats(),
+            }
+
+        return await local(_list)
+
+    @router.get("/api/career/audit-journal/integrity")
+    async def audit_journal_integrity() -> Any:
+        from career.audit_journal import AuditJournal
+
+        journal = AuditJournal(service.data_dir / "audit")
+        return await local(journal.verify_integrity)
+
+    @router.get("/api/career/audit-journal/{decision_id}/explanation")
+    async def audit_journal_explanation(decision_id: str) -> Any:
+        from career.audit_journal import AuditJournal, AuditEntryNotFoundError
+
+        journal = AuditJournal(service.data_dir / "audit")
+
+        def _explain() -> dict[str, Any]:
+            explanation = journal.explain(decision_id)
+            return {
+                "explanation": {
+                    "entry": explanation.entry.as_dict(),
+                    "narrative": explanation.narrative,
+                    "contributing_factors": [list(factor) for factor in explanation.contributing_factors],
+                }
+            }
+
+        try:
+            return await local(_explain)
+        except AuditEntryNotFoundError as error:
+            raise HTTPException(status_code=404, detail=str(error))
+
     return router
 
 
