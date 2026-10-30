@@ -39,7 +39,9 @@ def test_desktop_shell_and_assets_are_served_with_local_protections(tmp_path, mo
         assert 'const HOMEWORK_ACCEPT = ".pdf,.docx,.pptx,.xlsx,.xlsm,.xls,.csv,.tsv,.txt,.md"' in script
         assert 'await api("/api/files/upload"' in script
         assert 'analyze ? "/api/actions/analyze" : "/api/actions/inspect"' in script
-        assert 'selected_file_ids: [file.file_id]' in script
+        assert 'selected_file_ids: [file.file_id, reference?.file_id].filter(Boolean)' in script
+        assert 'const REFERENCE_STORAGE_KEY = "nage-homework-reference-v1"' in script
+        assert '"Vérifier avec un corrigé"' in script
         assert 'allow_cloud_context: false' in script
         assert 'api("/api/study/courses"' in script
         assert '"/api/study/overview"' in script

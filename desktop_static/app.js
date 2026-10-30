@@ -7,6 +7,7 @@
   const THEME_STORAGE_KEY = "nage-app-theme-v2";
   const LANGUAGE_STORAGE_KEY = "nage-kit-language-v1";
   const DOCUMENT_STORAGE_KEY = "nage-homework-document-v1";
+  const REFERENCE_STORAGE_KEY = "nage-homework-reference-v1";
   const THEMES = new Set(["terminal", "studio"]);
   const KIT_LANGUAGES = new Set(["en", "fr", "it", "de"]);
 
@@ -48,6 +49,11 @@
     catch { return null; }
   }
 
+  function readReferenceDocumentId() {
+    try { return window.localStorage.getItem(REFERENCE_STORAGE_KEY); }
+    catch { return null; }
+  }
+
   const state = window.__appState = {
     view: "today",
     dashboard: null,
@@ -62,6 +68,7 @@
     sending: false,
     documents: null,
     selectedDocumentId: readSelectedDocumentId(),
+    referenceDocumentId: readReferenceDocumentId(),
     documentFilter: "",
     documentInspection: null,
     documentAnalysis: null,
@@ -109,23 +116,49 @@
 
   const num = (value) => new Intl.NumberFormat("fr-FR").format(Number(value) || 0);
 
+  let activeRequests = 0;
+  let progressTimer = null;
+
+  function beginProgress() {
+    activeRequests += 1;
+    if (activeRequests !== 1) return;
+    progressTimer = window.setTimeout(() => {
+      const bar = $("#progressBar");
+      if (bar && activeRequests > 0) bar.hidden = false;
+    }, 120);
+  }
+
+  function endProgress() {
+    activeRequests = Math.max(0, activeRequests - 1);
+    if (activeRequests) return;
+    window.clearTimeout(progressTimer);
+    progressTimer = null;
+    const bar = $("#progressBar");
+    if (bar) bar.hidden = true;
+  }
+
   async function api(path, options) {
     const requestOptions = options || {};
     const isForm = requestOptions.body instanceof FormData;
-    const response = await fetch(path, {
-      headers: isForm ? undefined : { "Content-Type": "application/json", ...(requestOptions.headers || {}) },
-      credentials: "same-origin",
-      ...requestOptions,
-    });
-    if (!response.ok) {
-      let detail = `HTTP ${response.status}`;
-      try {
-        const body = await response.json();
-        if (body?.detail) detail = typeof body.detail === "string" ? body.detail : detail;
-      } catch { /* corps non JSON */ }
-      throw new Error(detail);
+    beginProgress();
+    try {
+      const response = await fetch(path, {
+        headers: isForm ? undefined : { "Content-Type": "application/json", ...(requestOptions.headers || {}) },
+        credentials: "same-origin",
+        ...requestOptions,
+      });
+      if (!response.ok) {
+        let detail = `HTTP ${response.status}`;
+        try {
+          const body = await response.json();
+          if (body?.detail) detail = typeof body.detail === "string" ? body.detail : detail;
+        } catch { /* corps non JSON */ }
+        throw new Error(detail);
+      }
+      return response.json();
+    } finally {
+      endProgress();
     }
-    return response.json();
   }
 
   /* ---------- Navigation ---------- */
@@ -153,11 +186,17 @@
     }
     $("#viewTitle").textContent = VIEWS[view].title;
     $("#viewSubtitle").textContent = VIEWS[view].subtitle;
+    const announcer = $("#srAnnounce");
+    if (announcer) announcer.textContent = `${VIEWS[view].title}. ${VIEWS[view].subtitle}`;
     $("#searchBox").hidden = true;
     const languagePicker = document.querySelector(".kit-language");
     if (languagePicker) languagePicker.hidden = !new Set(["today", "applications", "tracking", "offers", "assistant"]).has(view);
     $("#scroll").scrollTop = 0;
     render(view);
+    const activeNav = document.querySelector(`.nav-item[data-view="${view}"]`);
+    if (activeNav && window.matchMedia("(max-width: 720px)").matches) {
+      window.requestAnimationFrame(() => activeNav.scrollIntoView({ block: "nearest", inline: "center" }));
+    }
     const destination = `#${view}`;
     if (historyMode === "replace") history.replaceState(null, "", destination);
     else if (historyMode === "push" && location.hash !== destination) history.pushState(null, "", destination);
@@ -179,6 +218,10 @@
         state.selectedDocumentId = state.documents[0]?.file_id || null;
         state.documentInspection = null;
         state.documentAnalysis = null;
+      }
+      if (!state.documents.some((item) => item.file_id === state.referenceDocumentId) || state.referenceDocumentId === state.selectedDocumentId) {
+        const likelyReference = state.documents.find((item) => item.file_id !== state.selectedDocumentId && /corrig|solution|answer|rempli/i.test(item.name));
+        state.referenceDocumentId = likelyReference?.file_id || null;
       }
       return state.documents;
     },
@@ -265,7 +308,9 @@
       el("p", { class: "note" }, state.errors[key]),
       el("button", { class: "ghost-btn", type: "button", onclick: refresh }, "Réessayer"))
     : loading();
-  const loading = () => el("div", { class: "card skeleton" }, el("i"), el("i"), el("i"));
+  const loading = () => el("div", { class: "card skeleton", role: "status", "aria-live": "polite" },
+    el("span", { class: "sr-only" }, "Chargement en cours"),
+    el("i", { "aria-hidden": "true" }), el("i", { "aria-hidden": "true" }), el("i", { "aria-hidden": "true" }));
 
   function greeting() {
     const hour = new Date().getHours();
@@ -473,6 +518,19 @@
     return (state.documents || []).find((item) => item.file_id === state.selectedDocumentId) || null;
   }
 
+  function referenceDocument() {
+    return (state.documents || []).find((item) => item.file_id === state.referenceDocumentId) || null;
+  }
+
+  function chooseReferenceDocument(fileId) {
+    state.referenceDocumentId = fileId && fileId !== state.selectedDocumentId ? fileId : null;
+    try {
+      if (state.referenceDocumentId) window.localStorage.setItem(REFERENCE_STORAGE_KEY, state.referenceDocumentId);
+      else window.localStorage.removeItem(REFERENCE_STORAGE_KEY);
+    } catch { /* stockage local indisponible */ }
+    renderHomework();
+  }
+
   function formatFileSize(value) {
     const kb = Number(value || 0);
     return kb >= 1024 ? `${(kb / 1024).toFixed(1)} Mo` : `${kb.toFixed(kb >= 10 ? 0 : 1)} Ko`;
@@ -490,6 +548,10 @@
       state.studySession = null;
       state.studyQuestion = null;
       state.studyCorrection = null;
+      if (state.referenceDocumentId === fileId) {
+        state.referenceDocumentId = null;
+        try { window.localStorage.removeItem(REFERENCE_STORAGE_KEY); } catch { /* stockage local indisponible */ }
+      }
       try { window.localStorage.setItem(DOCUMENT_STORAGE_KEY, fileId); } catch { /* stockage local indisponible */ }
     }
     renderHomework();
@@ -710,6 +772,7 @@
 
   async function askHomework(message) {
     const file = selectedDocument();
+    const reference = referenceDocument();
     const prompt = String(message || "").trim();
     if (!file) { notify("Ajoute et sélectionne d’abord un document.", true); return; }
     if (!prompt || state.homeworkSending) return;
@@ -719,7 +782,7 @@
     try {
       const result = await api("/api/v5/chat", { method: "POST", body: JSON.stringify({
         message: prompt,
-        selected_file_ids: [file.file_id],
+        selected_file_ids: [file.file_id, reference?.file_id].filter(Boolean),
         history: state.homeworkChat.slice(-9).map(({ role, content }) => ({ role, content })),
         mode: "offline",
         provider: "ollama",
@@ -739,6 +802,20 @@
       state.homeworkSending = false;
       renderHomework();
     }
+  }
+
+  function verifyHomeworkWithReference() {
+    const reference = referenceDocument();
+    if (!reference) {
+      notify("Choisis d’abord le corrigé ou le document de référence.", true);
+      return;
+    }
+    askHomework(
+      `Compare méthodiquement le devoir sélectionné avec le document de référence « ${reference.name} ». `
+      + "Sépare : 1) résultats confirmés, 2) écarts numériques, 3) erreurs de raisonnement, 4) éléments impossibles à vérifier. "
+      + "N’invente aucune valeur, cite les passages ou cellules utilisés, distingue une approximation d’une égalité exacte, "
+      + "et termine par les corrections prioritaires. Si un calcul n’est pas vérifiable directement, dis-le explicitement.",
+    );
   }
 
   function studyCourseFor(file) {
@@ -940,6 +1017,19 @@
         ["M’expliquer le cours", "Explique les concepts indispensables pour réussir ce devoir, avec des exemples simples reliés au document."],
         ["Vérifier mon raisonnement", "Aide-moi à vérifier mon raisonnement. Commence par me demander ma démarche ou mon résultat, puis contrôle chaque étape à partir du document."],
       ];
+      const referenceOptions = (state.documents || []).filter((item) => item.file_id !== file.file_id);
+      const referenceSelect = el("select", { "aria-label": "Corrigé ou document de référence" },
+        el("option", { value: "" }, "Choisir un corrigé ou une référence…"),
+        referenceOptions.map((item) => el("option", { value: item.file_id, selected: item.file_id === state.referenceDocumentId }, item.name)));
+      referenceSelect.addEventListener("change", () => chooseReferenceDocument(referenceSelect.value));
+      const referencePanel = el("section", { class: "homework-reference", "aria-label": "Vérification avec un corrigé" },
+        el("div", {},
+          el("strong", {}, "Vérifier avec un corrigé"),
+          el("p", {}, "NAGe compare les deux copies locales, cite ses sources et signale ce qu’il ne peut pas confirmer. L’analyse reste à relire : ce n’est pas une certification indépendante.")),
+        el("div", { class: "homework-reference-actions" },
+          referenceSelect,
+          el("button", { class: "ghost-btn primary", type: "button", disabled: state.homeworkSending || !state.referenceDocumentId || !tutor.usable, onclick: verifyHomeworkWithReference }, state.homeworkSending ? "Comparaison…" : "Comparer maintenant")),
+      );
       const chatInput = el("textarea", { rows: "3", maxlength: "12000", placeholder: "Pose une question sur ce devoir…" });
       const chatForm = el("form", { class: "homework-composer", onsubmit: (event) => { event.preventDefault(); const prompt = chatInput.value; chatInput.value = ""; askHomework(prompt); } },
         chatInput,
@@ -955,6 +1045,7 @@
         ),
         el("div", { class: "homework-prompts", "aria-label": "Démarrages rapides" }, quickPrompts.map(([label, prompt]) =>
           el("button", { type: "button", onclick: () => askHomework(prompt), disabled: state.homeworkSending || !tutor.usable, title: tutor.usable ? "" : tutor.label }, label))),
+        referencePanel,
         inspectionContent(state.documentInspection),
         homeworkTaskWorkspace(state.homeworkTasks),
         analysisContent(state.documentAnalysis),
@@ -1193,6 +1284,8 @@
 
   function notify(text, error = false) {
     $("#appNotice")?.remove();
+    const live = $("#toast");
+    if (live) live.textContent = text;
     const notice = el("div", { id: "appNotice", class: `app-notice ${error ? "error-note" : ""}`, role: error ? "alert" : "status" },
       el("span", {}, text), el("button", { type: "button", "aria-label": "Fermer le message", onclick: () => notice.remove() }, "×"));
     document.body.append(notice);
