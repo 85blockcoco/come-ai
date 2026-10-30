@@ -7592,7 +7592,28 @@ class CareerService:
                 "automated_submission": False,
                 "platforms": ["greenhouse", "lever", "workday", "smartrecruiters", "recruitcrm", "breezy", "jobvite", "ashby", "ripplematch", "custom"],
             },
+            "faq_mining": {
+                "enabled": True,
+                "ai_required": False,
+                "local_only": True,
+                "deterministic": True,
+                "invented_facts": False,
+            },
         }
+
+    def mine_sector_faq(self, offers: Any = None, profile: Any = None, *, sector: Any = None, **kwargs: Any) -> list[dict[str, Any]]:
+        """Mine a deterministic sector FAQ from offers (defaults to stored jobs)."""
+        if offers is None:
+            offers = self.list_jobs()
+        if profile is None:
+            profile = self.get_profile()
+        from .faq_mining import mine_sector_faq as _mine, mine_all_sector_faqs as _mine_all
+
+        if sector is None or str(sector).strip() == "":
+            faqs = _mine_all(offers, profile, **kwargs)
+        else:
+            faqs = [_mine(offers, profile, sector=sector, **kwargs)]
+        return [faq.to_dict() if hasattr(faq, "to_dict") else faq for faq in faqs]
 
     def export_deadline_calendar(self) -> Path:
         """Write a private, inert ``.ics`` file for actionable deadlines.

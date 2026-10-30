@@ -1,0 +1,74 @@
+{
+  "label": "Synthetic sector FAQ fixtures; every company, offer and profile fact below is fictional.",
+  "profile": {
+    "display_name": "Candidat Synthétique",
+    "evidence": [
+      {"id": "ev-1", "text": "Modèle DCF construit pour un projet de valorisation synthétique."},
+      {"id": "ev-2", "text": "Présentation client d'une analyse de marché synthétique."},
+      {"id": "ev-3", "text": "Requêtes SQL et scripts Python pour analyser un jeu de données synthétique."},
+      {"id": "ev-4", "text": "Disponible de janvier à juillet 2027 pour un stage de six mois."}
+    ],
+    "education": "Master en finance, cours de valorisation et comptabilité.",
+    "experience": "Stage de six mois en banque : modèles financiers DCF et comparables.\nProjet d'équipe : présentation client et analyse de marché.",
+    "skills": "Excel avancé, Python, SQL, modélisation financière, communication.",
+    "languages": "Français et anglais courant; allemand intermédiaire."
+  },
+  "offers": [
+    {
+      "id": "syn-ma-01",
+      "title": "M&A Intern",
+      "company": "Banque Synthétique A",
+      "job_family": "M&A / Investment Banking",
+      "requirements": "Financial modelling and valuation: build DCF models, comparable company analysis, and client presentations. Advanced Excel required.",
+      "description_original": "Synthetic six-month internship description."
+    },
+    {
+      "id": "syn-ma-02",
+      "title": "Investment Banking Intern",
+      "company": "Banque Synthétique B",
+      "job_family": "M&A / Investment Banking",
+      "requirements": "Strong financial modelling skills; valuation experience; Excel and PowerPoint; communication with clients. Six-month internship starting January.",
+      "description_original": "Synthetic internship description."
+    },
+    {
+      "id": "syn-ma-03",
+      "title": "Corporate Advisory Intern",
+      "company": "Banque Synthétique C",
+      "job_family": "M&A / Investment Banking",
+      "requirements": "Financial modelling, valuation, DCF, Excel, attention to detail, and teamwork.",
+      "description_original": "Synthetic internship description."
+    },
+    {
+      "id": "syn-pe-01",
+      "title": "Private Equity Intern",
+      "company": "Fonds Synthétique A",
+      "job_family": "Private Equity",
+      "requirements": "Private equity deal experience: LBO modelling, due diligence, and portfolio monitoring. Excel required.",
+      "description_original": "Synthetic internship description."
+    },
+    {
+      "id": "syn-pe-02",
+      "title": "PE Analyst Intern",
+      "company": "Fonds Synthétique B",
+      "job_family": "Private Equity",
+      "requirements": "LBO analysis and due diligence for private equity investments; strong financial modelling.",
+      "description_original": "Synthetic internship description."
+    },
+    {
+      "id": "syn-cf-01",
+      "title": "Corporate Finance Intern",
+      "company": "Groupe Synthétique A",
+      "job_family": "Corporate Finance",
+      "requirements": "Corporate finance, budgeting, forecasting, Excel, and management reporting.",
+      "description_original": "Synthetic internship description."
+    },
+    {
+      "id": "syn-cf-02",
+      "title": "Financial Planning Intern",
+      "company": "Groupe Synthétique B",
+      "job_family": "Corporate Finance",
+      "requirements": "Financial analysis, forecasting, budgeting, and communication with stakeholders.",
+      "description_original": "Synthetic internship description."
+    }
+  ]
+}

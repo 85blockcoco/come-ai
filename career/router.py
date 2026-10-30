@@ -1068,6 +1068,12 @@ def create_constitution_router(store: ConstitutionStore, *, service: CareerServi
 
     return router
 
+class SectorFaqPayload(BaseModel):
+    offers: list[dict[str, Any]] = Field(default_factory=list)
+    profile: dict[str, Any] = Field(default_factory=dict)
+    sector: str = Field(default="", max_length=160)
+    top_n: int = Field(default=20, ge=0, le=100)
+    max_questions: int = Field(default=8, ge=0, le=20)
 
 
 def create_career_router(
@@ -1134,6 +1140,7 @@ def create_career_router(
             },
             "evidence_center": capabilities["evidence_center"],
             "ats_guide": capabilities["ats_guide"],
+            "faq_mining": capabilities.get("faq_mining", {"enabled": True}),
         }
 
     @router.post("/api/career/cv/analyze")
@@ -2242,6 +2249,32 @@ def create_career_router(
     async def delete_interview_prep_session(session_id: str) -> dict[str, bool]:
         await local(lambda: service.delete_interview_prep_session(session_id))
         return {"deleted": True}
+
+    @router.post("/api/career/faq-mine")
+    async def mine_sector_faq_endpoint(payload: SectorFaqPayload) -> Any:
+        return await local(
+            lambda: service.mine_sector_faq(
+                payload.offers,
+                payload.profile or None,
+                sector=payload.sector or None,
+                top_n=payload.top_n,
+                max_questions=payload.max_questions,
+            )
+        )
+
+    @router.get("/api/career/faq-mine")
+    async def mine_sector_faq_from_jobs(
+        sector: str = Query(default="", max_length=160),
+        top_n: int = Query(default=20, ge=1, le=100),
+        max_questions: int = Query(default=8, ge=0, le=20),
+    ) -> Any:
+        return await local(
+            lambda: service.mine_sector_faq(
+                sector=sector or None,
+                top_n=top_n,
+                max_questions=max_questions,
+            )
+        )
 
     @router.get("/api/career/export/{export_format}")
     async def export_applications(export_format: str) -> FileResponse:
