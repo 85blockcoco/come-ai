@@ -353,6 +353,34 @@ def create_career_router(
     async def dashboard() -> Any:
         return await local(service.dashboard)
 
+    @router.get("/api/career/weekly-review")
+    async def weekly_review() -> Any:
+        return await local(service.weekly_review)
+
+    @router.post("/api/career/weekly-review")
+    async def weekly_review_post(payload: dict[str, Any] | None = None) -> Any:
+        payload = payload or {}
+        return await local(lambda: service.weekly_review(
+            objective=payload.get("objective"),
+            objectives=payload.get("objectives"),
+            iso_week=payload.get("iso_week") or payload.get("week"),
+        ))
+    @router.get("/api/career/weekly_review")
+    async def weekly_review_underscore() -> Any:
+        return await local(service.weekly_review)
+
+    @router.get("/api/career/weekly")
+    async def weekly_short() -> Any:
+        return await local(service.weekly_review)
+
+    @router.get("/api/career/weekly-summary")
+    async def weekly_summary_dash() -> Any:
+        return await local(service.weekly_review)
+
+    @router.get("/api/career/weekly_summary")
+    async def weekly_summary_underscore() -> Any:
+        return await local(service.weekly_review)
+
     @router.get("/api/career/profile")
     async def profile() -> Any:
         return await local(service.get_profile)

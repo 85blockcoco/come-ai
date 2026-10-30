@@ -3904,6 +3904,66 @@ class CareerService:
             query=query,
         )
 
+    def weekly_review(self, *, objective=None, objectives=None, iso_week=None, week=None) -> dict[str, Any]:
+        """Bilan hebdomadaire des candidatures (SPEC-036)."""
+        from .weekly_review import weekly_summary, weekly_summary_to_dict
+
+        with self._lock, self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT applications.*, jobs.company, jobs.title, jobs.city, jobs.country,
+                       jobs.official_url, jobs.deadline_date, jobs.source_status
+                FROM applications JOIN jobs ON jobs.id = applications.job_id
+                ORDER BY applications.updated_at DESC
+                """
+            ).fetchall()
+            events_by_application = {}
+            application_ids = [str(row["id"]) for row in rows]
+            if application_ids:
+                placeholders = ", ".join("?" for _ in application_ids)
+                event_rows = connection.execute(
+                    "SELECT application_id, event_type, detail, created_at FROM application_events WHERE application_id IN (%s)" % placeholders,
+                    application_ids,
+                ).fetchall()
+                for event_row in event_rows:
+                    events_by_application.setdefault(str(event_row["application_id"]), []).append(dict(event_row))
+
+        applications = []
+        for row in rows:
+            record = dict(row)
+            record["approval_granted"] = bool(record.get("approval_granted"))
+            record["events"] = events_by_application.get(str(row["id"]), [])
+            applications.append(record)
+
+        summary = weekly_summary(
+            applications,
+            objective=objective,
+            objectives=objectives,
+            iso_week=iso_week,
+            week=week,
+        )
+        return weekly_summary_to_dict(summary)
+
+    def weekly_summary(self, *args, **kwargs):
+        return self.weekly_review(*args, **kwargs)
+
+    def get_weekly_review(self, *args, **kwargs):
+        return self.weekly_review(*args, **kwargs)
+
+    def weekly(self, *args, **kwargs):
+        return self.weekly_review(*args, **kwargs)
+
+    def build_weekly_summary(self, *args, **kwargs):
+        from .weekly_review import weekly_summary, weekly_summary_to_dict
+        # If first arg is data, compute module-level summary.
+        data = args[0] if args else kwargs.get("data") or kwargs.get("applications")
+        if data is None:
+            return self.weekly_review(*args, **kwargs)
+        obj = kwargs.get("objective")
+        objs = kwargs.get("objectives")
+        ws = weekly_summary(data, objective=obj, objectives=objs)
+        return weekly_summary_to_dict(ws)
+
     def set_application_checklist(self, application_id: str, checked: list[str]) -> dict[str, Any]:
         """Enregistre l'état local de la checklist dans le journal existant.
 

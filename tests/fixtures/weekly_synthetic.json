@@ -1,0 +1,11 @@
+{
+  "iso_week": "2026-W42",
+  "objective": { "metric": "applications", "target": 5 },
+  "applications": [
+    { "id": "a1", "stage": "submitted", "submitted_at": "2026-10-12", "events": [] },
+    { "id": "a2", "stage": "submitted_confirmed", "submitted_at": "2026-10-13", "events": [] },
+    { "id": "a3", "stage": "response_received", "submitted_at": "2026-10-14", "events": [] },
+    { "id": "a4", "stage": "interview", "submitted_at": "2026-10-15", "events": [] },
+    { "id": "a5", "stage": "to_review", "events": [] }
+  ]
+}
