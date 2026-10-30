@@ -8,6 +8,7 @@ model actions are routed through the controlled tools in ``workspace_core``.
 from __future__ import annotations
 
 import hmac
+import hashlib
 import json
 import logging
 import re
@@ -296,6 +297,12 @@ class StudyAnswerRequest(BaseModel):
     value: str = Field(min_length=1, max_length=4_000)
 
 
+class HomeworkTaskUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: Literal["todo", "doing", "review", "done"]
+    notes: str = Field(default="", max_length=12_000)
+
+
 def create_app(
     base_dir: Path | None = None,
     agent_override: Any | None = None,
@@ -363,6 +370,8 @@ def create_app(
     workshop_lock = threading.Lock()
     study_instances: list[Any] = []
     study_lock = threading.RLock()
+    homework_progress_lock = threading.RLock()
+    homework_progress_path = config.base_dir / "study_data" / "homework_progress.json"
 
     def get_workshop() -> Any:
         with workshop_lock:
@@ -380,6 +389,61 @@ def create_app(
 
                 study_instances.append(StudyCoach.open(config.base_dir / "study_data"))
             return study_instances[0]
+
+    def read_homework_progress() -> dict[str, Any]:
+        if not homework_progress_path.is_file():
+            return {"schema_version": 1, "files": {}}
+        try:
+            payload = json.loads(homework_progress_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise UserFacingError("La progression de ce devoir est illisible.") from error
+        if not isinstance(payload, dict) or not isinstance(payload.get("files"), dict):
+            raise UserFacingError("La progression de ce devoir est invalide.")
+        return payload
+
+    def write_homework_progress(payload: dict[str, Any]) -> None:
+        homework_progress_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        temporary = homework_progress_path.with_name(f".{homework_progress_path.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            temporary.chmod(0o600)
+            temporary.replace(homework_progress_path)
+            homework_progress_path.chmod(0o600)
+        except OSError as error:
+            temporary.unlink(missing_ok=True)
+            raise UserFacingError("Impossible d’enregistrer la progression locale du devoir.") from error
+
+    def current_homework_tasks(file_id: str) -> tuple[list[dict[str, Any]], int]:
+        with runtime.workspace_lock:
+            inspection = runtime.tools.inspect_file(file_id)
+        if inspection.get("kind") != "document":
+            raise UserFacingError("Le plan de travail est disponible pour les documents textuels.")
+        labels = inspection.get("outline", {}).get("tasks") or []
+        with homework_progress_lock:
+            file_progress = read_homework_progress().get("files", {}).get(file_id, {})
+            saved = file_progress.get("tasks", {}) if isinstance(file_progress, dict) else {}
+        tasks = []
+        for index, raw_label in enumerate(labels, start=1):
+            label = str(raw_label).strip()
+            task_id = "task_" + hashlib.sha256(f"{file_id}\0{label}".encode()).hexdigest()[:16]
+            progress = saved.get(task_id, {}) if isinstance(saved, dict) else {}
+            progress = progress if isinstance(progress, dict) else {}
+            status = progress.get("status", "todo")
+            if status not in {"todo", "doing", "review", "done"}:
+                status = "todo"
+            notes = progress.get("notes", "")
+            if not isinstance(notes, str):
+                notes = ""
+            tasks.append({
+                "id": task_id,
+                "index": index,
+                "label": label,
+                "status": status,
+                "notes": notes,
+                "updated_at": progress.get("updated_at"),
+            })
+        completed = sum(task["status"] == "done" for task in tasks)
+        return tasks, completed
 
     def get_hybrid_chat() -> Any:
         # Construction is inert: opening the interface never loads a model or
@@ -865,6 +929,61 @@ def create_app(
             runtime,
             lambda: runtime.tools.analyze_table(payload.file_id, payload.sheet_name),
         )
+
+    @app.get("/api/study/homework/{file_id}/tasks")
+    async def homework_tasks(file_id: str) -> dict[str, Any]:
+        def read() -> dict[str, Any]:
+            tasks, completed = current_homework_tasks(file_id)
+            total = len(tasks)
+            return {
+                "file_id": file_id,
+                "tasks": tasks,
+                "completed": completed,
+                "total": total,
+                "completion_percent": round(completed / total * 100) if total else 0,
+            }
+
+        return await run_in_threadpool(read)
+
+    @app.put("/api/study/homework/{file_id}/tasks/{task_id}")
+    async def update_homework_task(
+        file_id: str,
+        task_id: str,
+        payload: HomeworkTaskUpdateRequest,
+    ) -> dict[str, Any]:
+        def update() -> dict[str, Any]:
+            tasks, _ = current_homework_tasks(file_id)
+            known_ids = {task["id"] for task in tasks}
+            if task_id not in known_ids:
+                raise UserFacingError("Cette question n’existe plus dans le plan de travail actuel.")
+            with homework_progress_lock:
+                progress = read_homework_progress()
+                files = progress.setdefault("files", {})
+                file_progress = files.get(file_id)
+                if not isinstance(file_progress, dict):
+                    file_progress = {"tasks": {}}
+                    files[file_id] = file_progress
+                saved_tasks = file_progress.get("tasks")
+                if not isinstance(saved_tasks, dict):
+                    saved_tasks = {}
+                    file_progress["tasks"] = saved_tasks
+                saved_tasks[task_id] = {
+                    "status": payload.status,
+                    "notes": payload.notes.strip(),
+                    "updated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+                }
+                write_homework_progress(progress)
+            updated_tasks, completed = current_homework_tasks(file_id)
+            total = len(updated_tasks)
+            return {
+                "file_id": file_id,
+                "tasks": updated_tasks,
+                "completed": completed,
+                "total": total,
+                "completion_percent": round(completed / total * 100) if total else 0,
+            }
+
+        return await run_in_threadpool(update)
 
     @app.post("/api/actions/report")
     async def create_report(payload: FileActionRequest) -> dict[str, Any]:

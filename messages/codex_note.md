@@ -99,3 +99,28 @@
 - `pytest -q tests/test_desktop_app.py tests/test_study_web_integration.py` : **4 passed en 6,14 s**.
 - `ruff check tests/test_desktop_app.py` et `git diff --check` : verts.
 - Navigateur réel sur la candidate : TD4 restauré, badge de parcours visible, 4 indicateurs de progression, absence de `Dossier en`, tuteur indisponible expliqué, recherche `Eurotech` ramenant la bibliothèque de 8 à 2 documents.
+
+---
+
+# RAPPORT CODEX — 2026-10-30 13:11 CET
+
+## Livraison espace devoirs question par question
+
+- Chaque question détectée possède désormais un état (`À faire`, `En cours`, `À vérifier`, `Terminé`) et des notes de résolution enregistrées localement.
+- La progression possède un compteur et une barre d’avancement; les documents originaux ne sont jamais modifiés.
+- La progression survit au redémarrage et son fichier local est limité au compte utilisateur (`0600`).
+- Une entrée locale partiellement corrompue est ignorée proprement au lieu de casser la page.
+- Le libellé du tuteur indique honnêtement `modèle local configuré`, sans promettre sa disponibilité instantanée sous charge.
+
+## Preuves actuelles
+
+- `tests/test_study_web_integration.py` : **3 passed en 15,24 s**.
+- `tests/test_desktop_app.py` : **2 passed en 9,79 s**.
+- Ruff ciblé, `node --check desktop_static/app.js` et `git diff --check` : verts.
+- Navigateur réel sur la candidate : **38 questions** du TD4 affichées; la première a été passée à `À vérifier`, annotée, enregistrée puis relue via l’API.
+- Redémarrage déjà vérifié : état et notes conservés.
+- Ollama : modèle local `qwen3.5:2b-q4_K_M` configuré; une réponse minimale a fonctionné, mais les demandes documentaires longues restent lentes lorsque les workers OpenCode utilisent le même service.
+
+## Limite explicite
+
+- Cette livraison prouve le suivi question par question et sa persistance. Elle ne prouve pas encore une latence acceptable du tuteur conversationnel avec un document complet sous charge concurrente.

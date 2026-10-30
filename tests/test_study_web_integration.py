@@ -1,5 +1,9 @@
 """One-app integration contract for the local, persistent learning journey."""
 
+import json
+
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
 from come_ai_web import create_app
@@ -82,3 +86,54 @@ def test_study_routes_reject_unknown_workspace_identifiers(tmp_path, monkeypatch
         session = client.post("/api/study/courses/syll_unknown/sessions", json={"size": 5})
         assert session.status_code == 400
         assert "Programme de révision inconnu" in session.json()["detail"]
+
+
+def test_homework_task_plan_persists_status_and_notes_locally(tmp_path, monkeypatch):
+    monkeypatch.setenv("COME_AI_MEMORY_DIR", str(tmp_path / "memory_data"))
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True)
+    (data_dir / "assignment.txt").write_text(
+        "TD Finance\nQ1. Calculer la duration de l'obligation.\n"
+        "Q2. Expliquer le signe de la convexité.\n",
+        encoding="utf-8",
+    )
+
+    with TestClient(create_app(tmp_path, agent_override=FakeAgent())) as client:
+        file_id = client.get("/api/files").json()["files"][0]["file_id"]
+        initial = client.get(f"/api/study/homework/{file_id}/tasks")
+        assert initial.status_code == 200
+        body = initial.json()
+        assert body["total"] == 2
+        assert body["completed"] == 0
+        first = body["tasks"][0]
+
+        updated = client.put(
+            f"/api/study/homework/{file_id}/tasks/{first['id']}",
+            json={"status": "done", "notes": "Duration obtenue avec les flux du pricer synthétique."},
+        )
+        assert updated.status_code == 200
+        assert updated.json()["completed"] == 1
+        assert updated.json()["completion_percent"] == 50
+
+    progress_path = Path(tmp_path) / "study_data" / "homework_progress.json"
+    assert progress_path.is_file()
+    assert progress_path.stat().st_mode & 0o077 == 0
+
+    with TestClient(create_app(tmp_path, agent_override=FakeAgent())) as client:
+        restored = client.get(f"/api/study/homework/{file_id}/tasks").json()
+        assert restored["tasks"][0]["status"] == "done"
+        assert "pricer synthétique" in restored["tasks"][0]["notes"]
+        missing = client.put(
+            f"/api/study/homework/{file_id}/tasks/task_unknown",
+            json={"status": "todo", "notes": ""},
+        )
+        assert missing.status_code == 400
+
+    progress_path.write_text(
+        json.dumps({"schema_version": 1, "files": {file_id: {"tasks": {first["id"]: "valeur corrompue"}}}}),
+        encoding="utf-8",
+    )
+    with TestClient(create_app(tmp_path, agent_override=FakeAgent())) as client:
+        recovered = client.get(f"/api/study/homework/{file_id}/tasks")
+        assert recovered.status_code == 200
+        assert recovered.json()["tasks"][0]["status"] == "todo"

@@ -65,6 +65,8 @@
     documentFilter: "",
     documentInspection: null,
     documentAnalysis: null,
+    homeworkTasks: null,
+    homeworkTaskBusy: null,
     homeworkChat: [],
     homeworkSending: false,
     homeworkUploading: false,
@@ -481,6 +483,8 @@
       state.selectedDocumentId = fileId;
       state.documentInspection = null;
       state.documentAnalysis = null;
+      state.homeworkTasks = null;
+      state.homeworkTaskBusy = null;
       state.homeworkChat = [];
       state.studySyllabus = null;
       state.studySession = null;
@@ -504,7 +508,7 @@
   function localTutorStatus() {
     if (!state.health) return { usable: true, label: "État du modèle local en cours de vérification" };
     const ollama = state.health.providers?.ollama;
-    if (ollama?.configured && ollama?.model) return { usable: true, label: `Modèle local prêt · ${ollama.model}` };
+    if (ollama?.configured && ollama?.model) return { usable: true, label: `Modèle local configuré · ${ollama.model} · une première réponse peut être lente` };
     return { usable: false, label: "Tuteur conversationnel en pause · aucun modèle Ollama configuré" };
   }
 
@@ -543,10 +547,38 @@
         method: "POST",
         body: JSON.stringify({ file_id: file.file_id, sheet_name: "" }),
       });
+      if (!analyze && state[key]?.kind === "document") await loadHomeworkTasks(file.file_id);
     } catch (error) {
       state[key] = { error: error.message };
     }
     renderHomework();
+  }
+
+  async function loadHomeworkTasks(fileId) {
+    try {
+      state.homeworkTasks = await api(`/api/study/homework/${encodeURIComponent(fileId)}/tasks`);
+    } catch (error) {
+      state.homeworkTasks = { error: error.message, tasks: [] };
+    }
+  }
+
+  async function updateHomeworkTask(taskId, status, notes) {
+    const file = selectedDocument();
+    if (!file || state.homeworkTaskBusy) return;
+    state.homeworkTaskBusy = taskId;
+    renderHomework();
+    try {
+      state.homeworkTasks = await api(`/api/study/homework/${encodeURIComponent(file.file_id)}/tasks/${encodeURIComponent(taskId)}`, {
+        method: "PUT",
+        body: JSON.stringify({ status, notes }),
+      });
+      notify("Progression enregistrée localement.");
+    } catch (error) {
+      notify(`Progression non enregistrée : ${error.message}`, true);
+    } finally {
+      state.homeworkTaskBusy = null;
+      renderHomework();
+    }
   }
 
   function previewTable(rows) {
@@ -577,8 +609,7 @@
           el("div", { class: "homework-outline-sections" }, outline.sections.map((section) => el("span", {}, section))),
         ) : null,
         outline.tasks?.length ? el("div", { class: "homework-outline" },
-          el("h4", {}, `${outline.task_count} question${outline.task_count > 1 ? "s" : ""} ou tâche${outline.task_count > 1 ? "s" : ""}`),
-          el("ol", {}, outline.tasks.map((task) => el("li", {}, task))),
+          el("h4", {}, `${outline.task_count} question${outline.task_count > 1 ? "s" : ""} ou tâche${outline.task_count > 1 ? "s" : ""} intégrée${outline.task_count > 1 ? "s" : ""} au plan de travail ci-dessous`),
         ) : null,
         el("details", { class: "homework-source-details" },
           el("summary", {}, "Voir le texte extrait"),
@@ -609,6 +640,59 @@
         el("article", {}, el("strong", {}, name), el("span", {}, `Moyenne ${stat.mean ?? "—"}`), el("small", {}, `Min ${stat.min ?? "—"} · Max ${stat.max ?? "—"} · n=${stat.count ?? "—"}`))))
         : el("p", { class: "note" }, "Aucune colonne numérique n’a été détectée automatiquement."),
       result.note ? el("p", { class: "note" }, result.note) : null,
+    );
+  }
+
+  function homeworkTaskWorkspace(payload) {
+    if (!payload) return null;
+    if (payload.error) return el("p", { class: "error-note", role: "alert" }, `Plan de travail indisponible : ${payload.error}`);
+    const tasks = payload.tasks || [];
+    if (!tasks.length) return null;
+    const statuses = [
+      ["todo", "À faire"],
+      ["doing", "En cours"],
+      ["review", "À vérifier"],
+      ["done", "Terminé"],
+    ];
+    const labels = Object.fromEntries(statuses);
+    const taskRows = tasks.map((task) => {
+      const select = el("select", { "aria-label": `État de la question ${task.index}` }, statuses.map(([value, label]) =>
+        el("option", { value, selected: task.status === value }, label)));
+      const notes = el("textarea", {
+        rows: "4",
+        maxlength: "12000",
+        placeholder: "Ta démarche, tes calculs, les points à vérifier…",
+        "aria-label": `Notes pour la question ${task.index}`,
+      });
+      notes.value = task.notes || "";
+      const busy = state.homeworkTaskBusy === task.id;
+      const form = el("form", { class: "homework-task-editor", onsubmit: (event) => {
+        event.preventDefault();
+        updateHomeworkTask(task.id, select.value, notes.value);
+      } },
+      el("label", {}, el("span", {}, "État"), select),
+      el("label", { class: "task-notes" }, el("span", {}, "Notes de résolution"), notes),
+      el("div", { class: "homework-task-actions" },
+        el("small", {}, "Enregistré uniquement sur ce Mac"),
+        el("button", { class: "ghost-btn primary", type: "submit", disabled: Boolean(state.homeworkTaskBusy) }, busy ? "Enregistrement…" : "Enregistrer"),
+      ));
+      return el("details", { class: `homework-task ${task.status}`, open: task.status === "doing" || busy },
+        el("summary", {},
+          el("span", { class: "homework-task-index" }, String(task.index)),
+          el("strong", {}, task.label),
+          el("em", {}, labels[task.status] || "À faire"),
+        ),
+        form,
+      );
+    });
+    return el("section", { class: "homework-task-workspace", "aria-label": "Plan de résolution du devoir" },
+      el("div", { class: "homework-section-heading" },
+        el("div", {}, el("h3", {}, "Plan de résolution"), el("p", {}, "Avance question par question et conserve ta démarche, sans modifier le document original.")),
+        el("span", {}, `${payload.completed || 0}/${payload.total || tasks.length} terminée${payload.completed === 1 ? "" : "s"}`),
+      ),
+      el("div", { class: "homework-task-progress", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": String(payload.completion_percent || 0) },
+        el("i", { style: `width:${Math.max(0, Math.min(100, payload.completion_percent || 0))}%` })),
+      el("div", { class: "homework-task-list" }, taskRows),
     );
   }
 
@@ -872,6 +956,7 @@
         el("div", { class: "homework-prompts", "aria-label": "Démarrages rapides" }, quickPrompts.map(([label, prompt]) =>
           el("button", { type: "button", onclick: () => askHomework(prompt), disabled: state.homeworkSending || !tutor.usable, title: tutor.usable ? "" : tutor.label }, label))),
         inspectionContent(state.documentInspection),
+        homeworkTaskWorkspace(state.homeworkTasks),
         analysisContent(state.documentAnalysis),
         studyPanel(file),
         el("section", { class: "homework-tutor" },

@@ -49,6 +49,10 @@ def test_desktop_shell_and_assets_are_served_with_local_protections(tmp_path, mo
         assert "Parcours créé" in script
         assert "Tuteur conversationnel en pause" in script
         assert "Les outils d’apprentissage restent disponibles." in script
+        assert "/api/study/homework/${encodeURIComponent(fileId)}/tasks" in script
+        assert "Plan de résolution" in script
+        assert "Notes de résolution" in script
+        assert "Modèle local configuré" in script
         assert 'languagePicker.hidden = !new Set(["today", "applications", "tracking", "offers", "assistant"]).has(view)' in script
         assert '`${option.id}. ${option.label}`' not in script
         assert "Reprendre ma séance" in script
@@ -67,6 +71,7 @@ def test_desktop_shell_and_assets_are_served_with_local_protections(tmp_path, mo
         assert ".homework-overview" in stylesheet
         assert ".homework-filter" in stylesheet
         assert ".homework-model-note" in stylesheet
+        assert ".homework-task-workspace" in stylesheet
         assert 'window.addEventListener("hashchange"' in script
         assert 'history.pushState(null, "", destination)' in script
         embedded = client.get("/career?embed=app")
