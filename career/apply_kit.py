@@ -16,6 +16,7 @@ from typing import Any, Mapping
 from career.application_prep import prepare_application
 from career.application_studio import build_kit_texts, build_local_application_draft
 from career.cv_fit import classify_variant
+from career.dossier_quality import analyze_dossier_quality
 from career.cv_variants import ALL_VARIANTS
 from career.models import clean_text
 
@@ -33,6 +34,7 @@ class ApplyKit:
     checklist: list[dict[str, Any]]
     deep_link: str | None
     export_urls: dict[str, str]
+    dossier_audit: dict[str, Any] | None = None
 
 
 _REQUIRED_PROFILE_FIELDS: tuple[str, ...] = (
@@ -274,6 +276,23 @@ def build_apply_kit(
     checklist = _checklist(profile, job, variant_payload, letter_payload, unverified)
     answers = _answers(profile, intake, job, normalized_language)
 
+    # Dossier quality audit (SPEC-042) — step 2 before export.
+    dossier_audit = None
+    try:
+        dossier_text_parts = []
+        if isinstance(letter_payload, Mapping):
+            for key in ("letter_markdown", "markdown", "cv_markdown"):
+                value = letter_payload.get(key)
+                if isinstance(value, str) and value.strip():
+                    dossier_text_parts.append(value)
+        if answers:
+            dossier_text_parts.append("\n".join(f"{k}: {v}" for k, v in answers.items()))
+        dossier_text = "\n".join(dossier_text_parts)
+        audit = analyze_dossier_quality(dossier_text, profile, offer=job, language=normalized_language)
+        dossier_audit = audit.to_dict()
+    except Exception:
+        dossier_audit = None
+
     return ApplyKit(
         job_id=resolved_job_id,
         readiness=readiness,
@@ -284,4 +303,5 @@ def build_apply_kit(
         checklist=checklist,
         deep_link=deep_link,
         export_urls=export_urls,
+        dossier_audit=dossier_audit,
     )

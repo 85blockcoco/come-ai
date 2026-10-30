@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "inflated_terms": [
+    "expert", "experte", "senior", "lead", "leader", "principal", "staff",
+    "guru", "ninja", "rockstar", "wizard", "world-class", "world class",
+    "outstanding", "exceptional", "exceptionnelle", "incontournable",
+    "impactful", "scalable", "disruptive", "game-changer", "game changer",
+    "ownership", "stakeholder", "thought leader", "best-in-class", "best in class",
+    "cutting-edge", "cutting edge", "mastery", "master"
+  ],
+  "anglicisms": [
+    "impactful", "scalable", "disruptive", "ownership", "stakeholder"
+  ],
+  "ats_max_repeat": 3,
+  "min_years_for_expert": 5
+}
