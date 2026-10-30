@@ -3,6 +3,10 @@
 **Mission CVBOOST-39** · branche `worker/cvboost-39-1793359909653` ·
 worktree `AI-Excel-Agent-worker-cvboost-39-1793359909653`
 
+**Livraison** : commit `0773c79`, poussé sur `origin/worker/cvboost-39-1793359909653`
+(vérification flotte) et `origin/agent/spec-009-browser-e2e` (nom de branche
+demandé par la mission).
+
 ## Livré
 
 Suite Playwright complète pour les quatre parcours incontournables, avec
