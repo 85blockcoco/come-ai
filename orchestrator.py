@@ -66,6 +66,10 @@ WORKER_REPORTING_FOOTER = """
 `status` vaut `"done"` seulement si les tests pertinents passent et que le code
 est réellement écrit. Sinon `"failed"` avec `error` renseigné.
 Ne termine jamais sans avoir écrit ce fichier.
+
+**Git : ne te soucie pas de `git add`/`commit`/`push` — l'orchestrateur
+commite et pousse automatiquement le worktree. Laisse simplement les fichiers
+modifiés/non commités dans le worktree."
 Budget : 25 minutes maximum. Au-delà, écris `result.json` avec ce qui marche
 et `status: "done"` si le code est utilisable, sinon `"failed"` + la cause.
 """
@@ -428,6 +432,23 @@ def process_mission(order_id: str, prompt: str, mission_id: str | None = None) -
         #    branche sur origin n'est pas une preuve (règle du projet).
         pushed = False
         if result.get("status") == "done":
+            # Auto-commit: les workers écrivent les fichiers mais oublient
+            # souvent `git add/commit`. On commite leurs changements avant
+            # de pousser, sinon la branche reste vide et la vérification
+            # (fichiers présents sur origin) échoue.
+            try:
+                subprocess.run(["git", "add", "-A"], cwd=worktree_path,
+                               capture_output=True, text=True, timeout=120)
+                _diff = subprocess.run(["git", "diff", "--cached", "--quiet"],
+                                       cwd=worktree_path, capture_output=True, timeout=60)
+                if _diff.returncode != 0:
+                    _c = subprocess.run(
+                        ["git", "commit", "-m", f"feat: {order_id} (auto-commit)"],
+                        cwd=worktree_path, capture_output=True, text=True, timeout=180)
+                    if _c.returncode != 0:
+                        log(f"⚠️ commit auto échoué: {(_c.stderr or '')[-200:]}")
+            except Exception as e:
+                log(f"⚠️ auto-commit erreur: {e}")
             try:
                 _p = subprocess.run(["git", "push", "-u", "origin", branch],
                                     cwd=worktree_path, capture_output=True, text=True, timeout=180)
