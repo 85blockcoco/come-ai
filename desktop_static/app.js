@@ -1326,7 +1326,9 @@
       const draft = await api(`/api/career/application-drafts/${encodeURIComponent(kit.draft_id)}`);
       if (!ui.dialog.isConnected) return;
       ui.dialog.removeAttribute("aria-busy");
-      const blocked = kit.readiness !== 100 || kit.block_reasons?.length || !kit.deep_link;
+      const qualityAudit = kit.quality_audit && typeof kit.quality_audit === "object" ? kit.quality_audit : null;
+      const qualityBlocked = !qualityAudit || !qualityAudit.export_allowed;
+      const blocked = kit.readiness !== 100 || kit.block_reasons?.length || !kit.deep_link || qualityBlocked;
       const sent = sentStages.has(kit.application?.stage);
       let approved = !!kit.application?.approval_granted && !blocked;
       const status = el("p", { class: "flow-status", role: "status" }, approved
@@ -1383,6 +1385,38 @@
       const form = el("div", { class: "manual-destination-form" }, openButton);
       const exportNames = { cv_pdf: "CV · PDF", cv_docx: "CV · Word", letter_pdf: "Lettre · PDF", letter_docx: "Lettre · Word" };
       const preview = (label, text) => el("section", { class: "document-preview" }, el("h3", {}, label), documentContent(text));
+      const disabledExport = (label) => el("span", {
+        class: "ghost-btn disabled-export", "aria-disabled": "true",
+        title: "Corrige les points signalés avant d’exporter.",
+      }, label);
+      const factorLabels = { factuality: "Faits vérifiables", evidence: "Preuves du profil", argument: "Adaptation à l’offre" };
+      const qualityCard = qualityAudit ? el("section", {
+        class: `quality-card ${qualityBlocked ? "quality-card-blocked" : "quality-card-ready"}`,
+        "aria-labelledby": "qualityTitle",
+      },
+      el("div", { class: "quality-heading" },
+        el("div", {}, el("span", { class: "eyebrow" }, "Contrôle avant export"),
+          el("h3", { id: "qualityTitle" }, "Qualité factuelle du dossier")),
+        el("strong", { class: "quality-score" }, `${Number(qualityAudit.score || 0)}/100`)),
+      el("p", { class: "quality-verdict" }, qualityAudit.verdict_label || (qualityBlocked ? "Corrections requises" : "Prêt à relire et à exporter")),
+      el("div", { class: "quality-factors", "aria-label": "Détail du score qualité" },
+        ...(qualityAudit.factors || []).map((factor) => el("div", { class: "quality-factor" },
+          el("span", {}, factorLabels[factor.key] || factor.label || factor.key),
+          el("strong", {}, `${Number(factor.score || 0)}/100`)))),
+      (qualityAudit.issues || []).length ? el("div", { class: "quality-priorities" },
+        el("strong", {}, "À corriger en premier"),
+        el("ul", {}, qualityAudit.issues.slice(0, 3).map((issue) => el("li", {}, issue.suggestion || issue.label || "Vérifier ce passage.")))) :
+        el("p", { class: "note tight" }, qualityBlocked
+          ? "Aucun fait personnel n’a encore pu être validé. Complète et approuve ton profil avant de finaliser les documents."
+          : "Aucune affirmation problématique détectée par les règles locales."),
+      qualityBlocked ? el("button", { class: "ghost-btn quality-edit", type: "button", onclick: () => {
+        const editor = ui.content.querySelector("details[data-document-editor]");
+        if (editor) { editor.open = true; editor.scrollIntoView({ behavior: "smooth", block: "start" }); }
+      } }, "Relire et corriger le CV ou la lettre") : null,
+      el("p", { class: "quality-disclaimer" }, "Audit local factuel : ce score vérifie les preuves et l’adaptation, pas les chances de recrutement.")) :
+        el("section", { class: "quality-card quality-card-blocked", role: "alert" },
+          el("h3", {}, "Audit qualité indisponible"),
+          el("p", { class: "note tight" }, "L’export reste bloqué tant que le CV et la lettre n’ont pas été contrôlés."));
       const cvEdit = el("textarea", { rows: "12", maxlength: "18000", "aria-label": "Modifier le CV", value: draft.cv_markdown });
       const letterEdit = el("textarea", { rows: "12", maxlength: "18000", "aria-label": "Modifier la lettre", value: draft.letter_markdown });
       const save = el("button", { class: "ghost-btn", type: "button", disabled: sent, onclick: async () => {
@@ -1410,24 +1444,30 @@
           el("span", { class: `chip ${blocked ? "amber" : "green"}` }, blocked ? "À compléter" : "Vérifications locales complètes")),
         el("p", { class: "note" }, "Ces vérifications documentaires ne prédisent pas les chances de recrutement. Le contenu reste à relire et à adapter."),
         blocked ? el("div", { class: "error-note", role: "alert" }, el("strong", {}, "À vérifier avant de continuer"),
-          el("ul", {}, (kit.block_reasons || []).map((reason) => el("li", {}, reason))),
+          el("ul", {}, [...(kit.block_reasons || []), ...(qualityBlocked ? ["L’audit factuel demande des corrections avant l’export."] : [])]
+            .filter((reason, index, reasons) => reasons.indexOf(reason) === index)
+            .map((reason) => el("li", {}, reason))),
           el("button", { class: "inline-action", type: "button", onclick: () => { ui.close(); openCareerWorkspace("profile"); } }, "Vérifier mon profil dans NAGE →")) : null,
+        qualityCard,
         el("div", { class: "document-grid" }, preview("CV", draft.cv_markdown), preview("Lettre de motivation", draft.letter_markdown)),
         el("div", { class: "download-links", "aria-label": "Télécharger les documents relus" },
-          Object.entries(kit.export_urls || {}).map(([key, url]) => el("a", { class: "ghost-btn", href: url, download: "" }, exportNames[key] || key)),
-          el("a", {
-            class: "ghost-btn primary",
-            href: `/api/career/apply-kit/${encodeURIComponent(jobId)}/bundle.zip?language=${encodeURIComponent(kit.language || state.kitLanguage)}`,
-            download: "",
-          }, "tout télécharger (.zip)"),
+          Object.entries(kit.export_urls || {}).map(([key, url]) => blocked
+            ? disabledExport(exportNames[key] || key)
+            : el("a", { class: "ghost-btn", href: url, download: "" }, exportNames[key] || key)),
+          blocked ? disabledExport("tout télécharger (.zip)") : el("a", {
+              class: "ghost-btn primary",
+              href: `/api/career/apply-kit/${encodeURIComponent(jobId)}/bundle.zip?language=${encodeURIComponent(kit.language || state.kitLanguage)}`,
+              download: "",
+            }, "tout télécharger (.zip)"),
           el("button", {
             class: "ghost-btn",
             type: "button",
+            disabled: blocked,
             onclick: async () => {
               await copyText(kitBundleText(kit, draft, title));
             },
           }, "copier le dossier")),
-        el("details", { class: "kit-details" }, el("summary", {}, "Corriger le CV ou la lettre"),
+        el("details", { class: "kit-details", "data-document-editor": "true" }, el("summary", {}, "Corriger le CV ou la lettre"),
           el("p", { class: "note" }, "Garde uniquement des faits exacts. Enregistrer des corrections annule la revue précédente."),
           el("label", {}, "CV", cvEdit), el("label", {}, "Lettre de motivation", letterEdit), save),
         el("details", { class: "kit-details" }, el("summary", {}, "Vérifications et provenance"),

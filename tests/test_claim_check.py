@@ -267,6 +267,55 @@ def test_offer_reference_sentence_is_not_audited():
     assert report.skipped.get("offer_reference") == 1
 
 
+def test_exact_offer_fact_inside_long_description_is_not_a_candidate_claim():
+    description = (
+        "This internship starts in May 2027 and lasts four months. "
+        "Fluent English is required. French would be a plus."
+    )
+    report = check_claims(
+        "This internship starts in May 2027 and lasts four months.\nFrench would be a plus.",
+        evidence=[],
+        context={"terms": [description], "numbers": ["May 2027", "four months"]},
+    )
+    assert report.audited_claims == ()
+    assert report.skipped.get("offer_reference") == 2
+
+
+def test_candidate_claim_is_still_audited_when_words_also_appear_in_offer():
+    report = check_claims(
+        "I have fluent English.",
+        evidence=[],
+        context={"terms": ["Fluent English is required."]},
+    )
+    assert len(report.audited_claims) == 1
+    assert report.audited_claims[0].claim_type == "candidate"
+    assert report.audited_claims[0].label != "supported"
+
+
+def test_offer_detail_prefix_and_standard_closing_are_not_candidate_facts():
+    report = check_claims(
+        (
+            "Offer details to review: Fluent English is required.\n"
+            "Thank you for considering my application.\n"
+            "I would welcome the opportunity to discuss how my background could be relevant to your team."
+        ),
+        evidence=[],
+        context={"terms": ["Fluent English is required."]},
+    )
+    assert report.audited_claims == ()
+    assert report.skipped.get("offer_reference") == 1
+    assert report.skipped.get("boilerplate") == 2
+
+
+def test_placeholder_sentence_is_handled_by_placeholder_gate_not_claim_audit():
+    report = check_claims(
+        "The skills I can substantiate are: [Skills to complete].",
+        evidence=[],
+    )
+    assert report.audited_claims == ()
+    assert report.skipped.get("boilerplate") == 1
+
+
 def test_empty_document_warns_and_has_zero_counts():
     report = check_claims("", evidence=EVIDENCE)
     assert report.audited_claims == ()

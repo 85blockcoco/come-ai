@@ -124,3 +124,27 @@
 ## Limite explicite
 
 - Cette livraison prouve le suivi question par question et sa persistance. Elle ne prouve pas encore une latence acceptable du tuteur conversationnel avec un document complet sous charge concurrente.
+
+---
+
+# RAPPORT CODEX — 2026-10-30 19:06 CET
+
+## Priorité urgente offres + CV + lettre
+
+- Le dossier de candidature affiche maintenant un audit factuel visible : score sur 100, factualité, preuves du profil, adaptation à l’offre et trois corrections prioritaires.
+- Tous les exports et la copie sont visiblement bloqués tant que le profil, l’offre ou l’audit ne permettent pas une candidature sûre; l’export ZIP est également refusé côté serveur si l’audit échoue.
+- L’auditeur distingue désormais une citation exacte de l’offre (langue, date, durée, exigence) d’une affirmation personnelle. Exemple vérifié : « Fluent English is required » reste un fait de l’offre; « I have fluent English » exige toujours une preuve du profil.
+- Les formules de politesse et les champs à compléter ne polluent plus le score factuel; ils sont traités par leurs contrôles dédiés.
+- Le classement BBA/Bachelor/Bac+4 avant M2/MBA reste actif et testé; les offres ambitieuses restent visibles.
+
+## Preuves actuelles
+
+- `pytest -q tests/test_apply_kit_bundle.py tests/test_claim_check.py tests/test_dossier_quality.py tests/test_desktop_app.py tests/test_career_education_access.py tests/test_career_stage_hunter.py tests/test_career_search_ux.py` : **237 passed en 18,99 s**.
+- Ruff `career/`, `node --check desktop_static/app.js` et `git diff --check` : verts.
+- Navigateur Playwright sur la candidate, port 18940 : carte qualité visible, **5 exports désactivés**, **0 lien de téléchargement actif**, copie désactivée et **0 erreur console** sur le dossier synthétique incomplet.
+- API synthétique après correction : 16 citations de l’offre reconnues, 11 éléments de gabarit ignorés, 0 fait candidat inventé attribué à tort.
+
+## Limites et sécurité
+
+- Le profil synthétique de recette est volontairement incomplet : score 0 et export bloqué, comportement attendu.
+- Aucun CV personnel, aucune candidature réelle, aucun envoi automatique et aucun fournisseur cloud n’ont été utilisés.

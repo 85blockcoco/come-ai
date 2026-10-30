@@ -127,6 +127,13 @@ def test_service_bundle_contains_every_document(tmp_path: Path):
             assert archive.getinfo(name).file_size > 0
 
 
+def test_bundle_export_is_blocked_when_factual_audit_fails(tmp_path: Path):
+    service = CareerService(tmp_path)
+    job = service.import_job(synthetic_job())
+    with pytest.raises(UserFacingError, match="audit factuel"):
+        service.build_apply_kit_bundle(job["id"])
+
+
 def test_bundle_endpoint_smoke(tmp_path: Path):
     service, job = make_service(tmp_path)
     client = bundle_client(service)
@@ -163,3 +170,7 @@ def test_desktop_ui_wires_bundle_and_copy():
     assert "tout télécharger (.zip)" in app_js
     assert "copier le dossier" in app_js
     assert "function kitBundleText(" in app_js
+    assert "Qualité factuelle du dossier" in app_js
+    assert "qualityAudit.export_allowed" in app_js
+    assert '"aria-disabled": "true"' in app_js
+    assert "Audit local factuel" in app_js

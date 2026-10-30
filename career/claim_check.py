@@ -187,7 +187,7 @@ _OFFER_MARKERS: tuple[str, ...] = (
     "votre offre", "l offre", "offre mentionne", "offre indique", "offre precise",
     "cette offre", "cette opportunite", "candidature au poste",
     "candidature pour le poste", "candidature au sein", "je vous adresse ma candidature",
-    "the offer", "job description", "position at", "application for",
+    "the offer", "offer details", "job description", "position at", "application for",
     "i am applying", "role of",
 )
 
@@ -202,7 +202,8 @@ _BOILERPLATE_MARKERS: tuple[str, ...] = (
     "cordialement", "bien cordialement", "sincerely", "best regards", "kind regards",
     "je vous remercie", "je me tiens a votre disposition", "je serais heureux",
     "je serais heureuse", "je souhaite", "n hesitez pas", "do not hesitate",
-    "i would be glad", "i look forward",
+    "i would be glad", "i would welcome the opportunity", "i look forward",
+    "thank you for considering my application",
 )
 
 _PLACEHOLDER_RE = re.compile(r"\[[^\]]{1,120}\]|«\s*[^»]{0,120}\s*»")
@@ -901,8 +902,13 @@ def _skill_matches(text: str, terms: Sequence[str]) -> list[str]:
 
 def _contact_or_offer(text: str, context: AuditContext) -> str | None:
     normalized = normalized_text(text)
-    placeholder_removed = normalized_text(_PLACEHOLDER_RE.sub(" ", text))
-    if _PLACEHOLDER_RE.search(text) and len(placeholder_removed.split()) <= 5:
+    candidate_voice = bool(
+        re.search(r"\b(je|j|nous|mon|ma|mes|notre|nos|my|i|we|our|have|ai|suis|am)\b", f" {normalized} ")
+    )
+    # Placeholders have their own hard gate in the application kit.  Auditing
+    # the surrounding template as if it were a candidate fact produces noisy
+    # duplicate warnings and hides the useful corrections.
+    if _PLACEHOLDER_RE.search(text):
         return "boilerplate"
     if _CONTACT_RE.search(text):
         return "contact"
@@ -917,9 +923,16 @@ def _contact_or_offer(text: str, context: AuditContext) -> str | None:
         prefix = normalized_text(text.split(":", 1)[0])
         if prefix in _METADATA_PREFIXES or prefix.split()[:1] and prefix.split()[0] in _METADATA_PREFIXES:
             return "offer_reference"
-    if len(normalized.split()) <= 6 and not re.search(
-        r"\b(je|j|nous|my|i|we|ai|have|suis|am)\b", f" {normalized} "
-    ) and normalized in context.terms:
+    if len(normalized.split()) <= 6 and not candidate_voice and normalized in context.terms:
+        return "offer_reference"
+    # The kit often quotes one complete requirement or timing sentence from a
+    # longer offer description.  It remains an offer fact, not a personal
+    # claim, when the exact normalized phrase is present in that source.  The
+    # first-person guard is essential: "I have fluent English" must still be
+    # proved by the candidate profile even if the offer asks for English.
+    if len(normalized.split()) >= 4 and not candidate_voice and any(
+        f" {normalized} " in f" {term} " for term in context.terms
+    ):
         return "offer_reference"
     padded = f" {normalized} "
     if any(f" {normalized_text(marker)} " in padded for marker in _OFFER_MARKERS):

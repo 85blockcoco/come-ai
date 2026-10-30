@@ -3474,6 +3474,11 @@ class CareerService:
 
         identifier = clean_text(job_id, limit=80)
         kit = self.build_apply_kit(identifier, language, variant)
+        quality_audit = kit.get("quality_audit")
+        if not isinstance(quality_audit, Mapping) or not quality_audit.get("export_allowed"):
+            raise UserFacingError(
+                "Le dossier n’a pas passé l’audit factuel : corrige ou complète le CV et la lettre avant l’export groupé."
+            )
         job = self.get_job(identifier)
         draft_id = str(kit.get("draft_id") or "").strip()
         if not draft_id:
