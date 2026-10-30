@@ -28,7 +28,6 @@ from ..source_fields import attach_source_material
 from ..stage_search import default_brief, validate_brief
 
 from .cards import card_attributes, published_fields, time_attribute
-from .http import ssl_context
 
 
 _APEC_BASE = "https://www.apec.fr"

@@ -27,6 +27,10 @@ class PrepWizardPage(CareerPage):
             "#applications-list .application-kit h4:text-is('Kit de candidature local')",
             timeout=30_000,
         )
+        self.page.wait_for_function(
+            "() => { const t = document.querySelector('#applications-list .application-kit .application-kit-documents textarea'); return !!t && (t.value || '').trim().length > 0; }",
+            timeout=30_000,
+        )
         self.wait_message("Kit de candidature prêt localement")
         return self
 
