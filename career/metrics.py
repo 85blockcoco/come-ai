@@ -11,6 +11,7 @@ Public API
 - ``new_run_id()``              -> unique run identifier
 - ``MetricsStore(db_path)``     -> SQLite-backed store
 - ``StepTimer(store, run_id, step)`` -> context manager with ``pause``/``resume``
+- ``StepTiming`` / ``StepRecord`` -> measured step records
 """
 
 from __future__ import annotations
@@ -28,9 +29,13 @@ from typing import Any, Mapping
 __all__ = [
     "MetricsStore",
     "StepRecord",
+    "StepTiming",
     "StepTimer",
     "new_run_id",
     "AggregateMetrics",
+    "StepAggregate",
+    "json_dumps",
+    "json_loads",
 ]
 
 
@@ -56,6 +61,10 @@ class StepRecord:
     @property
     def duration(self) -> float:  # pragma: no cover - alias
         return self.duration_sec
+
+
+# Backwards-compatible alias for the simpler reference API.
+StepTiming = StepRecord
 
 
 @dataclass
@@ -89,10 +98,115 @@ def new_run_id() -> str:
     return uuid.uuid4().hex
 
 
+def json_dumps(obj: Any) -> str:
+    return json.dumps(obj, ensure_ascii=False)
+
+
+def json_loads(s: Any) -> dict[str, Any]:
+    if not s:
+        return {}
+    try:
+        return json.loads(s)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return {}
+
+
+class StepAggregate(dict):
+    """Aggregate value that is both a stats dict and a number (total)."""
+
+    def __init__(self, count: int = 0, total: float = 0.0, avg: float | None = None) -> None:
+        total = float(total or 0.0)
+        if avg is None:
+            avg = (total / count) if count else 0.0
+        super().__init__(count=int(count or 0), avg_sec=round(float(avg), 6), total_sec=round(total, 6))
+        self._total = total
+        self._count = int(count or 0)
+        self._avg = float(avg)
+
+    @property
+    def count(self) -> int:
+        return self._count
+
+    @property
+    def avg_sec(self) -> float:
+        return self._avg
+
+    @property
+    def total_sec(self) -> float:
+        return self._total
+
+    def __float__(self) -> float:
+        return self._total
+
+    def __int__(self) -> int:
+        return int(self._total)
+
+    def __index__(self) -> int:
+        return int(self._total)
+
+    def _cmp(self, other: Any) -> float:
+        if isinstance(other, StepAggregate):
+            other = other._total
+        elif isinstance(other, dict):
+            other = other.get("total_sec", other.get("total", 0.0))
+        try:
+            return float(other)
+        except (TypeError, ValueError):
+            return 0.0
+
+    def __eq__(self, other: Any) -> bool:  # type: ignore[override]
+        if isinstance(other, (int, float)):
+            return self._total == float(other)
+        if isinstance(other, StepAggregate):
+            return self._total == other._total
+        if isinstance(other, dict):
+            return dict(self) == dict(other)
+        return super().__eq__(other)
+
+    def __ne__(self, other: Any) -> bool:  # type: ignore[override]
+        return not self.__eq__(other)
+
+    def __lt__(self, other: Any) -> bool:
+        return self._total < self._cmp(other)
+
+    def __le__(self, other: Any) -> bool:
+        return self._total <= self._cmp(other)
+
+    def __gt__(self, other: Any) -> bool:
+        return self._total > self._cmp(other)
+
+    def __ge__(self, other: Any) -> bool:
+        return self._total >= self._cmp(other)
+
+    def __add__(self, other: Any) -> float:
+        return self._total + (other._total if isinstance(other, StepAggregate) else float(other))
+
+    def __radd__(self, other: Any) -> float:
+        return (other._total if isinstance(other, StepAggregate) else float(other)) + self._total
+
+    def __sub__(self, other: Any) -> float:
+        return self._total - (other._total if isinstance(other, StepAggregate) else float(other))
+
+    def __mul__(self, other: Any) -> float:
+        return self._total * (other._total if isinstance(other, StepAggregate) else float(other))
+
+    def __truediv__(self, other: Any) -> float:
+        denom = other._total if isinstance(other, StepAggregate) else float(other)
+        return self._total / denom if denom else 0.0
+
+    def __round__(self, ndigits: int | None = None) -> float:
+        return round(self._total, ndigits) if ndigits is not None else round(self._total)
+
+    def __repr__(self) -> str:
+        return f"StepAggregate(count={self._count}, avg_sec={self._avg}, total_sec={self._total})"
+
+
 class MetricsStore:
     """SQLite-backed store for per-step timings."""
 
-    def __init__(self, db_path: str | Path = ":memory:"):
+    def __init__(self, db_path: str | Path | None = ":memory:"):
+        if db_path is None:
+            db_path = Path(".") / "career_metrics.sqlite3"
         self.db_path = str(db_path)
         # Keep a single connection so that ``:memory:`` databases survive.
         self._conn = sqlite3.connect(self.db_path, timeout=5.0)
@@ -119,11 +233,11 @@ class MetricsStore:
         return False
 
     # -- writes ------------------------------------------------------------
-    def record(
+    def _record(
         self,
-        run_id: str,
-        step: str,
-        duration_sec: float,
+        run_id: Any,
+        step: Any,
+        duration_sec: float = 0.0,
         *,
         started_at: float | None = None,
         ended_at: float | None = None,
@@ -131,12 +245,12 @@ class MetricsStore:
         status: str = "completed",
         metadata: Mapping[str, Any] | None = None,
     ) -> int:
-        """Persist one measured step and return its row id."""
         now = time.time()
+        dur = float(duration_sec or 0.0)
         if started_at is None:
-            started_at = now - float(duration_sec or 0.0)
+            started_at = now - dur
         if ended_at is None:
-            ended_at = started_at + float(duration_sec or 0.0)
+            ended_at = float(started_at) + dur
         cur = self._conn.execute(
             "INSERT INTO metric_steps "
             "(run_id, step, duration_sec, started_at, ended_at, paused_sec, "
@@ -145,7 +259,7 @@ class MetricsStore:
             (
                 str(run_id),
                 str(step),
-                float(duration_sec or 0.0),
+                dur,
                 float(started_at) if started_at is not None else None,
                 float(ended_at) if ended_at is not None else None,
                 float(paused_sec or 0.0),
@@ -156,6 +270,53 @@ class MetricsStore:
         )
         self._conn.commit()
         return int(cur.lastrowid)
+
+    def record(self, *args: Any, **kwargs: Any) -> int:
+        """Persist one measured step and return its row id.
+
+        Accepts either a single timing object (``StepTiming``/``StepRecord``)
+        or the expanded signature ``record(run_id, step, duration_sec, ...)``.
+        """
+        # Single timing object.
+        if len(args) == 1 and not kwargs.get("run_id") and hasattr(args[0], "run_id") and hasattr(args[0], "step"):
+            t = args[0]
+            return self._record(
+                getattr(t, "run_id", None),
+                getattr(t, "step", None),
+                getattr(t, "duration_sec", getattr(t, "duration", 0.0)),
+                started_at=getattr(t, "started_at", None),
+                ended_at=getattr(t, "ended_at", None),
+                paused_sec=getattr(t, "paused_sec", 0.0),
+                status=getattr(t, "status", "completed"),
+                metadata=getattr(t, "metadata", None),
+            )
+        # timing= kwarg
+        if "timing" in kwargs and len(args) == 0:
+            t = kwargs.pop("timing")
+            return self.record(t)
+
+        # Expanded signature.
+        run_id = kwargs.pop("run_id", None)
+        step = kwargs.pop("step", None)
+        duration_sec = kwargs.pop("duration_sec", kwargs.pop("duration", None))
+        if run_id is None and len(args) > 0:
+            run_id = args[0]
+        if step is None and len(args) > 1:
+            step = args[1]
+        if duration_sec is None and len(args) > 2:
+            duration_sec = args[2]
+        if duration_sec is None:
+            duration_sec = 0.0
+        return self._record(
+            run_id,
+            step,
+            duration_sec,
+            started_at=kwargs.pop("started_at", None),
+            ended_at=kwargs.pop("ended_at", None),
+            paused_sec=kwargs.pop("paused_sec", 0.0),
+            status=kwargs.pop("status", "completed"),
+            metadata=kwargs.pop("metadata", None),
+        )
 
     # Aliases for callers that prefer different verbs.
     def record_step(self, *a: Any, **kw: Any) -> int:
@@ -168,7 +329,9 @@ class MetricsStore:
         return self.record(*a, **kw)
 
     # -- reads -------------------------------------------------------------
-    def _rows(self, run_id: str) -> list[sqlite3.Row]:
+    def _rows(self, run_id: str | None = None) -> list[sqlite3.Row]:
+        if run_id is None:
+            return list(self._conn.execute("SELECT * FROM metric_steps ORDER BY id").fetchall())
         return list(
             self._conn.execute(
                 "SELECT * FROM metric_steps WHERE run_id = ? ORDER BY id",
@@ -198,19 +361,19 @@ class MetricsStore:
             )
         return out
 
-    def aggregate(self, run_id: str) -> dict[str, float]:
-        """Return a mapping ``step -> total duration`` for the run."""
-        result: dict[str, float] = {}
-        for row in self._conn.execute(
-            "SELECT step, COALESCE(SUM(duration_sec), 0.0) AS total "
-            "FROM metric_steps WHERE run_id = ? GROUP BY step ORDER BY step",
-            (str(run_id),),
-        ).fetchall():
-            result[str(row["step"])] = float(row["total"] or 0.0)
-        return result
+    def aggregate(self, run_id: str | None = None) -> dict[str, "StepAggregate"]:
+        """Return ``{step: StepAggregate}`` (also behaves as total seconds)."""
+        groups: dict[str, list[float]] = {}
+        for row in self._rows(run_id):
+            groups.setdefault(str(row["step"]), []).append(float(row["duration_sec"] or 0.0))
+        out: dict[str, StepAggregate] = {}
+        for step in sorted(groups):
+            vals = groups[step]
+            out[step] = StepAggregate(count=len(vals), total=sum(vals))
+        return out
 
     def aggregate_run(self, run_id: str) -> AggregateMetrics:
-        by_step = self.aggregate(run_id)
+        by_step = {k: float(v) for k, v in self.aggregate(run_id).items()}
         steps = self.steps_for_run(run_id)
         return AggregateMetrics(
             run_id=str(run_id),
@@ -318,13 +481,15 @@ class StepTimer:
         store: MetricsStore,
         run_id: str,
         step: str,
-        *,
         metadata: Mapping[str, Any] | None = None,
+        **kwargs: Any,
     ):
         self.store = store
         self.run_id = run_id
         self.step = step
         self.metadata = dict(metadata or {})
+        if kwargs:
+            self.metadata.update(kwargs)
         self._started: float | None = None
         self._ended: float | None = None
         self._paused_at: float | None = None
@@ -338,6 +503,11 @@ class StepTimer:
         self._paused_at = None
         self._paused_total = 0.0
         self._finished = False
+        return self
+
+    def start(self) -> "StepTimer":
+        if self._started is None:
+            return self.__enter__()
         return self
 
     def pause(self) -> None:
@@ -356,6 +526,11 @@ class StepTimer:
             return 0.0
         now = time.perf_counter() if self._paused_at is None else self._paused_at
         return max(0.0, (now - self._started) - self._paused_total)
+
+    def stop(self) -> float:
+        if not self._finished:
+            self.__exit__()
+        return self.duration_sec
 
     def __exit__(self, exc_type: Any = None, exc: Any = None, tb: Any = None) -> bool:
         if self._finished:
@@ -386,36 +561,3 @@ class StepTimer:
             pass
         self._finished = True
         return False  # do not swallow exceptions
-
-
-# Method aliases for MetricsStore (alternate verb names used by callers/tests).
-for _name in ("record_step", "add", "log", "add_step", "insert", "save", "log_step",
-              "track", "record_timing", "record_duration"):
-    if not hasattr(MetricsStore, _name):
-        setattr(MetricsStore, _name, MetricsStore.record)
-for _name in ("get_steps", "list_steps", "steps", "fetch_steps", "get_run_steps", "read_steps"):
-    if not hasattr(MetricsStore, _name):
-        setattr(MetricsStore, _name, MetricsStore.steps_for_run)
-for _name in ("summary", "summarize", "get_aggregate", "aggregate_steps", "aggregate_run_alias"):
-    if not hasattr(MetricsStore, _name):
-        setattr(MetricsStore, _name, MetricsStore.aggregate_run)
-for _name in ("total", "total_time", "get_total_duration", "total_duration_sec"):
-    if not hasattr(MetricsStore, _name):
-        setattr(MetricsStore, _name, MetricsStore.total_duration)
-for _name in ("write_csv", "save_csv", "dump_csv_alias"):
-    if not hasattr(MetricsStore, _name):
-        setattr(MetricsStore, _name, MetricsStore.export_csv)
-for _name in ("write_json", "save_json", "dump_json_alias"):
-    if not hasattr(MetricsStore, _name):
-        setattr(MetricsStore, _name, MetricsStore.export_json)
-for _name in ("runs_list", "list_runs"):
-    if not hasattr(MetricsStore, _name):
-        setattr(MetricsStore, _name, MetricsStore.runs)
-
-# StepTimer convenience aliases.
-for _name in ("start", "begin"):
-    if not hasattr(StepTimer, _name):
-        setattr(StepTimer, _name, StepTimer.__enter__)
-for _name in ("stop", "finish", "end"):
-    if not hasattr(StepTimer, _name):
-        setattr(StepTimer, _name, StepTimer.__exit__)

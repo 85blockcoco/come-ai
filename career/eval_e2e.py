@@ -17,6 +17,17 @@ from typing import Any, Callable, Iterable, Mapping
 
 from career.metrics import MetricsStore, StepTimer, new_run_id
 
+# Optional dependency (SPEC-042 dossier quality auditor).  When available we
+# reuse its transparent score; otherwise a local fallback is used.
+try:  # pragma: no cover - import availability depends on the base
+    from .dossier_quality import score_dossier as _score_dossier
+except Exception:  # pragma: no cover
+    try:
+        from career.dossier_quality import score_dossier as _score_dossier
+    except Exception:
+        _score_dossier = None
+
+
 __all__ = [
     "OfferResult",
     "AggregateReport",
@@ -27,20 +38,6 @@ __all__ = [
     "aggregate",
     "render_report",
     "run_evaluation",
-    "read_offers",
-    "discover_offers",
-    "list_offers",
-    "evaluate",
-    "assess_offer",
-    "summarize",
-    "combine",
-    "format_report",
-    "dashboard",
-    "render_dashboard",
-    "render_markdown",
-    "run_e2e",
-    "evaluate_all",
-    "run",
 ]
 
 
@@ -97,16 +94,25 @@ class AggregateReport:
     avg_quality_score: float = 0.0
     total_errors: int = 0
     total_corrections: int = 0
-    avg_errors: float = 0.0
-    avg_corrections: float = 0.0
     avg_total_duration_sec: float = 0.0
     total_duration_sec: float = 0.0
     min_quality_score: float = 0.0
     max_quality_score: float = 0.0
     confidence: str = "n=0 : aucune donnée (indicatif)"
     results: list[OfferResult] = field(default_factory=list)
+    per_offer: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
+        if not self.per_offer and self.results:
+            self.per_offer = [
+                {
+                    "offer_id": r.offer_id,
+                    "quality_score": r.quality_score,
+                    "errors_found": r.errors_found,
+                    "total_duration_sec": r.total_duration_sec,
+                }
+                for r in self.results
+            ]
         return {
             "n_offers": self.n_offers,
             "avg_quality_score": self.avg_quality_score,
@@ -118,6 +124,7 @@ class AggregateReport:
             "max_quality_score": self.max_quality_score,
             "confidence": self.confidence,
             "results": [r.to_dict() for r in self.results],
+            "per_offer": list(self.per_offer),
         }
 
 
@@ -186,6 +193,7 @@ def evaluate_offer(
     steps: Mapping[str, Callable[[], Any]] | None = None,
     audit: Mapping[str, Any] | None = None,
     metrics_store: MetricsStore | None = None,
+    store: MetricsStore | None = None,
     run_id: str | None = None,
     errors_found: int | None = None,
     corrections: int = 0,
@@ -197,6 +205,9 @@ def evaluate_offer(
     **extra: Any,
 ) -> OfferResult:
     """Evaluate one offer end to end (locally, no network)."""
+    if metrics_store is None and store is not None:
+        metrics_store = store
+
     offer = dict(offer or {})
     offer_id = str(offer.get("offer_id") or offer.get("id") or "").strip() or "offer"
     title = str(offer.get("title") or offer.get("name") or "").strip()
@@ -214,14 +225,32 @@ def evaluate_offer(
         metadata={k: v for k, v in offer.items()},
     )
 
-    # Quality score from evidence coverage unless explicitly provided.
+    evidence_list = list(evidence or [])
+
+    # Quality score.
     if quality_score is not None:
         result.quality_score = float(quality_score)
-        matches, total = (0, 0)
         if errors_found is None:
             errors_found = 0
+    elif _score_dossier is not None:
+        try:
+            q = _score_dossier(dossier_text or "", evidence_list)
+            result.quality_score = float(getattr(q, "score", 0.0))
+            if errors_found is None:
+                claims = getattr(q, "claims", []) or []
+                errors_found = sum(1 for c in claims if (c.get("label") if isinstance(c, Mapping) else getattr(c, "label", None)) != "supported")
+        except Exception:
+            matches, total = _match_evidence(dossier_text or "", evidence_list)
+            if total:
+                result.quality_score = round(100.0 * matches / total, 2)
+                if errors_found is None:
+                    errors_found = total - matches
+            else:
+                result.quality_score = 100.0 if (dossier_text or "").strip() else 0.0
+                if errors_found is None:
+                    errors_found = 0
     else:
-        matches, total = _match_evidence(dossier_text or "", evidence)
+        matches, total = _match_evidence(dossier_text or "", evidence_list)
         if total:
             result.quality_score = round(100.0 * matches / total, 2)
             if errors_found is None:
@@ -267,6 +296,15 @@ def evaluate_offer(
             result.errors_found += 1
             result.notes = (result.notes + " " + str(exc)).strip()
     result.steps = step_durations
+    result.step_timings = dict(step_durations)
+    result.timings = dict(step_durations)
+
+    # Sync alias fields after quality score finalized.
+    result.final_score = result.quality_score
+    result.paper_score = result.quality_score
+    result.final_paper_score = result.quality_score
+    result.score = result.quality_score
+    result.quality = result.quality_score
 
     if total_duration_sec is not None:
         result.total_duration_sec = float(total_duration_sec)
@@ -283,19 +321,6 @@ def evaluate_offer(
         if hasattr(result, key):
             setattr(result, key, value)
 
-    # Keep paper-grade aliases in sync with the canonical quality score.
-    result.final_score = result.quality_score
-    result.paper_score = result.quality_score
-    result.final_paper_score = result.quality_score
-    result.score = result.quality_score
-    result.quality = result.quality_score
-    if not result.step_timings and result.steps:
-        result.step_timings = dict(result.steps)
-    if not result.timings and result.steps:
-        result.timings = dict(result.steps)
-    if not result.final_note:
-        result.final_note = result.notes
-
     return result
 
 
@@ -307,8 +332,6 @@ def aggregate(results: Iterable[OfferResult]) -> AggregateReport:
     avg_q = (sum(quality_scores) / n) if n else 0.0
     total_errors = int(sum(int(r.errors_found) for r in items))
     total_corrections = int(sum(int(r.corrections) for r in items))
-    avg_errors = (total_errors / n) if n else 0.0
-    avg_corrections = (total_corrections / n) if n else 0.0
     total_duration = float(sum(float(r.total_duration_sec) for r in items))
     avg_duration = (total_duration / n) if n else 0.0
     if quality_scores:
@@ -325,19 +348,28 @@ def aggregate(results: Iterable[OfferResult]) -> AggregateReport:
     else:
         confidence = f"n={n} : indicatif (tendances non concluantes, pas de conclusion forte)"
 
+    per_offer = [
+        {
+            "offer_id": r.offer_id,
+            "quality_score": r.quality_score,
+            "errors_found": r.errors_found,
+            "total_duration_sec": r.total_duration_sec,
+        }
+        for r in items
+    ]
+
     return AggregateReport(
         n_offers=n,
         avg_quality_score=avg_q,
         total_errors=total_errors,
         total_corrections=total_corrections,
-        avg_errors=avg_errors,
-        avg_corrections=avg_corrections,
         avg_total_duration_sec=avg_duration,
         total_duration_sec=total_duration,
         min_quality_score=min_q,
         max_quality_score=max_q,
         confidence=confidence,
         results=items,
+        per_offer=per_offer,
     )
 
 
@@ -407,20 +439,3 @@ def run_evaluation(
             )
 
     return report
-
-
-# Convenience aliases for callers using alternate names.
-read_offers = load_offers
-discover_offers = load_offers
-list_offers = load_offers
-evaluate = evaluate_offer
-assess_offer = evaluate_offer
-summarize = aggregate
-combine = aggregate
-format_report = render_report
-dashboard = render_report
-render_dashboard = render_report
-render_markdown = render_report
-run_e2e = run_evaluation
-evaluate_all = run_evaluation
-run = run_evaluation
