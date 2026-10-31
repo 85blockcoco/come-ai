@@ -1,21 +1,18 @@
 {
   "status": "done",
-  "order_id": "cvboost-29-1792622329",
-  "branch": "agent/spec-sk08-connectors-enrich",
-  "remote_branch": "origin/agent/spec-sk08-connectors-enrich",
-  "worker_branch": "worker/cvboost-29-1792622329",
-  "remote_worker_branch": "origin/worker/cvboost-29-1792622329",
-  "base_commit": "f5b22f2",
-  "files_created": [],
-  "files_modified": [
-    "career/connectors/__init__.py",
-    "career/connectors/public_ats.py",
-    "docs/agent-reports/SPEC-SK08-CONNECTORS_ENRICH.md",
-    "tests/fixtures/connectors_enrich/smartrecruiters.json",
-    "tests/test_connectors_enrich.py",
-    "tests/test_connectors_enrich_live.py"
+  "files_created": [
+    "career/automation_policy.py",
+    "career/automation_audit.py",
+    "career/automation_dashboard.py",
+    "career/controlled_automation.py",
+    "career/router.py",
+    "career/service.py",
+    "career_static/js/automation-dashboard.js",
+    "come_ai_web.py",
+    "tests/test_controlled_automation.py",
+    "docs/agent-reports/SPEC-016-CONTROLLED_AUTOMATION.md"
   ],
-  "output": "Mission SK-08 (CVBOOST-29) CONSOLIDÉE, pas re-écrite : la branche d'intégration `agent/spec-sk08-connectors-enrich` portait déjà le contrat commun (source_fields + source_conflicts + description_original) et la décision d'admission sortie des connecteurs ; cette 3e revue l'audite en direct contre les sources publiques et corrige deux défauts que les revues précédentes ne pouvaient pas voir, parce qu'ils n'existent que sur la réponse RÉELLE d'un fournisseur. Défaut 1 : la réponse de LISTE de SmartRecruiters ne publie pas l'annonce (`jobAd.sections` n'existe que dans la réponse de DÉTAIL) — les offres SmartRecruiters arrivaient donc avec une description vide et sans sections, et le critère « description_original peuplés » n'était pas tenu pour cette source. Correction : lecture BORNÉE du détail d'offre (opt-in `enrich_details`, maximum 20 lectures par board, budget d'exploration appliqué, échec non bloquant, hôte API public uniquement), le lien de publication `postingUrl` publié par la source devient l'URL officielle. Défaut 2 : la fixture synthétique composait les sections comme des chaînes alors que l'API publie des objets {title, text} — la fixture masquait le défaut (une section reçue était ignorée) ; le composeur lit les deux formes et le titre PUBLIÉ par la source devient l'en-tête de la section. Contrôle réel direct après correction : les offres SmartRecruiters lues en direct portent leur description et leurs sections ; le contrôle réel passe de 5 à 6 contrôles réussis. Aucune nouvelle version du contrat n'est créée, career/service.py, le schéma SQLite et l'interface restent intacts (la persistance du bloc source_fields reste la suite recommandée, cf. rapport § 10.1).",
-  "logs": "RECHERCHE OBLIGATOIRE AVANT ÉCRITURE : la branche `agent/spec-sk08-connectors-enrich` contenait déjà une livraison SK-08 (ordres cvboost-29-1792619869 puis cvboost-29-1792623066) — elle a été lue ligne à ligne et sert de base à cette revue (aucune v2/v3 créée, aucun travail perdu).\n\nAUDIT ADVERSARIAL (contrat rejoué contre les flux publics réels) :\nDÉFAUT 1 (élevé, prouvé en direct) : SmartRecruiters GET /v1/companies/Equinox/postings → 3 offres lues, description_original VIDE et 'jobAd.sections' ABSENT pour les trois. Le connecteur ne lisait que la réponse de liste, qui ne publie pas l'annonce ; le gain annoncé par les revues précédentes (sections composées sous leur nom) n'était donc pas réel en production. Reproduit puis corrigé par la lecture bornée du détail ; re-contrôlé en direct : description et sections présentes.\nDÉFAUT 2 (moyen, masqué par la fixture) : l'API publie jobAd.sections.companyDescription = {title, text}; la fixture synthétique utilisait une chaîne. Le composeur ne lisait que la chaîne → section ignorée, description vide sur la source réelle. Corrigé : les deux formes sont lues, le titre publié par la source prime, la fixture reproduit la forme documentée.\nNON-DÉFAUT (vérifié) : contradictions conservées et non arbitrées (type de contrat, durée) ; valeurs bornées et JSON-sûres ; nom de champ source jamais renommé ; updated_at de Greenhouse toujoursJamais une date de publication ; createdAt de Lever transmis brut et jamais converti en date (la conversion est l'affaire de offer_dates/SK-02) ; aucune logique de qualification dans un connecteur (contrôle structurel) ; certificat serveur vérifié sur les 4 connecteurs HTML ; lien /view?id= de Talent.com reconnu.\n\nVALIDATION\npytest -q tests/test_connectors_enrich.py → 66 passed\npytest -q tests/test_connectors_enrich_live.py → 6 skipped (contrôle réel opt-in)\nCAREER_LIVE_SOURCE_CHECK=1 pytest -q tests/test_connectors_enrich_live.py → 6 passed, 3 skipped (WJ rendu côté client, JobTeaser HTTP 410/403, APEC HTTP 403 — raisons documentées)\npytest -q (suite complète) → 1490 passed, 10 skipped (base 1424 + 66 nouveaux ; 9 skips = contrôle réel opt-in, 1 skip préexistant)\nruff check . → All checks passed\nVENV_PY=… ./checklist_codex.sh main → TOUT VERT ; ./checklist_codex.sh secrets → TOUT VERT ; ./checklist_codex.sh lint → All checks passed\ngit diff --check → propre\n\nBRANCHES : `agent/spec-sk08-connectors-enrich` (intégration, base f5b22f2) et `worker/cvboost-29-1792622329` (ordre) pointent sur le même commit et sont poussées sur origin. Aucun conflit possible avec SK-01/02/03/07 : ni career/service.py, ni le schéma SQLite, ni l'interface n'ont été modifiés.",
+  "output": "SPEC-016 couche d'automatisation contrôlée livrée: dataclasses, orchestrateur human-in-the-loop, audit trail, dashboard, endpoints REST et tests.",
+  "logs": "pytest -q tests/test_controlled_automation.py -> 8 passed\nruff check ... -> All checks passed\ngit diff --check -> clean\nbranch pushed: origin/worker/cvboost-51-1793409538871",
   "error": null
 }
