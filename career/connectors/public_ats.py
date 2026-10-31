@@ -21,8 +21,7 @@ from typing import Any, Callable, Protocol
 
 from ..discovery import DiscoveryPayload, PublicSourceError, _location_parts, source_html_to_text
 from ..countries import canonical_country_codes, country_from_source
-from ..exploration import EXPLORATION_MAX_RESULTS, admit_offer, criteria_admit, ranking_key, classify_internship
-from ..offer_qualification import qualify_offer
+from ..exploration import EXPLORATION_MAX_RESULTS, admit_offer, ranking_key
 from ..scoring import classify_job_family
 from ..source_fields import attach_source_material
 from ..stage_search import default_brief, validate_brief
