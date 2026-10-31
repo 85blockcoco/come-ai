@@ -1,0 +1,9 @@
+{
+  "events": [
+    {"status": "sent", "date": "2026-01-26"},
+    {"status": "sent", "date": "2026-01-27"},
+    {"status": "sent", "date": "2026-01-28"},
+    {"status": "responded", "date": "2026-01-29"},
+    {"status": "interview", "date": "2026-01-30"}
+  ]
+}
