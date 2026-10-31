@@ -27,8 +27,6 @@ from ..source_fields import attach_source_material
 from ..stage_search import default_brief, validate_brief
 
 from .cards import card_attributes, published_fields, time_attribute
-from .http import ssl_context
-
 
 _JT_BASE = "https://www.jobteaser.com"
 _JT_SEARCH = _JT_BASE + "/en/jobs"

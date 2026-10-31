@@ -249,6 +249,25 @@ class CVAnalyzeResponse(BaseModel):
     provenance: dict[str, Any]
 
 
+class TranslationDetectPayload(BaseModel):
+    text: str | None = None
+    offer_text: str | None = None
+    offer: Any | None = None
+    fields: dict[str, Any] | None = None
+
+
+class TranslationVariantPayload(BaseModel):
+    fields: dict[str, Any] = Field(default_factory=dict)
+    offer_lang: str | None = None
+    offer_text: str | None = None
+    text: str | None = None
+    offer: Any | None = None
+    target_lang: str | None = None
+    lang: str | None = None
+    language: str | None = None
+    terms: list[str] | None = Field(default=None, max_length=500)
+    mode: str | None = None
+
 def create_career_router(
     service: CareerService,
     *,
@@ -349,10 +368,82 @@ def create_career_router(
             },
         )
 
+    # SPEC-033 — translated dossier variants.
+    @router.post("/api/career/translation/detect-language")
+    async def detect_translation_language(payload: TranslationDetectPayload) -> Any:
+        from career.translation_variants import detect_offer_lang, _coerce_text
+
+        text = payload.text
+        if text is None:
+            text = payload.offer_text
+        if text is None:
+            text = payload.offer
+        if text is None and payload.fields:
+            text = payload.fields
+        return {"offer_lang": detect_offer_lang(_coerce_text(text))}
+
+    @router.post("/api/career/translation/variant")
+    async def build_translation_variant(payload: TranslationVariantPayload) -> Any:
+        from career.translation_variants import build_variant
+        from dataclasses import asdict
+
+        report = build_variant(
+            fields=payload.fields or {},
+            offer_lang=payload.offer_lang,
+            offer_text=payload.offer_text,
+            text=payload.text,
+            offer=payload.offer,
+            target_lang=payload.target_lang,
+            lang=payload.lang,
+            mode=payload.mode,
+        )
+        return to_jsonable(asdict(report))
+
+    # Aliases for smoke tests / clients.
+    @router.post("/api/career/translation/variants")
+    async def build_translation_variants_alias(payload: TranslationVariantPayload) -> Any:
+        from career.translation_variants import build_variant
+        from dataclasses import asdict
+
+        report = build_variant(
+            fields=payload.fields or {},
+            offer_lang=payload.offer_lang,
+            offer_text=payload.offer_text,
+            text=payload.text,
+            offer=payload.offer,
+            target_lang=payload.target_lang,
+            lang=payload.lang,
+            mode=payload.mode,
+        )
+        return to_jsonable(asdict(report))
+
+    @router.post("/api/career/translations/variant")
+    async def build_translation_variant_alias2(payload: TranslationVariantPayload) -> Any:
+        from career.translation_variants import build_variant
+        from dataclasses import asdict
+
+        report = build_variant(
+            fields=payload.fields or {},
+            offer_lang=payload.offer_lang,
+            offer_text=payload.offer_text,
+            text=payload.text,
+            offer=payload.offer,
+            target_lang=payload.target_lang,
+            lang=payload.lang,
+            mode=payload.mode,
+        )
+        return to_jsonable(asdict(report))
+
+    @router.get("/api/career/translation/lexicons/{lang}")
+    async def translation_lexicon(lang: str) -> Any:
+        from career.translation_variants import load_lexicon
+
+        lex = load_lexicon(lang)
+        return to_jsonable(lex.to_dict())
+
     @router.get("/api/career/dashboard")
     async def dashboard() -> Any:
         return await local(service.dashboard)
-
     @router.get("/api/career/profile")
     async def profile() -> Any:
         return await local(service.get_profile)
