@@ -1540,7 +1540,8 @@
    ],
    "status": "done",
    "description": "Journal append-only des décisions (qui, quand, contexte, résultat) avec recherche/filtre et génération d'un rapport d'explication par décision.",
-   "retry_of": 0
+   "retry_of": 0,
+   "push_verified": true
   },
   {
    "id": "71",
@@ -1550,7 +1551,7 @@
    "dependencies": [
     "67"
    ],
-   "status": "failed",
+   "status": "done",
    "description": "Agrégateur hebdo : N candidatures envoyées, taux de réponse, temps par étape, comparaison à l'objectif fixé, top 3 actions recommandées pour la semaine suivante.",
    "retry_of": 0
   },
