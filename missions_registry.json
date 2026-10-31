@@ -1597,8 +1597,9 @@
     "68",
     "70"
    ],
-   "status": "pending",
-   "description": "Générateur de briefing J-1 : fiche entreprise (sources), questions probables (SPEC-031), worksheets STAR remplies (SPEC-027), checklist administratives (SPEC-028) si stage à l'étranger, éléments à relire du CV — un seul JSON/export lien."
+   "status": "done",
+   "description": "Générateur de briefing J-1 : fiche entreprise (sources), questions probables (SPEC-031), worksheets STAR remplies (SPEC-027), checklist administratives (SPEC-028) si stage à l'étranger, éléments à relire du CV — un seul JSON/export lien.",
+   "retry_of": 0
   },
   {
    "id": "73",
@@ -1748,10 +1749,11 @@
     "59",
     "77"
    ],
-   "status": "pending",
+   "status": "done",
    "branch": "",
    "merged_sha": "",
-   "completed_at": ""
+   "completed_at": "",
+   "retry_of": 0
   },
   {
    "id": "80",
