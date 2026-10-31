@@ -1613,7 +1613,8 @@
    "branch": "",
    "merged_sha": "",
    "completed_at": "",
-   "retry_of": 0
+   "retry_of": 0,
+   "push_verified": true
   },
   {
    "id": "74",
@@ -1700,7 +1701,7 @@
     "56",
     "57"
    ],
-   "status": "pending",
+   "status": "done",
    "branch": "",
    "merged_sha": "",
    "completed_at": "",
