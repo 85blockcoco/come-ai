@@ -460,6 +460,34 @@ def process_mission(order_id: str, prompt: str, mission_id: str | None = None) -
                 log(f"⚠️ push {branch} erreur: {e}")
             result["pushed"] = pushed
 
+            # Compléter files_created depuis les fichiers réellement commités
+            # si le worker a oublié de les déclarer (sinon la vérification
+            # rejette le lot pour "files_created vide" alors que le code est là).
+            try:
+                _wr = result.get("worker_result") or {}
+                if not (_wr.get("files_created") or []):
+                    _diff = subprocess.run(
+                        ["git", "diff", "--name-only", "HEAD~1", "HEAD"],
+                        cwd=worktree_path, capture_output=True, text=True, timeout=60)
+                    _files = [f for f in (_diff.stdout or "").splitlines() if f.strip()]
+                    if not _files:
+                        _ls = subprocess.run(
+                            ["git", "ls-tree", "-r", "--name-only", "HEAD"],
+                            cwd=worktree_path, capture_output=True, text=True, timeout=60)
+                        # On ne veut que les fichiers "nouveaux" vs base main; on
+                        # se contente du diff contre la branche de base.
+                        _base = os.environ.get("WORKER_BASE_BRANCH", "main")
+                        _diff2 = subprocess.run(
+                            ["git", "diff", "--name-only", f"origin/{_base}..HEAD"],
+                            cwd=worktree_path, capture_output=True, text=True, timeout=60)
+                        _files = [f for f in (_diff2.stdout or "").splitlines() if f.strip()]
+                    if _files:
+                        _wr["files_created"] = _files
+                        result["worker_result"] = _wr
+                        log(f"files_created complétés depuis le diff: {len(_files)} fichiers")
+            except Exception as e:
+                log(f"⚠️ complétion files_created erreur: {e}")
+
         # 6. Publier le résultat par mission (source de vérité en parallèle)
         publish_result(order_id, mission_id, result)
 

@@ -33,6 +33,9 @@ class ApplyKit:
     checklist: list[dict[str, Any]]
     deep_link: str | None
     export_urls: dict[str, str]
+    # Step 2 of the one-click kit: the dossier is generated, then audited before
+    # any export.  ``None`` only when no generated text exists to audit.
+    quality_audit: dict[str, Any] | None = None
 
 
 _REQUIRED_PROFILE_FIELDS: tuple[str, ...] = (
@@ -137,12 +140,115 @@ def _readiness(profile: Mapping[str, Any], job: Mapping[str, Any], unverified: l
     return score, block_reasons
 
 
-def _checklist(profile: Mapping[str, Any], job: Mapping[str, Any], variant: dict[str, Any] | None, letter: dict[str, Any] | None, unverified: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _quality_audit(
+    profile: Mapping[str, Any],
+    intake: Mapping[str, Any],
+    job: Mapping[str, Any],
+    letter: Mapping[str, Any] | None,
+    prepped: Mapping[str, Any],
+    service: Any = None,
+) -> dict[str, Any] | None:
+    """Run the deterministic dossier audit on the generated texts.
+
+    The audit is the second step of the one-click kit: the person sees the
+    quality report *before* choosing to export.  It never rewrites the draft
+    and never calls a provider.
+    """
+
+    if not isinstance(letter, Mapping):
+        return None
+    cv_markdown = str(letter.get("cv_markdown") or "").strip()
+    letter_markdown = str(letter.get("letter_markdown") or letter.get("markdown") or "").strip()
+    if not cv_markdown and not letter_markdown:
+        return None
+    try:
+        from career.dossier_quality import audit_dossier
+    except Exception:  # pragma: no cover - defensive
+        return None
+
+    intake_answers = intake.get("answers") if isinstance(intake.get("answers"), Mapping) else {}
+    extra_facts: list[dict[str, Any]] = []
+    for question, answer in intake_answers.items():
+        value = str(answer or "").strip()
+        if not value:
+            continue
+        extra_facts.append(
+            {
+                "fact_id": f"intake_{len(extra_facts):04d}",
+                "category": "answer",
+                "value": value,
+                "quote": f"{question} : {value}",
+                "level": "declared",
+                "source": "intake",
+                "topic": str(question),
+            }
+        )
+    requirements = prepped.get("requirements") if isinstance(prepped, Mapping) else []
+    if not isinstance(requirements, list):
+        requirements = []
+    context = {
+        "entities": [
+            str(job.get(key)).strip()
+            for key in ("company", "title", "city", "country", "source_name")
+            if str(job.get(key) or "").strip()
+        ],
+        "terms": [
+            str(job.get(key)).strip()
+            for key in ("requirements", "description_original", "description", "missions")
+            if str(job.get(key) or "").strip()
+        ],
+        "numbers": [
+            str(job.get(key)).strip()
+            for key in ("deadline_date", "start_date", "end_date", "duration_months")
+            if str(job.get(key) or "").strip()
+        ],
+    }
+    try:
+        report = audit_dossier(
+            cv=cv_markdown,
+            letter=letter_markdown,
+            profile=profile,
+            extra_facts=extra_facts,
+            requirements=requirements,
+            recurring_answers=intake_answers,
+            context=context,
+            evidence_service=service,
+        )
+    except Exception:  # pragma: no cover - defensive
+        return None
+    return report.to_dict()
+
+
+def _checklist(profile: Mapping[str, Any], job: Mapping[str, Any], variant: dict[str, Any] | None, letter: dict[str, Any] | None, unverified: list[dict[str, Any]], quality_audit: Mapping[str, Any] | None = None) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     items.append({"id": "profile", "label": "Profil candidat complété", "done": all(str(profile.get(f) or "").strip() for f in _REQUIRED_PROFILE_FIELDS), "note": ""})
     items.append({"id": "eligibility", "label": "Autorisation de travail vérifiée", "done": str(profile.get("eligibility") or "").strip().lower() not in ("", "unknown"), "note": ""})
     items.append({"id": "variant", "label": "Variante CV sélectionnée", "done": variant is not None, "note": (variant or {}).get("label", "") if isinstance(variant, dict) else ""})
     items.append({"id": "letter", "label": "Lettre adaptée générée", "done": letter is not None, "note": ""})
+    if isinstance(quality_audit, Mapping):
+        score = quality_audit.get("score")
+        verdict = str(quality_audit.get("verdict") or "")
+        export_allowed = bool(quality_audit.get("export_allowed"))
+        items.append(
+            {
+                "id": "quality_audit",
+                "label": "Étape 2 — audit qualité du dossier avant export",
+                "done": export_allowed,
+                "note": (
+                    f"Score {score}/100 — {quality_audit.get('verdict_label') or verdict}. "
+                    + ("Audit validé, relis puis exporte." if export_allowed else "Corrige les signaux avant d'exporter.")
+                ),
+            }
+        )
+    else:
+        items.append(
+            {
+                "id": "quality_audit",
+                "label": "Étape 2 — audit qualité du dossier avant export",
+                "done": False,
+                "note": "Audit indisponible : aucun texte généré à contrôler.",
+            }
+        )
     items.append({"id": "official_url", "label": "Lien officiel de l'offre vérifié", "done": bool(str(job.get("official_url") or "").strip()), "note": str(job.get("official_url") or "").strip()})
     deadline = str(job.get("deadline_date") or "").strip()
     if deadline:
@@ -271,8 +377,9 @@ def build_apply_kit(
             break
 
     readiness, block_reasons = _readiness(profile, job, unverified)
-    checklist = _checklist(profile, job, variant_payload, letter_payload, unverified)
     answers = _answers(profile, intake, job, normalized_language)
+    quality_audit = _quality_audit(profile, intake, job, letter_payload, prep, service)
+    checklist = _checklist(profile, job, variant_payload, letter_payload, unverified, quality_audit)
 
     return ApplyKit(
         job_id=resolved_job_id,
@@ -284,4 +391,5 @@ def build_apply_kit(
         checklist=checklist,
         deep_link=deep_link,
         export_urls=export_urls,
+        quality_audit=quality_audit,
     )
