@@ -7,6 +7,7 @@ from .welcome_jungle import WelcomeJungleConnector, register_welcome_jungle_conn
 from .jobteaser import JobTeaserConnector, register_jobteaser_connector
 from .talent_com import TalentComConnector, register_talent_com_connector
 from .apec import ApecConnector, register_apec_connector
+from .uk_sources import UkSourcesConnector, register_uk_sources_connector
 
 
 @dataclass(frozen=True)
@@ -53,6 +54,21 @@ CONNECTOR_SPECS = {
         documentation_url="https://www.apec.fr",
         doc_verified=True,
     ),
+    "prospects": ConnectorSpec(
+        provider="prospects",
+        documentation_url="https://www.prospects.ac.uk",
+        doc_verified=True,
+    ),
+    "gradcracker": ConnectorSpec(
+        provider="gradcracker",
+        documentation_url="https://www.gradcracker.com",
+        doc_verified=True,
+    ),
+    "targetjobs": ConnectorSpec(
+        provider="targetjobs",
+        documentation_url="https://targetjobs.co.uk",
+        doc_verified=True,
+    ),
 }
 
 # Internal connector registry for the exploration service
@@ -71,6 +87,7 @@ def _init_connector_registry() -> dict[str, tuple]:
     register_jobteaser_connector(registry)
     register_talent_com_connector(registry)
     register_apec_connector(registry)
+    register_uk_sources_connector(registry)
     return registry
 
 
@@ -94,6 +111,9 @@ def default_exploration_connectors(greenhouse_connector):
         "jobteaser": JobTeaserConnector(enabled=True),
         "talent_com": TalentComConnector(enabled=True),
         "apec": ApecConnector(enabled=True),
+        "prospects": UkSourcesConnector(enabled=True),
+        "gradcracker": UkSourcesConnector(enabled=True),
+        "targetjobs": UkSourcesConnector(enabled=True),
     }
 
 __all__ = [
@@ -104,4 +124,5 @@ __all__ = [
     "default_exploration_connectors",
     "LeverConnector",
     "SmartRecruitersConnector",
+    "UkSourcesConnector",
 ]

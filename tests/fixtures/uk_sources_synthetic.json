@@ -1,0 +1,98 @@
+{
+  "prospects": [
+    {
+      "id": "prospects-1001",
+      "title": "M&A Internship - London",
+      "company": "Goldman Sachs",
+      "location": "London, United Kingdom",
+      "contract_type": "Internship",
+      "url": "https://www.prospects.ac.uk/jobs/ma-internship-london",
+      "published": "2026-10-20T09:00:00Z",
+      "description": "<p>Six-month M&A internship starting January 2027. Financial modelling, valuation and client presentations. Bachelor's degree required.</p>"
+    },
+    {
+      "id": "prospects-1002",
+      "title": "Corporate Finance Intern - London",
+      "company": "Rothschild & Co",
+      "location": "London, United Kingdom",
+      "contract_type": "Internship",
+      "url": "https://www.prospects.ac.uk/jobs/corporate-finance-intern-london",
+      "published": "2026-10-19T09:00:00Z",
+      "description": "<p>Six-month corporate finance internship starting January 2027. Due diligence, financial analysis and valuation.</p>"
+    },
+    {
+      "id": "prospects-1003",
+      "title": "Investment Banking Summer Intern - Edinburgh",
+      "company": "Barclays",
+      "location": "Edinburgh - United Kingdom",
+      "contract_type": "Internship",
+      "url": "https://www.prospects.ac.uk/jobs/investment-banking-summer-intern-edinburgh",
+      "published": "2026-10-18T09:00:00Z",
+      "description": "<p>Six-month investment banking internship starting February 2027. Capital markets and financial analysis.</p>"
+    }
+  ],
+  "gradcracker": [
+    {
+      "id": "gradcracker-2001",
+      "title": "Finance Internship - London",
+      "company": "J.P. Morgan",
+      "location": "London, United Kingdom",
+      "contract_type": "Internship",
+      "url": "https://www.gradcracker.com/job/2001/jpmorgan-finance-internship",
+      "published": "2026-10-20T10:00:00Z",
+      "description": "<p>Six-month finance internship starting January 2027. Financial planning, analysis and reporting.</p>"
+    },
+    {
+      "id": "gradcracker-2002",
+      "title": "M&A Internship - London",
+      "company": "HSBC",
+      "location": "London, United Kingdom",
+      "contract_type": "Internship",
+      "url": "https://www.gradcracker.com/job/2002/hsbc-ma-internship",
+      "published": "2026-10-19T10:00:00Z",
+      "description": "<p>Six-month M&A internship starting January 2027. Transaction services and valuation.</p>"
+    },
+    {
+      "id": "gradcracker-2003",
+      "title": "Asset Management Intern - Leeds",
+      "company": "Legal & General",
+      "location": "Leeds",
+      "contract_type": "Internship",
+      "url": "https://www.gradcracker.com/job/2003/legal-general-asset-management-intern",
+      "published": "2026-10-18T10:00:00Z",
+      "description": "<p>Six-month asset management internship starting March 2027. Portfolio management and equity research.</p>"
+    }
+  ],
+  "targetjobs": [
+    {
+      "id": "targetjobs-3001",
+      "title": "Investment Banking Intern - London",
+      "company": "Morgan Stanley",
+      "location": "London, United Kingdom",
+      "contract_type": "Internship",
+      "url": "https://targetjobs.co.uk/internships/morgan-stanley/investment-banking-intern-london",
+      "published": "2026-10-20T11:00:00Z",
+      "description": "<p>Six-month investment banking internship starting January 2027. M&A, capital markets and financial modelling.</p>"
+    },
+    {
+      "id": "targetjobs-3002",
+      "title": "Corporate Finance Intern - London",
+      "company": "Barclays",
+      "location": "London, United Kingdom",
+      "contract_type": "Internship",
+      "url": "https://targetjobs.co.uk/internships/barclays/corporate-finance-intern-london",
+      "published": "2026-10-19T11:00:00Z",
+      "description": "<p>Six-month corporate finance internship starting February 2027. Valuation and due diligence.</p>"
+    },
+    {
+      "id": "targetjobs-3003",
+      "title": "Risk Management Intern - Manchester",
+      "company": "NatWest",
+      "location": "Manchester, United Kingdom",
+      "contract_type": "Internship",
+      "url": "https://targetjobs.co.uk/internships/natwest/risk-management-intern-manchester",
+      "published": "2026-10-18T11:00:00Z",
+      "description": "<p>Six-month risk management internship starting March 2027. Credit risk and regulatory reporting.</p>"
+    }
+  ]
+}
