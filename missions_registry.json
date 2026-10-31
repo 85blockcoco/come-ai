@@ -1654,7 +1654,7 @@
     "68",
     "70"
    ],
-   "status": "done",
+   "status": "pending",
    "description": "Générateur de briefing J-1 : fiche entreprise (sources), questions probables (SPEC-031), worksheets STAR remplies (SPEC-027), checklist administratives (SPEC-028) si stage à l'étranger, éléments à relire du CV — un seul JSON/export lien.",
    "retry_of": 0
   },
@@ -1811,7 +1811,24 @@
    "status": "done",
    "branch": "",
    "merged_sha": "",
-   "retry_of": 0
+   "retry_of": 0,
+   "completed_at": "2026-10-31T02:14:35.166353",
+   "worker_result": {
+    "task_id": "cvboost-79-1793408979623",
+    "status": "done",
+    "files_created": [
+     "career/metrics.py",
+     "career/eval_e2e.py",
+     "tests/test_eval_e2e.py",
+     "docs/agent-reports/CVBOOST-79-E2E_METRICS.md",
+     "evals/real_offers/.gitignore"
+    ],
+    "output": "Module metrics SQLite avec chronométrage pause/reprise et exports CSV/JSON, plus évaluation E2E sur offres locales avec rapport agrégé indicatif et confiance.",
+    "logs": "pytest -q tests/test_eval_e2e.py -> 12 passed\nruff check career/metrics.py career/eval_e2e.py tests/test_eval_e2e.py -> All checks passed\ngit diff --check -> clean",
+    "error": null
+   },
+   "verified": "push vérifié + tests verts",
+   "push_verified": true
   },
   {
    "id": "80",
@@ -1822,7 +1839,7 @@
     "64",
     "79"
    ],
-   "status": "done",
+   "status": "pending",
    "branch": "",
    "merged_sha": "",
    "retry_of": 0
@@ -2104,7 +2121,7 @@
   },
   {
    "id": "91",
-   "status": "pending",
+   "status": "done",
    "title": "N100-A01 — Connecteur UK (sources internationales finance)",
    "retry_of": 0,
    "depends_on": [],
@@ -2114,11 +2131,27 @@
    ],
    "tests_min": 30,
    "prompt_file": "docs/agent_missions/N100-A01-UK_SOURCES.md",
-   "branch": "agent/n100-91-connecteur-uk-sources-internat"
+   "branch": "agent/n100-91-connecteur-uk-sources-internat",
+   "completed_at": "2026-10-31T02:18:42.742911",
+   "worker_result": {
+    "task_id": "cvboost-91-1793409071184",
+    "status": "done",
+    "files_created": [
+     "career/connectors/uk_sources.py",
+     "tests/test_uk_sources.py",
+     "tests/fixtures/uk_sources_synthetic.json",
+     "docs/agent-reports/N100-A01-UK_SOURCES.md"
+    ],
+    "output": "Connecteur UK en lecture seule pour Prospects, Gradcracker et TargetJobs, enregistré dans le registre, avec parseur de cartes borné, respect du 429/backoff, User-Agent honnête, exclusion pays côté source et 67 tests synthétiques.",
+    "logs": "pytest -q tests/test_uk_sources.py -> 67 passed in 8.72s | ruff check career/connectors/uk_sources.py career/connectors/__init__.py tests/test_uk_sources.py -> All checks passed! | git diff --check -> clean",
+    "error": null
+   },
+   "verified": "push vérifié + tests verts",
+   "push_verified": true
   },
   {
    "id": "92",
-   "status": "pending",
+   "status": "done",
    "title": "N100-B05 — Niveau diplome requis (BBA/Bac+4/M2/MBA)",
    "retry_of": 0,
    "depends_on": [],
@@ -2132,7 +2165,7 @@
   },
   {
    "id": "93",
-   "status": "pending",
+   "status": "done",
    "title": "N100-C07 — Filtre par type de stage finance (M&A, CIB, corp fin)",
    "retry_of": 0,
    "depends_on": [],
@@ -2146,7 +2179,7 @@
   },
   {
    "id": "94",
-   "status": "pending",
+   "status": "done",
    "title": "N100-D04 — Registre de preuves (evidence)",
    "retry_of": 0,
    "depends_on": [],
