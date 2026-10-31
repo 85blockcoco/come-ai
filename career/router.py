@@ -774,6 +774,13 @@ def create_career_router(
         await local(lambda: service.reset_personal_data(payload.confirmation))
         return {"deleted": True}
 
+    try:
+        from .controlled_automation import create_automation_router
+        automation_router = create_automation_router(service)
+        router.include_router(automation_router, prefix="/api/career")
+    except Exception:
+        pass
+
     return router
 
 

@@ -280,6 +280,17 @@ class CareerService:
         else:
             self.consent_guard = None
 
+        # Controlled automation (SPEC-016) is lazily created so importing the
+        # service never pulls the orchestrator into memory until needed.
+        self._automation_orchestrator = None
+
+    @property
+    def automation_orchestrator(self):
+        if self._automation_orchestrator is None:
+            from .controlled_automation import get_orchestrator
+            self._automation_orchestrator = get_orchestrator(base_dir=self.base_dir, service=self)
+        return self._automation_orchestrator
+
     def _ensure_storage(self) -> None:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.documents_dir.mkdir(parents=True, exist_ok=True)

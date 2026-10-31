@@ -30,6 +30,10 @@ from starlette.datastructures import UploadFile
 
 from career.profile_import import MAX_PROFILE_IMPORT_BYTES
 from career.router import CAREER_STATIC_DIR, create_career_router
+try:
+    from career.controlled_automation import create_automation_router
+except Exception:
+    create_automation_router = None
 from career.service import CareerService
 from personal_memory import PersonalMemoryError, PersonalMemoryStore
 from memory_storage import MemoryStorageError, MemoryStorageService
@@ -886,6 +890,8 @@ def create_app(
         career_ai_generator = generate_career_application
 
     app.include_router(create_career_router(career, ai_generator=career_ai_generator))
+    if create_automation_router is not None:
+        app.include_router(create_automation_router(career))
     from devkit.router import create_developer_router
 
     app.include_router(create_developer_router(get_workshop))
