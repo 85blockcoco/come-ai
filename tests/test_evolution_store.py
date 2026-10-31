@@ -153,6 +153,41 @@ def test_legacy_store_migration_preserves_tasks_and_default_scope(store):
     assert migrated.get_task(task["task_id"])["targeted_tests"] is None
     assert migrated.add_task("Legacy", "Fictional task", ["core.py"])["task_id"] == task["task_id"]
     assert len(migrated.list_tasks()) == 1
+    backup = store.directory / "evolution-v1-before-v2.sqlite3"
+    assert backup.is_file()
+    assert backup.stat().st_mode & 0o777 == 0o600
+    with sqlite3.connect(backup) as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 1
+        assert "targeted_tests" not in {row[1] for row in connection.execute("PRAGMA table_info(evolution_tasks)")}
+        assert connection.execute("SELECT task_id FROM evolution_tasks").fetchone()[0] == task["task_id"]
+        assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+
+
+def test_new_store_does_not_create_migration_backup(store):
+    assert list(store.directory.glob("evolution-v*-before-v*.sqlite3")) == []
+
+
+@pytest.mark.parametrize("symlink", [False, True])
+def test_migration_refuses_existing_backup_without_modifying_it_or_schema(store, tmp_path, symlink):
+    import sqlite3
+
+    with sqlite3.connect(store.database_path) as connection:
+        connection.execute("ALTER TABLE evolution_tasks DROP COLUMN targeted_tests")
+        connection.execute("PRAGMA user_version=1")
+    target = tmp_path / "untouched-backup"
+    target.write_bytes(b"synthetic-original-backup")
+    backup = store.directory / "evolution-v1-before-v2.sqlite3"
+    if symlink:
+        backup.symlink_to(target)
+    else:
+        backup.write_bytes(b"synthetic-original-backup")
+    with pytest.raises(EvolutionStoreError, match="sauvegarde"):
+        EvolutionStore(store.storage_root)
+    assert target.read_bytes() == b"synthetic-original-backup"
+    assert backup.read_bytes() == b"synthetic-original-backup"
+    with sqlite3.connect(store.database_path) as connection:
+        assert connection.execute("PRAGMA user_version").fetchone()[0] == 1
+        assert "targeted_tests" not in {row[1] for row in connection.execute("PRAGMA table_info(evolution_tasks)")}
 
 
 @pytest.mark.parametrize("selection", [[], ["tests/test_a.py"] * 9, ["../test_a.py"], ["tests/test_a.py::test_a"], ["core.py"]])

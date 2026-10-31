@@ -13,9 +13,11 @@ import math
 import os
 import re
 import sqlite3
+import tempfile
+import time
 import uuid
 from collections import Counter
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
@@ -127,6 +129,7 @@ class EvolutionStore:
             self.directory.mkdir(exist_ok=True, mode=0o700)
             os.chmod(self.storage_root, 0o700)
             os.chmod(self.directory, 0o700)
+            self._backup_before_migration()
             with self._connection(write=True) as connection:
                 connection.executescript("""
                     CREATE TABLE IF NOT EXISTS evolution_tasks (
@@ -160,6 +163,54 @@ class EvolutionStore:
                 connection.execute("PRAGMA journal_mode=WAL")
         except (OSError, sqlite3.Error):
             raise EvolutionStoreError("Le stockage local d’évolution n’a pas pu être initialisé.") from None
+
+    def _backup_before_migration(self) -> None:
+        """Keep a private, consistent v1 snapshot before any schema write.
+
+        The SQLite backup API includes committed WAL contents.  A reserved
+        temporary file is atomically linked to its final name without replacing
+        an existing backup.  Restoring that standalone snapshot after stopping
+        the workshop provides the rollback source for the migration.
+        """
+        if not self.database_path.is_file():
+            return
+        self._assert_paths()
+        with closing(sqlite3.connect(self.database_path.as_uri() + "?mode=ro", uri=True)) as source:
+            version = source.execute("PRAGMA user_version").fetchone()[0]
+            if version >= 2 or not source.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='evolution_tasks'"
+            ).fetchone():
+                return
+            backup = self.directory / f"evolution-v{version}-before-v2.sqlite3"
+            if backup.is_symlink() or backup.exists():
+                raise EvolutionStoreError("La sauvegarde avant migration existe déjà : aucun fichier n’a été remplacé.")
+            pages = source.execute("PRAGMA page_count").fetchone()[0]
+            page_size = source.execute("PRAGMA page_size").fetchone()[0]
+            if pages * page_size > 64 * 1024 * 1024:
+                raise EvolutionStoreError("La sauvegarde avant migration dépasse la limite locale de 64 Mo.")
+            descriptor, temporary = tempfile.mkstemp(prefix=".migration-", suffix=".sqlite3", dir=self.directory)
+            os.close(descriptor)
+            try:
+                deadline = time.monotonic() + 10
+
+                def check_budget(status: int, remaining: int, total: int) -> None:
+                    if time.monotonic() >= deadline or total * page_size > 64 * 1024 * 1024:
+                        raise EvolutionStoreError("La sauvegarde avant migration a dépassé son budget local.")
+
+                with closing(sqlite3.connect(temporary)) as destination:
+                    source.backup(destination, pages=64, progress=check_budget, sleep=0.01)
+                    if destination.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+                        raise EvolutionStoreError("La sauvegarde avant migration n’a pas pu être vérifiée.")
+                os.chmod(temporary, 0o600)
+                with open(temporary, "rb") as handle:
+                    os.fsync(handle.fileno())
+                self._assert_paths()
+                try:
+                    os.link(temporary, backup)
+                except FileExistsError:
+                    raise EvolutionStoreError("La sauvegarde avant migration existe déjà : aucun fichier n’a été remplacé.") from None
+            finally:
+                os.unlink(temporary)
 
     def _assert_paths(self) -> None:
         for path in (self.storage_root, self.directory, self.database_path,
