@@ -13,6 +13,6 @@
     "docs/agent-reports/SPEC-016-CONTROLLED_AUTOMATION.md"
   ],
   "output": "SPEC-016 couche d'automatisation contrôlée livrée: dataclasses, orchestrateur human-in-the-loop, audit trail, dashboard, endpoints REST et tests.",
-  "logs": "pytest -q tests/test_controlled_automation.py -> 8 passed\nruff check ... -> All checks passed\ngit diff --check -> clean\nbranch pushed: origin/worker/cvboost-51-1793409538871",
+  "logs": "pytest -q tests/test_controlled_automation.py -> 8 passed\nruff check . -> All checks passed\ngit diff --check -> clean\nbranch pushed: origin/worker/cvboost-51-1793409538871",
   "error": null
 }

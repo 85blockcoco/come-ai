@@ -1,11 +1,19 @@
-"""Audit trail and compliance helpers for controlled automation (SPEC-016)."""
+"""Audit trail and compliance helpers for controlled automation (SPEC-016).
+
+Events are immutable once recorded: the store keeps deep copies so a caller can
+never rewrite history through a returned reference (audit immutability is a
+SPEC-016 success criterion), and retention can be enforced per policy.
+"""
 
 from __future__ import annotations
 
+import copy
+import csv
+import io
 import json
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 AUDIT_EVENT_TYPES = (
@@ -42,12 +50,32 @@ class AuditTrail:
     events: list[AuditEvent] = field(default_factory=list)
 
     def append(self, event: AuditEvent) -> AuditEvent:
-        self.events.append(event)
-        return event
+        # Defensive copy: history is immutable, whatever the caller keeps.
+        stored = copy.deepcopy(event)
+        self.events.append(stored)
+        return stored
 
     def record(self, **kwargs: Any) -> AuditEvent:
         event = AuditEvent(**kwargs)
         return self.append(event)
+
+    def prune_before(self, cutoff_iso: str) -> int:
+        """Drop events strictly older than ``cutoff_iso`` (ISO8601). Returns count."""
+        keep, removed = [], 0
+        for event in self.events:
+            if event.timestamp < cutoff_iso:
+                removed += 1
+            else:
+                keep.append(event)
+        self.events = keep
+        return removed
+
+    def prune_older_than(self, retention_days: int, *, now: datetime | None = None) -> int:
+        if retention_days <= 0:
+            return 0
+        moment = now or datetime.now(timezone.utc)
+        cutoff = (moment - timedelta(days=retention_days)).isoformat()
+        return self.prune_before(cutoff)
 
     def filter(
         self,
@@ -56,6 +84,8 @@ class AuditTrail:
         event_type: str | None = None,
         severity: str | None = None,
         actor: str | None = None,
+        correlation_id: str | None = None,
+        query: str | None = None,
     ) -> list[AuditEvent]:
         result = list(self.events)
         if execution_id is not None:
@@ -66,16 +96,38 @@ class AuditTrail:
             result = [e for e in result if e.severity == severity]
         if actor is not None:
             result = [e for e in result if e.actor == actor]
-        return result
+        if correlation_id is not None:
+            result = [e for e in result if e.correlation_id == correlation_id]
+        if query:
+            needle = query.lower()
+            result = [
+                e
+                for e in result
+                if needle in json.dumps(_to_dict(e), ensure_ascii=False).lower()
+            ]
+        # Defensive copies: history stays immutable for every consumer.
+        return [copy.deepcopy(e) for e in result]
 
     def export_json(self) -> str:
         return json.dumps([_to_dict(e) for e in self.events], ensure_ascii=False, indent=2)
 
     def export_csv(self) -> str:
-        lines = ["event_id,timestamp,execution_id,event_type,actor,severity"]
-        for e in self.events:
-            lines.append(f"{e.event_id},{e.timestamp},{e.execution_id or ''},{e.event_type},{e.actor},{e.severity}")
-        return "\n".join(lines)
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        writer.writerow(["event_id", "timestamp", "execution_id", "event_type", "actor", "actor_id", "severity", "correlation_id", "details"])
+        for event in self.events:
+            writer.writerow([
+                event.event_id,
+                event.timestamp,
+                event.execution_id or "",
+                event.event_type,
+                event.actor,
+                event.actor_id,
+                event.severity,
+                event.correlation_id,
+                json.dumps(event.details, ensure_ascii=False),
+            ])
+        return buffer.getvalue()
 
     def clear(self) -> None:
         self.events.clear()
@@ -98,10 +150,19 @@ class AuditStore:
         return self._trail.record(**kwargs)
 
     def all(self) -> list[AuditEvent]:
-        return list(self._trail.events)
+        return [copy.deepcopy(e) for e in self._trail.events]
 
     def filter(self, **kwargs: Any) -> list[AuditEvent]:
         return self._trail.filter(**kwargs)
+
+    def prune_older_than(self, retention_days: int, *, now: datetime | None = None) -> int:
+        return self._trail.prune_older_than(retention_days, now=now)
+
+    def prune_before(self, cutoff_iso: str) -> int:
+        return self._trail.prune_before(cutoff_iso)
+
+    def __len__(self) -> int:
+        return len(self._trail.events)
 
     def export(self, format: str = "json") -> str:
         if format == "csv":
