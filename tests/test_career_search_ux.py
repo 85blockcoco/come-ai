@@ -48,6 +48,16 @@ def test_stage_results_make_education_priority_and_rank_visible() -> None:
     assert "ambitieuses M2 / MBA" in source
 
 
+def test_stage_results_offer_safe_shortlist_filters() -> None:
+    html = HTML.read_text(encoding="utf-8")
+    source = SCRIPT.read_text(encoding="utf-8")
+    assert 'id="stagehunter-visibility"' in html
+    assert "Début de stage confirmé" in html
+    assert "Accessibles BBA / Bac+4" in html
+    assert "stagehunter_visibility" in source
+    assert "stageHasKnownStart" in source
+
+
 def test_stagehunter_keeps_first_run_criteria_visible_and_advanced_filters_collapsible() -> None:
     html = HTML.read_text(encoding="utf-8")
     core_criteria = html.index('id="stagehunter-start-date"')

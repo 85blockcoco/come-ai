@@ -2896,6 +2896,12 @@ function stageEducationBadge(match) {
   return chip(presentation[0], presentation[1]);
 }
 
+function stageHasKnownStart(match) {
+  const job = match.job || {};
+  const evidence = {...(job.qualification_facts || {}), ...((match.qualification || {}))};
+  return Boolean(job.start_date || evidence.start_date || (Number.isInteger(evidence.start_month) && Number.isInteger(evidence.start_year)));
+}
+
 function renderStageMap(matches) {
   const map = $("#stagehunter-map");
   if (!map) return;
@@ -2938,7 +2944,15 @@ function renderStageMatches(payload) {
   const direction = localStorage.getItem("stagehunter_sort") || "desc";
   const sortSelect = $("#stagehunter-sort");
   if (sortSelect) sortSelect.value = direction;
-  const sorted = [...matches].sort((a, b) => {
+  const visibility = localStorage.getItem("stagehunter_visibility") || "all";
+  const visibilitySelect = $("#stagehunter-visibility");
+  if (visibilitySelect) visibilitySelect.value = visibility;
+  const visibleMatches = matches.filter((match) => {
+    if (visibility === "known_start") return stageHasKnownStart(match);
+    if (visibility === "accessible") return (match.stage_match || match).education_access?.status === "preferred";
+    return true;
+  });
+  const sorted = [...visibleMatches].sort((a, b) => {
     const eligibilityDelta = stageMatchEligibilityRank(a) - stageMatchEligibilityRank(b);
     if (eligibilityDelta) return eligibilityDelta;
     const educationDelta = stageMatchEducationRank(a) - stageMatchEducationRank(b);
@@ -2947,6 +2961,10 @@ function renderStageMatches(payload) {
   });
   renderStageMap(sorted);
   renderStageResultSummary(sorted);
+  const matchesNote = $("#stagehunter-matches-note");
+  if (matchesNote) matchesNote.textContent = visibleMatches.length === matches.length
+    ? "Les offres sont classées par conformité, accessibilité des études puis score."
+    : `${visibleMatches.length} offre${visibleMatches.length > 1 ? "s" : ""} affichée${visibleMatches.length > 1 ? "s" : ""} · ${matches.length - visibleMatches.length} masquée${matches.length - visibleMatches.length > 1 ? "s" : ""} par ce filtre.`;
   empty.hidden = sorted.length > 0;
   sorted.forEach((match, index) => {
     const wrapper = make("div", "", "stagehunter-match");
@@ -4045,6 +4063,11 @@ bootstrap();
 
 $("#stagehunter-sort")?.addEventListener("change", (event) => {
   localStorage.setItem("stagehunter_sort", event.target.value);
+  renderStageMatches({ matches: state.stageMatches, configured: true });
+});
+
+$("#stagehunter-visibility")?.addEventListener("change", (event) => {
+  localStorage.setItem("stagehunter_visibility", event.target.value);
   renderStageMatches({ matches: state.stageMatches, configured: true });
 });
 

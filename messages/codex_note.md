@@ -161,3 +161,9 @@
 - Chaque carte Stage Hunter affiche maintenant son rang (`Choix #N`) et un statut explicite : `Accessible BBA / Bac+4`, `Ambitieux M2 / MBA`, `Niveau à vérifier` ou `Hors préférence`.
 - Le résumé compte séparément les offres accessibles et ambitieuses; les M2/MBA restent affichées.
 - Preuves : **110 tests** Stage Hunter/éducation/Desktop verts en 16,39 s; navigateur candidate sans erreur console, rang et résumé visibles.
+
+## Filtre shortlist sans invention
+
+- Stage Hunter permet maintenant d’afficher uniquement toutes les offres, celles dont le début est confirmé, ou celles accessibles BBA/Bac+4.
+- Le filtre conserve les offres dans la mémoire de la page et indique combien ont été masquées; il ne transforme jamais une date inconnue en date supposée.
+- Preuves : `tests/test_career_search_ux.py` **11 passed**; Stage Hunter + accessibilité **98 passed en 51,19 s**; navigateur candidate : 1 offre totale, 0 début confirmé, 0 accessible, sans erreur console.
