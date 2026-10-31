@@ -1553,7 +1553,8 @@
    ],
    "status": "done",
    "description": "Agrégateur hebdo : N candidatures envoyées, taux de réponse, temps par étape, comparaison à l'objectif fixé, top 3 actions recommandées pour la semaine suivante.",
-   "retry_of": 0
+   "retry_of": 0,
+   "push_verified": true
   },
   {
    "id": "72",
@@ -1590,7 +1591,7 @@
    "dependencies": [
     "32"
    ],
-   "status": "pending",
+   "status": "failed",
    "branch": "",
    "merged_sha": "",
    "completed_at": "",
