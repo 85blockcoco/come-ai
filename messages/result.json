@@ -1,15 +1,14 @@
 {
   "status": "done",
   "files_created": [
-    "career/translation_variants.py",
-    "career/lexicons/en.json",
-    "career/lexicons/de.json",
-    "career/lexicons/es.json",
-    "tests/test_translation_variants.py",
+    "career/j1_briefing.py",
     "career/router.py",
-    "docs/agent-reports/SPEC-033-translation_variants.md"
+    "tests/test_j1_briefing.py",
+    "tests/fixtures/j1_synthetic.json",
+    "docs/agent-reports/SPEC-037-j1_briefing.md",
+    "messages/result.json"
   ],
-  "output": "SPEC-033 variantes traduites EN/DE/ES livrées : détection heuristique locale, lexiques statiques, arena injectable, endpoints REST via create_app() et 36 tests verts.",
-  "logs": "pytest -q tests/test_translation_variants.py -> 36 passed\nruff check . -> All checks passed\ngit diff --check -> clean",
+  "output": "SPEC-037 briefing J-1 livré : career/j1_briefing.py (BriefingDoc + build_j1_briefing + assemblage non bloquant), 2 endpoints REST via create_app() (/j1-briefing et /j1-briefing.md, schema_version=7 intact), fixture synthétique et 34 tests dont 4 adversariaux ; toute lacune est affichée en « À COMPLÉTER », jamais masquée.",
+  "logs": "pytest -q tests/test_j1_briefing.py -> 34 passed\nruff check . -> All checks passed!\n./checklist_codex.sh lint|secrets|main -> TOUT VERT\npytest -q --ignore=tests/test_claim_check.py (avant/après) -> 1 failed, 3238 passed / 1 failed, 3264 passed, 1 skipped : mêmes 2 défauts préexistants (ImportError ApprovedEvidence dans tests/test_claim_check.py = mission 77 ; test_career_agent preferences 14 != 6), 0 régression introduite\ngit diff --check -> clean",
   "error": null
 }
