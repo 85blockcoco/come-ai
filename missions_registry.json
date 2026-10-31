@@ -1068,8 +1068,9 @@
     "39",
     "40"
    ],
-   "status": "pending",
-   "description": "Orchestrateur automatismes (pipelines, workflows, tâches planifiées) avec garde-fous (circuit breakers, rate limits, timeouts, coûts), checkpoints validation humaine, audit trail immuable, dashboard temps réel."
+   "status": "done",
+   "description": "Orchestrateur automatismes (pipelines, workflows, tâches planifiées) avec garde-fous (circuit breakers, rate limits, timeouts, coûts), checkpoints validation humaine, audit trail immuable, dashboard temps réel.",
+   "retry_of": 0
   },
   {
    "id": "52",
@@ -1625,7 +1626,7 @@
    "dependencies": [
     "32"
    ],
-   "status": "pending",
+   "status": "done",
    "branch": "",
    "merged_sha": "",
    "completed_at": "",
@@ -1764,10 +1765,11 @@
     "64",
     "79"
    ],
-   "status": "pending",
+   "status": "done",
    "branch": "",
    "merged_sha": "",
-   "completed_at": ""
+   "completed_at": "",
+   "retry_of": 0
   },
   {
    "id": "81",
