@@ -61,6 +61,11 @@
     jobs: null,
     overview: null,
     missions: null,
+    specifications: null,
+    specificationsLoading: false,
+    specificationBusy: null,
+    specificationForm: null,
+    workshopToken: null,
     filter: "",
     tracker: null,
     chat: [],
@@ -193,6 +198,7 @@
     if (languagePicker) languagePicker.hidden = !new Set(["today", "applications", "tracking", "offers", "assistant"]).has(view);
     $("#scroll").scrollTop = 0;
     render(view);
+    if (view === "missions" && !state.specifications && !state.specificationsLoading) loadSpecifications();
     const activeNav = document.querySelector(`.nav-item[data-view="${view}"]`);
     if (activeNav && window.matchMedia("(max-width: 720px)").matches) {
       window.requestAnimationFrame(() => activeNav.scrollIntoView({ block: "nearest", inline: "center" }));
@@ -211,6 +217,7 @@
     jobs: async () => (state.jobs = await api("/api/career/jobs?limit=300")),
     overview: async () => (state.overview = await api("/api/v5/overview")),
     missions: async () => (state.missions = await api("/api/app/missions")),
+    specifications: async () => state.view === "missions" ? loadSpecifications() : null,
     documents: async () => {
       const payload = await api("/api/files");
       state.documents = payload.files || [];
@@ -1182,16 +1189,188 @@
     log.scrollTop = log.scrollHeight;
   }
 
+  async function specificationRequest(path, options = {}, download = false) {
+    if (!state.workshopToken) {
+      const status = await api("/api/devkit/status");
+      state.workshopToken = status.workshop_token;
+      if (!state.workshopToken) throw new Error("Recharge NAGE pour ouvrir l’atelier local.");
+    }
+    const requestOptions = {
+      ...options,
+      headers: { "Content-Type": "application/json", "X-Workshop-Token": state.workshopToken },
+    };
+    const url = `/api/devkit/specifications${path}`;
+    if (!download) return api(url, requestOptions);
+    beginProgress();
+    try {
+      const response = await fetch(url, { ...requestOptions, credentials: "same-origin" });
+      if (!response.ok) {
+        let message = "Le brief n’a pas pu être téléchargé.";
+        try { const error = await response.json(); if (typeof error.detail === "string") message = error.detail; } catch { /* réponse non JSON */ }
+        throw new Error(message);
+      }
+      return response.blob();
+    } finally { endProgress(); }
+  }
+
+  function specificationFormFrom(template) {
+    return {
+      templateId: template?.id || "",
+      title: template?.title || "",
+      objective: template?.objective || "",
+      acceptance: (template?.acceptance || []).join("\n"),
+      selected_files: (template?.selected_files || []).join("\n"),
+      targeted_tests: (template?.targeted_tests || []).join("\n"),
+    };
+  }
+
+  async function loadSpecifications() {
+    if (state.specificationsLoading) return state.specifications;
+    state.specificationsLoading = true;
+    delete state.errors.specifications;
+    try {
+      state.specifications = await specificationRequest("");
+      if (!state.specificationForm) {
+        const templates = state.specifications.templates || [];
+        state.specificationForm = specificationFormFrom(templates.find((item) => /career|candidature|stage/i.test(item.id + " " + item.title)) || templates[0]);
+      }
+    } catch (error) { state.errors.specifications = error.message; }
+    finally {
+      state.specificationsLoading = false;
+      if (state.view === "missions") renderMissions();
+    }
+    return state.specifications;
+  }
+
+  async function specificationAction(id, action, button) {
+    if (state.specificationBusy) return;
+    state.specificationBusy = id;
+    if (button) { button.disabled = true; button.setAttribute("aria-busy", "true"); }
+    try {
+      if (action === "queue") {
+        await specificationRequest(`/${encodeURIComponent(id)}/queue`, { method: "POST", body: "{}" });
+        await loadSpecifications();
+        notify("Mission ajoutée au backlog local. Le lancement reste une étape distincte.");
+      } else if (action === "download") {
+        const blob = await specificationRequest(`/${encodeURIComponent(id)}/bundle`, {}, true);
+        const url = URL.createObjectURL(blob);
+        const link = el("a", { href: url, download: `nage-mission-${id}.zip`, hidden: true });
+        document.body.append(link); link.click(); link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        notify("Brief téléchargé : spécification, plan, tâches et mission OpenCode.");
+      } else {
+        const mission = await specificationRequest(`/${encodeURIComponent(id)}`);
+        if (document.querySelector("dialog[open]")) return;
+        const ui = modal(mission.title || "Brief de développement");
+        ui.content.append(el("p", { class: "note" }, mission.objective || ""));
+        Object.entries(mission.documents || {}).forEach(([name, content], index) => {
+          ui.content.append(el("details", { class: "kit-details", open: index === 0 },
+            el("summary", {}, name), documentContent(content)));
+        });
+      }
+    } catch (error) { notify(error.message, true); }
+    finally {
+      state.specificationBusy = null;
+      if (button?.isConnected) { button.disabled = false; button.removeAttribute("aria-busy"); }
+      if (action === "queue" && state.view === "missions") renderMissions();
+    }
+  }
+
+  function renderSpecifications() {
+    const data = state.specifications;
+    const panel = el("section", { class: "card spec-workshop", "aria-labelledby": "specWorkshopTitle" });
+    panel.append(el("div", { class: "spec-workshop-heading" },
+      el("div", {}, el("p", { class: "spec-eyebrow" }, "Spec Kit · Développement guidé"),
+        el("h2", { id: "specWorkshopTitle" }, "Construire mon NAGE"),
+        el("p", {}, "Transforme une amélioration en mission précise : résultat attendu, fichiers concernés, tests et brief pour OpenCode.")),
+      el("span", { class: "chip green" }, "Préparation locale")));
+    if (state.errors.specifications) panel.append(el("p", { class: "error-note", role: "alert" }, state.errors.specifications),
+      el("button", { class: "ghost-btn", type: "button", onclick: loadSpecifications }, "Recharger le Spec Kit"));
+    if (!data) {
+      if (!state.errors.specifications) panel.append(el("p", { class: "note", role: "status" }, "Ouverture des modèles de mission…"));
+      return panel;
+    }
+    const draft = state.specificationForm || (state.specificationForm = specificationFormFrom(null));
+    const templates = data.templates || [];
+    if (templates.length) {
+      const templatePicker = el("select", { id: "specTemplate", "aria-label": "Modèle de mission", onchange: (event) => {
+        state.specificationForm = specificationFormFrom(templates.find((item) => item.id === event.target.value));
+        renderMissions();
+      } }, templates.map((item) => el("option", { value: item.id }, item.title)));
+      templatePicker.value = draft.templateId;
+      panel.append(el("label", { class: "spec-field" }, "Partir d’une priorité", templatePicker));
+    }
+    const field = (tag, label, key, attrs = {}) => el("label", { class: "spec-field" }, label,
+      el(tag, { ...attrs, value: draft[key], oninput: (event) => { draft[key] = event.target.value; } }));
+    const feedback = el("p", { class: "error-note", role: "alert", hidden: true });
+    const submit = el("button", { type: "submit", class: "ghost-btn primary", disabled: !!state.specificationBusy }, "Préparer la mission");
+    const form = el("form", { class: "spec-form", onsubmit: async (event) => {
+      event.preventDefault();
+      if (state.specificationBusy) return;
+      state.specificationBusy = "create";
+      feedback.hidden = true; submit.disabled = true; submit.setAttribute("aria-busy", "true");
+      const lines = (value) => value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+      try {
+        await specificationRequest("", { method: "POST", body: JSON.stringify({
+          title: draft.title.trim(), objective: draft.objective.trim(),
+          acceptance: lines(draft.acceptance), selected_files: lines(draft.selected_files), targeted_tests: lines(draft.targeted_tests),
+        }) });
+        await loadSpecifications();
+        notify("Mission préparée et enregistrée. Son brief est prêt pour OpenCode.");
+      } catch (error) { feedback.textContent = error.message; feedback.hidden = false; }
+      finally {
+        state.specificationBusy = null;
+        submit.disabled = false; submit.removeAttribute("aria-busy");
+        if (!feedback.isConnected && state.view === "missions") renderMissions();
+      }
+    } },
+    field("input", "Nom de l’amélioration", "title", { id: "specTitle", required: true, maxlength: "160", autocomplete: "off" }),
+    field("textarea", "Ce que NAGE doit te permettre de faire", "objective", { id: "specObjective", required: true, rows: "3", maxlength: "6000" }),
+    field("textarea", "Comment vérifier que c’est réussi · un critère par ligne", "acceptance", { id: "specAcceptance", required: true, rows: "4", maxlength: "4000" }),
+    el("details", { class: "spec-technical" }, el("summary", {}, "Périmètre technique et tests ciblés"),
+      el("p", { class: "note" }, "Les chemins du modèle délimitent le travail de l’agent. Chaque test est un fichier précis du projet."),
+      el("div", { class: "spec-scope-grid" },
+        field("textarea", "Fichiers autorisés · un chemin par ligne", "selected_files", { required: true, rows: "4", maxlength: "4000" }),
+        field("textarea", "Tests à exécuter · un fichier par ligne", "targeted_tests", { required: true, rows: "4", maxlength: "4000" }))),
+    feedback,
+    el("div", { class: "spec-form-footer" }, submit,
+      el("p", {}, "Cette action prépare les documents et enregistre la mission. Elle ne lance aucun modèle.")));
+    panel.append(form);
+    const missions = data.missions || [];
+    panel.append(el("div", { class: "spec-list-heading" }, el("h3", {}, "Mes missions préparées"),
+      el("span", {}, `${missions.length} mission${missions.length > 1 ? "s" : ""}`)));
+    if (!missions.length) panel.append(emptyState("Ta première amélioration commence ici", "Choisis une priorité, ajuste le résultat attendu, puis prépare la mission."));
+    const statuses = { draft: "Brief prêt", prepared: "Brief prêt", queued: "Dans le backlog local", needs_review: "À relire", staged: "Proposition reçue" };
+    missions.forEach((mission) => {
+      const queued = !!mission.evolution_task_id;
+      const action = (label, kind, disabled = false) => {
+        const button = el("button", { type: "button", class: "ghost-btn", disabled: disabled || !!state.specificationBusy,
+          onclick: () => specificationAction(mission.id, kind, button) }, label);
+        return button;
+      };
+      panel.append(el("article", { class: "spec-mission" },
+        el("div", { class: "spec-mission-heading" }, el("h4", {}, mission.title),
+          el("span", { class: `chip ${queued ? "green" : "amber"}` }, statuses[mission.status] || "Brief enregistré")),
+        el("p", {}, mission.objective),
+        el("p", { class: "spec-mission-meta" }, `${mission.acceptance?.length || 0} critères · ${mission.selected_files?.length || 0} fichiers · ${mission.targeted_tests?.length || 0} tests ciblés`),
+        el("div", { class: "spec-mission-actions" }, action("Lire le brief", "preview"), action("Télécharger pour OpenCode", "download"),
+          action(queued ? "Déjà dans le backlog local" : "Ajouter au backlog local", "queue", queued))));
+    });
+    return panel;
+  }
+
   function renderMissions() {
     const host = $("#view-missions");
     const m = state.missions;
-    if (!m) { host.replaceChildren(loading()); return; }
+    const workshop = renderSpecifications();
+    if (!m) { host.replaceChildren(workshop, loading()); return; }
     if (!m.available) {
-      host.replaceChildren(el("div", { class: "card" }, emptyState("Registre illisible", "missions_registry.json est absent ou invalide.")));
+      host.replaceChildren(workshop, el("div", { class: "card padded" }, emptyState("Historique de flotte indisponible", "Le Spec Kit reste accessible pour préparer les prochaines améliorations.")));
       return;
     }
     const total = Object.values(m.counts).reduce((a, b) => a + b, 0);
     host.replaceChildren(
+      workshop,
       el("div", { class: "grid kpi" },
         el("div", { class: "card kpi-card" },
           el("div", { class: "kpi-top" }, el("span", { class: "kpi-label" }, "Livrées"), el("span", { class: "kpi-chip" }, "✓")),

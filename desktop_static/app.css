@@ -947,6 +947,47 @@ body[data-theme="studio"] .homework-prompts button { background: #f7faf8; }
 .mt-14 { margin-top: 10px; }
 .no-gap { margin-top: 0; }
 .card.padded { padding: 16px; }
+.spec-workshop { padding: 24px; margin-bottom: 24px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 14px; line-height: 1.55; }
+.spec-workshop-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; margin-bottom: 20px; }
+.spec-eyebrow { margin: 0 0 5px; color: var(--green-2); font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.spec-workshop h2 { margin: 0 0 8px; color: var(--text); font-size: 25px; letter-spacing: -.03em; line-height: 1.2; }
+.spec-workshop-heading p:not(.spec-eyebrow) { max-width: 700px; margin: 0; color: var(--mute); }
+.spec-workshop-heading > .chip { flex-shrink: 0; }
+.spec-workshop .spec-field { display: flex; flex-direction: column; gap: 7px; margin: 0 0 16px; color: var(--text); font-size: 13px; font-weight: 600; }
+.spec-field input, .spec-field select, .spec-field textarea { width: 100%; min-width: 0; min-height: 44px; padding: 11px 12px; border: 1px solid var(--line-hard); border-radius: 9px; color: var(--text); background: var(--bg-2); font-size: 14px; font-weight: 400; line-height: 1.5; }
+.spec-field textarea { resize: vertical; }
+.spec-field input:focus, .spec-field select:focus, .spec-field textarea:focus { outline: 2px solid var(--green); outline-offset: 2px; }
+.spec-technical { margin: 4px 0 20px; padding: 14px 16px; border: 1px solid var(--line-hard); border-radius: 10px; background: color-mix(in srgb, var(--panel-2) 65%, transparent); }
+.spec-technical summary { min-height: 30px; cursor: pointer; font-size: 13px; font-weight: 650; }
+.spec-technical .note { margin: 10px 0 14px; padding: 0; font-size: 12px; line-height: 1.55; text-transform: none; letter-spacing: 0; }
+.spec-scope-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.spec-scope-grid textarea { font-family: var(--mono); font-size: 12px; }
+.spec-form-footer { display: flex; align-items: center; gap: 16px; margin-bottom: 26px; }
+.spec-form-footer > p { margin: 0; color: var(--mute); font-size: 12px; }
+.spec-form-footer > .ghost-btn { flex-shrink: 0; }
+.spec-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 20px; border-top: 1px solid var(--line-hard); }
+.spec-list-heading h3 { margin: 0; font-size: 16px; }
+.spec-list-heading > span, .spec-mission-meta { color: var(--mute); font-size: 12px; }
+.spec-mission { padding: 18px 0; border-bottom: 1px solid var(--line); }
+.spec-mission:last-child { padding-bottom: 0; border-bottom: 0; }
+.spec-mission-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.spec-mission-heading h4 { margin: 0; font-size: 15px; line-height: 1.5; }
+.spec-mission > p { margin: 8px 0 0; overflow-wrap: anywhere; }
+.spec-mission-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.spec-workshop .ghost-btn { font-family: inherit; font-size: 12px; letter-spacing: 0; text-transform: none; }
+.spec-workshop .chip { font-size: 11px; line-height: 1.5; letter-spacing: 0; text-transform: none; white-space: normal; }
+body[data-theme="studio"] .spec-eyebrow { color: #16714f; }
+body[data-theme="studio"] .spec-field input, body[data-theme="studio"] .spec-field select, body[data-theme="studio"] .spec-field textarea { background: #fff; border-color: #c8dbd0; }
+body[data-theme="studio"] .spec-technical { background: #f5f9f6; border-color: #dbe7df; }
+@media (max-width: 720px) {
+  .spec-workshop { padding: 20px 16px; }
+  .spec-workshop-heading, .spec-mission-heading { flex-direction: column; gap: 10px; }
+  .spec-workshop h2 { font-size: 23px; }
+  .spec-scope-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .spec-form-footer { align-items: stretch; flex-direction: column; gap: 10px; }
+  .spec-mission-actions { flex-direction: column; }
+  .spec-mission-actions > * { width: 100%; }
+}
 .note.tight { margin: 0; }
 
 @media (max-width: 1080px) {
