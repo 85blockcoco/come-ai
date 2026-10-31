@@ -1,0 +1,3 @@
+# Real offers provided by the user are kept local and never committed.
+*
+!.gitignore
