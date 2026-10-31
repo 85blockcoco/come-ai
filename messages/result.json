@@ -1,21 +1,15 @@
 {
   "status": "done",
-  "order_id": "cvboost-68-1793403923277",
-  "branch": "agent/spec-033-translation-variants",
-  "remote_branch": "origin/agent/spec-033-translation-variants",
-  "worker_branch": "worker/cvboost-68-1793403923277",
   "files_created": [
     "career/translation_variants.py",
     "career/lexicons/en.json",
     "career/lexicons/de.json",
     "career/lexicons/es.json",
     "tests/test_translation_variants.py",
+    "career/router.py",
     "docs/agent-reports/SPEC-033-translation_variants.md"
   ],
-  "files_modified": [
-    "career/router.py"
-  ],
-  "output": "SPEC-033 livré : détection de langue par heuristique stopwords, construction de variantes traduites (arena/lexicon/passthrough), lexiques FR→EN/DE/ES, endpoints REST et smoke test.",
-  "logs": "pytest -q tests/test_translation_variants.py → 36 passed\nruff check career/translation_variants.py career/router.py → All checks passed",
+  "output": "SPEC-033 variantes traduites EN/DE/ES livrées : détection heuristique locale, lexiques statiques, arena injectable, endpoints REST via create_app() et 36 tests verts.",
+  "logs": "pytest -q tests/test_translation_variants.py -> 36 passed\nruff check . -> All checks passed\ngit diff --check -> clean",
   "error": null
 }
