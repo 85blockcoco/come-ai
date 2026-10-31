@@ -48,7 +48,16 @@ class DeveloperWorkshop:
         self._jobs: dict[str, dict[str, Any]] = {}
         self._artifacts: dict[str, Path] = {}
         self._evolution: Any | None = None
+        self._specifications: Any | None = None
         self._busy_check = busy_check or (lambda: False)
+
+    def specifications(self) -> Any:
+        with self._lock:
+            if self._specifications is None:
+                from devkit.specifications import SpecificationWorkshop
+
+                self._specifications = SpecificationWorkshop(self.project_root, self.storage_root)
+            return self._specifications
 
     def close(self) -> None:
         if self._evolution is not None:

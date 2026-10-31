@@ -1191,7 +1191,7 @@
 
   async function specificationRequest(path, options = {}, download = false) {
     if (!state.workshopToken) {
-      const status = await api("/api/devkit/status");
+      const status = await api("/api/devkit/session");
       state.workshopToken = status.workshop_token;
       if (!state.workshopToken) throw new Error("Recharge NAGE pour ouvrir l’atelier local.");
     }
@@ -1325,7 +1325,7 @@
       }
     } },
     field("input", "Nom de l’amélioration", "title", { id: "specTitle", required: true, maxlength: "160", autocomplete: "off" }),
-    field("textarea", "Ce que NAGE doit te permettre de faire", "objective", { id: "specObjective", required: true, rows: "3", maxlength: "6000" }),
+    field("textarea", "Ce que NAGE doit te permettre de faire", "objective", { id: "specObjective", required: true, rows: "3", maxlength: "5000" }),
     field("textarea", "Comment vérifier que c’est réussi · un critère par ligne", "acceptance", { id: "specAcceptance", required: true, rows: "4", maxlength: "4000" }),
     el("details", { class: "spec-technical" }, el("summary", {}, "Périmètre technique et tests ciblés"),
       el("p", { class: "note" }, "Les chemins du modèle délimitent le travail de l’agent. Chaque test est un fichier précis du projet."),
@@ -1340,7 +1340,7 @@
     panel.append(el("div", { class: "spec-list-heading" }, el("h3", {}, "Mes missions préparées"),
       el("span", {}, `${missions.length} mission${missions.length > 1 ? "s" : ""}`)));
     if (!missions.length) panel.append(emptyState("Ta première amélioration commence ici", "Choisis une priorité, ajuste le résultat attendu, puis prépare la mission."));
-    const statuses = { draft: "Brief prêt", prepared: "Brief prêt", queued: "Dans le backlog local", needs_review: "À relire", staged: "Proposition reçue" };
+    const statuses = { draft: "Brief prêt", specified: "Brief prêt", prepared: "Brief prêt", queued: "Dans le backlog local", running: "Cycle en cours", waiting_provider: "Modèle indisponible", failed: "Cycle à reprendre", cancelled: "Cycle arrêté", needs_review: "À relire", staged: "Proposition reçue" };
     missions.forEach((mission) => {
       const queued = !!mission.evolution_task_id;
       const action = (label, kind, disabled = false) => {

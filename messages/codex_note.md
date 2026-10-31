@@ -167,3 +167,37 @@
 - Stage Hunter permet maintenant d’afficher uniquement toutes les offres, celles dont le début est confirmé, ou celles accessibles BBA/Bac+4.
 - Le filtre conserve les offres dans la mémoire de la page et indique combien ont été masquées; il ne transforme jamais une date inconnue en date supposée.
 - Preuves : `tests/test_career_search_ux.py` **11 passed**; Stage Hunter + accessibilité **98 passed en 51,19 s**; navigateur candidate : 1 offre totale, 0 début confirmé, 0 accessible, sans erreur console.
+
+---
+
+# RAPPORT CODEX — 31 octobre 2026 — Spec Kit de développement
+
+## Livré dans la candidate
+
+- Atelier Bureau : panneau « Construire mon NAGE », quatre priorités personnalisables, critères d’acceptation, périmètre technique repliable, liste persistante des missions, lecture du brief, téléchargement ZIP authentifié et mise en backlog local.
+- Contrat Spec Kit : `spec.md`, `plan.md`, `tasks.md`, `OPENCODE_MISSION.md`, `mission.json`, `RESULT_TEMPLATE.json`.
+- Source et tests figés par empreintes, déduplication, sources privées et liens symboliques refusés, état de la tâche locale relié à celui de la mission.
+- Moteur existant : mêmes tests ciblés pour la référence et la candidate, reçu pytest et sandbox conservés. Sauvegarde SQLite privée et cohérente avant migration v1→v2.
+- Bootstrap léger `/api/devkit/session` : ouvrir le Spec Kit ne scanne pas les sources sans rapport; les exports conservent leurs contrôles de secrets.
+
+## Preuves réellement exécutées
+
+- Campagne ciblée Dev Kit/évolution/desktop : **102 passed en 56,07 s**.
+- Après les derniers changements de session/contrat : **27 passed en 21,06 s**, Ruff `devkit/`, syntaxe JS et `git diff --check` verts.
+- Validation finale après revue locale : **76 passed en 8,05 s** (diagnostics/évolution/stockage) et **29 passed en 16,11 s** (Spec Kit/HTTP/desktop), soit **105 tests ciblés**. Ruff et syntaxe JS verts.
+- Deux défauts de revue reproduits par deux tests rouges puis corrigés : échappement shell des chemins de tests dans le brief (`shlex.quote`) et traitement HTTP contrôlé d’une erreur de stockage.
+- Les quatre modèles de mission pointent sur des sources et tests existants, admissibles aux contrôles d’export.
+- Navigateur réel sur candidate 18940 : création d’une mission synthétique, FR/SC visibles, six fichiers dans le ZIP, mise en file, état conservé après reload, double mise en file désactivée, aucun débordement à 1440 et 390 px, zéro erreur de page.
+- Spécification et guide : `specs/011-spec-kit-workshop/`.
+
+## Collaboration OpenCode
+
+- Revue réellement lancée : session `ses_e70805d52ffe9cNdt24Wy69K70`, agent `plan`, modèle `opencode/mimo-v2.6-flash-free` (coûts publiés et étapes observées à zéro).
+- La revue a lu du code mais n’a pas rendu de verdict en 180 s. Session ponctuelle interrompue et absence d’activité résiduelle vérifiée. Ne pas annoncer une revue OpenCode terminée.
+- Côme a demandé un prompt pour 100 missions avec quatre workers; le prompt lui a été fourni. Codex ne prétend pas avoir lancé ce pool ni avoir créé/exécuté ces 100 missions.
+
+## Limites
+
+- Le canevas est déterministe. Une mission préparée ne prouve pas sa réalisation.
+- Le lancement du moteur d’évolution reste dans l’Atelier avancé existant. Le nouveau panneau prépare et met en file; il n’appelle aucun modèle et ne déploie aucun correctif.
+- Aucun merge sur main et aucune modification du dépôt de travail partagé OpenCode.

@@ -6,7 +6,7 @@ import hmac
 from typing import Any, Callable
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
@@ -37,11 +37,20 @@ class ConfirmRequest(BaseModel):
 
 
 class EvolutionTaskRequest(BaseModel):
-    title: str = Field(min_length=1, max_length=200)
-    description: str = Field(min_length=1, max_length=12_000)
+    title: str = Field(min_length=1, max_length=160)
+    description: str = Field(min_length=1, max_length=6_000)
     selected_files: list[str] = Field(min_length=1, max_length=8)
     acceptance: str = Field(default="", max_length=4_000)
     priority: int = Field(default=50, ge=0, le=100)
+    targeted_tests: list[str] | None = Field(default=None, min_length=1, max_length=8)
+
+
+class SpecificationRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    objective: str = Field(min_length=1, max_length=5_000)
+    acceptance: list[str] = Field(min_length=1, max_length=12)
+    selected_files: list[str] = Field(min_length=1, max_length=8)
+    targeted_tests: list[str] = Field(min_length=1, max_length=8)
 
 
 class EvolutionSettingsRequest(BaseModel):
@@ -89,6 +98,19 @@ def create_developer_router(service_factory: Callable[[], DeveloperWorkshop]) ->
         except OSError as error:
             raise HTTPException(400, "Le fichier local n’a pas pu être lu ou sauvegardé.") from error
 
+    @router.get("/session")
+    async def workshop_session(request: Request) -> dict[str, Any]:
+        """Bootstrap the local UI without scanning or exporting source files."""
+        expected_origin = f"{request.url.scheme}://{request.url.netloc}"
+        origin = request.headers.get("origin")
+        site = request.headers.get("sec-fetch-site", "").strip().lower()
+        if (origin and not hmac.compare_digest(origin, expected_origin)) or site == "cross-site":
+            raise HTTPException(403, "Cet atelier est accessible depuis l’application locale.")
+        if not ((origin and hmac.compare_digest(origin, expected_origin)) or site == "same-origin"):
+            raise HTTPException(403, "Ouvre l’atelier dans l’application locale.")
+        workshop = service_factory()
+        return {"available": True, "workshop_token": workshop.token}
+
     @router.get("/status")
     async def status(request: Request) -> dict[str, Any]:
         workshop = service_factory()
@@ -116,6 +138,35 @@ def create_developer_router(service_factory: Callable[[], DeveloperWorkshop]) ->
             }
         result["workshop_token"] = workshop.token
         return result
+
+    @router.get("/specifications")
+    async def specifications(request: Request) -> dict[str, Any]:
+        workshop = authorise(request)
+        return await action(lambda: workshop.specifications().overview())
+
+    @router.post("/specifications")
+    async def create_specification(payload: SpecificationRequest, request: Request) -> dict[str, Any]:
+        workshop = authorise(request)
+        return await action(lambda: workshop.specifications().create(**payload.model_dump()))
+
+    @router.get("/specifications/{mission_id}")
+    async def specification(mission_id: str, request: Request) -> dict[str, Any]:
+        workshop = authorise(request)
+        return await action(lambda: workshop.specifications().get(mission_id))
+
+    @router.get("/specifications/{mission_id}/bundle")
+    async def specification_bundle(mission_id: str, request: Request) -> Response:
+        workshop = authorise(request)
+        content = await action(lambda: workshop.specifications().bundle(mission_id))
+        return Response(content, media_type="application/zip", headers={
+            "Content-Disposition": 'attachment; filename="mission-opencode.zip"',
+            "Cache-Control": "no-store",
+        })
+
+    @router.post("/specifications/{mission_id}/queue")
+    async def queue_specification(mission_id: str, request: Request) -> dict[str, Any]:
+        workshop = authorise(request)
+        return await action(lambda: workshop.specifications().queue(mission_id))
 
     @router.get("/evolution")
     async def evolution_overview(request: Request) -> dict[str, Any]:
