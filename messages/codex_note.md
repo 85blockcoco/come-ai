@@ -201,3 +201,11 @@
 - Le canevas est déterministe. Une mission préparée ne prouve pas sa réalisation.
 - Le lancement du moteur d’évolution reste dans l’Atelier avancé existant. Le nouveau panneau prépare et met en file; il n’appelle aucun modèle et ne déploie aucun correctif.
 - Aucun merge sur main et aucune modification du dépôt de travail partagé OpenCode.
+
+## Recette de la version Bureau
+
+- Code fonctionnel publié et déployé : `006590b6b6c3ea16a4c032771f89bb468f00acdb`, branche `codex/nage-consolidation-20261030`, SHA distant vérifié.
+- Checkout Bureau propre : `/Users/comedelavenne/NAGE-release`; serveur de cette instance redémarré sur `127.0.0.1:8766`.
+- Playwright sur cette instance exacte : quatre modèles affichés, modèle CV/lettre sélectionnable, bouton de préparation actif, ouverture limitée à deux requêtes Dev Kit (`session`, `specifications`), zéro erreur de page et aucun débordement horizontal.
+- Le parcours de création/ZIP/mise en file/reload a été vérifié sur la candidate avec une mission synthétique; la recette Bureau n’a créé aucune mission dans les données de production.
+- Contrôle Career chargé au redémarrage : HTTP 200, temps pipeline **5,56 s**, puis **6,25 s**, **2,99 s**, **2,55 s**. Le contrat `< 3 s` n’est **pas atteint de manière constante** dans cette campagne. Aucun changement Career dans ce lot; la cause des latences intermittentes reste à diagnostiquer séparément.
