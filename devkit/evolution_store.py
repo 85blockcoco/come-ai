@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from devkit.exporting import KitError, redact_text, source_path_allowed
+from devkit.diagnostics import validate_targeted_tests
 
 
 TASK_STATUSES = frozenset({"queued", "running", "waiting_provider", "needs_review", "failed", "cancelled"})
@@ -149,8 +150,11 @@ class EvolutionStore:
                         status TEXT NOT NULL, message TEXT NOT NULL, data TEXT NOT NULL, created_at TEXT NOT NULL
                     );
                     CREATE INDEX IF NOT EXISTS evolution_events_run ON evolution_events(run_id, event_id);
-                    PRAGMA user_version=1;
                 """)
+                columns = {row["name"] for row in connection.execute("PRAGMA table_info(evolution_tasks)")}
+                if "targeted_tests" not in columns:
+                    connection.execute("ALTER TABLE evolution_tasks ADD COLUMN targeted_tests TEXT")
+                connection.execute("PRAGMA user_version=2")
             # WAL is persistent and set outside the schema transaction.
             with self._connection() as connection:
                 connection.execute("PRAGMA journal_mode=WAL")
@@ -205,6 +209,7 @@ class EvolutionStore:
     def _task(row: sqlite3.Row) -> dict[str, Any]:
         task = dict(row)
         task["selected_files"] = json.loads(task["selected_files"])
+        task["targeted_tests"] = json.loads(task["targeted_tests"]) if task.get("targeted_tests") is not None else None
         task.pop("fingerprint", None)
         return task
 
@@ -218,7 +223,7 @@ class EvolutionStore:
     def _limit(value: int) -> int:
         return _integer(value, "La limite de liste", 1, 200)
 
-    def add_task(self, title: str, description: str, selected_files: list[str], acceptance: str = "", priority: int = 50) -> dict:
+    def add_task(self, title: str, description: str, selected_files: list[str], acceptance: str = "", priority: int = 50, *, targeted_tests: list[str] | None = None) -> dict:
         title = _safe_text(title, "Le titre", 160, required=True)
         description = _safe_text(description, "La description", 6000, required=True)
         acceptance = _safe_text(acceptance, "Les critères d’acceptation", 4000)
@@ -228,8 +233,9 @@ class EvolutionStore:
         if any(not isinstance(item, str) or len(item) > 240 or not source_path_allowed(item) for item in selected_files):
             raise EvolutionStoreError("La tâche contient un chemin hors du périmètre de code autorisé.")
         paths = sorted(set(selected_files))
+        targeted_tests = validate_targeted_tests(targeted_tests)
         canonical = json.dumps([" ".join(title.split()), " ".join(description.split()), paths,
-                                " ".join(acceptance.split())], ensure_ascii=False, separators=(",", ":"))
+                                " ".join(acceptance.split()), *([targeted_tests] if targeted_tests is not None else [])], ensure_ascii=False, separators=(",", ":"))
         fingerprint = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
         now = _now()
         with self._connection(write=True) as connection:
@@ -241,8 +247,8 @@ class EvolutionStore:
                 return self._task(existing)
             task_id = uuid.uuid4().hex
             connection.execute(
-                "INSERT INTO evolution_tasks VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                (task_id, title, description, json.dumps(paths), acceptance, priority, "queued", None, None, fingerprint, now, now),
+                "INSERT INTO evolution_tasks (task_id,title,description,selected_files,acceptance,priority,status,candidate_id,reason,fingerprint,created_at,updated_at,targeted_tests) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (task_id, title, description, json.dumps(paths), acceptance, priority, "queued", None, None, fingerprint, now, now, json.dumps(targeted_tests) if targeted_tests is not None else None),
             )
             return self._task(connection.execute("SELECT * FROM evolution_tasks WHERE task_id=?", (task_id,)).fetchone())
 

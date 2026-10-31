@@ -38,6 +38,30 @@ class CommandResult:
 Runner = Callable[..., CommandResult]
 
 
+def validate_targeted_tests(value: list[str] | None, project_root: Path | None = None) -> list[str] | None:
+    """Validate a bounded file selection; never accept pytest flags or node IDs."""
+    if value is None:
+        return None
+    from devkit.exporting import KitError, source_path_allowed
+
+    if not isinstance(value, list) or not 1 <= len(value) <= 8:
+        raise KitError("Sélectionnez entre 1 et 8 fichiers de tests ciblés.")
+    for name in value:
+        if (not isinstance(name, str) or len(name) > 240 or not source_path_allowed(name)
+                or not name.endswith(".py") or not name.startswith(("tests/", "evals/tests/"))):
+            raise KitError("Un test ciblé doit être un fichier Python relatif dans tests/ ou evals/tests/.")
+        if project_root is not None:
+            path = project_root / name
+            current = path
+            while current != project_root:
+                if current.is_symlink():
+                    raise KitError("Les liens symboliques sont exclus des tests ciblés.")
+                current = current.parent
+            if not path.is_file():
+                raise KitError("Un fichier de tests ciblé n’existe pas dans les sources sélectionnées.")
+    return sorted(set(value))
+
+
 def source_fingerprint(project_root: Path) -> str:
     """Use the exporter as the single source of truth for the source manifest."""
     from .exporting import source_fingerprint as fingerprint
@@ -249,7 +273,7 @@ elif action == "pytest":
             self.finished = True
             self.collected = int(session.testscollected)
     plugin = ReceiptPlugin()
-    test_paths = [path for path in ("tests", "evals/tests") if pathlib.Path(path).is_dir()]
+    test_paths = json.loads(arguments[1]) if len(arguments) > 1 else [path for path in ("tests", "evals/tests") if pathlib.Path(path).is_dir()]
     exitstatus = int(pytest.main(["-q", "--tb=short", "-p", "no:cacheprovider", *test_paths], plugins=[plugin]))
     outcomes = list(plugin.outcomes.values())
     receipt = {
@@ -368,6 +392,7 @@ def run_diagnostics(
     project_root: Path, *, report_dir: Path | None = None,
     python_executable: Path | None = None, timeout_seconds: int = 600,
     isolated: bool = True, require_sandbox: bool = False, runner: Runner | None = None,
+    targeted_tests: list[str] | None = None,
 ) -> dict:
     """Run source checks, offline tests, and installed dependency checks.
 
@@ -378,6 +403,7 @@ def run_diagnostics(
     from .exporting import materialize_source
 
     root = Path(project_root).resolve()
+    targeted_tests = validate_targeted_tests(targeted_tests, root)
     executable = Path(python_executable or root / ".venv/bin/python").absolute()
     started = time.monotonic()
     budget = max(1, min(int(timeout_seconds), MAX_TIMEOUT_SECONDS))
@@ -390,6 +416,7 @@ def run_diagnostics(
         "network": "disabled", "dependencies": {},
         "pytest_receipt_verified": False,
         "tests_executed": 0, "tests_passed": 0, "tests_failed": 0, "tests_skipped": 0,
+        "targeted_tests": targeted_tests,
     }
     destination = Path(report_dir) if report_dir is not None else root / ".devkit/diagnostics"
     with tempfile.TemporaryDirectory(prefix="come-ai-diagnostics-") as temporary:
@@ -397,6 +424,7 @@ def run_diagnostics(
         source = run_root / "source"
         try:
             inventory = materialize_source(root, source)
+            validate_targeted_tests(targeted_tests, source)
             report["source_fingerprint"] = source_fingerprint(source)
         except (OSError, ValueError, RuntimeError) as error:
             report["checks"].append({"name": "source_copy", "status": "blocked", "returncode": None,
@@ -438,7 +466,7 @@ def run_diagnostics(
                 ("python_syntax", ["syntax", json.dumps(python_paths)], "Aucun fichier Python exporté."),
                 ("environment", ["metadata"], ""),
                 ("pip_check", ["pip_check"], ""),
-                ("pytest", ["pytest", str(pytest_receipt)] if any((source / path).is_dir() for path in ("tests", "evals/tests")) else None, "Dossiers de tests absents ; aucun test exécuté."),
+                ("pytest", ["pytest", str(pytest_receipt), *([json.dumps(targeted_tests)] if targeted_tests else [])] if any((source / path).is_dir() for path in ("tests", "evals/tests")) else None, "Dossiers de tests absents ; aucun test exécuté."),
                 ("offline_smoke", ["smoke", "test_v3_offline.py"] if (source / "test_v3_offline.py").is_file() else None, "Smoke test V3 absent."),
                 ("javascript_syntax", ["javascript", node, *javascript_paths] if node and javascript_paths else None,
                  "Node absent." if not node else "Aucun fichier JavaScript exporté."),

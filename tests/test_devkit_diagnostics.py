@@ -37,6 +37,59 @@ def test_real_bootstrap_collects_application_and_evaluation_tests(tmp_path: Path
     assert counts["tests_failed"] == 0
 
 
+def test_real_bootstrap_runs_only_the_selected_test_file(tmp_path: Path) -> None:
+    root = tmp_path / "synthetic-targeted"
+    (root / "tests").mkdir(parents=True)
+    (root / "tests/test_selected.py").write_text("def test_selected():\n    assert 2 + 2 == 4\n", encoding="utf-8")
+    (root / "tests/test_unselected.py").write_text("raise AssertionError('must not be collected')\n", encoding="utf-8")
+    bootstrap = root / "bootstrap.py"
+    bootstrap.write_text(diagnostics._BOOTSTRAP, encoding="utf-8")
+    receipt = root / "receipt.json"
+    result = subprocess.run(
+        [sys.executable, str(bootstrap), "pytest", str(receipt), json.dumps(["tests/test_selected.py"])],
+        cwd=root, env={"PATH": "/usr/bin:/bin", "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1"},
+        capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    counts = json.loads(receipt.read_text(encoding="utf-8"))
+    assert counts["tests_collected"] == counts["tests_passed"] == 1
+
+
+@pytest.mark.parametrize("selection", [[], ["tests/test_example.py"] * 9, ["../test_example.py"],
+                                      ["--collect-only.py"], ["tests/test_example.py::test_example"],
+                                      ["core.py"], ["tests/../core.py"], ["/tmp/test_example.py"],
+                                      ["tests/missing.py"]])
+def test_targeted_test_paths_are_validated_before_execution(tmp_path: Path, selection) -> None:
+    root, python = project(tmp_path)
+    runner = FakeRunner()
+    with pytest.raises(ValueError):
+        run_diagnostics(root, python_executable=python, runner=runner, targeted_tests=selection)
+    assert runner.calls == []
+
+
+def test_targeted_tests_refuse_symlinked_parent(tmp_path: Path) -> None:
+    root, python = project(tmp_path)
+    external = tmp_path / "outside"
+    external.mkdir()
+    (external / "test_external.py").write_text("raise AssertionError('private')\n", encoding="utf-8")
+    (root / "tests/linked").symlink_to(external, target_is_directory=True)
+    with pytest.raises(ValueError, match="liens symboliques"):
+        run_diagnostics(root, python_executable=python, targeted_tests=["tests/linked/test_external.py"])
+
+
+def test_targeted_scope_is_recorded_and_passed_to_the_isolated_runner(tmp_path: Path, monkeypatch) -> None:
+    root, python = project(tmp_path)
+    sandbox_present(monkeypatch)
+    runner = FakeRunner()
+    report = run_diagnostics(root, python_executable=python, require_sandbox=True, runner=runner,
+                             targeted_tests=["tests/test_example.py"])
+    assert report["status"] == "passed"
+    assert report["sandbox_used"] is True
+    assert report["targeted_tests"] == ["tests/test_example.py"]
+    command = next(call["command"] for call in runner.calls if "pytest" in call["command"])
+    assert json.loads(command[-1]) == ["tests/test_example.py"]
+
+
 def project(tmp_path: Path, *, tests: bool = True) -> tuple[Path, Path]:
     root = tmp_path / "fictional-project"
     root.mkdir()

@@ -61,6 +61,10 @@ def _safe_report(report: dict, root: Path) -> dict:
         "tests_executed", "tests_passed", "tests_failed", "tests_skipped", "tests_collected", "collection_errors",
     )})
     result["checks"] = []
+    if "targeted_tests" in report:
+        from devkit.diagnostics import validate_targeted_tests
+
+        result["targeted_tests"] = validate_targeted_tests(report["targeted_tests"])
     for check in report.get("checks", [])[:20]:
         if isinstance(check, dict):
             result["checks"].append({
@@ -103,7 +107,8 @@ def evaluate_candidate(baseline: dict, candidate: dict, changed_files: list[dict
              and candidate.get("sandbox_used") is True and candidate.get("pytest_receipt_verified") is True
              and _count(candidate.get("tests_executed")) > 0)
     regression = (_count(candidate.get("tests_executed")) < _count(baseline.get("tests_executed"))
-                  or _count(candidate.get("tests_failed")) > 0)
+                  or _count(candidate.get("tests_failed")) > 0
+                  or baseline.get("targeted_tests") != candidate.get("targeted_tests"))
     protected = any(path.startswith("tests/") or Path(path).name in {"conftest.py", "pytest.ini"} for path in paths)
     if not proof:
         reason = "La copie doit réussir des tests effectivement terminés sous isolation OS."
@@ -198,6 +203,10 @@ class EvolutionEngine:
 
         try:
             checkpoint()
+            from devkit.diagnostics import validate_targeted_tests
+
+            targeted_tests = validate_targeted_tests(task.get("targeted_tests"), self.project_root)
+            diagnostic_options = {"targeted_tests": targeted_tests} if targeted_tests is not None else {}
             # The provider performs only configuration checks at construction.
             # A missing setup terminates before an expensive baseline/retry loop.
             provider = self.provider_factory(self.project_root, replace(settings, timeout_seconds=min(settings.timeout_seconds, remaining())))
@@ -211,7 +220,7 @@ class EvolutionEngine:
             selected = task["selected_files"]
             self.store.record_event(run_id, "baseline", "running", "Diagnostic réel des sources actuelles.")
             baseline = self.diagnostic_runner(self.project_root, report_dir=run_dir / "baseline",
-                                               python_executable=self.python_executable, timeout_seconds=remaining(), require_sandbox=False)
+                                               python_executable=self.python_executable, timeout_seconds=remaining(), require_sandbox=False, **diagnostic_options)
             baseline = _safe_report(baseline, self.project_root)
             checkpoint()
             _write_json(run_dir / "baseline.json", baseline)
@@ -287,7 +296,7 @@ class EvolutionEngine:
                 self.store.record_event(run_id, "staging", "completed", "Copie isolée et aperçu créés.", data={"attempt": attempt, "candidate_id": candidate_id})
                 checkpoint()
                 report = self.diagnostic_runner(self.patches.candidate_path(candidate_id), report_dir=run_dir / f"attempt-{attempt}",
-                                                 python_executable=self.python_executable, timeout_seconds=remaining(), require_sandbox=True)
+                                                 python_executable=self.python_executable, timeout_seconds=remaining(), require_sandbox=True, **diagnostic_options)
                 report = _safe_report(report, self.project_root)
                 checkpoint()
                 _write_json(run_dir / f"attempt-{attempt}.json", report)

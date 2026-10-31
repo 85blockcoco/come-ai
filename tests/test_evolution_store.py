@@ -128,3 +128,35 @@ def test_symlinked_store_does_not_touch_target(tmp_path):
     with pytest.raises(EvolutionStoreError, match="liens symboliques"):
         EvolutionStore(linked)
     assert list(target.iterdir()) == []
+
+
+def test_targeted_scope_persists_and_is_part_of_task_identity(store):
+    first = store.add_task("Scoped task", "Fix fictional core", ["core.py"], targeted_tests=["tests/test_core.py"])
+    assert first["targeted_tests"] == ["tests/test_core.py"]
+    assert EvolutionStore(store.storage_root).get_task(first["task_id"])["targeted_tests"] == ["tests/test_core.py"]
+    assert store.add_task("Scoped task", "Fix fictional core", ["core.py"], targeted_tests=["tests/test_core.py"])["task_id"] == first["task_id"]
+    other = store.add_task("Scoped task", "Fix fictional core", ["core.py"], targeted_tests=["tests/test_other.py"])
+    assert other["task_id"] != first["task_id"]
+    legacy = store.add_task("Scoped task", "Fix fictional core", ["core.py"])
+    assert legacy["targeted_tests"] is None
+    assert legacy["task_id"] not in {first["task_id"], other["task_id"]}
+
+
+def test_legacy_store_migration_preserves_tasks_and_default_scope(store):
+    import sqlite3
+
+    task = store.add_task("Legacy", "Fictional task", ["core.py"])
+    with sqlite3.connect(store.database_path) as connection:
+        connection.execute("ALTER TABLE evolution_tasks DROP COLUMN targeted_tests")
+        connection.execute("PRAGMA user_version=1")
+    migrated = EvolutionStore(store.storage_root)
+    assert migrated.get_task(task["task_id"])["targeted_tests"] is None
+    assert migrated.add_task("Legacy", "Fictional task", ["core.py"])["task_id"] == task["task_id"]
+    assert len(migrated.list_tasks()) == 1
+
+
+@pytest.mark.parametrize("selection", [[], ["tests/test_a.py"] * 9, ["../test_a.py"], ["tests/test_a.py::test_a"], ["core.py"]])
+def test_bad_targeted_scopes_are_never_persisted(store, selection):
+    with pytest.raises(ValueError):
+        store.add_task("Bad scope", "Fictional task", ["core.py"], targeted_tests=selection)
+    assert store.list_tasks() == []

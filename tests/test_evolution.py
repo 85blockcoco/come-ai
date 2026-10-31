@@ -121,6 +121,38 @@ def test_failed_first_candidate_gets_feedback_second_passes_without_touching_mai
     assert engine.store.get_task(task["task_id"])["status"] == "needs_review"
 
 
+def test_scoped_mission_uses_the_same_tests_for_baseline_and_candidate(project, tmp_path):
+    provider = FixtureProvider([CodeProposal(files={"core.py": CORRECT})])
+    engine, diagnostic_calls, _ = make_engine(project, tmp_path, provider)
+    task = engine.store.add_task("Scoped correction", "Make answer return 2.", ["core.py"],
+                                 targeted_tests=["tests/test_core.py"])
+    result = engine.run_task(task["task_id"], settings(), max_attempts=1, max_requests=1)
+    assert result["status"] == "needs_review"
+    assert len(diagnostic_calls) == 2
+    assert all(options["targeted_tests"] == ["tests/test_core.py"] for _, options in diagnostic_calls)
+    assert diagnostic_calls[0][1]["require_sandbox"] is False
+    assert diagnostic_calls[1][1]["require_sandbox"] is True
+
+
+def test_missing_scoped_test_stops_before_provider_or_diagnostics(project, tmp_path):
+    provider = FixtureProvider([CodeProposal(files={"core.py": CORRECT})])
+    engine, calls, factories = make_engine(project, tmp_path, provider)
+    task = engine.store.add_task("Missing test", "Fictional correction", ["core.py"],
+                                 targeted_tests=["tests/test_missing.py"])
+    result = engine.run_task(task["task_id"], settings())
+    assert result["status"] == "failed"
+    assert calls == factories == provider.contexts == []
+
+
+def test_changed_diagnostic_scope_cannot_validate_a_candidate(project):
+    baseline = fixture_report(project)
+    candidate = fixture_report(project)
+    baseline["targeted_tests"] = ["tests/test_core.py"]
+    candidate["targeted_tests"] = ["tests/test_unrelated.py"]
+    decision = evaluate_candidate(baseline, candidate, [{"path": "core.py"}])
+    assert decision["tests_validated"] is False
+
+
 @pytest.mark.parametrize("prefix", ["AQ.", "AIza", "sk-or-v1-"])
 def test_model_supplied_secret_key_is_not_saved_or_returned_in_retry_feedback(project, tmp_path, monkeypatch, prefix):
     monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
