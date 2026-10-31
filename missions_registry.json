@@ -2101,6 +2101,54 @@
    },
    "verified": "push vérifié + tests verts",
    "push_verified": true
+  },
+  {
+   "id": "91",
+   "status": "pending",
+   "title": "N100-A01 — Connecteur UK (sources internationales finance)",
+   "retry_of": 0,
+   "depends_on": [],
+   "files": [
+    "career/connectors/uk_sources.py",
+    "tests/test_uk_sources.py"
+   ],
+   "tests_min": 30
+  },
+  {
+   "id": "92",
+   "status": "pending",
+   "title": "N100-B05 — Niveau diplome requis (BBA/Bac+4/M2/MBA)",
+   "retry_of": 0,
+   "depends_on": [],
+   "files": [
+    "career/degree_level.py",
+    "tests/test_degree_level.py"
+   ],
+   "tests_min": 30
+  },
+  {
+   "id": "93",
+   "status": "pending",
+   "title": "N100-C07 — Filtre par type de stage finance (M&A, CIB, corp fin)",
+   "retry_of": 0,
+   "depends_on": [],
+   "files": [
+    "career/finance_family.py",
+    "tests/test_finance_family.py"
+   ],
+   "tests_min": 20
+  },
+  {
+   "id": "94",
+   "status": "pending",
+   "title": "N100-D04 — Registre de preuves (evidence)",
+   "retry_of": 0,
+   "depends_on": [],
+   "files": [
+    "career/evidence_registry.py",
+    "tests/test_evidence_registry.py"
+   ],
+   "tests_min": 20
   }
  ],
  "execution_order": [
