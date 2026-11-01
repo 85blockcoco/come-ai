@@ -214,6 +214,24 @@ function renderListSkeleton(target, count = 3) {
   }));
 }
 
+async function withListLoading(target, empty, action) {
+  empty.hidden = true;
+  renderListSkeleton(target);
+  try {
+    return await action();
+  } catch (error) {
+    const message = make("p", error.message || "Le chargement a échoué. Réessaie.", "error-note");
+    message.setAttribute("role", "alert");
+    const retry = make("button", "Réessayer", "secondary-button");
+    retry.type = "button";
+    retry.addEventListener("click", () => withListLoading(target, empty, action).catch((failure) => setMessage(failure.message, true)));
+    target.replaceChildren(message, retry);
+    throw error;
+  } finally {
+    target.removeAttribute("aria-busy");
+  }
+}
+
 function reducedMotion() {
   return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 }
@@ -338,6 +356,7 @@ function renderPreferenceRows(container, items) {
     enabled.type = "checkbox";
     enabled.checked = Boolean(item.enabled);
     enabled.className = "pref-enabled";
+    enabled.setAttribute("aria-label", `Activer la préférence ${item.label}`);
     const label = make("span", item.label);
     label.title = item.label;
     const priorityLabel = make("label", "Priorité");
@@ -347,6 +366,7 @@ function renderPreferenceRows(container, items) {
     priority.max = "1000";
     priority.value = String(item.priority);
     priority.className = "pref-priority";
+    priority.setAttribute("aria-label", `Priorité de ${item.label}`);
     priorityLabel.append(priority);
     row.append(enabled, label, priorityLabel);
     container.append(row);
@@ -1093,7 +1113,6 @@ function renderJobs(jobs, target, empty, mode) {
 }
 
 async function loadJobs() {
-  renderListSkeleton(elements.jobs);
   const query = $("#filter-query").value.trim();
   const family = $("#filter-family").value;
   const sourceStatus = $("#filter-status").value;
@@ -1101,17 +1120,18 @@ async function loadJobs() {
   if (query) params.set("query", query);
   if (family) params.set("family", family);
   if (sourceStatus) params.set("source_status", sourceStatus);
-  const payload = await api(`/api/career/jobs?${params.toString()}`);
-  state.jobs = payload.jobs || [];
-  elements.jobs.removeAttribute("aria-busy");
-  renderJobs(state.jobs, elements.jobs, elements.jobsEmpty, "discover");
+  await withListLoading(elements.jobs, elements.jobsEmpty, async () => {
+    const payload = await api(`/api/career/jobs?${params.toString()}`);
+    state.jobs = payload.jobs || [];
+    renderJobs(state.jobs, elements.jobs, elements.jobsEmpty, "discover");
+  });
 }
 
 async function loadShortlist() {
-  renderListSkeleton(elements.shortlist, 2);
-  const payload = await api("/api/career/jobs?shortlisted=true");
-  elements.shortlist.removeAttribute("aria-busy");
-  renderJobs(payload.jobs || [], elements.shortlist, elements.shortlistEmpty, "shortlist");
+  await withListLoading(elements.shortlist, elements.shortlistEmpty, async () => {
+    const payload = await api("/api/career/jobs?shortlisted=true");
+    renderJobs(payload.jobs || [], elements.shortlist, elements.shortlistEmpty, "shortlist");
+  });
 }
 
 async function toggleShortlist(job) {
@@ -1482,16 +1502,16 @@ function renderApplicationDashboard(dash) {
 }
 
 async function loadApplications() {
-  renderListSkeleton(elements.applications);
+  await withListLoading(elements.applications, elements.applicationsEmpty, async () => {
   const suffix = applicationFilterQuery();
   const [listing, dash] = await Promise.all([
     api("/api/career/applications"),
     api(`/api/career/applications/dashboard${suffix}`),
   ]);
   state.applications = listing.applications || [];
-  elements.applications.removeAttribute("aria-busy");
   renderApplicationDashboard(dash);
   await consumePendingKit();
+  });
 }
 
 const coachModeLabels = {
@@ -3966,7 +3986,9 @@ async function bootstrap() {
   try {
     organiseViews();
     ensureApplicationAccessibility();
-    await Promise.all([loadHealth(), loadProfile(), loadProfileImports(), loadIntake(), loadPreferences(), loadDiscoverySources(), loadDashboard(), loadJobs(), loadShortlist(), loadApplications()]);
+    const results = await Promise.allSettled([loadHealth(), loadProfile(), loadProfileImports(), loadIntake(), loadPreferences(), loadDiscoverySources(), loadDashboard(), loadJobs(), loadShortlist(), loadApplications()]);
+    const failure = results.find((result) => result.status === "rejected");
+    if (failure) setMessage(`Certaines données ne sont pas disponibles. ${failure.reason.message}`, true);
     resumeExplorationIfNeeded();
     const requested = window.location.hash.replace("#career/", "");
     if (careerViews.has(requested)) showView(requested, { focus: false, updateHash: false });

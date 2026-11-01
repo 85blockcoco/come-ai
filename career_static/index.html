@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
     <title>Côme AI Career — espace local</title>
-    <link rel="stylesheet" href="/career-static/career.css?v=codex-v3-20261025-rc10" />
+    <link rel="stylesheet" href="/career-static/career.css?v=n100-stability-20261102" />
     <link rel="stylesheet" href="/career-static/cv_plan.css?v=codex-v3-20261025-rc10" />
   </head>
   <body>
@@ -358,8 +358,8 @@
             </div>
             <form id="job-filters" class="filter-row">
               <label class="filter-search"><span class="visually-hidden">Rechercher</span><input id="filter-query" type="search" placeholder="Entreprise, poste ou ville" /></label>
-              <select id="filter-family"><option value="">Tous les métiers</option></select>
-              <select id="filter-status"><option value="">Tous les statuts</option><option value="open">Ouvertes</option><option value="closed">Fermées</option><option value="unknown">À vérifier</option></select>
+              <select id="filter-family" aria-label="Filtrer par métier"><option value="">Tous les métiers</option></select>
+              <select id="filter-status" aria-label="Filtrer par disponibilité de l’offre"><option value="">Tous les statuts</option><option value="open">Ouvertes</option><option value="closed">Fermées</option><option value="unknown">À vérifier</option></select>
               <button class="secondary-button" type="submit">Filtrer</button>
               <button id="clear-job-filters" class="quiet-button" type="button">Réinitialiser</button>
             </form>
@@ -745,6 +745,6 @@
     </div>
     <script src="/career-static/cv_plan.js?v=codex-v3-20261025-rc10" defer></script>
     <script src="/career-static/js/exploration-progress.js?v=codex-v3-20261025-rc10" defer></script>
-    <script src="/career-static/career.js?v=codex-v3-20261025-rc10" defer></script>
+    <script src="/career-static/career.js?v=n100-stability-20261102" defer></script>
   </body>
 </html>

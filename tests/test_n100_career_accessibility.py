@@ -1,4 +1,5 @@
 from pathlib import Path
+import subprocess
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,10 +14,13 @@ def test_application_controls_receive_accessible_names() -> None:
 
 
 def test_offer_and_application_lists_have_loading_skeletons() -> None:
-    assert "renderListSkeleton(elements.jobs)" in JS
-    assert "renderListSkeleton(elements.shortlist" in JS
-    assert "renderListSkeleton(elements.applications)" in JS
-    assert 'setAttribute("aria-busy", "true")' in JS
+    # Test the shared loader's actual success/failure/retry lifecycle, replacing
+    # old string checks tied to the three duplicated skeleton calls.
+    result = subprocess.run(
+        ["node", "--test", str(ROOT / "tests/js/career_list_loading.test.cjs")],
+        capture_output=True, text=True, timeout=15,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_focus_motion_and_mobile_rules_are_present() -> None:
