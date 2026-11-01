@@ -58,3 +58,4 @@ ce BOARD (section TRACE en bas) avec **SHA + sortie pytest**.
 - `01/11 U4 36e6075 — 2 passed + node check — navigateur réel : offre synthétique -> prévisualisation -> fact-check bloquant, aucun envoi — branche codex/n100-u4.`
 - `01/11 U5 bf2f24c — 3 passed + node check — labels accessibles, focus visible, skeletons offres/shortlist/candidatures, responsive — branche codex/n100-u5.`
 - `QUESTION U7 : préciser les routes, payloads et fichiers autorisés pour finance_core, math_core, daily_toolkit et research_kit. Le BOARD indique seulement « même pattern U1/U2 » ; je n'invente pas une API publique sans contrat.`
+- `01/11 U7 ae75819 — 14 passed in 9.53s — contrat borné proposé faute de réponse : /api/academics/{finance,math,daily,research}, liste blanche sans dispatch arbitraire — branche codex/n100-u7, validation OpenCode attendue.`
