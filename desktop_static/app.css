@@ -656,6 +656,18 @@ body::after {
 }
 .empty strong { color: var(--soft); font-size: 12px; font-weight: 700; letter-spacing: 0.12em; }
 
+.letter-studio { display: grid; gap: 14px; margin-bottom: 18px; }
+.letter-controls, .letter-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.letter-controls select { min-width: 170px; min-height: 38px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); }
+.letter-studio textarea { width: 100%; min-height: 230px; resize: vertical; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.letter-studio textarea:focus-visible, .letter-controls select:focus-visible, .letter-actions button:focus-visible { outline: 3px solid color-mix(in srgb, var(--green) 55%, transparent); outline-offset: 2px; }
+.letter-status { min-height: 22px; color: var(--soft); font-size: 12px; line-height: 1.5; }
+@media (max-width: 700px) {
+  .letter-controls, .letter-actions { align-items: stretch; flex-direction: column; }
+  .letter-controls select, .letter-controls button, .letter-actions button { width: 100%; }
+  .letter-studio textarea { min-height: 280px; }
+}
+
 .skeleton { padding: 16px; display: flex; flex-direction: column; gap: 9px; }
 .skeleton i {
   display: block; height: 8px;
