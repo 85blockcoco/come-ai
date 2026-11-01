@@ -317,6 +317,37 @@ class CareerService:
             result = export_shortlist_json(offers, target)
         return {"ok": True, **result.__dict__, "warnings": [], "blockers": []}
 
+    def ats_fields(self, platform: str) -> dict[str, Any]:
+        from .ats_fields import missing_required, prefill_fields, to_dict
+        fields = prefill_fields(platform, self.get_profile())
+        missing = missing_required(fields)
+        return {
+            "platform": platform or "generic",
+            "fields": [to_dict(field) for field in fields],
+            "warnings": [],
+            "blockers": [f"Champ obligatoire manquant : {name}" for name in missing],
+        }
+
+    @staticmethod
+    def dossier_checklist(dossier: str, provided: list[str]) -> dict[str, Any]:
+        from .dossier_checklist import checklist_for, completeness, to_dict
+        items = checklist_for(dossier, provided)
+        status = completeness(items)
+        return {
+            "dossier": dossier or "stage",
+            "items": [to_dict(item) for item in items],
+            "completeness": status,
+            "warnings": [],
+            "blockers": [f"Document obligatoire manquant : {name}" for name in status["missing_required"]],
+        }
+
+    @staticmethod
+    def dossier_preview(**kwargs: Any) -> dict[str, Any]:
+        from .dossier_preview import build_preview, to_dict
+        result = to_dict(build_preview(**kwargs))
+        result.setdefault("blockers", [])
+        return result
+
     def __init__(
         self,
         base_dir: Path,
