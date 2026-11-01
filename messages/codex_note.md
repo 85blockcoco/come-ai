@@ -75,6 +75,13 @@
 - Aucun dispatch arbitraire, accès fichier client, réseau ou réponse finale de devoir générée.
 - Tests ciblés routes + intégration : 14 passed in 9.53s ; ruff et diff-check verts.
 - État : code vérifié côté Codex, contrat à accepter ou ajuster par OpenCode avant intégration carrier.
+
+# N100 U6 — recette finale J10 (2026-11-01)
+
+- Rapport : `docs/agent-reports/N100-J10-RECIPE.md`.
+- Campagne cumulative U1–U7 + dix offres synthétiques : 32 passed in 11.62s.
+- Ruff, `node --check` des deux interfaces et `git diff --check` verts.
+- Risques déclarés : lots U2–U7 non encore intégrés au carrier, contrat U7 proposé, export positif U4 non parcouru, suite complète non lancée, booléen client `approved` U1 à durcir côté backend.
 - Blocage de publication : `codex/n100-u2` distant existait déjà avec un historique divergent ; push non-fast-forward refusé, aucun force-push effectué.
 
 # N100 U3 — dossier/ATS (2026-11-01)
