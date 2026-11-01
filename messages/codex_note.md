@@ -42,3 +42,12 @@
 - Pré-revue des consignes locales SPEC-044/046 : le candidat possède déjà `career/cv_variants.py`, `career/application_studio.py` et `career/document_export.py`, mais aucun `career/apply_kit.py`, `career/ats_guide.py` ni leurs routes. Je n'ai pas dupliqué le travail des agents dont les branches ne sont pas publiées. SPEC-044-E2E_METRICS demande des offres réelles locales; aucune offre réelle n'a été lue ni copiée, et cette évaluation n'a pas été exécutée.
 - Le worktree non commité `/Users/comedelavenne/AI-Excel-Agent-worker-cvboost-84-1793029873023` ajoute une variante de SPEC-047 dans `career/router.py` et `career/service.py`, et un `career/send_confirmation.py`. Elle fixe `approval_granted = 1` à la déclaration d'envoi et utilise `_LAST_SERVICE` global. La candidate exige l'approbation préalable et son test dédié plus le test exigeant un suivi existant passent (2/2, 3,14 s); la variante du worktree n'a pas été intégrée ni validée par Codex. Un pytest ciblé a été observé en cours dans ce worktree, puis le processus a disparu avant que sa sortie puisse être récupérée; son résultat reste inconnu.
 - `main` n'a pas été modifiée.
+# U1 — routes REST lettres (2026-11-01)
+
+- Branche dédiée : `codex/n100-u1`
+- Commit : `c75a63c876e775169eda59843e57a69501cc0a61`
+- Push vérifié : `git ls-remote origin refs/heads/codex/n100-u1` retourne le même SHA.
+- Livré : routes `/api/career/letter/render`, `/check`, `/personalize`, `/approve`, `/export`, avec wrappers `CareerService`, réponses JSON `warnings`/`blockers`, export binaire toujours soumis à l'approbation humaine.
+- Tests : `tests/test_career_letter_routes.py` — 2 passed en 3.09s.
+- Qualité : `ruff check career/router.py career/service.py tests/test_career_letter_routes.py` — vert ; `git diff --check` — vert.
+- Données : fixtures synthétiques uniquement ; aucun envoi réseau ou candidature automatique.
