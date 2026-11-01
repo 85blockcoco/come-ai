@@ -65,6 +65,7 @@
 - Labels accessibles complétés depuis les labels HTML existants ; focus visible global ; skeletons avec `aria-busy` sur offres, shortlist et candidatures ; animation neutralisée en réduction de mouvement ; règles mobiles renforcées.
 - Tests : `tests/test_n100_career_accessibility.py` → 3 passed ; `node --check career_static/career.js`, ruff et diff-check verts.
 - Navigateur réel isolé `127.0.0.1:18951/career#career/applications` : filtres État/Réception/Échéance et case À traiter exposent tous un nom accessible ; page chargée sans erreur visible ; aucun envoi déclenché.
+- Campagne cumulative ciblée U1–U5 + intégration academics : 25 passed in 7.12s ; ruff, deux `node --check` et `git diff --check` verts. Ce n'est pas une suite complète.
 - Blocage de publication : `codex/n100-u2` distant existait déjà avec un historique divergent ; push non-fast-forward refusé, aucun force-push effectué.
 
 # N100 U3 — dossier/ATS (2026-11-01)
