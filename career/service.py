@@ -282,10 +282,22 @@ class CareerService:
         from .letter_approval import decide, to_dict
         return to_dict(decide(**kwargs))
 
-    @staticmethod
-    def export_letter(**kwargs: Any) -> dict[str, Any]:
+    def export_letter(self, **kwargs: Any) -> dict[str, Any]:
+        from .letter_approval import is_approved
         from .letter_export import export_letter
-        return export_letter(**kwargs)
+        title = clean_text(kwargs.get("title"), limit=240)
+        fmt = clean_text(kwargs.get("fmt"), limit=8).lower()
+        if not is_approved(title):
+            return {"ok": False, "error": "export bloqué : lettre non approuvée par un humain"}
+        target = self.export_dir / f"{re_sub_filename(title)}.{fmt}"
+        return export_letter(
+            letter_body=kwargs.get("letter_body", ""),
+            title=title,
+            language=kwargs.get("language", "fr"),
+            target=target,
+            fmt=fmt,
+            approved=True,
+        )
 
     def shortlist(self) -> list[dict[str, Any]]:
         return self.list_jobs(shortlisted=True)
