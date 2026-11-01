@@ -566,8 +566,21 @@ button, a, .career-tab { transition: background-color .16s ease, border-color .1
 .application-checklist-items input { width: auto; flex-shrink: 0; margin-top: 2px; }
 .timeline-event { margin: 0; color: var(--muted); font-size: .72rem; line-height: 1.4; }
 .clipboard-fallback { position: absolute; inset-inline-start: -9999px; top: 0; }
+
+:where(button, a, input, select, textarea, summary):focus-visible {
+  outline: 3px solid #087a4a;
+  outline-offset: 3px;
+}
+.career-skeleton { display: grid; gap: 10px; min-height: 92px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
+.career-skeleton-line { display: block; width: 58%; height: 12px; border-radius: 999px; background: linear-gradient(90deg, #e8f1ec 25%, #f7faf8 50%, #e8f1ec 75%); background-size: 200% 100%; animation: career-skeleton-pulse 1.25s ease-in-out infinite; }
+.career-skeleton-line.wide { width: 82%; height: 16px; }
+@keyframes career-skeleton-pulse { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .career-skeleton-line { animation: none; } }
 @media (max-width: 620px) {
   .application-filters { align-items: stretch; }
   .application-filters label { flex: 1 1 100%; }
   .application-filters select { width: 100%; }
+  .job-card, .application-card, .studio-panel, .application-draft-preview { min-width: 0; overflow-wrap: anywhere; }
+  .inline-actions, .job-actions, .application-actions { align-items: stretch; flex-direction: column; }
+  .inline-actions > *, .job-actions > *, .application-actions > * { width: 100%; }
 }

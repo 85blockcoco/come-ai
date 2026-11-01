@@ -193,6 +193,27 @@ function setLoading(loading, label = "Chargement de ton espace Career local…")
   if (loading) elements.loading.textContent = label;
 }
 
+function ensureApplicationAccessibility() {
+  document.querySelectorAll("input, select, textarea").forEach((control) => {
+    if (control.getAttribute("aria-label") || control.getAttribute("aria-labelledby")) return;
+    const explicit = control.id ? document.querySelector(`label[for="${CSS.escape(control.id)}"]`) : null;
+    const wrapping = control.closest("label");
+    const label = (explicit || wrapping)?.textContent?.replace(/\s+/g, " ").trim();
+    if (label) control.setAttribute("aria-label", label.slice(0, 180));
+  });
+}
+
+function renderListSkeleton(target, count = 3) {
+  if (!target) return;
+  target.setAttribute("aria-busy", "true");
+  target.replaceChildren(...Array.from({ length: count }, () => {
+    const row = make("div", "", "career-skeleton");
+    row.setAttribute("aria-hidden", "true");
+    row.append(make("span", "", "career-skeleton-line wide"), make("span", "", "career-skeleton-line"));
+    return row;
+  }));
+}
+
 function reducedMotion() {
   return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 }
@@ -1072,6 +1093,7 @@ function renderJobs(jobs, target, empty, mode) {
 }
 
 async function loadJobs() {
+  renderListSkeleton(elements.jobs);
   const query = $("#filter-query").value.trim();
   const family = $("#filter-family").value;
   const sourceStatus = $("#filter-status").value;
@@ -1081,11 +1103,14 @@ async function loadJobs() {
   if (sourceStatus) params.set("source_status", sourceStatus);
   const payload = await api(`/api/career/jobs?${params.toString()}`);
   state.jobs = payload.jobs || [];
+  elements.jobs.removeAttribute("aria-busy");
   renderJobs(state.jobs, elements.jobs, elements.jobsEmpty, "discover");
 }
 
 async function loadShortlist() {
+  renderListSkeleton(elements.shortlist, 2);
   const payload = await api("/api/career/jobs?shortlisted=true");
+  elements.shortlist.removeAttribute("aria-busy");
   renderJobs(payload.jobs || [], elements.shortlist, elements.shortlistEmpty, "shortlist");
 }
 
@@ -1457,12 +1482,14 @@ function renderApplicationDashboard(dash) {
 }
 
 async function loadApplications() {
+  renderListSkeleton(elements.applications);
   const suffix = applicationFilterQuery();
   const [listing, dash] = await Promise.all([
     api("/api/career/applications"),
     api(`/api/career/applications/dashboard${suffix}`),
   ]);
   state.applications = listing.applications || [];
+  elements.applications.removeAttribute("aria-busy");
   renderApplicationDashboard(dash);
   await consumePendingKit();
 }
@@ -3938,6 +3965,7 @@ async function bootstrap() {
   setLoading(true);
   try {
     organiseViews();
+    ensureApplicationAccessibility();
     await Promise.all([loadHealth(), loadProfile(), loadProfileImports(), loadIntake(), loadPreferences(), loadDiscoverySources(), loadDashboard(), loadJobs(), loadShortlist(), loadApplications()]);
     resumeExplorationIfNeeded();
     const requested = window.location.hash.replace("#career/", "");
