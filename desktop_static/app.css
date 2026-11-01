@@ -35,6 +35,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 html, body { height: 100%; margin: 0; }
 
@@ -662,7 +663,29 @@ body::after {
 .letter-studio textarea { width: 100%; min-height: 230px; resize: vertical; padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .letter-studio textarea:focus-visible, .letter-controls select:focus-visible, .letter-actions button:focus-visible { outline: 3px solid color-mix(in srgb, var(--green) 55%, transparent); outline-offset: 2px; }
 .letter-status { min-height: 22px; color: var(--soft); font-size: 12px; line-height: 1.5; }
+.letter-studio { min-width: 0; }
+.letter-studio label { display: grid; gap: 6px; min-width: 0; color: var(--soft); font-size: 12px; }
+.letter-studio details { display: grid; gap: 12px; }
+.letter-studio summary { cursor: pointer; margin-bottom: 12px; color: var(--green-2); }
+.letter-studio input, .letter-studio select { max-width: 100%; border: 1px solid var(--line-hard); border-radius: 8px; padding: 10px; background: var(--panel); color: var(--text); font: inherit; }
+.letter-studio #letterFacts { min-height: 100px; }
+.letter-studio p, .letter-report, .letter-status { overflow-wrap: anywhere; white-space: normal; }
+.letter-studio > .send-btn { justify-self: start; }
+.letter-report { color: var(--soft); font-size: 13px; line-height: 1.6; }
+.letter-report ul { padding-left: 20px; }
+.letter-studio .ghost-btn { min-height: 40px; white-space: normal; }
+.letter-studio [hidden] { display: none !important; }
 @media (max-width: 700px) {
+  .topbar { align-items: stretch; flex-direction: column; padding: 16px; gap: 12px; }
+  .topbar-title { min-width: 0; overflow-wrap: anywhere; }
+  .topbar-title h1 { font-size: 16px; letter-spacing: .06em; }
+  .topbar-actions { flex-wrap: wrap; }
+  .search { min-width: 0; max-width: 100%; }
+  .search input { min-width: 0; width: 100%; }
+  .scroll { padding: 16px; }
+  .section-title { flex-wrap: wrap; }
+  .view .pipeline-item { grid-template-columns: minmax(0, 1fr); }
+  .offer-tags { flex-wrap: wrap; }
   .letter-controls, .letter-actions { align-items: stretch; flex-direction: column; }
   .letter-controls select, .letter-controls button, .letter-actions button { width: 100%; }
   .letter-studio textarea { min-height: 280px; }

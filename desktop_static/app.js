@@ -16,8 +16,25 @@
     chat: [],
     chatMode: "offline",
     sending: false,
-    letterStudio: { body: "", letterId: "", approved: false, check: null },
+    letterStudio: restoreLetterDraft(),
   };
+
+  function restoreLetterDraft() {
+    const draft = { jobId: "", language: "fr", tone: "formal", name: "", facts: "", body: "", letterId: "", format: "md", revision: 0, approved: false, check: null, busy: false, message: "", downloadUrl: "" };
+    try {
+      const saved = JSON.parse(sessionStorage.getItem("nage-letter-draft-v2") || "{}");
+      for (const key of ["jobId", "language", "tone", "name", "facts", "body", "letterId", "format"]) {
+        if (typeof saved[key] === "string") draft[key] = saved[key].slice(0, 30000);
+      }
+    } catch { /* Draft stays in memory when browser storage is unavailable. */ }
+    return draft;
+  }
+
+  function saveLetterDraft() {
+    const { jobId, language, tone, name, facts, body, letterId, format } = state.letterStudio;
+    try { sessionStorage.setItem("nage-letter-draft-v2", JSON.stringify({ jobId, language, tone, name, facts, body, letterId, format })); }
+    catch { state.letterStudio.message = "Le brouillon reste ouvert ; la sauvegarde de cet onglet est indisponible."; }
+  }
 
   const $ = (sel, root = document) => root.querySelector(sel);
   const el = (tag, attrs = {}, ...children) => {
@@ -298,8 +315,8 @@
   function renderApplications() {
     const host = $("#view-applications");
     const p = state.pipeline?.pipeline;
-    if (!p) { host.replaceChildren(loading()); return; }
     const studio = renderLetterStudio();
+    if (!p) { host.replaceChildren(studio, loading()); return; }
     if (!p.length) {
       host.replaceChildren(studio, el("div", { class: "card" }, emptyState(
         "Aucun dossier", "Prépare une lettre ci-dessus ou ouvre une offre pour créer ton premier dossier.")));
@@ -328,6 +345,7 @@
   }
 
   function renderLetterStudio() {
+    const draft = state.letterStudio;
     const jobs = state.jobs?.jobs || [];
     const offer = el("select", { id: "letterOffer", "aria-label": "Offre pour la lettre" },
       el("option", { value: "" }, "Choisir une offre…"),
@@ -339,64 +357,97 @@
     const tone = el("select", { id: "letterTone", "aria-label": "Ton de la lettre" },
       [["formal", "Formel"], ["dynamic", "Dynamique"], ["concise", "Concis"]].map(([value, label]) => el("option", { value }, label)),
     );
+    offer.value = draft.jobId;
+    language.value = draft.language;
+    tone.value = draft.tone;
+    const name = el("input", { id: "letterName", maxlength: "160", "aria-label": "Nom de candidature", placeholder: "Ton nom" });
+    name.value = draft.name;
+    const facts = el("textarea", { id: "letterFacts", rows: "3", maxlength: "12000", "aria-label": "Faits approuvés du profil", placeholder: "Un fait vérifié par ligne : diplôme, expérience ou compétence." });
+    facts.value = draft.facts;
+    const useProfile = el("button", { type: "button", class: "ghost-btn" }, "Utiliser mon profil enregistré");
     const preview = el("textarea", { id: "letterPreview", rows: "12", maxlength: "30000", "aria-label": "Aperçu modifiable de la lettre", placeholder: "La lettre apparaîtra ici. Relis-la avant toute approbation." });
-    preview.value = state.letterStudio.body;
-    preview.addEventListener("input", () => {
-      state.letterStudio.body = preview.value;
-      state.letterStudio.approved = false;
-    });
+    preview.value = draft.body;
     const status = el("div", { class: "letter-status", role: "status", "aria-live": "polite" });
-    if (state.letterStudio.check) {
-      const check = state.letterStudio.check;
-      status.textContent = `Score factuel ${check.facts_score ?? 0} · complétude ${check.completeness_score ?? 0} · ${check.blockers?.length || 0} blocage(s).`;
+    status.textContent = draft.message;
+    const report = el("div", { class: "letter-report" });
+    if (draft.check) {
+      report.append(el("p", {}, `Contrôle factuel : ${draft.check.facts_score ?? 0}/100 · complétude : ${draft.check.completeness_score ?? 0}/100`),
+        el("p", { class: "note" }, "Ce contrôle recherche des écarts avec les faits fournis. Relis aussi les affirmations non vérifiables."),
+        el("ul", {}, [...(draft.check.blockers || []), ...(draft.check.warnings || [])].map((warning) => el("li", {}, warning))));
     }
-    const generate = el("button", { type: "button", class: "primary-btn" }, "Prévisualiser");
+    const generate = el("button", { type: "button", class: "send-btn" }, "Prévisualiser");
     const verify = el("button", { type: "button", class: "ghost-btn" }, "Vérifier les faits");
-    const approve = el("button", { type: "button", class: "ghost-btn" }, state.letterStudio.approved ? "Approuvée" : "Approuver");
-    const exportButton = el("button", { type: "button", class: "ghost-btn" }, "Exporter en Markdown");
-    approve.disabled = !state.letterStudio.body || Boolean(state.letterStudio.check?.blockers?.length);
-    exportButton.disabled = !state.letterStudio.approved;
-    generate.addEventListener("click", async () => {
+    const approve = el("button", { type: "button", class: "ghost-btn" }, draft.approved ? "Approuvée" : "Approuver cette version");
+    const exportFormat = el("select", { "aria-label": "Format de la lettre" },
+      [["md", "Markdown"], ["docx", "Word"], ["pdf", "PDF"], ["txt", "Texte"]].map(([value, label]) => el("option", { value }, label)));
+    exportFormat.value = draft.format;
+    exportFormat.addEventListener("change", () => { draft.format = exportFormat.value; saveLetterDraft(); });
+    const exportButton = el("button", { type: "button", class: "ghost-btn" }, "Créer le fichier");
+    const syncButtons = () => {
+      generate.disabled = draft.busy || !draft.jobId || !state.jobs;
+      useProfile.disabled = draft.busy;
+      verify.disabled = draft.busy || !draft.body.trim();
+      approve.disabled = draft.busy || !draft.check || Boolean(draft.check.blockers?.length) || !draft.body.trim();
+      exportButton.disabled = draft.busy || !draft.approved;
+      for (const control of [offer, language, tone, name, facts, preview, exportFormat]) control.disabled = draft.busy;
+    };
+    const invalidate = () => {
+      draft.revision += 1; draft.approved = false; draft.check = null; draft.downloadUrl = "";
+      draft.message = "Modification enregistrée dans cet onglet. Vérifie puis approuve cette nouvelle version.";
+      approve.textContent = "Approuver cette version"; report.replaceChildren();
+      status.textContent = draft.message; download.hidden = true; saveLetterDraft(); syncButtons();
+    };
+    for (const [control, key] of [[offer, "jobId"], [language, "language"], [tone, "tone"], [name, "name"], [facts, "facts"], [preview, "body"]]) {
+      control.addEventListener(control.tagName === "SELECT" ? "change" : "input", () => { draft[key] = control.value; invalidate(); });
+    }
+    const evidence = () => draft.facts.split("\n").map((line) => line.trim()).filter(Boolean).slice(0, 20);
+    const run = async (action) => {
+      if (draft.busy) return;
+      draft.busy = true; status.textContent = "Traitement local…"; syncButtons();
+      try { await action(); }
+      catch (error) { draft.message = error.message; }
+      finally { draft.busy = false; saveLetterDraft(); renderApplications(); }
+    };
+    useProfile.addEventListener("click", () => run(async () => {
+      const profile = await api("/api/career/profile");
+      draft.name = profile.display_name || "";
+      draft.facts = [profile.education, profile.experience, profile.skills, profile.languages].filter(Boolean).join("\n");
+      invalidate(); draft.message = "Profil chargé localement. Vérifie les faits avant de préparer la lettre.";
+    }));
+    generate.addEventListener("click", () => run(async () => {
       const job = jobs.find((item) => item.id === offer.value);
-      if (!job) { status.textContent = "Choisis d’abord une offre."; return; }
-      generate.disabled = true; status.textContent = "Préparation locale…";
-      try {
-        const result = await api("/api/career/letter/render", { method: "POST", body: JSON.stringify({ role: job.title, company: job.company, language: language.value, tone: tone.value, evidence: [] }) });
-        state.letterStudio = { body: result.body || "", letterId: `letter-${job.id}`, approved: false, check: null };
-        renderApplications();
-      } catch (error) { status.textContent = error.message; generate.disabled = false; }
-    });
-    verify.addEventListener("click", async () => {
-      if (!preview.value.trim()) { status.textContent = "Prévisualise ou saisis une lettre avant la vérification."; return; }
-      verify.disabled = true; status.textContent = "Vérification locale…";
-      try {
-        state.letterStudio.body = preview.value;
-        state.letterStudio.check = await api("/api/career/letter/check", { method: "POST", body: JSON.stringify({ letter_body: preview.value, evidence: [] }) });
-        state.letterStudio.approved = false;
-        renderApplications();
-      } catch (error) { status.textContent = error.message; verify.disabled = false; }
-    });
-    approve.addEventListener("click", async () => {
-      if (!state.letterStudio.letterId) state.letterStudio.letterId = `letter-local-${Date.now()}`;
-      approve.disabled = true;
-      try {
-        await api("/api/career/letter/approve", { method: "POST", body: JSON.stringify({ letter_id: state.letterStudio.letterId, approved: true, note: "Approbation humaine dans NAGE" }) });
-        state.letterStudio.approved = true; renderApplications();
-      } catch (error) { status.textContent = error.message; approve.disabled = false; }
-    });
-    exportButton.addEventListener("click", async () => {
-      exportButton.disabled = true; status.textContent = "Export local…";
-      try {
-        const result = await api("/api/career/letter/export", { method: "POST", body: JSON.stringify({ letter_body: state.letterStudio.body, title: state.letterStudio.letterId, language: language.value, fmt: "md", target: `career_data/exports/${state.letterStudio.letterId}.md`, approved: true }) });
-        status.textContent = result.ok ? `Export local créé : ${result.path}` : (result.blockers || []).join(" · ");
-      } catch (error) { status.textContent = error.message; }
-      finally { exportButton.disabled = !state.letterStudio.approved; }
-    });
+      if (!job) { draft.message = "Choisis d’abord une offre."; return; }
+      const result = await api("/api/career/letter/render", { method: "POST", body: JSON.stringify({ candidate_name: draft.name, role: job.title, company: job.company, language: draft.language, tone: draft.tone, evidence: evidence() }) });
+      draft.body = result.body || ""; draft.letterId = `letter-${job.id}`; invalidate();
+      draft.message = (result.warnings || []).join(" · ") || "Brouillon prêt. Relis-le puis lance la vérification.";
+    }));
+    verify.addEventListener("click", () => run(async () => {
+      draft.check = await api("/api/career/letter/check", { method: "POST", body: JSON.stringify({ letter_body: draft.body, evidence: evidence() }) });
+      draft.approved = false; draft.message = draft.check.blockers?.length ? "Corrige les blocages ci-dessous avant l’approbation." : "Contrôle terminé. Tu peux approuver cette version après relecture.";
+    }));
+    approve.addEventListener("click", () => run(async () => {
+      if (!draft.check || draft.check.blockers?.length) return;
+      if (!draft.letterId) draft.letterId = `letter-local-${Date.now()}`;
+      const result = await api("/api/career/letter/approve", { method: "POST", body: JSON.stringify({ letter_id: draft.letterId, letter_body: draft.body, language: draft.language, approved: true, note: "Version relue dans NAGE" }) });
+      draft.approved = result.approved === true;
+      draft.message = draft.approved ? "Cette version est approuvée. Choisis un format et crée le fichier." : (result.blockers || []).join(" · ");
+    }));
+    exportButton.addEventListener("click", () => run(async () => {
+      if (!draft.approved) return;
+      const result = await api("/api/career/letter/export", { method: "POST", body: JSON.stringify({ letter_body: draft.body, title: draft.letterId, language: draft.language, fmt: draft.format }) });
+      draft.downloadUrl = result.ok ? result.download_url || "" : "";
+      draft.message = result.ok ? "Fichier prêt : utilise le lien de téléchargement." : (result.blockers || []).join(" · ");
+    }));
+    const download = el("a", { class: "ghost-btn", href: draft.downloadUrl || "#", download: "", hidden: !draft.downloadUrl }, "Télécharger la lettre");
+    syncButtons();
     return el("section", { class: "card letter-studio", "aria-labelledby": "letterStudioTitle" },
       el("div", { class: "section-title no-gap" }, el("h2", { id: "letterStudioTitle" }, "Lettre de motivation"), el("span", { class: "hint" }, "locale · révision humaine obligatoire")),
       el("p", { class: "note" }, "Choisis l’offre, la langue et le ton. NAGE prépare un brouillon sans inventer de faits et n’envoie jamais la candidature."),
-      el("div", { class: "letter-controls" }, offer, language, tone, generate), preview,
-      el("div", { class: "letter-actions" }, verify, approve, exportButton), status,
+      !jobs.length ? el("p", { class: "note" }, state.jobs ? "Enregistre une offre pour préparer ta lettre." : "Chargement des offres…") : null,
+      el("div", { class: "letter-controls" }, el("label", {}, "Offre", offer), el("label", {}, "Langue", language), el("label", {}, "Ton", tone)),
+      el("details", {}, el("summary", {}, "Faits et nom utilisés pour personnaliser la lettre"), el("label", {}, "Nom", name), el("label", {}, "Faits approuvés (un par ligne)", facts), useProfile),
+      generate, preview, report,
+      el("div", { class: "letter-actions" }, verify, approve, el("label", {}, "Format", exportFormat), exportButton, download), status,
     );
   }
 
@@ -734,6 +785,7 @@
   /* ---------- Démarrage ---------- */
 
   for (const button of document.querySelectorAll(".nav-item")) {
+    button.setAttribute("aria-label", VIEWS[button.dataset.view]?.title || button.textContent.trim());
     button.addEventListener("click", () => setView(button.dataset.view));
   }
   $("#refreshBtn").addEventListener("click", refresh);

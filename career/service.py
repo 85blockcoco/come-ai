@@ -278,26 +278,56 @@ class CareerService:
         return to_dict(personalize_letter(**kwargs))
 
     @staticmethod
-    def approve_letter(**kwargs: Any) -> dict[str, Any]:
-        from .letter_approval import decide, to_dict
-        return to_dict(decide(**kwargs))
+    def _letter_fingerprint(body: str, language: str) -> str:
+        return hashlib.sha256(json.dumps([body, language], ensure_ascii=False).encode("utf-8")).hexdigest()
+
+    def approve_letter(self, **kwargs: Any) -> dict[str, Any]:
+        identifier = kwargs["letter_id"]
+        body = kwargs.get("letter_body", "")
+        language = kwargs.get("language", "fr")
+        approved = bool(kwargs["approved"] and body.strip())
+        blockers = [] if not kwargs["approved"] or approved else ["Relis le contenu de la lettre avant de l’approuver."]
+        with self._lock, self._connection() as connection:
+            connection.execute(
+                "INSERT INTO letter_content_approvals(letter_id, fingerprint, approved, version, note, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(letter_id) DO UPDATE SET "
+                "fingerprint=excluded.fingerprint, approved=excluded.approved, version=excluded.version, "
+                "note=excluded.note, updated_at=excluded.updated_at",
+                (identifier, self._letter_fingerprint(body, language), int(approved),
+                 kwargs.get("version", 1), kwargs.get("note", ""), utc_now()),
+            )
+        return {"letter_id": identifier, "approved": approved, "version": kwargs.get("version", 1),
+                "approver": "human", "warnings": [], "blockers": blockers}
 
     def export_letter(self, **kwargs: Any) -> dict[str, Any]:
-        from .letter_approval import is_approved
-        from .letter_export import export_letter
-        title = clean_text(kwargs.get("title"), limit=240)
+        from .letter_export import ALLOWED_FORMATS, export_letter
+        title = kwargs.get("title", "")
+        body = kwargs.get("letter_body", "")
+        language = kwargs.get("language", "fr")
         fmt = clean_text(kwargs.get("fmt"), limit=8).lower()
-        if not is_approved(title):
-            return {"ok": False, "error": "export bloqué : lettre non approuvée par un humain"}
-        target = self.export_dir / f"{re_sub_filename(title)}.{fmt}"
-        return export_letter(
-            letter_body=kwargs.get("letter_body", ""),
-            title=title,
-            language=kwargs.get("language", "fr"),
-            target=target,
-            fmt=fmt,
-            approved=True,
-        )
+        if fmt not in ALLOWED_FORMATS:
+            return {"ok": False, "error": "Format d’export non supporté."}
+        with self._lock, self._connection() as connection:
+            approval = connection.execute(
+                "SELECT fingerprint, approved FROM letter_content_approvals WHERE letter_id = ?", (title,),
+            ).fetchone()
+            if not approval or not approval["approved"] or approval["fingerprint"] != self._letter_fingerprint(body, language):
+                return {"ok": False, "error": "Approuve cette version exacte de la lettre avant l’export."}
+            # Opaque, fresh filenames cannot collide with an existing original or symlink.
+            target = self.export_dir / f"career_letter_{uuid.uuid4().hex}.{fmt}"
+            result = export_letter(letter_body=body, title=title, language=language, target=target, fmt=fmt, approved=True)
+            if result.get("ok"):
+                os.chmod(target, 0o600)
+                result["download_url"] = f"/api/career/letter/exports/{target.name}"
+            return result
+
+    def letter_export_path(self, filename: str) -> Path:
+        if not re.fullmatch(r"career_letter_[0-9a-f]{32}\.(?:md|txt|pdf|docx)", filename):
+            raise UserFacingError("Cet export de lettre est introuvable.")
+        path = self.export_dir / filename
+        if path.is_symlink() or not path.is_file():
+            raise UserFacingError("Cet export de lettre est introuvable.")
+        return path
 
     def shortlist(self) -> list[dict[str, Any]]:
         return self.list_jobs(shortlisted=True)
@@ -675,6 +705,11 @@ class CareerService:
             # never as a new column on the offers themselves.
             offer_intelligence_store.ensure_schema(connection)
             source_material_store.ensure_schema(connection)
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS letter_content_approvals ("
+                "letter_id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, approved INTEGER NOT NULL, "
+                "version INTEGER NOT NULL, note TEXT NOT NULL, updated_at TEXT NOT NULL)"
+            )
         try:
             os.chmod(self.db_path, 0o600)
         except OSError:
@@ -5674,6 +5709,9 @@ class CareerService:
                     ).fetchall()
                 ],
                 "exported_at": utc_now(),
+                "letter_approvals": [dict(row) for row in connection.execute(
+                    "SELECT * FROM letter_content_approvals ORDER BY updated_at"
+                ).fetchall()],
             }
         target.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         try:
@@ -5708,6 +5746,7 @@ class CareerService:
             connection.execute("DELETE FROM preference_items")
             connection.execute("DELETE FROM career_settings")
             connection.execute("DELETE FROM career_audit_log")
+            connection.execute("DELETE FROM letter_content_approvals")
             self._seed_defaults(connection)
             self._audit(connection, "career_data_reset", "career", "all")
         for path in self.export_dir.glob("career_*"):

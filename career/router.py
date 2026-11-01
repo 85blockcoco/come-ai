@@ -6,7 +6,7 @@ import hashlib
 import os
 from datetime import date
 from pathlib import Path
-from typing import Any, Callable
+from typing import Annotated, Any, Callable
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse
@@ -92,14 +92,14 @@ class LetterRenderPayload(BaseModel):
     candidate_name: str = Field(default="", max_length=160)
     role: str = Field(default="", max_length=300)
     company: str = Field(default="", max_length=240)
-    evidence: list[str] = Field(default_factory=list, max_length=20)
+    evidence: list[Annotated[str, Field(max_length=2_000)]] = Field(default_factory=list, max_length=20)
     language: str = Field(default="fr", max_length=8)
     tone: str = Field(default="formal", max_length=20)
 
 
 class LetterCheckPayload(BaseModel):
     letter_body: str = Field(min_length=1, max_length=30_000)
-    evidence: list[str] = Field(default_factory=list, max_length=30)
+    evidence: list[Annotated[str, Field(max_length=2_000)]] = Field(default_factory=list, max_length=30)
 
 
 class LetterPersonalizePayload(BaseModel):
@@ -112,7 +112,7 @@ class LetterExportPayload(BaseModel):
     letter_body: str = Field(min_length=1, max_length=30_000)
     title: str = Field(min_length=1, max_length=240)
     language: str = Field(default="fr", max_length=8)
-    target: str = Field(min_length=1, max_length=500)
+    target: str = Field(default="", max_length=500)  # Legacy input, deliberately ignored.
     fmt: str = Field(default="md", max_length=8)
     approved: bool = False
 
@@ -122,6 +122,8 @@ class LetterApprovePayload(BaseModel):
     approved: bool
     version: int = Field(default=1, ge=1, le=100)
     note: str = Field(default="", max_length=2_000)
+    letter_body: str = Field(default="", max_length=30_000)
+    language: str = Field(default="fr", max_length=8)
 
 
 class OffersRankPayload(BaseModel):
@@ -1047,6 +1049,11 @@ def create_career_router(
         result.setdefault("warnings", [])
         result.setdefault("blockers", [] if result.get("ok") else [result.get("error", "export bloqué")])
         return result
+
+    @router.get("/api/career/letter/exports/{filename}")
+    async def letter_download(filename: str) -> FileResponse:
+        path = await run_in_threadpool(lambda: service.letter_export_path(filename))
+        return FileResponse(path, filename=path.name, headers={"Cache-Control": "no-store"})
 
     @router.post("/api/career/offers/rank")
     async def offers_rank(payload: OffersRankPayload) -> Any:

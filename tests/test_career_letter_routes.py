@@ -27,7 +27,7 @@ def test_letter_render_check_personalize_and_approve(tmp_path: Path) -> None:
         assert "warnings" in checked.json() and "blockers" in checked.json()
         personalized = http.post("/api/career/letter/personalize", json={"body": body, "company": "Acme", "company_facts": ["has a finance team"]})
         assert personalized.status_code == 200
-        approved = http.post("/api/career/letter/approve", json={"letter_id": "synthetic-1", "approved": True})
+        approved = http.post("/api/career/letter/approve", json={"letter_id": "synthetic-1", "approved": True, "letter_body": body, "language": "en"})
         assert approved.status_code == 200
         assert approved.json()["approved"] is True
 
@@ -56,7 +56,9 @@ def test_client_approved_flag_cannot_bypass_server_gate(tmp_path: Path) -> None:
 
 def test_approved_letter_exports_only_under_server_directory(tmp_path: Path) -> None:
     with client(tmp_path) as http:
-        assert http.post("/api/career/letter/approve", json={"letter_id": "approved-letter", "approved": True}).status_code == 200
+        approval = http.post("/api/career/letter/approve", json={"letter_id": "approved-letter", "approved": True, "letter_body": "Synthetic approved letter"})
+        assert approval.status_code == 200
+        assert approval.json()["approved"] is True
         response = http.post("/api/career/letter/export", json={
             "letter_body": "Synthetic approved letter",
             "title": "approved-letter",
@@ -67,4 +69,6 @@ def test_approved_letter_exports_only_under_server_directory(tmp_path: Path) -> 
         assert response.status_code == 200
         payload = response.json()
         assert payload["ok"] is True
-        assert payload["path"].endswith("career_data/exports/approved-letter.md")
+        path = Path(payload["path"])
+        assert path.parent == tmp_path / "career_data" / "exports"
+        assert path.read_text(encoding="utf-8").endswith("Synthetic approved letter")
