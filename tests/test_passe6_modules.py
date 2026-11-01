@@ -19,8 +19,8 @@ def test_report_success_rates() -> None:
         cache_hits=10, cache_misses=40, at="2026-11-01T00:00:00+00:00",
     )
     assert r.total_calls == 15
-    assert r.global_success_rate == 80.0
-    assert r.providers[0]["success_rate"] == 90.0
+    assert r.global_success_rate == 73.3  # (15-4)/15
+    assert r.providers[0]["success_rate"] == 90.0  # (10-1)/10
     assert r.cache_hit_rate == 20.0
 
 
