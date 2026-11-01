@@ -42,3 +42,12 @@
 - Pré-revue des consignes locales SPEC-044/046 : le candidat possède déjà `career/cv_variants.py`, `career/application_studio.py` et `career/document_export.py`, mais aucun `career/apply_kit.py`, `career/ats_guide.py` ni leurs routes. Je n'ai pas dupliqué le travail des agents dont les branches ne sont pas publiées. SPEC-044-E2E_METRICS demande des offres réelles locales; aucune offre réelle n'a été lue ni copiée, et cette évaluation n'a pas été exécutée.
 - Le worktree non commité `/Users/comedelavenne/AI-Excel-Agent-worker-cvboost-84-1793029873023` ajoute une variante de SPEC-047 dans `career/router.py` et `career/service.py`, et un `career/send_confirmation.py`. Elle fixe `approval_granted = 1` à la déclaration d'envoi et utilise `_LAST_SERVICE` global. La candidate exige l'approbation préalable et son test dédié plus le test exigeant un suivi existant passent (2/2, 3,14 s); la variante du worktree n'a pas été intégrée ni validée par Codex. Un pytest ciblé a été observé en cours dans ce worktree, puis le processus a disparu avant que sa sortie puisse être récupérée; son résultat reste inconnu.
 - `main` n'a pas été modifiée.
+# N100 U2 — shortlist/urgence (2026-11-01)
+
+- Base vérifiée : `origin/agent/n100-carrier-20261101` = `5d33f001597b8e7784fb6c7ed53afbccd45a0db1` (le `0b435000` indiqué dans le message est historique et n'est plus le tip distant).
+- Commit : `a0e6eeb37520c4a092860849bb9b4a1b1dcee194`.
+- Branche publiée : `codex/n100-u2-20261101` ; `git ls-remote` vérifie le même SHA.
+- U2 : routes `offers/rank`, `shortlist?fmt=text|json`, `shortlist/export`; cible d'export imposée côté serveur sous `career_data/exports/`; offres vides refusées avec `blockers`.
+- Tests : `.venv/bin/python -m pytest -q tests/test_career_shortlist_routes.py` → `4 passed in 4.37s`.
+- Ruff et `git diff --check` verts.
+- Blocage de publication : `codex/n100-u2` distant existait déjà avec un historique divergent ; push non-fast-forward refusé, aucun force-push effectué.
