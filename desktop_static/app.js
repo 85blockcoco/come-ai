@@ -16,6 +16,7 @@
     chat: [],
     chatMode: "offline",
     sending: false,
+    letterStudio: { body: "", letterId: "", approved: false, check: null },
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -298,9 +299,10 @@
     const host = $("#view-applications");
     const p = state.pipeline?.pipeline;
     if (!p) { host.replaceChildren(loading()); return; }
+    const studio = renderLetterStudio();
     if (!p.length) {
-      host.replaceChildren(el("div", { class: "card" }, emptyState(
-        "Aucun dossier", "Ouvre une offre et génère un kit pour créer ton premier dossier.")));
+      host.replaceChildren(studio, el("div", { class: "card" }, emptyState(
+        "Aucun dossier", "Prépare une lettre ci-dessus ou ouvre une offre pour créer ton premier dossier.")));
       return;
     }
     const stages = new Map();
@@ -309,6 +311,7 @@
       stages.set(key, (stages.get(key) ?? 0) + 1);
     }
     host.replaceChildren(
+      studio,
       el("div", { class: "grid kpi" }, [...stages.entries()].map(([label, count]) =>
         el("div", { class: "card kpi-card" },
           el("div", { class: "kpi-top" }, el("span", { class: "kpi-label" }, label), el("span", { class: "kpi-chip" }, "◆")),
@@ -321,6 +324,79 @@
       el("p", { class: "note" },
         "Chaque action reste manuelle : rien n’est envoyé sans ta validation. ",
         el("a", { class: "inline-link", href: "/career", target: "_blank", rel: "noopener" }, "Ouvrir Career pour agir →")),
+    );
+  }
+
+  function renderLetterStudio() {
+    const jobs = state.jobs?.jobs || [];
+    const offer = el("select", { id: "letterOffer", "aria-label": "Offre pour la lettre" },
+      el("option", { value: "" }, "Choisir une offre…"),
+      jobs.map((job) => el("option", { value: job.id }, `${job.company || "Entreprise"} — ${job.title || "Offre"}`)),
+    );
+    const language = el("select", { id: "letterLanguage", "aria-label": "Langue de la lettre" },
+      [["fr", "Français"], ["en", "English"], ["de", "Deutsch"], ["es", "Español"]].map(([value, label]) => el("option", { value }, label)),
+    );
+    const tone = el("select", { id: "letterTone", "aria-label": "Ton de la lettre" },
+      [["formal", "Formel"], ["dynamic", "Dynamique"], ["concise", "Concis"]].map(([value, label]) => el("option", { value }, label)),
+    );
+    const preview = el("textarea", { id: "letterPreview", rows: "12", maxlength: "30000", "aria-label": "Aperçu modifiable de la lettre", placeholder: "La lettre apparaîtra ici. Relis-la avant toute approbation." });
+    preview.value = state.letterStudio.body;
+    preview.addEventListener("input", () => {
+      state.letterStudio.body = preview.value;
+      state.letterStudio.approved = false;
+    });
+    const status = el("div", { class: "letter-status", role: "status", "aria-live": "polite" });
+    if (state.letterStudio.check) {
+      const check = state.letterStudio.check;
+      status.textContent = `Score factuel ${check.facts_score ?? 0} · complétude ${check.completeness_score ?? 0} · ${check.blockers?.length || 0} blocage(s).`;
+    }
+    const generate = el("button", { type: "button", class: "primary-btn" }, "Prévisualiser");
+    const verify = el("button", { type: "button", class: "ghost-btn" }, "Vérifier les faits");
+    const approve = el("button", { type: "button", class: "ghost-btn" }, state.letterStudio.approved ? "Approuvée" : "Approuver");
+    const exportButton = el("button", { type: "button", class: "ghost-btn" }, "Exporter en Markdown");
+    approve.disabled = !state.letterStudio.body || Boolean(state.letterStudio.check?.blockers?.length);
+    exportButton.disabled = !state.letterStudio.approved;
+    generate.addEventListener("click", async () => {
+      const job = jobs.find((item) => item.id === offer.value);
+      if (!job) { status.textContent = "Choisis d’abord une offre."; return; }
+      generate.disabled = true; status.textContent = "Préparation locale…";
+      try {
+        const result = await api("/api/career/letter/render", { method: "POST", body: JSON.stringify({ role: job.title, company: job.company, language: language.value, tone: tone.value, evidence: [] }) });
+        state.letterStudio = { body: result.body || "", letterId: `letter-${job.id}`, approved: false, check: null };
+        renderApplications();
+      } catch (error) { status.textContent = error.message; generate.disabled = false; }
+    });
+    verify.addEventListener("click", async () => {
+      if (!preview.value.trim()) { status.textContent = "Prévisualise ou saisis une lettre avant la vérification."; return; }
+      verify.disabled = true; status.textContent = "Vérification locale…";
+      try {
+        state.letterStudio.body = preview.value;
+        state.letterStudio.check = await api("/api/career/letter/check", { method: "POST", body: JSON.stringify({ letter_body: preview.value, evidence: [] }) });
+        state.letterStudio.approved = false;
+        renderApplications();
+      } catch (error) { status.textContent = error.message; verify.disabled = false; }
+    });
+    approve.addEventListener("click", async () => {
+      if (!state.letterStudio.letterId) state.letterStudio.letterId = `letter-local-${Date.now()}`;
+      approve.disabled = true;
+      try {
+        await api("/api/career/letter/approve", { method: "POST", body: JSON.stringify({ letter_id: state.letterStudio.letterId, approved: true, note: "Approbation humaine dans NAGE" }) });
+        state.letterStudio.approved = true; renderApplications();
+      } catch (error) { status.textContent = error.message; approve.disabled = false; }
+    });
+    exportButton.addEventListener("click", async () => {
+      exportButton.disabled = true; status.textContent = "Export local…";
+      try {
+        const result = await api("/api/career/letter/export", { method: "POST", body: JSON.stringify({ letter_body: state.letterStudio.body, title: state.letterStudio.letterId, language: language.value, fmt: "md", target: `career_data/exports/${state.letterStudio.letterId}.md`, approved: true }) });
+        status.textContent = result.ok ? `Export local créé : ${result.path}` : (result.blockers || []).join(" · ");
+      } catch (error) { status.textContent = error.message; }
+      finally { exportButton.disabled = !state.letterStudio.approved; }
+    });
+    return el("section", { class: "card letter-studio", "aria-labelledby": "letterStudioTitle" },
+      el("div", { class: "section-title no-gap" }, el("h2", { id: "letterStudioTitle" }, "Lettre de motivation"), el("span", { class: "hint" }, "locale · révision humaine obligatoire")),
+      el("p", { class: "note" }, "Choisis l’offre, la langue et le ton. NAGE prépare un brouillon sans inventer de faits et n’envoie jamais la candidature."),
+      el("div", { class: "letter-controls" }, offer, language, tone, generate), preview,
+      el("div", { class: "letter-actions" }, verify, approve, exportButton), status,
     );
   }
 
