@@ -330,7 +330,14 @@ class CareerService:
         return path
 
     def shortlist(self) -> list[dict[str, Any]]:
-        return self.list_jobs(shortlisted=True)
+        return [self._shortlist_offer(job) for job in self.list_jobs(shortlisted=True)]
+
+    @staticmethod
+    def _shortlist_offer(offer: dict[str, Any]) -> dict[str, Any]:
+        return {**offer,
+                "deadline": offer.get("deadline") or offer.get("deadline_date"),
+                "score": offer.get("score", (offer.get("scoring") or {}).get("score", 0)),
+                "location": offer.get("location") or ", ".join(str(offer.get(key) or "") for key in ("city", "country") if offer.get(key))}
 
     @staticmethod
     def rank_offers(offers: list[dict[str, Any]], today: str | None = None) -> dict[str, Any]:
@@ -353,11 +360,25 @@ class CareerService:
         if normalized not in {"csv", "json"}:
             return {"ok": False, "warnings": [], "blockers": ["Format shortlist non supporté."]}
         target = self.export_dir / f"shortlist.{normalized}"
-        if normalized == "csv":
-            result = export_shortlist_csv(offers, target, fields=fields or None)
-        else:
-            result = export_shortlist_json(offers, target)
-        return {"ok": True, **result.__dict__, "warnings": [], "blockers": []}
+        warnings: list[str] = []
+        with self._lock:
+            if target.is_symlink():
+                return {"ok": False, "warnings": [], "blockers": ["La cible d’export est un lien symbolique."]}
+            if normalized == "csv":
+                def safe_cell(value: Any) -> Any:
+                    if isinstance(value, str) and (value.lstrip().startswith(("=", "+", "-", "@")) or value.startswith(("\t", "\r", "\n"))):
+                        if not warnings:
+                            warnings.append("Les cellules pouvant être interprétées comme des formules ont été exportées comme texte.")
+                        return "'" + value
+                    return value
+                if any(safe_cell(field) != field for field in fields or [key for offer in offers for key in offer]):
+                    return {"ok": False, "warnings": [], "blockers": ["Un nom de colonne est incompatible avec un export CSV sûr."]}
+                safe_offers = [{key: safe_cell(value) for key, value in offer.items()} for offer in offers]
+                result = export_shortlist_csv(safe_offers, target, fields=fields or None)
+            else:
+                result = export_shortlist_json(offers, target)
+            os.chmod(target, 0o600)
+        return {"ok": True, **result.__dict__, "warnings": warnings, "blockers": []}
 
     def ats_fields(self, platform: str) -> dict[str, Any]:
         from .ats_fields import missing_required, prefill_fields, to_dict
