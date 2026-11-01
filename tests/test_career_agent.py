@@ -506,7 +506,7 @@ def test_local_storage_profile_preferences_and_persistence(tmp_path: Path) -> No
     initial_profile = service.get_profile()
     assert initial_profile["eligibility"] == "unknown"
     preferences = service.get_preferences()
-    assert len(preferences["families"]) == 6
+    assert len(preferences["families"]) == 14
     assert {item["priority"] for item in preferences["families"]} == {100}
     primary_locations = [item for item in preferences["locations"] if item["scope"] == "primary"]
     secondary_locations = [item for item in preferences["locations"] if item["scope"] == "secondary"]

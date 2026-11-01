@@ -7,10 +7,10 @@ V5_JS = Path(__file__).resolve().parents[1] / "v5_static" / "v5.js"
 
 def test_career_note_editing_is_inline_not_window_prompt() -> None:
     source = CAREER_JS.read_text(encoding="utf-8")
-    # Exactly one remaining window.prompt: the typed destructive-data
-    # confirmation, which is a safety feature, not a note input.
-    assert source.count("window.prompt") == 1
-    assert "SUPPRIMER MES DONNÉES CAREER" in source
+    # La suppression des données Career utilise désormais une confirmation
+    # accessible (window.confirm) plutôt qu'un prompt bloquant.
+    assert source.count("window.prompt") == 0
+    assert 'window.confirm("Cette action supprime définitivement les données Career locales' in source
     assert "function openNoteEditor" in source
     assert 'editor.remove();\n    onSaved(input.value);' in source
     assert "Escape" in source

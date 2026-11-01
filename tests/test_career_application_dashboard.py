@@ -415,8 +415,8 @@ STATIC_DIR = Path(__file__).resolve().parents[1] / "career_static"
 def test_ui_guards_no_new_native_prompt_and_local_copy_only() -> None:
     js = (STATIC_DIR / "career.js").read_text(encoding="utf-8")
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
-    # Exactement un window.prompt : la confirmation typée de suppression.
-    assert js.count("window.prompt") == 1
+    # La suppression des données utilise désormais window.confirm (accessible).
+    assert js.count("window.prompt") == 0
     assert 'aria-live="polite"' in html
     assert "applications-radar" in html
     assert "navigator.clipboard" in js
