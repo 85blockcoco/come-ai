@@ -26,4 +26,4 @@ ruff>=0.9,<1
 
 # Exports Career locaux, sans Word, Pages, navigateur ou service distant
 python-docx>=1.1,<2
-reportlab>=4,<5
+reportlab>=5.1.0,<6
