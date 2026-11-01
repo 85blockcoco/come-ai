@@ -64,6 +64,7 @@
 - Commit code : `bf2f24cf5bc2652378419700786197cdf5217fb7` ; branche `codex/n100-u5`, push vérifié.
 - Labels accessibles complétés depuis les labels HTML existants ; focus visible global ; skeletons avec `aria-busy` sur offres, shortlist et candidatures ; animation neutralisée en réduction de mouvement ; règles mobiles renforcées.
 - Tests : `tests/test_n100_career_accessibility.py` → 3 passed ; `node --check career_static/career.js`, ruff et diff-check verts.
+- Navigateur réel isolé `127.0.0.1:18951/career#career/applications` : filtres État/Réception/Échéance et case À traiter exposent tous un nom accessible ; page chargée sans erreur visible ; aucun envoi déclenché.
 - Blocage de publication : `codex/n100-u2` distant existait déjà avec un historique divergent ; push non-fast-forward refusé, aucun force-push effectué.
 
 # N100 U3 — dossier/ATS (2026-11-01)
