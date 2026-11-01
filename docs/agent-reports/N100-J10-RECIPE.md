@@ -117,7 +117,7 @@ Les deux serveurs de recette ont été arrêtés après vérification.
 3. Le parcours navigateur U4 a vérifié le blocage de l'approbation, pas un export positif après résolution de tous les faits.
 4. La suite complète n'a pas été exécutée ; la preuve porte sur 32 tests ciblés et les validations antérieures documentées.
 5. Aucune fusion dans `main`, publication ou déploiement n'a été effectué.
-6. La route U1 d'export de lettre accepte encore le booléen `approved` du payload. L'UI n'active l'export qu'après approbation, mais le backend doit idéalement ignorer ce booléen client et vérifier uniquement le registre d'approbation persistant avant DOCX/PDF.
+6. Le contournement potentiel par le booléen client `approved` a été corrigé après cette campagne au commit `46abda86e024aea13bf6dccac9ab6164ac4ad654` : tous les formats vérifient désormais le registre serveur et le chemin d'export est imposé côté serveur.
 
 ## 8. Ordre d'intégration reproductible
 
