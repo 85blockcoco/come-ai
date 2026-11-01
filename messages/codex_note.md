@@ -89,6 +89,7 @@
 - Le booléen `approved` envoyé par le client ne peut plus contourner la validation : le registre d'approbation serveur est obligatoire pour MD/TXT/DOCX/PDF.
 - Le chemin client est ignoré ; l'export est imposé sous `career_data/exports/`.
 - Tests ciblés lettre + UI : 6 passed in 3.59s ; ruff et diff-check verts.
+- Campagne cumulative post-correctif : 34 passed in 9.51s ; ruff, deux `node --check` et diff-check verts.
 - Blocage de publication : `codex/n100-u2` distant existait déjà avec un historique divergent ; push non-fast-forward refusé, aucun force-push effectué.
 
 # N100 U3 — dossier/ATS (2026-11-01)

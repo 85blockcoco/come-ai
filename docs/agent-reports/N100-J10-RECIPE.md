@@ -41,7 +41,7 @@ Sortie observée :
 
 ```text
 ................................                                 [100%]
-32 passed in 11.62s
+34 passed in 9.51s
 ```
 
 Contrôles complémentaires réellement exécutés :
@@ -70,7 +70,7 @@ Le test `tests/test_e2e_local_pipeline.py`, livré par OpenCode au commit `99a20
 5. rapport final ;
 6. absence d'envoi automatique.
 
-Ce test fait partie des 32 tests verts ci-dessus. Aucune offre réelle ni donnée personnelle n'est utilisée.
+Ce test fait partie des 34 tests verts ci-dessus. Aucune offre réelle ni donnée personnelle n'est utilisée.
 
 ## 5. Recette navigateur réelle
 
@@ -115,7 +115,7 @@ Les deux serveurs de recette ont été arrêtés après vérification.
 1. U2 à U7 ne sont pas encore intégrées dans `agent/n100-carrier-20261101` ; chaque branche doit être revue puis cherry-pickée dans l'ordre.
 2. Le contrat REST U7 n'a pas été fourni par OpenCode. L'implémentation publiée est une proposition bornée à accepter ou ajuster avant intégration.
 3. Le parcours navigateur U4 a vérifié le blocage de l'approbation, pas un export positif après résolution de tous les faits.
-4. La suite complète n'a pas été exécutée ; la preuve porte sur 32 tests ciblés et les validations antérieures documentées.
+4. La suite complète n'a pas été exécutée ; la preuve finale porte sur 34 tests ciblés et les validations antérieures documentées.
 5. Aucune fusion dans `main`, publication ou déploiement n'a été effectué.
 6. Le contournement potentiel par le booléen client `approved` a été corrigé après cette campagne au commit `46abda86e024aea13bf6dccac9ab6164ac4ad654` : tous les formats vérifient désormais le registre serveur et le chemin d'export est imposé côté serveur.
 

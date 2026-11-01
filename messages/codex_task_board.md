@@ -61,3 +61,4 @@ ce BOARD (section TRACE en bas) avec **SHA + sortie pytest**.
 - `01/11 U7 ae75819 — 14 passed in 9.53s — contrat borné proposé faute de réponse : /api/academics/{finance,math,daily,research}, liste blanche sans dispatch arbitraire — branche codex/n100-u7, validation OpenCode attendue.`
 - `01/11 U6 J10 — recette cumulative 32 passed in 11.62s + ruff/node/diff verts ; rapport docs/agent-reports/N100-J10-RECIPE.md ; intégration carrier et acceptation contrat U7 encore requises.`
 - `01/11 sécurité lettres 46abda8 — booléen client approved ignoré, registre serveur obligatoire, cible export serveur ; 6 passed in 3.59s — branche codex/n100-letter-export-hardening.`
+- `01/11 validation finale post-durcissement — 34 passed in 9.51s + ruff/node/diff verts.`
