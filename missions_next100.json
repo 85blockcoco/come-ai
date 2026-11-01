@@ -135,7 +135,7 @@
    "id": "A09",
    "lot": "A",
    "title": "Cache local des offres avec invalidation",
-   "status": "todo",
+   "status": "done",
    "priority": "P2",
    "files": [
     "career/offer_cache.py",
@@ -1046,7 +1046,7 @@
    "id": "G10",
    "lot": "G",
    "title": "Rapport d'export",
-   "status": "todo",
+   "status": "done",
    "priority": "P2",
    "files": [
     "career/export_report.py",
@@ -1342,7 +1342,7 @@
    "id": "I10",
    "lot": "I",
    "title": "Rapport de fiabilite IA",
-   "status": "todo",
+   "status": "done",
    "priority": "P2",
    "files": [
     "career/ai_reliability_report.py",
