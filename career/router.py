@@ -88,6 +88,42 @@ class NotePayload(BaseModel):
     note: str = Field(default="", max_length=4_000)
 
 
+class LetterRenderPayload(BaseModel):
+    candidate_name: str = Field(default="", max_length=160)
+    role: str = Field(default="", max_length=300)
+    company: str = Field(default="", max_length=240)
+    evidence: list[str] = Field(default_factory=list, max_length=20)
+    language: str = Field(default="fr", max_length=8)
+    tone: str = Field(default="formal", max_length=20)
+
+
+class LetterCheckPayload(BaseModel):
+    letter_body: str = Field(min_length=1, max_length=30_000)
+    evidence: list[str] = Field(default_factory=list, max_length=30)
+
+
+class LetterPersonalizePayload(BaseModel):
+    body: str = Field(min_length=1, max_length=30_000)
+    company: str = Field(default="", max_length=240)
+    company_facts: list[str] = Field(default_factory=list, max_length=20)
+
+
+class LetterExportPayload(BaseModel):
+    letter_body: str = Field(min_length=1, max_length=30_000)
+    title: str = Field(min_length=1, max_length=240)
+    language: str = Field(default="fr", max_length=8)
+    target: str = Field(min_length=1, max_length=500)
+    fmt: str = Field(default="md", max_length=8)
+    approved: bool = False
+
+
+class LetterApprovePayload(BaseModel):
+    letter_id: str = Field(min_length=1, max_length=240)
+    approved: bool
+    version: int = Field(default=1, ge=1, le=100)
+    note: str = Field(default="", max_length=2_000)
+
+
 class StageSearchPayload(BaseModel):
     """The person's own internship-search brief; every field is optional so no
     preference is presumed before they fill it in."""
@@ -954,6 +990,40 @@ def create_career_router(
             arena_available=payload.arena_available,
         )))
         return report
+
+    @router.post("/api/career/letter/render")
+    async def letter_render(payload: LetterRenderPayload) -> Any:
+        result = await local(lambda: service.render_letter(**payload.model_dump()))
+        result.setdefault("warnings", [])
+        result.setdefault("blockers", [])
+        return result
+
+    @router.post("/api/career/letter/check")
+    async def letter_check(payload: LetterCheckPayload) -> Any:
+        result = await local(lambda: service.check_letter(payload.letter_body, payload.evidence))
+        result.setdefault("warnings", result.pop("violations", []))
+        result.setdefault("blockers", [])
+        return result
+
+    @router.post("/api/career/letter/personalize")
+    async def letter_personalize(payload: LetterPersonalizePayload) -> Any:
+        result = await local(lambda: service.personalize_letter(**payload.model_dump()))
+        result.setdefault("blockers", [])
+        return result
+
+    @router.post("/api/career/letter/approve")
+    async def letter_approve(payload: LetterApprovePayload) -> Any:
+        result = await local(lambda: service.approve_letter(**payload.model_dump()))
+        result.setdefault("warnings", [])
+        result.setdefault("blockers", [])
+        return result
+
+    @router.post("/api/career/letter/export")
+    async def letter_export(payload: LetterExportPayload) -> Any:
+        result = await local(lambda: service.export_letter(**payload.model_dump()))
+        result.setdefault("warnings", [])
+        result.setdefault("blockers", [] if result.get("ok") else [result.get("error", "export bloqué")])
+        return result
 
     return router
 
