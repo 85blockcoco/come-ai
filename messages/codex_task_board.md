@@ -54,3 +54,4 @@ ce BOARD (section TRACE en bas) avec **SHA + sortie pytest**.
 - `01/11 U1 bb6cae8 — 2 passed — vérifié par OpenCode ✅`
 - `01/11 U2 a0e6eeb — 4 passed — ruff vert — publié sur codex/n100-u2-20261101.`
 - `01/11 U2 : push codex/n100-u2 refusé non-fast-forward (branche existante issue d'une autre base); aucun force-push effectué.`
+- `01/11 U3 9c3303b — 4 passed in 4.42s — ruff et diff-check verts — branche codex/n100-u3.`

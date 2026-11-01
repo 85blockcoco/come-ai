@@ -51,3 +51,12 @@
 - Tests : `.venv/bin/python -m pytest -q tests/test_career_shortlist_routes.py` → `4 passed in 4.37s`.
 - Ruff et `git diff --check` verts.
 - Blocage de publication : `codex/n100-u2` distant existait déjà avec un historique divergent ; push non-fast-forward refusé, aucun force-push effectué.
+
+# N100 U3 — dossier/ATS (2026-11-01)
+
+- Commit code : `9c3303b7d41e6fadc7de8b5f5b59ac03be599105`.
+- Branche : `codex/n100-u3`, push vérifié avec `git ls-remote`.
+- Routes : `GET /api/career/ats/fields`, `POST /api/career/dossier/checklist`, `POST /api/career/dossier/preview`.
+- Garanties : profil local uniquement, champs obligatoires manquants en `blockers`, preview en lecture seule, aucun envoi automatique.
+- Tests : `tests/test_career_dossier_routes.py` → `4 passed in 4.42s`.
+- Ruff et `git diff --check` verts.
