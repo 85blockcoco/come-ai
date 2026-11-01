@@ -50,6 +50,14 @@
 - U2 : routes `offers/rank`, `shortlist?fmt=text|json`, `shortlist/export`; cible d'export imposée côté serveur sous `career_data/exports/`; offres vides refusées avec `blockers`.
 - Tests : `.venv/bin/python -m pytest -q tests/test_career_shortlist_routes.py` → `4 passed in 4.37s`.
 - Ruff et `git diff --check` verts.
+
+# N100 U4 — écran Lettres (2026-11-01)
+
+- Commit code : `36e607511cbd0215ed6e8eaca92519aacd20a061` ; branche `codex/n100-u4`, push vérifié.
+- Écran intégré à `/app#applications` : offre, langues fr/en/de/es, tons formal/dynamic/concise, preview modifiable, vérification factuelle, approbation humaine et export local.
+- Garde-fous : approbation invalidée après modification ou contrôle ; bouton export bloqué avant approbation ; aucun envoi automatique.
+- Tests : `tests/test_n100_letter_ui.py` → 2 passed ; `node --check desktop_static/app.js` vert ; ruff/diff-check verts.
+- Navigateur réel isolé `127.0.0.1:18950` : offre synthétique sélectionnée, lettre rendue, contrôle factuel affichant 1 blocage et bouton Approuver désactivé ; UI visible sans erreur de parcours.
 - Blocage de publication : `codex/n100-u2` distant existait déjà avec un historique divergent ; push non-fast-forward refusé, aucun force-push effectué.
 
 # N100 U3 — dossier/ATS (2026-11-01)
