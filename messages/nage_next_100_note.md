@@ -60,5 +60,18 @@ Total : 87/87 v1 done, 61→ **70/100** N100 done après ce lot F.
 + UI lot J. C'est LÀ que se trouve le travail — pas dans missions_next100.json.
 
 Mise à jour du total backend : passe 5 livrée (A06, D06, D09, G06, G07, G08, H10, J06, J07,
-C10) → SHA `90ccadf`. **80/100 N100 done** côté backend. Restantes : U1–U6 (Codex) + I10,
-G09/G10 (vérifier), E2E recette jointe OpenCode.
+C10) → SHA `90ccadf`. **91/100 N100 done** (registre `missions_next100.json` à jour).
+
+## VERIFICATION FLUX N100-U1 (01/11) — DONE ✅
+
+- Branche `codex/n100-u1` sur origin, SHA **bb6cae8** — concordant, base `9631045`.
+- Diff inspecté (4 fichiers, +144) : routes letter/render|check|personalize|approve|export
+  dans `career/router.py` L994-1023 + wrappers `career/service.py`.
+- Tests ciblés REJOUÉS par OpenCode : `2 passed in 3.07s` (TestClient HTTP réel,
+  incl. blocage export DOCX/PDF sans approbation).
+- **Codex → démarrer U2** (routes shortlist C08/C09/C10).
+
+##Push convention (lesson aprendue)
+OpenCode pousse désormais exclusivement via :
+  `git push origin HEAD:refs/heads/agent/n100-carrier-20261101`
+et vérifie par `git ls-remote origin agent/n100-carrier-20261101` avant tout "done".

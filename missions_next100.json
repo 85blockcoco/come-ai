@@ -1,0 +1,1512 @@
+{
+ "version": 1,
+ "name": "NAGE NEXT 100",
+ "description": "100 missions pour faire evoluer NAGE (sources internationales, qualification, classement, profil, CV, lettres, dossier, entretiens, fiabilite IA, recettes).",
+ "lots": [
+  "A",
+  "B",
+  "C",
+  "D",
+  "E",
+  "F",
+  "G",
+  "H",
+  "I",
+  "J"
+ ],
+ "missions": [
+  {
+   "id": "A01",
+   "lot": "A",
+   "title": "Connecteur UK (Prospects/Gradcracker/TargetJobs)",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/connectors/uk_sources.py",
+    "tests/test_uk_sources.py"
+   ],
+   "depends_on": [],
+   "tests_min": 30
+  },
+  {
+   "id": "A02",
+   "lot": "A",
+   "title": "Connecteur DE (Absolventa/StepStone trainee)",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/connectors/de_sources.py",
+    "tests/test_de_sources.py"
+   ],
+   "depends_on": [],
+   "tests_min": 30
+  },
+  {
+   "id": "A03",
+   "lot": "A",
+   "title": "Connecteur ES (IEFP/InfoJobs)",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/connectors/es_sources.py",
+    "tests/test_es_sources.py"
+   ],
+   "depends_on": [],
+   "tests_min": 30
+  },
+  {
+   "id": "A04",
+   "lot": "A",
+   "title": "Connecteur US (Handshake/USAJobs intern)",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/connectors/us_sources.py",
+    "tests/test_us_sources.py"
+   ],
+   "depends_on": [],
+   "tests_min": 30
+  },
+  {
+   "id": "A05",
+   "lot": "A",
+   "title": "Normalisation des champs source",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/source_normalizer.py",
+    "tests/test_source_normalizer.py"
+   ],
+   "depends_on": [
+    "A01",
+    "A02",
+    "A03",
+    "A04"
+   ],
+   "tests_min": 40
+  },
+  {
+   "id": "A06",
+   "lot": "A",
+   "title": "Fraicheur des offres (TTL, re-verification URL)",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/offer_freshness.py",
+    "tests/test_offer_freshness.py"
+   ],
+   "depends_on": [],
+   "tests_min": 20
+  },
+  {
+   "id": "A07",
+   "lot": "A",
+   "title": "Deduplication cross-source",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/cross_source_dedup.py",
+    "tests/test_cross_source_dedup.py"
+   ],
+   "depends_on": [
+    "A05"
+   ],
+   "tests_min": 40
+  },
+  {
+   "id": "A08",
+   "lot": "A",
+   "title": "Provenance et confiance par source",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/source_trust.py",
+    "tests/test_source_trust.py"
+   ],
+   "depends_on": [
+    "A01",
+    "A02",
+    "A03",
+    "A04"
+   ],
+   "tests_min": 20
+  },
+  {
+   "id": "A09",
+   "lot": "A",
+   "title": "Cache local des offres avec invalidation",
+   "status": "todo",
+   "priority": "P2",
+   "files": [
+    "career/offer_cache.py",
+    "tests/test_offer_cache.py"
+   ],
+   "depends_on": [
+    "A06"
+   ],
+   "tests_min": 20
+  },
+  {
+   "id": "A10",
+   "lot": "A",
+   "title": "Rapport de couverture sources",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/source_coverage.py",
+    "tests/test_source_coverage.py"
+   ],
+   "depends_on": [
+    "A01",
+    "A02",
+    "A03",
+    "A04"
+   ],
+   "tests_min": 10
+  },
+  {
+   "id": "B01",
+   "lot": "B",
+   "title": "Extraction robuste des dates debut/fin",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/offer_dates.py",
+    "tests/test_offer_dates.py"
+   ],
+   "depends_on": [],
+   "tests_min": 40
+  },
+  {
+   "id": "B02",
+   "lot": "B",
+   "title": "Detection de duree (>=6 mois)",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/duration_detector.py",
+    "tests/test_duration_detector.py"
+   ],
+   "depends_on": [
+    "B01"
+   ],
+   "tests_min": 20
+  },
+  {
+   "id": "B03",
+   "lot": "B",
+   "title": "Detection langue de l'offre",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/translation_variants.py",
+    "tests/test_translation_variants.py"
+   ],
+   "depends_on": [],
+   "tests_min": 20
+  },
+  {
+   "id": "B04",
+   "lot": "B",
+   "title": "Detection type de contrat",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/contract_type.py",
+    "tests/test_contract_type.py"
+   ],
+   "depends_on": [],
+   "tests_min": 30
+  },
+  {
+   "id": "B05",
+   "lot": "B",
+   "title": "Niveau diplome requis (BBA/Bac+4/M2/MBA)",
+   "status": "done",
+   "priority": "P0",
+   "files": [
+    "career/degree_level.py",
+    "tests/test_degree_level.py"
+   ],
+   "depends_on": [],
+   "tests_min": 30
+  },
+  {
+   "id": "B06",
+   "lot": "B",
+   "title": "Filtrage geographique",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/countries.py",
+    "tests/test_countries.py"
+   ],
+   "depends_on": [],
+   "tests_min": 20
+  },
+  {
+   "id": "B07",
+   "lot": "B",
+   "title": "Exclusions geographiques utilisateur",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/geo_exclusions.py",
+    "tests/test_geo_exclusions.py"
+   ],
+   "depends_on": [
+    "B06"
+   ],
+   "tests_min": 20
+  },
+  {
+   "id": "B08",
+   "lot": "B",
+   "title": "Score de pertinence stage",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/stage_fit.py",
+    "tests/test_stage_fit.py"
+   ],
+   "depends_on": [
+    "B02",
+    "B03",
+    "B04",
+    "B05"
+   ],
+   "tests_min": 20
+  },
+  {
+   "id": "B09",
+   "lot": "B",
+   "title": "Filtre international accessible BBA",
+   "status": "done",
+   "priority": "P0",
+   "files": [
+    "career/intl_filter.py",
+    "tests/test_intl_filter.py"
+   ],
+   "depends_on": [
+    "B02",
+    "B05",
+    "B06"
+   ],
+   "tests_min": 30
+  },
+  {
+   "id": "B10",
+   "lot": "B",
+   "title": "Rapport de qualification par offre",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/qualification_report.py",
+    "tests/test_qualification_report.py"
+   ],
+   "depends_on": [
+    "B08",
+    "B09"
+   ],
+   "tests_min": 10
+  },
+  {
+   "id": "C01",
+   "lot": "C",
+   "title": "Score explique (facteurs + poids)",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/scoring.py",
+    "tests/test_scoring.py"
+   ],
+   "depends_on": [],
+   "tests_min": 20
+  },
+  {
+   "id": "C02",
+   "lot": "C",
+   "title": "Shortlist automatique (top N)",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/shortlist.py",
+    "tests/test_shortlist.py"
+   ],
+   "depends_on": [
+    "C01"
+   ],
+   "tests_min": 20
+  },
+  {
+   "id": "C03",
+   "lot": "C",
+   "title": "Comparaison d'offres (side-by-side)",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/offer_compare.py",
+    "tests/test_offer_compare.py"
+   ],
+   "depends_on": [],
+   "tests_min": 15
+  },
+  {
+   "id": "C04",
+   "lot": "C",
+   "title": "Deduplication dans la shortlist",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/job_deduplication.py",
+    "tests/test_job_deduplication.py"
+   ],
+   "depends_on": [
+    "C02"
+   ],
+   "tests_min": 20
+  },
+  {
+   "id": "C05",
+   "lot": "C",
+   "title": "Raisonnement pourquoi cette offre",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/offer_rationale.py",
+    "tests/test_offer_rationale.py"
+   ],
+   "depends_on": [
+    "C01"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "C06",
+   "lot": "C",
+   "title": "Filtre par secteur",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/sector_filter.py",
+    "tests/test_sector_filter.py"
+   ],
+   "depends_on": [],
+   "tests_min": 15
+  },
+  {
+   "id": "C07",
+   "lot": "C",
+   "title": "Filtre par type de stage finance",
+   "status": "done",
+   "priority": "P0",
+   "files": [
+    "career/finance_family.py",
+    "tests/test_finance_family.py"
+   ],
+   "depends_on": [],
+   "tests_min": 20
+  },
+  {
+   "id": "C08",
+   "lot": "C",
+   "title": "Tri par date limite / urgence",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/deadline_sort.py",
+    "tests/test_deadline_sort.py"
+   ],
+   "depends_on": [
+    "B01"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "C09",
+   "lot": "C",
+   "title": "Export shortlist CSV/JSON",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/shortlist_export.py",
+    "tests/test_shortlist_export.py"
+   ],
+   "depends_on": [
+    "C02"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "C10",
+   "lot": "C",
+   "title": "Dashboard shortlist (texte)",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/shortlist_dashboard.py",
+    "tests/test_shortlist_dashboard.py"
+   ],
+   "depends_on": [
+    "C02",
+    "C09"
+   ],
+   "tests_min": 10
+  },
+  {
+   "id": "D01",
+   "lot": "D",
+   "title": "Import CV PDF/DOCX robuste",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/profile_import.py",
+    "tests/test_profile_import.py"
+   ],
+   "depends_on": [],
+   "tests_min": 20
+  },
+  {
+   "id": "D02",
+   "lot": "D",
+   "title": "Extraction sections CV",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/cv_parser.py",
+    "tests/test_cv_parser.py"
+   ],
+   "depends_on": [
+    "D01"
+   ],
+   "tests_min": 20
+  },
+  {
+   "id": "D03",
+   "lot": "D",
+   "title": "Validation profil",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/profile_validation.py",
+    "tests/test_profile_validation.py"
+   ],
+   "depends_on": [],
+   "tests_min": 20
+  },
+  {
+   "id": "D04",
+   "lot": "D",
+   "title": "Registre de preuves (evidence)",
+   "status": "done",
+   "priority": "P0",
+   "files": [
+    "career/evidence_registry.py",
+    "tests/test_evidence_registry.py"
+   ],
+   "depends_on": [],
+   "tests_min": 20
+  },
+  {
+   "id": "D05",
+   "lot": "D",
+   "title": "Approbation de preuve (humain)",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/evidence_approval.py",
+    "tests/test_evidence_approval.py"
+   ],
+   "depends_on": [
+    "D04"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "D06",
+   "lot": "D",
+   "title": "Fraicheur des preuves",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/evidence_freshness.py",
+    "tests/test_evidence_freshness.py"
+   ],
+   "depends_on": [
+    "D04"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "D07",
+   "lot": "D",
+   "title": "Lien preuve -> claim",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/evidence_link.py",
+    "tests/test_evidence_link.py"
+   ],
+   "depends_on": [
+    "D04",
+    "D05"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "D08",
+   "lot": "D",
+   "title": "Import LinkedIn (local, consentement)",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/linkedin_import.py",
+    "tests/test_linkedin_import.py"
+   ],
+   "depends_on": [
+    "D01"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "D09",
+   "lot": "D",
+   "title": "Fusion de profils (dedup)",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/profile_merge.py",
+    "tests/test_profile_merge.py"
+   ],
+   "depends_on": [
+    "D01",
+    "D08"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "D10",
+   "lot": "D",
+   "title": "Rapport de completude profil",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/profile_readiness.py",
+    "tests/test_profile_readiness.py"
+   ],
+   "depends_on": [
+    "D03"
+   ],
+   "tests_min": 10
+  },
+  {
+   "id": "E01",
+   "lot": "E",
+   "title": "Generation CV adapte (factuel)",
+   "status": "done",
+   "priority": "P0",
+   "files": [
+    "career/cv_variants.py",
+    "tests/test_cv_variants.py"
+   ],
+   "depends_on": [
+    "D04",
+    "D05"
+   ],
+   "tests_min": 20
+  },
+  {
+   "id": "E02",
+   "lot": "E",
+   "title": "Variante par metier",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/cv_by_role.py",
+    "tests/test_cv_by_role.py"
+   ],
+   "depends_on": [
+    "E01"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "E03",
+   "lot": "E",
+   "title": "Variantes par langue",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/translation_variants.py",
+    "tests/test_translation_variants.py"
+   ],
+   "depends_on": [
+    "E01"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "E04",
+   "lot": "E",
+   "title": "Verification factuelle (claim_check)",
+   "status": "done",
+   "priority": "P0",
+   "files": [
+    "career/claim_check.py",
+    "tests/test_claim_check.py"
+   ],
+   "depends_on": [
+    "E01",
+    "D04"
+   ],
+   "tests_min": 20
+  },
+  {
+   "id": "E05",
+   "lot": "E",
+   "title": "Score qualite CV (dossier_quality)",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/dossier_quality.py",
+    "tests/test_dossier_quality.py"
+   ],
+   "depends_on": [
+    "E04"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "E06",
+   "lot": "E",
+   "title": "Export CV PDF/DOCX",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/document_export.py",
+    "tests/test_document_export.py"
+   ],
+   "depends_on": [
+    "E01"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "E07",
+   "lot": "E",
+   "title": "Diff visuel avant/apres",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/cv_diff.py",
+    "tests/test_cv_diff.py"
+   ],
+   "depends_on": [
+    "E01"
+   ],
+   "tests_min": 10
+  },
+  {
+   "id": "E08",
+   "lot": "E",
+   "title": "Versioning des variantes",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/cv_versions.py",
+    "tests/test_cv_versions.py"
+   ],
+   "depends_on": [
+    "E01"
+   ],
+   "tests_min": 10
+  },
+  {
+   "id": "E09",
+   "lot": "E",
+   "title": "Validation humaine avant export",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/cv_approval.py",
+    "tests/test_cv_approval.py"
+   ],
+   "depends_on": [
+    "E05"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "E10",
+   "lot": "E",
+   "title": "Rapport de generation CV",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/cv_generation_report.py",
+    "tests/test_cv_generation_report.py"
+   ],
+   "depends_on": [
+    "E01",
+    "E09"
+   ],
+   "tests_min": 10
+  },
+  {
+   "id": "F01",
+   "lot": "F",
+   "title": "Generation lettre ciblee",
+   "status": "done",
+   "priority": "P0",
+   "files": [
+    "career/cover_letter.py",
+    "tests/test_cover_letter.py"
+   ],
+   "depends_on": [
+    "D04",
+    "E01"
+   ],
+   "tests_min": 20
+  },
+  {
+   "id": "F02",
+   "lot": "F",
+   "title": "Lettre multi-langues",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/cover_letter_i18n.py",
+    "tests/test_cover_letter_i18n.py"
+   ],
+   "depends_on": [
+    "F01",
+    "E03"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "F03",
+   "lot": "F",
+   "title": "Ton et style",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/letter_tone.py",
+    "tests/test_letter_tone.py"
+   ],
+   "depends_on": [
+    "F01"
+   ],
+   "tests_min": 10
+  },
+  {
+   "id": "F04",
+   "lot": "F",
+   "title": "Personnalisation par entreprise",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/letter_company.py",
+    "tests/test_letter_company.py"
+   ],
+   "depends_on": [
+    "F01",
+    "C05"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "F05",
+   "lot": "F",
+   "title": "Verification factuelle lettre",
+   "status": "done",
+   "priority": "P0",
+   "files": [
+    "career/claim_check.py",
+    "tests/test_claim_check_letter.py"
+   ],
+   "depends_on": [
+    "F01",
+    "E04"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "F06",
+   "lot": "F",
+   "title": "Score qualite lettre",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/dossier_quality.py",
+    "tests/test_letter_quality.py"
+   ],
+   "depends_on": [
+    "F05"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "F07",
+   "lot": "F",
+   "title": "Export lettre PDF/DOCX",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/document_export.py",
+    "tests/test_letter_export.py"
+   ],
+   "depends_on": [
+    "F01"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "F08",
+   "lot": "F",
+   "title": "Modeles de lettre par secteur",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/letter_templates.py",
+    "tests/test_letter_templates.py"
+   ],
+   "depends_on": [
+    "F01"
+   ],
+   "tests_min": 10
+  },
+  {
+   "id": "F09",
+   "lot": "F",
+   "title": "Validation humaine avant envoi",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/letter_approval.py",
+    "tests/test_letter_approval.py"
+   ],
+   "depends_on": [
+    "F06"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "F10",
+   "lot": "F",
+   "title": "Rapport de generation lettre",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/letter_generation_report.py",
+    "tests/test_letter_generation_report.py"
+   ],
+   "depends_on": [
+    "F01",
+    "F09"
+   ],
+   "tests_min": 10
+  },
+  {
+   "id": "G01",
+   "lot": "G",
+   "title": "Apply-kit par offre",
+   "status": "done",
+   "priority": "P0",
+   "files": [
+    "career/apply_kit.py",
+    "tests/test_apply_kit.py"
+   ],
+   "depends_on": [
+    "E01",
+    "F01"
+   ],
+   "tests_min": 20
+  },
+  {
+   "id": "G02",
+   "lot": "G",
+   "title": "Reponses types copiables",
+   "status": "done",
+   "priority": "P0",
+   "files": [
+    "career/quick_answers.py",
+    "tests/test_quick_answers.py"
+   ],
+   "depends_on": [
+    "E01",
+    "F01"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "G03",
+   "lot": "G",
+   "title": "Guide ATS par plateforme",
+   "status": "done",
+   "priority": "P0",
+   "files": [
+    "career/ats_guide.py",
+    "tests/test_ats_guide.py"
+   ],
+   "depends_on": [],
+   "tests_min": 15
+  },
+  {
+   "id": "G04",
+   "lot": "G",
+   "title": "Confirmation d'envoi + relance",
+   "status": "done",
+   "priority": "P0",
+   "files": [
+    "career/send_confirmation.py",
+    "tests/test_send_confirmation.py"
+   ],
+   "depends_on": [
+    "G01"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "G05",
+   "lot": "G",
+   "title": "Export groupé (zip)",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/bundle_export.py",
+    "tests/test_bundle_export.py"
+   ],
+   "depends_on": [
+    "G01"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "G06",
+   "lot": "G",
+   "title": "Formulaires ATS (champs)",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/ats_forms.py",
+    "tests/test_ats_forms.py"
+   ],
+   "depends_on": [
+    "G03"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "G07",
+   "lot": "G",
+   "title": "Checklist de dossier",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/dossier_checklist.py",
+    "tests/test_dossier_checklist.py"
+   ],
+   "depends_on": [
+    "G01"
+   ],
+   "tests_min": 10
+  },
+  {
+   "id": "G08",
+   "lot": "G",
+   "title": "Previsualisation dossier",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/dossier_preview.py",
+    "tests/test_dossier_preview.py"
+   ],
+   "depends_on": [
+    "G01"
+   ],
+   "tests_min": 10
+  },
+  {
+   "id": "G09",
+   "lot": "G",
+   "title": "Suivi des envois (tracker)",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/apply_tracker.py",
+    "tests/test_apply_tracker.py"
+   ],
+   "depends_on": [
+    "G04"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "G10",
+   "lot": "G",
+   "title": "Rapport d'export",
+   "status": "todo",
+   "priority": "P2",
+   "files": [
+    "career/export_report.py",
+    "tests/test_export_report.py"
+   ],
+   "depends_on": [
+    "G05",
+    "G06"
+   ],
+   "tests_min": 10
+  },
+  {
+   "id": "H01",
+   "lot": "H",
+   "title": "Preparation entretien",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/interview.py",
+    "tests/test_interview.py"
+   ],
+   "depends_on": [
+    "C05",
+    "F04"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "H02",
+   "lot": "H",
+   "title": "Worksheets STAR",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/star_worksheets.py",
+    "tests/test_star_worksheets.py"
+   ],
+   "depends_on": [
+    "H01"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "H03",
+   "lot": "H",
+   "title": "Briefing J-1",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/j1_briefing.py",
+    "tests/test_j1_briefing.py"
+   ],
+   "depends_on": [
+    "H01",
+    "H02"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "H04",
+   "lot": "H",
+   "title": "Suivi des candidatures",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/application_dashboard.py",
+    "tests/test_application_dashboard.py"
+   ],
+   "depends_on": [
+    "G09"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "H05",
+   "lot": "H",
+   "title": "Moteur de relances",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/followup_engine.py",
+    "tests/test_followup_engine.py"
+   ],
+   "depends_on": [
+    "H04"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "H06",
+   "lot": "H",
+   "title": "Calendrier entretiens (ICS)",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/calendar_export.py",
+    "tests/test_calendar_export.py"
+   ],
+   "depends_on": [
+    "H04"
+   ],
+   "tests_min": 10
+  },
+  {
+   "id": "H07",
+   "lot": "H",
+   "title": "Detection reponses email",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/mail_ingest.py",
+    "tests/test_mail_ingest.py"
+   ],
+   "depends_on": [
+    "H04"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "H08",
+   "lot": "H",
+   "title": "Journal d'audit decisions",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/audit_journal.py",
+    "tests/test_audit_journal.py"
+   ],
+   "depends_on": [
+    "H04"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "H09",
+   "lot": "H",
+   "title": "Bilan hebdo",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/weekly_review.py",
+    "tests/test_weekly_review.py"
+   ],
+   "depends_on": [
+    "H04"
+   ],
+   "tests_min": 15
+  },
+  {
+   "id": "H10",
+   "lot": "H",
+   "title": "Rapport de suivi",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/tracking_report.py",
+    "tests/test_tracking_report.py"
+   ],
+   "depends_on": [
+    "H04",
+    "H05",
+    "H06",
+    "H07",
+    "H08",
+    "H09"
+   ],
+   "tests_min": 10
+  },
+  {
+   "id": "I01",
+   "lot": "I",
+   "title": "Memoire personnelle (sources)",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/personal_memory.py",
+    "tests/test_personal_memory.py"
+   ],
+   "depends_on": [],
+   "tests_min": 15
+  },
+  {
+   "id": "I02",
+   "lot": "I",
+   "title": "Recuperation apres erreur",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/recovery.py",
+    "tests/test_recovery.py"
+   ],
+   "depends_on": [],
+   "tests_min": 15
+  },
+  {
+   "id": "I03",
+   "lot": "I",
+   "title": "Circuit breaker fournisseur",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/circuit_breaker.py",
+    "tests/test_circuit_breaker.py"
+   ],
+   "depends_on": [],
+   "tests_min": 15
+  },
+  {
+   "id": "I04",
+   "lot": "I",
+   "title": "Validation sortie IA (guardrails)",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "career/ai_guardrails.py",
+    "tests/test_ai_guardrails.py"
+   ],
+   "depends_on": [],
+   "tests_min": 15
+  },
+  {
+   "id": "I05",
+   "lot": "I",
+   "title": "Tracabilite decisions IA",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/ai_traceability.py",
+    "tests/test_ai_traceability.py"
+   ],
+   "depends_on": [
+    "I01"
+   ],
+   "tests_min": 10
+  },
+  {
+   "id": "I06",
+   "lot": "I",
+   "title": "Cache des reponses IA",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/ai_cache.py",
+    "tests/test_ai_cache.py"
+   ],
+   "depends_on": [],
+   "tests_min": 10
+  },
+  {
+   "id": "I07",
+   "lot": "I",
+   "title": "Fallback modele",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/model_fallback.py",
+    "tests/test_model_fallback.py"
+   ],
+   "depends_on": [],
+   "tests_min": 10
+  },
+  {
+   "id": "I08",
+   "lot": "I",
+   "title": "Evaluation qualite IA",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/ai_quality.py",
+    "tests/test_ai_quality.py"
+   ],
+   "depends_on": [
+    "I04"
+   ],
+   "tests_min": 10
+  },
+  {
+   "id": "I09",
+   "lot": "I",
+   "title": "Memoire de contexte (session)",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/context_memory.py",
+    "tests/test_context_memory.py"
+   ],
+   "depends_on": [
+    "I01"
+   ],
+   "tests_min": 10
+  },
+  {
+   "id": "I10",
+   "lot": "I",
+   "title": "Rapport de fiabilite IA",
+   "status": "todo",
+   "priority": "P2",
+   "files": [
+    "career/ai_reliability_report.py",
+    "tests/test_ai_reliability_report.py"
+   ],
+   "depends_on": [
+    "I01",
+    "I02",
+    "I03",
+    "I04",
+    "I05",
+    "I06",
+    "I07",
+    "I08",
+    "I09"
+   ],
+   "tests_min": 10,
+   "note": "attente coordination (UI)"
+  },
+  {
+   "id": "J01",
+   "lot": "J",
+   "title": "Recette bout-en-bout (10 offres)",
+   "status": "todo",
+   "priority": "P1",
+   "files": [
+    "tests/test_e2e_recipe.py"
+   ],
+   "depends_on": [
+    "G01",
+    "H04"
+   ],
+   "tests_min": 10,
+   "note": "attente coordination"
+  },
+  {
+   "id": "J02",
+   "lot": "J",
+   "title": "Accessibilite (a11y) UI",
+   "status": "todo",
+   "priority": "P1",
+   "files": [
+    "(reserve Codex) desktop_static/**"
+   ],
+   "depends_on": [],
+   "tests_min": 0,
+   "note": "attente coordination"
+  },
+  {
+   "id": "J03",
+   "lot": "J",
+   "title": "Performance percue (skeleton)",
+   "status": "todo",
+   "priority": "P1",
+   "files": [
+    "(reserve Codex) desktop_static/**"
+   ],
+   "depends_on": [],
+   "tests_min": 0,
+   "note": "attente coordination"
+  },
+  {
+   "id": "J04",
+   "lot": "J",
+   "title": "Mode hors-ligne (PWA)",
+   "status": "todo",
+   "priority": "P1",
+   "files": [
+    "(reserve Codex) desktop_static/**"
+   ],
+   "depends_on": [],
+   "tests_min": 0,
+   "note": "attente coordination"
+  },
+  {
+   "id": "J05",
+   "lot": "J",
+   "title": "Responsive mobile",
+   "status": "todo",
+   "priority": "P1",
+   "files": [
+    "(reserve Codex) desktop_static/**"
+   ],
+   "depends_on": [],
+   "tests_min": 0,
+   "note": "attente coordination"
+  },
+  {
+   "id": "J06",
+   "lot": "J",
+   "title": "Tests de regression",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "tests/test_regression_*.py"
+   ],
+   "depends_on": [],
+   "tests_min": 10
+  },
+  {
+   "id": "J07",
+   "lot": "J",
+   "title": "Smoke test HTTP/navigateur",
+   "status": "done",
+   "priority": "P1",
+   "files": [
+    "tests/test_smoke_http.py"
+   ],
+   "depends_on": [],
+   "tests_min": 10
+  },
+  {
+   "id": "J08",
+   "lot": "J",
+   "title": "Profiling performance backend",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/perf_profile.py",
+    "tests/test_perf_profile.py"
+   ],
+   "depends_on": [],
+   "tests_min": 10
+  },
+  {
+   "id": "J09",
+   "lot": "J",
+   "title": "Monitoring erreurs",
+   "status": "done",
+   "priority": "P2",
+   "files": [
+    "career/error_monitor.py",
+    "tests/test_error_monitor.py"
+   ],
+   "depends_on": [],
+   "tests_min": 10
+  },
+  {
+   "id": "J10",
+   "lot": "J",
+   "title": "Rapport de recette final",
+   "status": "todo",
+   "priority": "P1",
+   "files": [
+    "docs/agent-reports/NAGE_NEXT_100_RECIPE.md"
+   ],
+   "depends_on": [
+    "J01",
+    "J02",
+    "J03",
+    "J04",
+    "J05",
+    "J06",
+    "J07",
+    "J08",
+    "J09"
+   ],
+   "tests_min": 0,
+   "note": "attente coordination"
+  }
+ ],
+ "summary": {
+  "done": 91,
+  "remaining": 9,
+  "updated": "2026-11-01 OpenCode"
+ }
+}
