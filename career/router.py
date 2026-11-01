@@ -124,6 +124,17 @@ class LetterApprovePayload(BaseModel):
     note: str = Field(default="", max_length=2_000)
 
 
+class OffersRankPayload(BaseModel):
+    offers: list[dict[str, Any]] = Field(default_factory=list, max_length=200)
+    today: str | None = Field(default=None, max_length=32)
+
+
+class ShortlistExportPayload(BaseModel):
+    offers: list[dict[str, Any]] = Field(default_factory=list, max_length=200)
+    fmt: str = Field(default="json", max_length=8)
+    fields: list[str] = Field(default_factory=list, max_length=30)
+
+
 class StageSearchPayload(BaseModel):
     """The person's own internship-search brief; every field is optional so no
     preference is presumed before they fill it in."""
@@ -1024,6 +1035,21 @@ def create_career_router(
         result.setdefault("warnings", [])
         result.setdefault("blockers", [] if result.get("ok") else [result.get("error", "export bloqué")])
         return result
+
+    @router.post("/api/career/offers/rank")
+    async def offers_rank(payload: OffersRankPayload) -> Any:
+        return await local(lambda: service.rank_offers(payload.offers, today=payload.today))
+
+    @router.get("/api/career/shortlist")
+    async def shortlist_view(fmt: str = Query(default="json", pattern="^(text|json)$")) -> Any:
+        offers = await local(service.shortlist)
+        if fmt == "text":
+            return await local(lambda: service.render_shortlist(offers))
+        return {"offers": offers, "warnings": [], "blockers": []}
+
+    @router.post("/api/career/shortlist/export")
+    async def shortlist_export(payload: ShortlistExportPayload) -> Any:
+        return await local(lambda: service.export_shortlist(payload.offers, payload.fmt, payload.fields))
 
     return router
 
