@@ -287,6 +287,32 @@ class CareerService:
         from .letter_export import export_letter
         return export_letter(**kwargs)
 
+    def shortlist(self) -> list[dict[str, Any]]:
+        return self.list_jobs(shortlisted=True)
+
+    @staticmethod
+    def rank_offers(offers: list[dict[str, Any]], **kwargs: Any) -> dict[str, Any]:
+        from .urgency_ranking import rank_by_urgency
+        rows, ordered = rank_by_urgency(offers, **kwargs)
+        return {"rows": [row.to_dict() for row in rows], "offers": ordered, "warnings": [], "blockers": []}
+
+    @staticmethod
+    def render_shortlist(offers: list[dict[str, Any]], **kwargs: Any) -> dict[str, Any]:
+        from .shortlist_dashboard import render_dashboard, to_dict
+        result = to_dict(render_dashboard(offers, **kwargs))
+        result.update({"warnings": [], "blockers": []})
+        return result
+
+    @staticmethod
+    def export_shortlist(offers: list[dict[str, Any]], target: str, fmt: str, fields: list[str]) -> dict[str, Any]:
+        from .shortlist_export import export_shortlist_csv, export_shortlist_json
+        exporter = export_shortlist_csv if fmt.lower() == "csv" else export_shortlist_json if fmt.lower() == "json" else None
+        if exporter is None:
+            return {"ok": False, "error": "format shortlist non supporté", "warnings": [], "blockers": ["format"]}
+        result = exporter(offers, target, fields=fields) if fmt.lower() == "csv" else exporter(offers, target)
+        payload = {"ok": True, **result.__dict__, "warnings": [], "blockers": []}
+        return payload
+
     def __init__(
         self,
         base_dir: Path,
