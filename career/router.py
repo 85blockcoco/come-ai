@@ -135,6 +135,18 @@ class ShortlistExportPayload(BaseModel):
     fields: list[str] = Field(default_factory=list, max_length=30)
 
 
+class DossierChecklistPayload(BaseModel):
+    dossier: str = Field(default="stage", max_length=40)
+    provided: list[str] = Field(default_factory=list, max_length=30)
+
+
+class DossierPreviewPayload(BaseModel):
+    dossier_id: str = Field(min_length=1, max_length=160)
+    documents: list[tuple[str, str]] = Field(default_factory=list, max_length=30)
+    stage_summary: str = Field(default="", max_length=4_000)
+    letter_summary: str = Field(default="", max_length=4_000)
+
+
 class StageSearchPayload(BaseModel):
     """The person's own internship-search brief; every field is optional so no
     preference is presumed before they fill it in."""
@@ -1050,6 +1062,18 @@ def create_career_router(
     @router.post("/api/career/shortlist/export")
     async def shortlist_export(payload: ShortlistExportPayload) -> Any:
         return await local(lambda: service.export_shortlist(payload.offers, payload.fmt, payload.fields))
+
+    @router.get("/api/career/ats/fields")
+    async def ats_fields(platform: str = Query(default="generic", max_length=40)) -> Any:
+        return await local(lambda: service.ats_fields(platform))
+
+    @router.post("/api/career/dossier/checklist")
+    async def dossier_checklist(payload: DossierChecklistPayload) -> Any:
+        return await local(lambda: service.dossier_checklist(payload.dossier, payload.provided))
+
+    @router.post("/api/career/dossier/preview")
+    async def dossier_preview(payload: DossierPreviewPayload) -> Any:
+        return await local(lambda: service.dossier_preview(**payload.model_dump()))
 
     return router
 
