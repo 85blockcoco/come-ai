@@ -56,3 +56,4 @@ ce BOARD (section TRACE en bas) avec **SHA + sortie pytest**.
 - `01/11 U2 : push codex/n100-u2 refusé non-fast-forward (branche existante issue d'une autre base); aucun force-push effectué.`
 - `01/11 U3 9c3303b — 4 passed in 4.42s — ruff et diff-check verts — branche codex/n100-u3.`
 - `01/11 U4 36e6075 — 2 passed + node check — navigateur réel : offre synthétique -> prévisualisation -> fact-check bloquant, aucun envoi — branche codex/n100-u4.`
+- `01/11 U5 bf2f24c — 3 passed + node check — labels accessibles, focus visible, skeletons offres/shortlist/candidatures, responsive — branche codex/n100-u5.`

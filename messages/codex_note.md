@@ -58,6 +58,12 @@
 - Garde-fous : approbation invalidée après modification ou contrôle ; bouton export bloqué avant approbation ; aucun envoi automatique.
 - Tests : `tests/test_n100_letter_ui.py` → 2 passed ; `node --check desktop_static/app.js` vert ; ruff/diff-check verts.
 - Navigateur réel isolé `127.0.0.1:18950` : offre synthétique sélectionnée, lettre rendue, contrôle factuel affichant 1 blocage et bouton Approuver désactivé ; UI visible sans erreur de parcours.
+
+# N100 U5 — accessibilité/skeleton/responsive (2026-11-01)
+
+- Commit code : `bf2f24cf5bc2652378419700786197cdf5217fb7` ; branche `codex/n100-u5`, push vérifié.
+- Labels accessibles complétés depuis les labels HTML existants ; focus visible global ; skeletons avec `aria-busy` sur offres, shortlist et candidatures ; animation neutralisée en réduction de mouvement ; règles mobiles renforcées.
+- Tests : `tests/test_n100_career_accessibility.py` → 3 passed ; `node --check career_static/career.js`, ruff et diff-check verts.
 - Blocage de publication : `codex/n100-u2` distant existait déjà avec un historique divergent ; push non-fast-forward refusé, aucun force-push effectué.
 
 # N100 U3 — dossier/ATS (2026-11-01)
