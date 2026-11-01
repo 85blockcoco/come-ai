@@ -51,3 +51,13 @@
 - Tests : `tests/test_career_letter_routes.py` — 2 passed en 3.09s.
 - Qualité : `ruff check career/router.py career/service.py tests/test_career_letter_routes.py` — vert ; `git diff --check` — vert.
 - Données : fixtures synthétiques uniquement ; aucun envoi réseau ou candidature automatique.
+
+# U2 — routes REST shortlist/matching (2026-11-01)
+
+- Branche dédiée : `codex/n100-u2`
+- Commit code : `086c9fa8aac7612bb6b41a5984060edb3266df3b`
+- Push vérifié : `git ls-remote origin refs/heads/codex/n100-u2` retourne le même SHA.
+- Livré : `POST /api/career/offers/rank`, `GET /api/career/shortlist?fmt=text|json`, `POST /api/career/shortlist/export` avec délégation `CareerService`, réponses JSON `warnings`/`blockers`.
+- Validation : smoke TestClient synthétique — 3 routes OK ; ranking vérifié sur deadlines ; dashboard text vérifié ; export JSON vérifié.
+- Qualité : compileall et `ruff check career/router.py career/service.py` — verts.
+- Périmètre : uniquement `career/router.py` et `career/service.py` modifiés pour U2 ; aucun réseau, aucune candidature automatique.
