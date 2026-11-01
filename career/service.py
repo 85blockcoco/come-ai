@@ -262,6 +262,31 @@ def re_sub_filename(value: str) -> str:
 class CareerService:
     """Small local service with short SQLite connections and explicit rules."""
 
+    @staticmethod
+    def render_letter(**kwargs: Any) -> dict[str, Any]:
+        from .letter_language import render_multilingual_letter, to_dict
+        return to_dict(render_multilingual_letter(**kwargs))
+
+    @staticmethod
+    def check_letter(letter_body: str, evidence: list[str]) -> dict[str, Any]:
+        from .letter_check import score_letter, to_dict
+        return to_dict(score_letter(letter_body, evidence))
+
+    @staticmethod
+    def personalize_letter(**kwargs: Any) -> dict[str, Any]:
+        from .letter_personalization import personalize_letter, to_dict
+        return to_dict(personalize_letter(**kwargs))
+
+    @staticmethod
+    def approve_letter(**kwargs: Any) -> dict[str, Any]:
+        from .letter_approval import decide, to_dict
+        return to_dict(decide(**kwargs))
+
+    @staticmethod
+    def export_letter(**kwargs: Any) -> dict[str, Any]:
+        from .letter_export import export_letter
+        return export_letter(**kwargs)
+
     def __init__(
         self,
         base_dir: Path,
