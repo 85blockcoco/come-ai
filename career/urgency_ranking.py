@@ -30,6 +30,14 @@ def _parse_date(value: str) -> datetime.date | None:
         return None
 
 
+def _days_left(deadline: str, *, today: str | None = None) -> int | None:
+    d = _parse_date(deadline)
+    today_d = _parse_date(today) if today else datetime.date.today()
+    if d is None or today_d is None:
+        return None
+    return (d - today_d).days
+
+
 def classify_urgency(deadline: str, *, today: str | None = None) -> str:
     d = _parse_date(deadline)
     if d is None:
@@ -53,7 +61,12 @@ def rank_by_urgency(offers: Iterable[dict[str, Any]], *, deadline_key: str = "de
     for offer in offers:
         oid = str(offer.get("id") or offer.get("job_id") or "")
         deadline = offer.get(deadline_key)
-        rows.append(UrgencyRow(job_id=oid, deadline=deadline, days_left=None, urgency=classify_urgency(str(deadline or ""), today=today)))
+        rows.append(UrgencyRow(
+            job_id=oid,
+            deadline=deadline,
+            days_left=_days_left(str(deadline or ""), today=today),
+            urgency=classify_urgency(str(deadline or ""), today=today),
+        ))
 
     order = {"urgent_72h": 0, "soon_14d": 1, "normal": 2, "expired": 3, "unknown": 4}
     ordered = sorted(

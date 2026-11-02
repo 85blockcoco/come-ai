@@ -52,6 +52,14 @@ def test_rank_unknown_last() -> None:
     assert ordered[-1]["id"] == "o4"
 
 
+def test_rank_days_left_is_computed() -> None:
+    rows, _ = rank_by_urgency(OFFERS, today=TODAY)
+    by_id = {row.job_id: row for row in rows}
+    assert by_id["o1"].days_left == 2
+    assert by_id["o5"].days_left == -31
+    assert by_id["o4"].days_left is None
+
+
 def test_rank_ties_deterministic() -> None:
     same = [{"id": "b", "deadline": "2026-11-03"}, {"id": "a", "deadline": "2026-11-03"}]
     _, ordered = rank_by_urgency(same, today=TODAY)

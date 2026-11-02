@@ -1515,7 +1515,7 @@
    "tests_min": 0,
    "note": "attente coordination",
    "merged_sha": "9806f9e",
-   "description": "Rapport de recette final avec preuves : 42 tests verts, lint, routes verifiees en direct, checklist securite.",
+   "description": "Rapport de recette final : 56 tests verts, lint, instance HTTP jetable (approbation/export/rank/dossier/academics), checklist securite.",
    "tests": "docs/agent-reports/N100-J10-RECIPE.md"
   }
  ],

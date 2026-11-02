@@ -29,10 +29,11 @@ Commande finale (02/11) :
   tests/test_n100_career_accessibility.py \
   tests/test_academics_routes.py \
   tests/test_academics_integration.py \
-  tests/test_nage_cli.py
+  tests/test_nage_cli.py \
+  tests/test_urgency_shortlist.py
 ```
 
-Résultat : **42 passed in 14.14s** (exit 0).
+Résultat : **56 passed in 12.92s** (exit 0).
 
 Lint :
 
@@ -66,6 +67,27 @@ curl -s -X POST http://127.0.0.1:8765/api/academics/finance/calculate \
   -d '{"operation":"future_value","arguments":{"pv":100,"rate":0.1,"periods":2}}'
 # result = 121.00000000000001
 ```
+
+## Preuve HTTP réelle (instance jetable 8799)
+
+Une instance `create_app(tmp_path)` a été lancée avec uvicorn sur un dossier
+temporaire, puis testée par `curl` (vrai socket HTTP, aucune donnée perso) :
+
+| Scénario | Résultat |
+|---|---|
+| Lettre rendue puis contrôlée | `200`, corps de 210 caractères |
+| Approbation humaine | `200`, `approved: true` |
+| Export avec `target: /tmp/evil-client-path.md` | `200`, `ok: true`, fichier écrit sous `<tmp>/career_data/exports/live-http-test.md` ; `/tmp/evil-client-path.md` **absent** |
+| Export sans approbation avec `approved: true` | `200`, `ok: false`, `blockers: ["export bloqué : lettre non approuvée par un humain"]` ; `/tmp/evil2.md` **absent** |
+| Dossier banque incomplet | `completeness.ok = false`, blockers `lettre_motivation` + `transcript_english` |
+| Classement urgence | `ordered = ["urgent", "unknown"]` (inconnue en dernier) |
+| Finance `future_value` | `result = 121.00000000000001` |
+| Finance `__import__` | `result = null`, blocker « Opération non autorisée » |
+| Export shortlist CSV | écrit sous `<tmp>/career_data/exports/shortlist.csv` |
+
+Correction associée : `days_left` est désormais calculé dans
+`career/urgency_ranking.py` (auparavant toujours `null`), avec le test
+`test_rank_days_left_is_computed`.
 
 ## Vérifications de sécurité
 
