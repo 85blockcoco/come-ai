@@ -98,6 +98,17 @@
 - Restent P0 : recette depuis l'icône du bureau, mesure pipeline chargée sur 150/1 000
   offres, persistance après redémarrage, parcours trois interactions, préparation du
   diff vers `main`.
+
+## RAPPORT CODEX — 2026-11-02 — mission VC-001 à VC-012, noyau rappel actif
+
+- Périmètre exclusif : `academics/vc/**` et `tests/test_vc_scheduler.py` ; aucun fichier
+  Career, Dev Kit ou orchestration modifié.
+- Livré : `Card`, `Review`, `SessionSummary`, stockage JSON local hors dépôt avec permissions
+  0700/0600, session de cartes dues/nouvelles déterministe, notation 0–5, replanification
+  explicite et bilan séparant maîtrisé/à revoir/non répondu.
+- Preuve : `tests/test_vc_scheduler.py tests/test_academics_routes.py tests/test_academics_route_boundaries.py` — `20 passed in 7.73s`; Ruff et diff-check verts.
+- Aucun support personnel ni contenu de cours réel n'a été lu ou ajouté. Le paquet est prêt
+  à recevoir des notes approuvées dans une mission distincte.
 # Candidate consolidée Codex (2026-11-01)
 
 - Branche : `codex/n100-consolidated-20261101`.
