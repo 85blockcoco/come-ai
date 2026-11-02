@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from .errors import InputError, StorageError
-from .models import CardProgress, CaseAttempt, ReviewEvent, ReviewSession
+from .models import CardProgress, CaseAttempt, ExamSession, ReviewEvent, ReviewSession
 
 SCHEMA_VERSION = 1
 CONFIRMATION_PHRASE = "SUPPRIMER MES DONNEES VC"
@@ -147,6 +147,32 @@ class VcStore:
 
     def append_session_history(self, summary: dict[str, Any]) -> None:
         self._append_jsonl(self.path("sessions", "history.jsonl"), summary)
+
+    # ------------------------------------------------------------------ exams
+    def load_active_exam(self) -> ExamSession | None:
+        payload = self._read_json(self.path("exams", "active.json"), None)
+        if not isinstance(payload, dict):
+            return None
+        try:
+            return ExamSession.from_dict(payload)
+        except (TypeError, ValueError):
+            self.warnings.append("Examen actif illisible ignoré.")
+            return None
+
+    def save_active_exam(self, exam: ExamSession) -> None:
+        self._write_json(self.path("exams", "active.json"), exam.to_dict())
+
+    def clear_active_exam(self) -> None:
+        try:
+            self.path("exams", "active.json").unlink(missing_ok=True)
+        except OSError as error:
+            raise StorageError("Impossible de fermer l'examen actif.") from error
+
+    def append_exam_history(self, summary: dict[str, Any]) -> None:
+        self._append_jsonl(self.path("exams", "history.jsonl"), summary)
+
+    def load_exam_history(self) -> list[dict[str, Any]]:
+        return self._read_jsonl(self.path("exams", "history.jsonl"))
 
     # ------------------------------------------------------------ case attempts
     def append_case_attempt(self, attempt: CaseAttempt) -> None:

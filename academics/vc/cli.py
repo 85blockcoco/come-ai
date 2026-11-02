@@ -13,6 +13,13 @@ from .cases import case_payload, case_result_payload, evaluate_case
 from .content import load_content
 from .drills import drill_payload, grade_drill, random_drill
 from .errors import ContentError, InputError, StorageError, VcError
+from .exams import (
+    build_exam,
+    exam_payload,
+    grade_exam,
+    oral_questions,
+    record_exam_result,
+)
 from .mastery import build_study_plan, mastery_radar, radar_payload
 from .report import build_progress_report
 from .scheduler import (
@@ -97,6 +104,26 @@ def build_vc_parser(parser) -> None:
     case_grade.add_argument("case_id")
     case_grade.add_argument("--answers", required=True, type=Path)
     _add_common(case_grade)
+
+    exam = sub.add_parser("exam", help="Examen blanc chronométré")
+    exam_sub = exam.add_subparsers(dest="exam_action", required=True)
+    exam_start = exam_sub.add_parser("start", help="Démarrer ou reprendre un examen")
+    exam_start.add_argument("--questions", type=int, default=20)
+    exam_start.add_argument("--minutes", type=int, default=30)
+    exam_start.add_argument("--seed", type=int, default=0)
+    exam_start.add_argument("--topic", action="append", default=[])
+    exam_start.add_argument("--new", action="store_true", help="Remplacer l'examen actif")
+    _add_common(exam_start)
+    exam_submit = exam_sub.add_parser("submit", help="Soumettre les réponses")
+    exam_submit.add_argument("exam_id")
+    exam_submit.add_argument("--answers", required=True, type=Path)
+    exam_submit.add_argument("--now", default=None, help="Horloge injectée (tests)")
+    _add_common(exam_submit)
+
+    oral = sub.add_parser("oral", help="Oral simulé avec relances")
+    oral.add_argument("topic_id")
+    oral.add_argument("--count", type=int, default=5)
+    _add_common(oral)
 
     radar = sub.add_parser("radar", help="Radar de maîtrise")
     radar.add_argument("--today", default=None)
@@ -257,6 +284,73 @@ def _case(args, store: VcStore, content) -> int:
     return 0
 
 
+def _read_answers(path: Path) -> dict[str, str]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as error:
+        raise InputError(f"Fichier de réponses introuvable : {path}") from error
+    except json.JSONDecodeError as error:
+        raise InputError(f"Fichier de réponses JSON invalide : {error.msg}") from error
+    if not isinstance(payload, dict):
+        raise InputError("Le fichier de réponses doit être un objet JSON question -> réponse.")
+    answers: dict[str, str] = {}
+    for key, value in payload.items():
+        if isinstance(value, (dict, list)):
+            raise InputError(f"Réponse invalide pour {key} : texte attendu.")
+        answers[str(key)] = "" if value is None else str(value)
+    return answers
+
+
+def _exam(args, store: VcStore, content) -> int:
+    if args.exam_action == "start":
+        active = store.load_active_exam()
+        if active is not None and not args.new:
+            payload = exam_payload(active, content)
+            payload["resumed"] = True
+            _emit(payload, args.json)
+            return 0
+        if active is not None:
+            store.clear_active_exam()
+        exam = build_exam(
+            content,
+            questions=args.questions,
+            minutes=args.minutes,
+            seed=args.seed,
+            topic_ids=args.topic,
+        )
+        store.save_active_exam(exam)
+        payload = exam_payload(exam, content)
+        payload["resumed"] = False
+        _emit(payload, args.json)
+        return 0
+
+    if args.exam_action == "submit":
+        active = store.load_active_exam()
+        if active is None or active.exam_id != args.exam_id:
+            raise InputError("Examen actif introuvable. Relancez `vc exam start`.")
+        active.answers.update(_read_answers(args.answers))
+        result = grade_exam(active, content, now=args.now)
+        record_exam_result(store, result)
+        _emit(result, args.json)
+        return 0
+
+    raise InputError("Action d'examen inconnue.")
+
+
+def _oral(args, store: VcStore, content) -> int:
+    questions = oral_questions(content, args.topic_id, count=args.count)
+    _emit(
+        {
+            "topic_id": args.topic_id,
+            "count": len(questions),
+            "questions": questions,
+            "notice": "Oral simulé : les relances n'affichent jamais la réponse modèle.",
+        },
+        args.json,
+    )
+    return 0
+
+
 def _radar(args, store: VcStore, content) -> int:
     from .dates import now_iso, today_iso
 
@@ -266,6 +360,7 @@ def _radar(args, store: VcStore, content) -> int:
         store.load_reviews(),
         today=day,
         case_attempts=store.load_case_attempts(),
+        exam_results=store.load_exam_history(),
         progress=store.load_progress(),
     )
     _emit(radar_payload(records, generated_at=now_iso()), args.json)
@@ -281,6 +376,7 @@ def _plan(args, store: VcStore, content) -> int:
         store.load_reviews(),
         today=day,
         case_attempts=store.load_case_attempts(),
+        exam_results=store.load_exam_history(),
         progress=store.load_progress(),
     )
     exam_date = args.exam_date or store.load_settings().get("exam_date")
@@ -302,6 +398,7 @@ def _report(args, store: VcStore, content) -> int:
         days=args.days,
         output_dir=store.reports_dir,
         case_attempts=store.load_case_attempts(),
+        exam_results=store.load_exam_history(),
         progress=store.load_progress(),
     )
     _emit(report.to_dict(), args.json)
@@ -343,6 +440,10 @@ def run_vc(args) -> int:
             return _drill(args, store, content)
         if args.vc_action == "case":
             return _case(args, store, content)
+        if args.vc_action == "exam":
+            return _exam(args, store, content)
+        if args.vc_action == "oral":
+            return _oral(args, store, content)
         if args.vc_action == "radar":
             return _radar(args, store, content)
         if args.vc_action == "plan":

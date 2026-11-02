@@ -133,3 +133,25 @@ def test_permissions_are_private(tmp_path: Path) -> None:
     assert mode == 0o700
     file_mode = os.stat(store.home / "progress.json").st_mode & 0o777
     assert file_mode == 0o600
+
+
+def test_exam_active_roundtrip_and_history(tmp_path: Path) -> None:
+    from academics.vc.models import ExamSession
+
+    store = VcStore(tmp_path / "vc")
+    exam = ExamSession(
+        exam_id="exam-1",
+        seed=7,
+        questions=[{"kind": "exam_question", "ref_id": "VC04-E001", "points": 100}],
+        started_at="2026-11-02T10:00:00",
+        duration_minutes=30,
+    )
+    store.save_active_exam(exam)
+    loaded = store.load_active_exam()
+    assert loaded is not None
+    assert loaded.exam_id == "exam-1"
+    assert loaded.questions[0]["ref_id"] == "VC04-E001"
+    store.append_exam_history({"exam_id": "exam-1", "score": 0.5})
+    assert store.load_exam_history() == [{"exam_id": "exam-1", "score": 0.5}]
+    store.clear_active_exam()
+    assert store.load_active_exam() is None

@@ -521,3 +521,214 @@ def test_delete_requires_phrase_and_removes_only_vc_home(tmp_path: Path, capsys)
     assert json.loads(out)["deleted"] is True
     assert not home.exists()
     assert other.exists()
+
+
+def test_exam_start_resume_submit_and_oral(tmp_path: Path, capsys) -> None:
+    from academics.vc.content import load_content
+
+    home = str(tmp_path / "vc")
+    code, out, _ = invoke(
+        capsys,
+        "vc",
+        "exam",
+        "start",
+        "--questions",
+        "4",
+        "--minutes",
+        "30",
+        "--seed",
+        "7",
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 0
+    started = json.loads(out)
+    exam_id = started["exam_id"]
+    assert started["resumed"] is False
+    assert started["total_questions"] == 4
+    assert started["total_points"] == 100
+    assert all("answer" not in item for item in started["questions"])
+    assert all("expected_answer" not in item for item in started["questions"])
+
+    code, out, _ = invoke(
+        capsys,
+        "vc",
+        "exam",
+        "start",
+        "--questions",
+        "4",
+        "--minutes",
+        "30",
+        "--seed",
+        "7",
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 0
+    resumed = json.loads(out)
+    assert resumed["resumed"] is True
+    assert resumed["exam_id"] == exam_id
+
+    content = load_content()
+    answers = {
+        item["question_id"]: content.exam_question(item["question_id"]).answer
+        for item in started["questions"]
+    }
+    answers_path = tmp_path / "exam_answers.json"
+    answers_path.write_text(json.dumps(answers), encoding="utf-8")
+    code, out, _ = invoke(
+        capsys,
+        "vc",
+        "exam",
+        "submit",
+        exam_id,
+        "--answers",
+        str(answers_path),
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 0
+    result = json.loads(out)
+    assert result["score"] == pytest.approx(1.0)
+    assert result["status"] == "submitted"
+    assert result["points_total"] == 100
+    assert result["per_topic"]
+    assert result["notice"].startswith("Correction déterministe")
+    assert not (Path(home) / "exams" / "active.json").exists()
+    history = (Path(home) / "exams" / "history.jsonl").read_text(encoding="utf-8")
+    assert exam_id in history
+
+    code, out, _ = invoke(
+        capsys,
+        "vc",
+        "oral",
+        "VC07",
+        "--count",
+        "3",
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 0
+    oral = json.loads(out)
+    assert oral["count"] == 3
+    assert all(item["follow_ups"] for item in oral["questions"])
+    assert "answer" not in json.dumps(oral)
+
+
+def test_exam_submit_marks_an_expired_exam(tmp_path: Path, capsys) -> None:
+    home = str(tmp_path / "vc")
+    code, out, _ = invoke(
+        capsys,
+        "vc",
+        "exam",
+        "start",
+        "--questions",
+        "1",
+        "--minutes",
+        "1",
+        "--seed",
+        "2",
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 0
+    started = json.loads(out)
+    answers_path = tmp_path / "expired_answers.json"
+    answers_path.write_text(
+        json.dumps({started["questions"][0]["question_id"]: "réponse conservée"}),
+        encoding="utf-8",
+    )
+    code, out, _ = invoke(
+        capsys,
+        "vc",
+        "exam",
+        "submit",
+        started["exam_id"],
+        "--answers",
+        str(answers_path),
+        "--now",
+        "2030-01-01T00:00:00",
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 0
+    result = json.loads(out)
+    assert result["expired"] is True
+    assert result["status"] == "expired"
+    assert result["answered"] == 1
+    history = (Path(home) / "exams" / "history.jsonl").read_text(encoding="utf-8")
+    assert '"status": "expired"' in history
+
+
+def test_exam_and_oral_errors_exit_two(tmp_path: Path, capsys) -> None:
+    home = str(tmp_path / "vc")
+    code, _, err = invoke(
+        capsys,
+        "vc",
+        "exam",
+        "start",
+        "--questions",
+        "21",
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 2
+    assert "Pas assez" in err
+
+    code, _, err = invoke(
+        capsys,
+        "vc",
+        "exam",
+        "submit",
+        "exam-inconnu",
+        "--answers",
+        str(tmp_path / "missing.json"),
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 2
+    assert "introuvable" in err
+
+    code, out, _ = invoke(
+        capsys,
+        "vc",
+        "exam",
+        "start",
+        "--questions",
+        "1",
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 0
+    exam_id = json.loads(out)["exam_id"]
+    malformed = tmp_path / "malformed_exam.json"
+    malformed.write_text("not json", encoding="utf-8")
+    code, _, err = invoke(
+        capsys,
+        "vc",
+        "exam",
+        "submit",
+        exam_id,
+        "--answers",
+        str(malformed),
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 2
+    assert "JSON invalide" in err
+
+    code, _, err = invoke(
+        capsys, "vc", "oral", "VC99", "--json", "--home", home
+    )
+    assert code == 2
+    assert "Topic inconnu" in err

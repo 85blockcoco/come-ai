@@ -123,6 +123,7 @@ def build_progress_report(
     days: int = 30,
     output_dir: Path | None = None,
     case_attempts: Sequence[CaseAttempt] = (),
+    exam_results: Sequence[dict[str, Any]] = (),
     progress: Mapping[str, CardProgress] | None = None,
 ) -> ProgressReport:
     parse_date(today)
@@ -140,11 +141,17 @@ def build_progress_report(
         for attempt in case_attempts
         if period_start <= attempt.submitted_at[:10] <= today
     ]
+    period_exams = [
+        result
+        for result in exam_results
+        if period_start <= str(result.get("submitted_at", ""))[:10] <= today
+    ]
     radar = mastery_radar(
         content,
         filtered,
         today=today,
         case_attempts=period_cases,
+        exam_results=period_exams,
         progress=progress,
     )
     coverage = coverage_summary(radar)
@@ -165,6 +172,13 @@ def build_progress_report(
     for attempt in case_attempts:
         if attempt.score < 0.6:
             errors["cas"] += 1
+    for result in period_exams:
+        per_topic = result.get("per_topic")
+        if not isinstance(per_topic, dict):
+            continue
+        for bucket in per_topic.values():
+            if isinstance(bucket, dict) and float(bucket.get("score", 0.0)) < 0.6:
+                errors["examen"] += 1
     plan = build_study_plan(content, radar, minutes=60, today=today)
     due = 0
     if progress:

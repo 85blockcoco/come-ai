@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .cases import normalize_text
+from .drills import parse_number
 from .errors import ContentError
 from .models import (
     CARD_STATUSES,
@@ -15,6 +16,7 @@ from .models import (
     UNITS,
     CaseStudy,
     CourseTopic,
+    ExamQuestion,
     Flashcard,
     FormulaDrill,
     GlossaryEntry,
@@ -32,11 +34,12 @@ class ContentPack:
     drills: tuple[FormulaDrill, ...] = ()
     cases: tuple[CaseStudy, ...] = ()
     glossary: tuple[GlossaryEntry, ...] = ()
-    exams: tuple[dict[str, Any], ...] = ()
+    exams: tuple[ExamQuestion, ...] = ()
     topic_by_id: dict[str, CourseTopic] = field(default_factory=dict)
     card_by_id: dict[str, Flashcard] = field(default_factory=dict)
     drill_by_id: dict[str, FormulaDrill] = field(default_factory=dict)
     case_by_id: dict[str, CaseStudy] = field(default_factory=dict)
+    exam_by_id: dict[str, ExamQuestion] = field(default_factory=dict)
 
     def topic(self, topic_id: str) -> CourseTopic:
         try:
@@ -61,6 +64,12 @@ class ContentPack:
             return self.case_by_id[case_id]
         except KeyError as error:
             raise ContentError(f"Cas inconnu : {case_id}") from error
+
+    def exam_question(self, question_id: str) -> ExamQuestion:
+        try:
+            return self.exam_by_id[question_id]
+        except KeyError as error:
+            raise ContentError(f"Question d'examen inconnue : {question_id}") from error
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -237,18 +246,60 @@ def _load_glossary(path: Path, topic_ids: set[str]) -> list[GlossaryEntry]:
     return entries
 
 
-def _load_exams(path: Path, topic_ids: set[str]) -> list[dict[str, Any]]:
+def _load_exams(
+    path: Path, topic_ids: set[str], card_ids: set[str]
+) -> list[ExamQuestion]:
     payload = _read_json(path)
-    questions: list[dict[str, Any]] = []
+    questions: list[ExamQuestion] = []
     for item in _items(payload, path):
         if item.get("kind") != "exam_question":
             raise ContentError(f"Item non-exam_question dans {path.name}.")
         topic_id = _topic_id(item, path)
         if topic_id not in topic_ids:
             raise ContentError(f"Topic inconnu {topic_id} dans {path.name}.")
-        if item.get("format") not in ("mcq", "numeric", "open"):
-            raise ContentError(f"Format d'examen invalide dans {path.name}.")
-        questions.append(dict(item))
+        question = ExamQuestion.from_dict(item)
+        if question.format not in ("mcq", "numeric", "open"):
+            raise ContentError(f"Format d'examen invalide pour {question.id}.")
+        if not isinstance(question.points, int) or isinstance(question.points, bool):
+            raise ContentError(f"Points non entiers pour {question.id}.")
+        if not 1 <= question.points <= 100:
+            raise ContentError(f"Points hors [1,100] pour {question.id}.")
+        if len(question.question.strip()) < 8 or not question.answer.strip():
+            raise ContentError(f"Question ou réponse vide pour {question.id}.")
+        if question.source_card_id and question.source_card_id not in card_ids:
+            raise ContentError(
+                f"Carte source inconnue {question.source_card_id} pour {question.id}."
+            )
+        if question.format == "mcq":
+            if len(question.choices) < 2:
+                raise ContentError(f"QCM sans choix suffisants pour {question.id}.")
+            if len(set(question.choices)) != len(question.choices):
+                raise ContentError(f"Choix dupliqués pour {question.id}.")
+            if question.answer not in question.choices:
+                raise ContentError(
+                    f"Réponse hors choix pour {question.id} : {question.answer!r}."
+                )
+        elif question.format == "numeric":
+            if question.unit not in UNITS:
+                raise ContentError(f"Unité d'examen invalide pour {question.id}.")
+            if question.tolerance < 0:
+                raise ContentError(f"Tolérance négative pour {question.id}.")
+            try:
+                parse_number(question.answer, question.unit)
+            except ValueError as error:
+                raise ContentError(
+                    f"Réponse numérique invalide pour {question.id} : {question.answer!r}."
+                ) from error
+        else:
+            if not question.keywords:
+                raise ContentError(f"Mots-clés manquants pour {question.id}.")
+            if any(not keyword.strip() for keyword in question.keywords):
+                raise ContentError(f"Mot-clé vide pour {question.id}.")
+            if not 1 <= question.min_keywords <= len(question.keywords):
+                raise ContentError(
+                    f"min_keywords hors bornes pour {question.id}."
+                )
+        questions.append(question)
     return questions
 
 
@@ -285,7 +336,7 @@ def load_content(path: Path | None = None) -> ContentPack:
     drills: list[FormulaDrill] = []
     cases: list[CaseStudy] = []
     glossary: list[GlossaryEntry] = []
-    exams: list[dict[str, Any]] = []
+    exams: list[ExamQuestion] = []
     for file in sorted(directory.glob("cards_*.json")):
         cards.extend(_load_cards(file, topic_ids))
     for file in sorted(directory.glob("drills_*.json")):
@@ -294,8 +345,9 @@ def load_content(path: Path | None = None) -> ContentPack:
         cases.extend(_load_cases(file, topic_ids))
     for file in sorted(directory.glob("glossary_*.json")):
         glossary.extend(_load_glossary(file, topic_ids))
+    card_ids = {card.id for card in cards}
     for file in sorted(directory.glob("exams_*.json")):
-        exams.extend(_load_exams(file, topic_ids))
+        exams.extend(_load_exams(file, topic_ids, card_ids))
     _check_unique(cards, "Carte")
     _check_unique(drills, "Drill")
     _check_unique(cases, "Cas")
@@ -313,4 +365,5 @@ def load_content(path: Path | None = None) -> ContentPack:
         card_by_id={card.id: card for card in cards},
         drill_by_id={drill.id: drill for drill in drills},
         case_by_id={case.id: case for case in cases},
+        exam_by_id={question.id: question for question in exams},
     )

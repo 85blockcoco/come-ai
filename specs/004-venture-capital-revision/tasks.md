@@ -200,30 +200,30 @@ Deliver original cases with a per-criterion rubric, unsupported-fact detection a
 
 Deliver deterministic timed exams, per-topic scores and oral follow-ups without answer leakage.
 
-- [ ] T138 [P] [US4] Test deterministic exam composition for the same seed and topic filter in `tests/test_vc_exams.py`.
-- [ ] T139 [P] [US4] Test that points sum to 100 and no question repeats in `tests/test_vc_exams.py`.
-- [ ] T140 [P] [US4] Test that timer expiry preserves entered answers and marks the exam `expired` in `tests/test_vc_exams.py`.
-- [ ] T141 [P] [US4] Test that the score is recomputable from stored answers in `tests/test_vc_exams.py`.
-- [ ] T142 [P] [US4] Test per-topic scores and the weak-topic list in `tests/test_vc_exams.py`.
-- [ ] T143 [P] [US4] Test oral follow-ups do not reveal the model answer in `tests/test_vc_exams.py`.
-- [ ] T144 [P] [US4] Test the insufficient-questions error in `tests/test_vc_exams.py`.
-- [ ] T145 [US4] Implement `build_exam()` with seeded composition in `academics/vc/exams.py`.
-- [ ] T146 [US4] Implement `grade_exam()` with MCQ, numeric and open formats in `academics/vc/exams.py`.
-- [ ] T147 [US4] Implement `oral_questions()` with follow-ups in `academics/vc/exams.py`.
-- [ ] T148 [US4] Persist the active exam and allow resume in `academics/vc/storage.py`.
-- [ ] T149 [US4] Append completed exam summaries to `exams/history.jsonl` in `academics/vc/exams.py`.
-- [ ] T150 [US4] Add `vc exam start` and `vc exam submit` in `academics/vc/cli.py`.
-- [ ] T151 [US4] Add `vc oral <topic>` in `academics/vc/cli.py`.
-- [ ] T152 [US4] Add a countdown/timer boundary that uses the injected clock in `academics/vc/exams.py`.
-- [ ] T153 [US4] Link a weak exam topic to the remedial plan in `academics/vc/exams.py`.
-- [ ] T154 [US4] Add 20 core exam questions across the four MVP topics in `academics/vc/content/exams_core.json`.
-- [ ] T155 [US4] Validate exam points and answer formats at load time in `academics/vc/content.py`.
-- [ ] T156 [P] [US4] Add CLI tests for exam start, submit and oral in `tests/test_vc_cli.py`.
-- [ ] T157 [P] [US4] Add a CLI test for an expired exam in `tests/test_vc_cli.py`.
-- [ ] T158 [US4] Add a test for a numeric exam answer with a unit in `tests/test_vc_exams.py`.
-- [ ] T159 [US4] Add a test for a seed that produces the same exam twice in `tests/test_vc_exams.py`.
-- [ ] T160 [US4] Add a test that an exam never includes a suspended card's question in `tests/test_vc_exams.py`.
-- [ ] T161 [US4] Document the mock-exam and oral workflow in `docs/VC_REVISION_GUIDE.md`.
+- [x] T138 [P] [US4] Test deterministic exam composition for the same seed and topic filter in `tests/test_vc_exams.py`.
+- [x] T139 [P] [US4] Test that points sum to 100 and no question repeats in `tests/test_vc_exams.py`.
+- [x] T140 [P] [US4] Test that timer expiry preserves entered answers and marks the exam `expired` in `tests/test_vc_exams.py`.
+- [x] T141 [P] [US4] Test that the score is recomputable from stored answers in `tests/test_vc_exams.py`.
+- [x] T142 [P] [US4] Test per-topic scores and the weak-topic list in `tests/test_vc_exams.py`.
+- [x] T143 [P] [US4] Test oral follow-ups do not reveal the model answer in `tests/test_vc_exams.py`.
+- [x] T144 [P] [US4] Test the insufficient-questions error in `tests/test_vc_exams.py`.
+- [x] T145 [US4] Implement `build_exam()` with seeded composition in `academics/vc/exams.py`.
+- [x] T146 [US4] Implement `grade_exam()` with MCQ, numeric and open formats in `academics/vc/exams.py`.
+- [x] T147 [US4] Implement `oral_questions()` with follow-ups in `academics/vc/exams.py`.
+- [x] T148 [US4] Persist the active exam and allow resume in `academics/vc/storage.py`.
+- [x] T149 [US4] Append completed exam summaries to `exams/history.jsonl` in `academics/vc/exams.py`.
+- [x] T150 [US4] Add `vc exam start` and `vc exam submit` in `academics/vc/cli.py`.
+- [x] T151 [US4] Add `vc oral <topic>` in `academics/vc/cli.py`.
+- [x] T152 [US4] Add a countdown/timer boundary that uses the injected clock in `academics/vc/exams.py`.
+- [x] T153 [US4] Link a weak exam topic to the remedial plan in `academics/vc/exams.py`.
+- [x] T154 [US4] Add 20 core exam questions across the four MVP topics in `academics/vc/content/exams_core.json`.
+- [x] T155 [US4] Validate exam points and answer formats at load time in `academics/vc/content.py`.
+- [x] T156 [P] [US4] Add CLI tests for exam start, submit and oral in `tests/test_vc_cli.py`.
+- [x] T157 [P] [US4] Add a CLI test for an expired exam in `tests/test_vc_cli.py`.
+- [x] T158 [US4] Add a test for a numeric exam answer with a unit in `tests/test_vc_exams.py`.
+- [x] T159 [US4] Add a test for a seed that produces the same exam twice in `tests/test_vc_exams.py`.
+- [x] T160 [US4] Add a test that an exam never includes a suspended card's question in `tests/test_vc_exams.py`.
+- [x] T161 [US4] Document the mock-exam and oral workflow in `docs/VC_REVISION_GUIDE.md`.
 
 ---
 

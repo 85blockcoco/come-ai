@@ -121,7 +121,44 @@ Checklist de relecture d'un cas avant de l'ajouter au contenu :
 - la réponse modèle est originale et ne révèle rien avant la soumission ;
 - aucune donnée personnelle ou entreprise réelle identifiable n'est présente.
 
-## 6. Radar, plan et rapport
+## 6. Examen blanc et oral
+
+```bash
+.venv/bin/python nage.py vc exam start --questions 20 --minutes 30 --seed 7
+.venv/bin/python nage.py vc exam submit <exam_id> --answers reponses.json
+.venv/bin/python nage.py vc oral VC07 --count 5
+```
+
+- `exam start` compose un examen déterministe à partir de la banque originale : QCM,
+  calculs numériques et questions ouvertes. Les points somment toujours à 100.
+- Relancer `exam start` reprend l'examen actif. `--new` remplace explicitement l'examen
+  en cours.
+- `--topic VC04` (répétable) limite la composition à un ou plusieurs topics.
+- Le chronomètre part de `started_at`. À l'échéance, les réponses déjà saisies sont
+  conservées et l'examen est noté avec le statut `expired`.
+- `reponses.json` associe l'identifiant de chaque question à une réponse texte :
+
+```json
+{
+  "VC04-E001": "15 M€",
+  "VC04-E003": "B",
+  "VC04-E005": "Le pre-money fixe la valeur avant le cash, le post-money ajoute l'investissement."
+}
+```
+
+- La correction affiche le score global, le score par topic, les topics faibles et une
+  séance de rattrapage avec cartes, drills et cas. Le score est recalculable depuis les
+  réponses et les points stockés.
+- Les QCM acceptent la lettre (`A`, `B`, `C`, `D`) ou le texte exact du choix. Les réponses
+  numériques acceptent une unité explicite (`15 M€`, `15 000 k€`, `33,33 %`, `3x`).
+- Les questions ouvertes sont évaluées par mots-clés attendus, jamais par une IA distante.
+- `vc oral` propose des questions et des relances ciblées. La réponse modèle et
+  l'explication de la carte ne sont jamais affichées : l'oral sert à s'entraîner, pas à lire
+  le corrigé.
+- L'historique est écrit dans `exams/history.jsonl` et alimente le radar, le plan et le
+  rapport. L'examen actif est stocké dans `exams/active.json` et supprimé après soumission.
+
+## 7. Radar, plan et rapport
 
 ```bash
 .venv/bin/python nage.py vc radar --today 2026-11-02
@@ -138,7 +175,7 @@ Checklist de relecture d'un cas avant de l'ajouter au contenu :
   une rétention 7 j basse signale les notions oubliées, et les prochaines actions donnent le
   temps à investir par activité.
 
-## 7. Lexique et term sheet
+## 8. Lexique et term sheet
 
 ```bash
 .venv/bin/python nage.py vc glossary search "liquidation preference"
@@ -149,7 +186,7 @@ Le lexique est bilingue FR/EN et insensible aux accents. Le décodeur de term sh
 les clauses documentées et explique leur effet économique ; une clause inconnue est listée
 dans `unknown_clauses` et marquée `non documenté` plutôt que devinée.
 
-## 8. Suppression des données VC
+## 9. Suppression des données VC
 
 ```bash
 .venv/bin/python nage.py vc delete --confirm "SUPPRIMER MES DONNEES VC"
@@ -158,33 +195,35 @@ dans `unknown_clauses` et marquée `non documenté` plutôt que devinée.
 Une phrase incorrecte renvoie le code 2 et ne supprime rien. La commande ne touche jamais aux
 données Career ni au reste du dépôt.
 
-## 9. Tests et qualité
+## 10. Tests et qualité
 
 ```bash
 .venv/bin/python -m pytest -q tests/test_vc_*.py
 .venv/bin/python -m ruff check academics/vc nage.py tests/test_vc_*.py
 ```
 
-La recette du MVP P1 couvre le stockage, le scheduler, les drills, les cas, le radar, le plan,
-le rapport, le lexique, le term sheet et le parcours CLI complet.
+La recette du MVP P1 et P2 couvre le stockage, le scheduler, les drills, les cas, l'examen
+blanc chronométré, l'oral, le radar, le plan, le rapport, le lexique, le term sheet et le
+parcours CLI complet.
 
-## 10. Périmètre livré et limites
+## 11. Périmètre livré et limites
 
 Livré et prouvé :
 
 - US1 rappel actif quotidien ;
 - US2 drills de formules avec diagnostic ;
 - US3 cas chiffrés avec grille de critères ;
+- US4 examen blanc chronométré, notation multi-format, topics faibles et oral simulé ;
 - US5 radar et plan de révision ;
 - US7 lexique et décodeur de term sheet ;
 - US8 rapport de progression.
 
 Non encore livré :
 
-- US4 examens blancs et oral ;
 - US6 ingestion de notes de cours ;
 - façade HTTP et page statique ;
 - extension du contenu aux objectifs 200 cartes, 100 drills, 20 cas, 100 questions et
   120 termes.
 
-Le MVP reste utilisable en l'état avec 20 topics, 50 cartes, 24 drills, 4 cas et 42 termes.
+Le MVP reste utilisable en l'état avec 20 topics, 50 cartes, 24 drills, 4 cas, 20 questions
+d'examen et 42 termes.

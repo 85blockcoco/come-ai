@@ -10,6 +10,7 @@ from .models import (
     CaseStudy,
     Concept,
     CourseTopic,
+    ExamQuestion,
     ExamSession,
     Flashcard,
     FormulaDrill,
@@ -22,6 +23,7 @@ from .models import (
     ReviewSession,
     StudyPlan,
 )
+from .exams import build_exam, grade_exam, oral_questions, record_exam_result
 from .storage import VcStore, default_vc_home
 
 __all__ = [
@@ -32,6 +34,7 @@ __all__ = [
     "CaseStudy",
     "Concept",
     "CourseTopic",
+    "ExamQuestion",
     "ExamSession",
     "Flashcard",
     "FormulaDrill",
@@ -44,5 +47,9 @@ __all__ = [
     "ReviewSession",
     "StudyPlan",
     "VcStore",
+    "build_exam",
     "default_vc_home",
+    "grade_exam",
+    "oral_questions",
+    "record_exam_result",
 ]

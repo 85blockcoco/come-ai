@@ -239,6 +239,29 @@ class CaseAttempt:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class ExamQuestion:
+    id: str
+    topic_id: str
+    question: str
+    answer: str
+    points: int
+    format: str = "open"
+    choices: tuple[str, ...] = ()
+    keywords: tuple[str, ...] = ()
+    min_keywords: int = 0
+    unit: str = "eur"
+    tolerance: float = 0.0
+    source_card_id: str = ""
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "ExamQuestion":
+        data = _filtered(cls, payload)
+        data["choices"] = tuple(data.get("choices") or ())
+        data["keywords"] = tuple(data.get("keywords") or ())
+        return cls(**data)
+
+
 @dataclass
 class ExamSession:
     exam_id: str
@@ -248,8 +271,9 @@ class ExamSession:
     duration_minutes: int
     answers: dict[str, str] = field(default_factory=dict)
     score: float | None = None
-    per_topic: dict[str, float] = field(default_factory=dict)
+    per_topic: dict[str, Any] = field(default_factory=dict)
     status: str = "active"
+    submitted_at: str = ""
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "ExamSession":
