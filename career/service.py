@@ -360,36 +360,6 @@ class CareerService:
         result.setdefault("blockers", [])
         return result
 
-    def shortlist(self) -> list[dict[str, Any]]:
-        return self.list_jobs(shortlisted=True)
-
-    @staticmethod
-    def rank_offers(offers: list[dict[str, Any]], today: str | None = None) -> dict[str, Any]:
-        from .urgency_ranking import rank_by_urgency
-        rows, ordered = rank_by_urgency(offers, today=today)
-        return {"rows": [row.to_dict() for row in rows], "ordered": ordered, "warnings": [], "blockers": []}
-
-    @staticmethod
-    def render_shortlist(offers: list[dict[str, Any]], today: str | None = None) -> dict[str, Any]:
-        from .shortlist_dashboard import render_dashboard, to_dict
-        result = to_dict(render_dashboard(offers, today=today))
-        result.update({"warnings": [], "blockers": []})
-        return result
-
-    def export_shortlist(self, offers: list[dict[str, Any]], fmt: str, fields: list[str]) -> dict[str, Any]:
-        if not offers:
-            return {"ok": False, "warnings": [], "blockers": ["Aucune offre à exporter."]}
-        from .shortlist_export import export_shortlist_csv, export_shortlist_json
-        normalized = fmt.lower()
-        if normalized not in {"csv", "json"}:
-            return {"ok": False, "warnings": [], "blockers": ["Format shortlist non supporté."]}
-        target = self.export_dir / f"shortlist.{normalized}"
-        if normalized == "csv":
-            result = export_shortlist_csv(offers, target, fields=fields or None)
-        else:
-            result = export_shortlist_json(offers, target)
-        return {"ok": True, **result.__dict__, "warnings": [], "blockers": []}
-
     def __init__(
         self,
         base_dir: Path,
