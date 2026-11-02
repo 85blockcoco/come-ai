@@ -481,6 +481,7 @@ function renderVCProgress(exams) {
   elements.vcProgress.append(bars);
 }
 async function refreshVCStatus() {
+  elements.vcStatus.setAttribute("aria-busy", "true");
   try {
     const [status, radar, exams] = await Promise.all([api("/api/academics/vc/status"), api("/api/academics/vc/radar"), api("/api/academics/vc/exams")]);
     text(elements.vcStatus, `${status.cards || 0} carte(s) · ${status.reviews || 0} réponse(s) · ${(exams.exams || []).length} examen(s) · stockage local uniquement.`);
@@ -492,6 +493,7 @@ async function refreshVCStatus() {
     const latest = (exams.exams || []).at(-1);
     text(elements.vcPlan, fragile.length ? `Priorité suggérée : ${fragile.slice(0, 3).join(", ")}. Revois ces thèmes avant de passer aux cas avancés.` : latest ? `Dernier examen : ${latest.score}/${latest.max_score}. Continue une session courte chaque jour pour transformer tes réponses en maîtrise durable.` : "Continue une session courte chaque jour pour transformer tes réponses en maîtrise durable.");
   } catch (error) { text(elements.vcStatus, error.message); }
+  finally { elements.vcStatus.removeAttribute("aria-busy"); }
 }
 async function saveVCCard(event) {
   event.preventDefault();

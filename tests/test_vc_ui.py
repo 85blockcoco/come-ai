@@ -9,6 +9,8 @@ def test_vc_view_exposes_complete_revision_flow() -> None:
     for marker in ("vcView", "vcCardForm", "vcSessionForm", "vcFocusTopic", "vcReveal", "vcRadar", "vcExamStart", "vcExamSubmit", "vcExamHistory", "vcProgress", "vcReadiness", "vcQuickFocus"):
         assert marker in html
     assert 'data-view-target="vcView"' in html
+    assert 'aria-live="polite"' in html
+    assert 'role="list"' in html
 
 
 def test_vc_frontend_uses_local_routes_and_keeps_answer_out_of_session_payload() -> None:

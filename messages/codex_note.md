@@ -227,3 +227,8 @@
 - **Livré** : bouton « Réviser le thème prioritaire »; il sélectionne le premier thème fragile/non testé, ouvre l’espace VC et positionne le filtre de session.
 - **UX** : bouton désactivé lorsqu’aucune priorité fiable n’est disponible; l’utilisateur démarre ensuite explicitement la session.
 - **Preuve** : `11 passed in 5.88s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+# Livraison VC-121 — accessibilité du coach (2026-11-02)
+
+- **Livré** : annonces `aria-live` pour la question et le radar, rôle de liste pour les indicateurs, et état `aria-busy` pendant l’actualisation locale.
+- **UX** : les changements de question, correction et progression sont annoncés aux technologies d’assistance sans modifier le parcours clavier.
+- **Preuve** : `7 passed in 5.91s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
