@@ -1,7 +1,7 @@
 # N100 — Candidate consolidée Codex
 
-Date : 2026-11-01  
-Base : `origin/agent/n100-carrier-20261101` au commit `99a20691499f71608fd58bbfa7e9594223163ddb`.
+Date : 2026-11-02
+Base : `origin/agent/n100-carrier-20261101` réconcilié au commit OpenCode `93fde22a47a18438174569608f0c86ed9a08f503`.
 
 ## Contenu intégré
 
@@ -12,6 +12,10 @@ Base : `origin/agent/n100-carrier-20261101` au commit `99a20691499f71608fd58bbfa
 - U7 : routes académiques locales à opérations explicitement autorisées.
 - Durcissement : le booléen client `approved` ne peut pas contourner le registre d'approbation ; le chemin d'export de lettre est imposé côté serveur.
 - Recette E2E OpenCode J01 sur dix offres synthétiques conservée depuis la base.
+- Réconciliation du dernier U2 OpenCode sans doublon de routes ni régression U3/U4.
+- Approbations de lettres liées au contenu exact relu (empreinte SHA-256), export et téléchargement local contrôlés.
+- Shortlist persistante normalisée (date limite, score et localisation) et export CSV protégé contre l'injection de formules.
+- Routes académiques bornées par opérations autorisées, modèles stricts et limites numériques.
 
 ## Validation réellement exécutée
 
@@ -27,7 +31,7 @@ Base : `origin/agent/n100-carrier-20261101` au commit `99a20691499f71608fd58bbfa
   tests/test_academics_integration.py
 ```
 
-Résultat : `34 passed in 15.14s`.
+Résultat : `64 passed in 20.59s`.
 
 Également verts :
 
@@ -35,6 +39,8 @@ Résultat : `34 passed in 15.14s`.
 - `node --check desktop_static/app.js` ;
 - `node --check career_static/career.js` ;
 - `git diff --check`.
+
+Après la réconciliation carrier, Ruff, les deux contrôles JavaScript et `git diff --check` sont toujours verts.
 
 La suite complète n'a pas été exécutée. Aucun fichier personnel, secret ou fournisseur externe n'a été utilisé. Aucune candidature n'a été envoyée.
 

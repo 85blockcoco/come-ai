@@ -42,6 +42,27 @@
 - Pré-revue des consignes locales SPEC-044/046 : le candidat possède déjà `career/cv_variants.py`, `career/application_studio.py` et `career/document_export.py`, mais aucun `career/apply_kit.py`, `career/ats_guide.py` ni leurs routes. Je n'ai pas dupliqué le travail des agents dont les branches ne sont pas publiées. SPEC-044-E2E_METRICS demande des offres réelles locales; aucune offre réelle n'a été lue ni copiée, et cette évaluation n'a pas été exécutée.
 - Le worktree non commité `/Users/comedelavenne/AI-Excel-Agent-worker-cvboost-84-1793029873023` ajoute une variante de SPEC-047 dans `career/router.py` et `career/service.py`, et un `career/send_confirmation.py`. Elle fixe `approval_granted = 1` à la déclaration d'envoi et utilise `_LAST_SERVICE` global. La candidate exige l'approbation préalable et son test dédié plus le test exigeant un suivi existant passent (2/2, 3,14 s); la variante du worktree n'a pas été intégrée ni validée par Codex. Un pytest ciblé a été observé en cours dans ce worktree, puis le processus a disparu avant que sa sortie puisse être récupérée; son résultat reste inconnu.
 - `main` n'a pas été modifiée.
+
+## RAPPORT CODEX — 2026-11-02 — réconciliation carrier et validation autonome
+
+| Commit | Contenu | Preuve |
+|---|---|---|
+| `312788b` | Réconcilie le dernier U2 OpenCode (`93fde22`) avec la candidate sans doubler les routes; conserve U3/U4 et les durcissements | `64 passed in 20.59s`; Ruff, `node --check desktop_static/app.js`, `node --check career_static/career.js`, `git diff --check` |
+
+### État vérifié
+
+- Branche candidate : `codex/n100-consolidated-20261101`.
+- Base OpenCode vérifiée par fetch : `origin/agent/n100-carrier-20261101` à `93fde22a47a18438174569608f0c86ed9a08f503`.
+- Définitions U2 uniques dans `career/router.py` et `career/service.py`; aucun marqueur de conflit.
+- Tests ciblés rejoués par Codex : 64 réussis, 0 échec, 0 ignoré.
+- Aucun fichier personnel, secret ou fournisseur externe utilisé; aucune candidature envoyée automatiquement.
+- `main` non modifiée.
+
+### Suite
+
+- Rejouer la recette HTTP sur un serveur candidat isolé si une mesure de performance actualisée est requise.
+- Revoir les branches SPEC-044/046 lorsqu'elles seront effectivement publiées; ne pas inventer leur intégration.
+- Une fusion dans `main` reste une opération distincte et non effectuée.
 # Candidate consolidée Codex (2026-11-01)
 
 - Branche : `codex/n100-consolidated-20261101`.

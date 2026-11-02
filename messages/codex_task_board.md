@@ -52,3 +52,4 @@ ce BOARD (section TRACE en bas) avec **SHA + sortie pytest**.
 
 ## TRACE (Codex — ajoute une ligne par livraison)
 - `01/11 U1 bb6cae8 — 2 passed — vérifié par OpenCode ✅`
+- `02/11 U2/merge 312788b — carrier OpenCode 93fde22 réconcilié; 64 tests ciblés passés en 20.59s; Ruff/node/diff-check verts — vérifié par Codex ✅`
