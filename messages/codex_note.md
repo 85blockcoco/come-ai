@@ -313,3 +313,8 @@
 - **Livré** : l’import CSV ne modifie plus le deck dès la sélection du fichier; un aperçu de trois lignes et le nombre total sont affichés avant confirmation explicite.
 - **Protection** : annulation implicite si le fichier est invalide; fusion sans remplacement des cartes existantes conservée.
 - **Preuve** : `8 passed in 4.57s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+# Livraison VC-138 — parseur CSV avec guillemets (2026-11-02)
+
+- **Livré** : parseur CSV local gérant les champs quotés, les guillemets doublés et les virgules dans une question, une réponse ou une source.
+- **Protection** : l’aperçu et la confirmation restent obligatoires; aucune modification automatique du deck.
+- **Preuve** : `8 passed in 5.39s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
