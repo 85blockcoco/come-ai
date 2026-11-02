@@ -186,3 +186,8 @@
 - **Preuve** : `27 passed in 7.66s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
 - **Règle produit** : aucun corrigé transmis dans le sujet d’examen; la correction n’est produite qu’après soumission explicite, sans appel externe.
 - **Reste** : recette navigateur réelle du parcours examen et enrichissement progressif de la banque à partir de notes approuvées, sans ajouter de contenu personnel au dépôt.
+# Livraison VC-113 — fiabilité examen et minuteur (2026-11-02)
+
+- **Corrigé** : les examens de plus de cinq questions ont désormais des identifiants uniques; le mode 10 questions ne perd plus les réponses par collision de clés.
+- **UX** : minuteur visible en direct (`mm:ss`), arrêt à la correction, message explicite lorsque le temps est dépassé.
+- **Preuve** : `11 passed in 4.65s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.

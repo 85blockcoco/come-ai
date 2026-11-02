@@ -43,7 +43,16 @@ def build_mock_exam(*, exam_id: str = "vc-mock-001", limit: int = 20) -> MockExa
         ExamQuestion("q-term", "term-sheet", "Que signifie 1x non participating ?", "preference", 2),
         ExamQuestion("q-unknown", "method", "Que faire si une convention du cours manque ?", "inconnu", 2),
     )
-    questions = tuple(bank[index % len(bank)] for index in range(limit))
+    questions = tuple(
+        ExamQuestion(
+            id=bank[index % len(bank)].id if index < len(bank) else f"{bank[index % len(bank)].id}-{index + 1}",
+            topic=bank[index % len(bank)].topic,
+            prompt=bank[index % len(bank)].prompt,
+            answer=bank[index % len(bank)].answer,
+            points=bank[index % len(bank)].points,
+        )
+        for index in range(limit)
+    )
     return MockExam(exam_id, 30, questions)
 
 

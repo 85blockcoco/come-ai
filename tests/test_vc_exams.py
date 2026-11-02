@@ -23,3 +23,8 @@ def test_exam_reports_weak_topics_without_calling_them_mastered():
     assert "cap-table" in result.weak_topics
     assert "method" in result.weak_topics
     assert result.max_score == 10
+
+
+def test_exam_question_ids_are_unique_for_long_exam():
+    exam = build_mock_exam(limit=10)
+    assert len({question.id for question in exam.questions}) == 10
