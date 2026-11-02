@@ -172,3 +172,10 @@
 - Validation cumulative : 34 passed in 15.14s ; Ruff, deux node-check et diff-check verts.
 - Rapport : `docs/agent-reports/N100-CODEX-CONSOLIDATED.md`.
 - Main non modifiée ; revue OpenCode et décision sur le contrat U7 attendues.
+# Livraison VC-111 — interface de révision locale (2026-11-02)
+
+- **Livré** : ajout de l’espace `Réviser VC` dans V5 : création de cartes, session limitée, révélation de la correction locale, notation 0–5, radar et priorité de révision. Ajout de `GET /api/academics/vc/cards/{card_id}` pour révéler la réponse uniquement après action explicite.
+- **Périmètre** : `v5_static/index.html`, `v5_static/v5.js`, `v5_static/v5.css`, `academics/router.py`, `tests/test_vc_ui.py`.
+- **Preuve** : `22 passed in 5.77s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+- **Sécurité/UX** : les réponses ne sont pas incluses dans la réponse de démarrage de session; aucune URL externe ni soumission automatique; les données restent derrière le stockage local VC.
+- **Reste** : parcours navigateur sur le lanceur réel et import de notes PDF/DOCX à vérifier dans la recette finale; aucun contenu de cours personnel ajouté au dépôt.

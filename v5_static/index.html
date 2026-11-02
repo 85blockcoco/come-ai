@@ -22,6 +22,7 @@
           <button class="nav-item active" type="button" data-view-target="assistantView" aria-current="page">Assistant</button>
           <button class="nav-item" type="button" data-view-target="documentsView">Documents &amp; Finance</button>
           <button class="nav-item" type="button" data-view-target="memoryView">Mémoire &amp; stockage</button>
+          <button class="nav-item" type="button" data-view-target="vcView">Réviser VC</button>
           <a class="nav-item nav-link" href="/career">Career</a>
           <button class="nav-item" type="button" data-view-target="settingsView">Réglages</button>
           <button class="nav-item" type="button" data-view-target="developerView">Atelier Développeur</button>
@@ -141,6 +142,37 @@
                 <p id="emptyOutputs" class="empty-state compact">Les rapports Excel apparaîtront ici.</p>
               </section>
             </aside>
+          </div>
+        </section>
+
+        <section id="vcView" class="view" aria-labelledby="vcTitle" hidden>
+          <div class="section-intro split-intro">
+            <div><p class="eyebrow">RÉVISIONS LOCALES · VENTURE CAPITAL</p><h1 id="vcTitle">Réviser efficacement, une carte à la fois.</h1><p>Cartes, sessions courtes, cas chiffrés et radar de maîtrise. Tout reste sur ce Mac : aucune réponse n’est envoyée à un fournisseur.</p></div>
+            <div id="vcStatus" class="memory-health" role="status" aria-live="polite">Chargement du coach VC…</div>
+          </div>
+          <div class="vc-grid">
+            <section class="panel vc-card" aria-labelledby="vcCardTitle">
+              <div class="panel-heading"><div><p class="eyebrow">01 · CONSTRUIRE</p><h2 id="vcCardTitle">Ajouter une carte</h2></div></div>
+              <form id="vcCardForm" class="developer-form">
+                <label for="vcQuestion">Question</label><textarea id="vcQuestion" rows="3" maxlength="2000" required placeholder="Ex. Quelle est la différence entre pre-money et post-money ?"></textarea>
+                <label for="vcAnswer">Réponse attendue</label><textarea id="vcAnswer" rows="4" maxlength="4000" required placeholder="Une réponse courte, précise et vérifiable…"></textarea>
+                <div class="vc-form-row"><label for="vcTopic">Thème<select id="vcTopic"><option value="valuation">Valorisation</option><option value="term_sheet">Term sheet</option><option value="fund_metrics">Fonds &amp; métriques</option><option value="fundraising">Levée de fonds</option><option value="other">Autre</option></select></label><label for="vcSource">Source (optionnel)<input id="vcSource" maxlength="240" placeholder="Cours, page ou chapitre"></label></div>
+                <button class="primary-button" type="submit">Enregistrer la carte</button>
+              </form>
+              <p id="vcCardStatus" class="quiet-status" role="status" aria-live="polite">Utilise tes propres notes ou un extrait approuvé.</p>
+            </section>
+            <section class="panel vc-card" aria-labelledby="vcSessionTitle">
+              <div class="panel-heading"><div><p class="eyebrow">02 · S’ENTRAÎNER</p><h2 id="vcSessionTitle">Session active</h2></div><span id="vcSessionCount" class="status-pill neutral">Aucune session</span></div>
+              <form id="vcSessionForm" class="vc-session-form"><label><input id="vcTodayOnly" type="checkbox" checked> Cartes dues uniquement</label><label for="vcLimit">Nombre<select id="vcLimit"><option>5</option><option selected>10</option><option>20</option></select></label><button class="secondary-button" type="submit">Démarrer</button></form>
+              <div id="vcPrompt" class="vc-prompt empty-state">Démarre une session pour afficher une question.</div>
+              <button id="vcReveal" class="secondary-button" type="button" disabled>Afficher la correction</button>
+              <div id="vcCorrection" class="vc-correction" hidden><h3>Correction</h3><p id="vcAnswerDisplay"></p><small id="vcCitationDisplay"></small><div id="vcGrades" class="vc-grades" aria-label="Évaluer la réponse"></div></div>
+              <p id="vcSessionStatus" class="quiet-status" role="status" aria-live="polite">Évalue-toi honnêtement de 0 à 5 pour programmer la prochaine révision.</p>
+            </section>
+          </div>
+          <div class="vc-grid vc-grid-bottom">
+            <section class="panel vc-card" aria-labelledby="vcRadarTitle"><div class="panel-heading"><div><p class="eyebrow">03 · COMPRENDRE</p><h2 id="vcRadarTitle">Radar de maîtrise</h2></div><button id="vcRefreshRadar" class="text-button" type="button">Actualiser</button></div><div id="vcRadar" class="vc-radar"></div><p id="vcRadarEmpty" class="empty-state compact">Pas encore assez de réponses pour afficher le radar.</p></section>
+            <section class="panel vc-card" aria-labelledby="vcPlanTitle"><div class="panel-heading"><div><p class="eyebrow">04 · PLANIFIER</p><h2 id="vcPlanTitle">Prochaine priorité</h2></div></div><p id="vcPlan" class="vc-plan">Réponds à quelques cartes : le coach proposera ensuite les thèmes les plus fragiles.</p><button id="vcRefreshStatus" class="secondary-button" type="button">Actualiser mon bilan</button></section>
           </div>
         </section>
 

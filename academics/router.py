@@ -210,6 +210,13 @@ def create_academics_router() -> APIRouter:
         except (TypeError, ValueError) as error:
             return {"saved": 0, "warnings": [], "blockers": [str(error)]}
 
+    @router.get("/api/academics/vc/cards/{card_id}")
+    def vc_card(card_id: str) -> dict[str, Any]:
+        card = next((item for item in VCStore().load_cards() if item.id == card_id), None)
+        if card is None:
+            return {"card": None, "warnings": [], "blockers": ["Carte VC introuvable."]}
+        return {"card": {"id": card.id, "topic": card.topic, "back": card.back, "source": card.source}, "warnings": [], "blockers": []}
+
     @router.post("/api/academics/vc/session")
     def vc_session(payload: VCSessionPayload) -> dict[str, Any]:
         try:

@@ -200,6 +200,32 @@ input { min-width: 0; padding: 9px 10px; font-size: 12px; }
 .memory-result .secondary-button { margin: 8px 0 0; padding: 5px 10px; font-size: 11px; border-radius: 8px; }
 .sources-panel { margin-top: 17px; }
 
+.vc-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 17px; }
+.vc-grid-bottom { margin-top: 17px; }
+.vc-card { padding: 20px; min-width: 0; }
+.vc-form-row { display: grid; grid-template-columns: .8fr 1.2fr; gap: 10px; }
+.vc-form-row label, .vc-session-form label { display: grid; gap: 5px; color: #465a72; font-size: 12px; font-weight: 700; }
+.vc-form-row select, .vc-session-form select { width: 100%; padding: 9px 10px; color: var(--ink); font: inherit; background: #fff; border: 1px solid #cfd9e4; border-radius: 10px; }
+.vc-session-form { display: flex; gap: 12px; align-items: end; margin-bottom: 16px; }
+.vc-session-form label:first-child { display: flex; flex: 1; align-items: center; gap: 7px; font-weight: 500; }
+.vc-session-form input { width: 15px; height: 15px; accent-color: var(--teal); }
+.vc-prompt { min-height: 125px; padding: 18px; margin-bottom: 12px; background: #f2f8f5; border: 1px solid #d9ebe2; border-radius: 12px; }
+.vc-prompt small { color: #4e7a6a; font-size: 10px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
+.vc-prompt p { margin: 12px 0 0; color: #25473b; font-family: Georgia, "Times New Roman", serif; font-size: 20px; line-height: 1.35; }
+.vc-correction { padding: 14px; margin-top: 12px; background: #fffdf6; border: 1px solid #eee3c8; border-radius: 11px; }
+.vc-correction h3 { margin: 0 0 7px; color: #745a29; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+.vc-correction p { margin: 0; color: #4e493d; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+.vc-correction small { display: block; margin-top: 8px; color: #8a7855; font-size: 10px; }
+.vc-grades { display: flex; gap: 6px; margin-top: 13px; }
+.vc-grade { width: 31px; height: 31px; color: #37634f; font-weight: 800; background: #edf6f0; border: 1px solid #bfdac8; border-radius: 8px; }
+.vc-grade:hover, .vc-grade:focus-visible { color: #fff; background: var(--teal); }
+.vc-radar { display: grid; gap: 8px; }
+.vc-radar-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 10px 11px; background: #f8fbfa; border: 1px solid #e0ece5; border-radius: 9px; }
+.vc-radar-row strong { color: #315747; font-size: 12px; }
+.vc-radar-row span { padding: 3px 7px; color: #3f735c; font-size: 10px; font-weight: 750; background: #e5f2e9; border-radius: 999px; }
+.vc-radar-row small { color: var(--faint); font-size: 10px; }
+.vc-plan { min-height: 68px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+
 .storage-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0 0 17px; }
 .storage-metric { min-height: 92px; padding: 16px; background: linear-gradient(145deg, rgba(255, 255, 255, .94), rgba(231, 245, 238, .72)); border: 1px solid #d7e9df; border-radius: 14px; box-shadow: 0 9px 24px rgba(6, 78, 59, .045); }
 .storage-metric span { display: block; overflow: hidden; color: var(--navy); font-family: Georgia, "Times New Roman", serif; font-size: 24px; font-weight: 700; letter-spacing: -.025em; white-space: nowrap; text-overflow: ellipsis; }
@@ -245,7 +271,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid #2270d4; outline-offs
   .chat-log { height: 340px; }
   .activity-panel { grid-column: auto; }
   .activity-panel > .plan-list { grid-template-columns: 1fr; }
-  .tool-cards, .settings-grid, .storage-metrics { grid-template-columns: 1fr; }
+  .tool-cards, .settings-grid, .storage-metrics, .vc-grid { grid-template-columns: 1fr; }
   .memory-health { margin-top: 15px; }
 }
 @media (max-width: 520px) {
@@ -260,6 +286,8 @@ button:focus-visible, a:focus-visible { outline: 3px solid #2270d4; outline-offs
   .memory-selected .secondary-button, .memory-action-buttons { width: 100%; }
   .memory-action-buttons { display: grid; grid-template-columns: 1fr auto; }
   .storage-details { grid-template-columns: 1fr; }
+  .vc-form-row { grid-template-columns: 1fr; }
+  .vc-session-form { align-items: stretch; flex-direction: column; }
 }
 :root { --developer-border: #dce8e2; }
 .developer-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }

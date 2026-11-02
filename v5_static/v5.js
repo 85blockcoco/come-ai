@@ -28,6 +28,7 @@ const elements = {
   documentsSelectedName: $("documentsSelectedName"), documentsSelectedMeta: $("documentsSelectedMeta"),
   projectForm: $("projectForm"), projectName: $("projectName"), projectList: $("projectList"), memoryHealth: $("memoryHealth"), memorySelectedFile: $("memorySelectedFile"), indexSelected: $("indexSelected"), cancelMemoryIndex: $("cancelMemoryIndex"), memorySearchForm: $("memorySearchForm"), memorySearchInput: $("memorySearchInput"), memoryActionStatus: $("memoryActionStatus"), memoryResults: $("memoryResults"), refreshMemory: $("refreshMemory"), sourceList: $("sourceList"), emptySources: $("emptySources"),
   storageLibrarySize: $("storageLibrarySize"), storageFiles: $("storageFiles"), storageFreeSpace: $("storageFreeSpace"), storageIndexing: $("storageIndexing"), storageLocation: $("storageLocation"), storageIndexSize: $("storageIndexSize"), storageBackupStatus: $("storageBackupStatus"), storageQueueStatus: $("storageQueueStatus"), storageLargestFiles: $("storageLargestFiles"), emptyLargestFiles: $("emptyLargestFiles"), refreshStorage: $("refreshStorage"),
+  vcStatus: $("vcStatus"), vcCardForm: $("vcCardForm"), vcQuestion: $("vcQuestion"), vcAnswer: $("vcAnswer"), vcTopic: $("vcTopic"), vcSource: $("vcSource"), vcCardStatus: $("vcCardStatus"), vcSessionForm: $("vcSessionForm"), vcTodayOnly: $("vcTodayOnly"), vcLimit: $("vcLimit"), vcSessionCount: $("vcSessionCount"), vcPrompt: $("vcPrompt"), vcReveal: $("vcReveal"), vcCorrection: $("vcCorrection"), vcAnswerDisplay: $("vcAnswerDisplay"), vcCitationDisplay: $("vcCitationDisplay"), vcGrades: $("vcGrades"), vcSessionStatus: $("vcSessionStatus"), vcRadar: $("vcRadar"), vcRadarEmpty: $("vcRadarEmpty"), vcPlan: $("vcPlan"), vcRefreshRadar: $("vcRefreshRadar"), vcRefreshStatus: $("vcRefreshStatus"),
 };
 
 async function api(path, options = {}) {
@@ -48,8 +49,8 @@ function formatSize(value) { const kb = Number(value || 0); return kb >= 1024 ? 
 function formatBytes(value) { const bytes = Number(value || 0); if (!Number.isFinite(bytes) || bytes <= 0) return "0 o"; const units = ["o", "Ko", "Mo", "Go", "To"]; const step = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1); const amount = bytes / (1024 ** step); return `${amount >= 10 || step === 0 ? amount.toFixed(0) : amount.toFixed(1)} ${units[step]}`; }
 function text(node, value) { node.textContent = value == null ? "" : String(value); }
 
-const viewTargets = new Set(["assistantView", "documentsView", "memoryView", "settingsView", "developerView"]);
-const viewLabels = { assistantView: "Assistant", documentsView: "Documents & Finance", memoryView: "Mémoire & stockage", settingsView: "Réglages", developerView: "Atelier Développeur" };
+const viewTargets = new Set(["assistantView", "documentsView", "memoryView", "vcView", "settingsView", "developerView"]);
+const viewLabels = { assistantView: "Assistant", documentsView: "Documents & Finance", memoryView: "Mémoire & stockage", vcView: "Réviser VC", settingsView: "Réglages", developerView: "Atelier Développeur" };
 let internalHashChange = false;
 
 function requestedHashView() {
@@ -413,6 +414,61 @@ async function refreshMemory(includeStorage = true) {
   } catch (error) { text(elements.memoryHealth, error.message); }
 }
 
+const vcState = { cards: [], index: 0, revealed: false };
+function vcToday() { return new Date().toISOString().slice(0, 10); }
+function renderVCPrompt() {
+  const card = vcState.cards[vcState.index];
+  vcState.revealed = false;
+  elements.vcCorrection.hidden = true; elements.vcReveal.disabled = !card;
+  elements.vcGrades.replaceChildren();
+  if (!card) { elements.vcPrompt.className = "vc-prompt empty-state"; text(elements.vcPrompt, vcState.cards.length ? "Session terminée. Actualise ton bilan." : "Démarre une session pour afficher une question."); return; }
+  elements.vcPrompt.className = "vc-prompt";
+  const topic = document.createElement("small"); topic.textContent = card.topic || "VC";
+  const question = document.createElement("p"); question.textContent = card.front;
+  elements.vcPrompt.replaceChildren(topic, question);
+  text(elements.vcSessionCount, `${vcState.index + 1} / ${vcState.cards.length}`);
+}
+function renderVCRadar(radar) {
+  elements.vcRadar.replaceChildren();
+  const rows = Array.isArray(radar) ? radar : [];
+  elements.vcRadarEmpty.hidden = rows.length > 0;
+  for (const item of rows) {
+    const row = document.createElement("div"); row.className = "vc-radar-row";
+    const label = document.createElement("strong"); label.textContent = item.topic || "Autre";
+    const status = document.createElement("span"); status.textContent = item.status || "non testé";
+    const count = document.createElement("small"); count.textContent = `${item.review_count || 0} réponse(s)`;
+    row.append(label, status, count); elements.vcRadar.append(row);
+  }
+}
+async function refreshVCStatus() {
+  try {
+    const [status, radar] = await Promise.all([api("/api/academics/vc/status"), api("/api/academics/vc/radar")]);
+    text(elements.vcStatus, `${status.cards || 0} carte(s) · ${status.reviews || 0} réponse(s) · stockage local uniquement.`);
+    renderVCRadar(radar.radar);
+    const fragile = (radar.radar || []).filter((item) => ["non testé", "fragile"].includes(item.status)).map((item) => item.topic);
+    text(elements.vcPlan, fragile.length ? `Priorité suggérée : ${fragile.slice(0, 3).join(", ")}. Revois ces thèmes avant de passer aux cas avancés.` : "Continue une session courte chaque jour pour transformer tes réponses en maîtrise durable.");
+  } catch (error) { text(elements.vcStatus, error.message); }
+}
+async function saveVCCard(event) {
+  event.preventDefault();
+  const card = { id: `vc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, topic: elements.vcTopic.value, front: elements.vcQuestion.value.trim(), back: elements.vcAnswer.value.trim(), source: elements.vcSource.value.trim() || "Notes locales", approved: true };
+  try { const result = await api("/api/academics/vc/cards", { method: "POST", body: JSON.stringify({ cards: [card] }) }); elements.vcCardForm.reset(); text(elements.vcCardStatus, `${result.saved || 1} carte enregistrée. Elle apparaîtra dans une prochaine session.`); await refreshVCStatus(); } catch (error) { text(elements.vcCardStatus, error.message); }
+}
+async function startVCSession(event) {
+  event.preventDefault();
+  try { const payload = { limit: Number(elements.vcLimit.value), seed: 0 }; if (elements.vcTodayOnly.checked) payload.today = vcToday(); const result = await api("/api/academics/vc/session", { method: "POST", body: JSON.stringify(payload) }); vcState.cards = result.cards || []; vcState.index = 0; text(elements.vcSessionStatus, vcState.cards.length ? "Lis la question, réponds à voix haute ou sur papier, puis révèle la correction." : (result.blockers || ["Aucune carte due."])[0]); renderVCPrompt(); } catch (error) { text(elements.vcSessionStatus, error.message); }
+}
+async function revealVCCard() {
+  const card = vcState.cards[vcState.index]; if (!card) return;
+  vcState.revealed = true; elements.vcCorrection.hidden = false; elements.vcReveal.disabled = true;
+  try { const result = await api(`/api/academics/vc/cards/${encodeURIComponent(card.id)}`); const correction = result.card || {}; text(elements.vcAnswerDisplay, correction.back || "Correction indisponible."); text(elements.vcCitationDisplay, `Thème : ${correction.topic || card.topic || "VC"}${correction.source ? ` · Source : ${correction.source}` : ""}`); } catch (error) { text(elements.vcAnswerDisplay, error.message); }
+  for (let quality = 0; quality <= 5; quality += 1) { const button = document.createElement("button"); button.type = "button"; button.className = "vc-grade"; button.textContent = String(quality); button.title = quality < 3 ? "À revoir bientôt" : quality < 5 ? "Correct mais perfectible" : "Maîtrisé"; button.addEventListener("click", () => reviewVCCard(quality)); elements.vcGrades.append(button); }
+}
+async function reviewVCCard(quality) {
+  const card = vcState.cards[vcState.index]; if (!card) return;
+  try { await api("/api/academics/vc/review", { method: "POST", body: JSON.stringify({ card_id: card.id, quality, reviewed_on: vcToday() }) }); vcState.index += 1; text(elements.vcSessionStatus, vcState.index < vcState.cards.length ? "Réponse enregistrée. Passe à la suivante." : "Session terminée. Ton bilan est à jour."); renderVCPrompt(); await refreshVCStatus(); } catch (error) { text(elements.vcSessionStatus, error.message); }
+}
+
 document.querySelectorAll(".nav-item[data-view-target]").forEach((button) => button.addEventListener("click", () => activateView(button.dataset.viewTarget)));
 document.querySelectorAll(".suggestion").forEach((button) => button.addEventListener("click", () => { elements.message.value = button.dataset.prompt || ""; elements.message.focus(); }));
 document.querySelectorAll(".doc-action").forEach((button) => button.addEventListener("click", () => { const file = selectedFile(); if (!file) { activateView("assistantView"); addMessage("error", "Sélectionne un document avant de lancer cette action."); return; } const action = button.dataset.action; if (action === "inspect") startTask("Inspecte complètement le fichier sélectionné."); if (action === "analyze") startTask("Analyse financière en profondeur le fichier sélectionné."); if (action === "report") { activateView("assistantView"); elements.message.value = "Analyse le fichier sélectionné et crée un rapport."; elements.allowWrite.focus(); } }));
@@ -430,6 +486,11 @@ elements.projectForm.addEventListener("submit", async (event) => { event.prevent
 elements.memorySearchForm.addEventListener("submit", async (event) => { event.preventDefault(); const query = elements.memorySearchInput.value.trim(); if (!query) return; text(elements.memoryActionStatus, "Recherche locale en cours…"); try { const params = new URLSearchParams({ q: query }); if (state.selectedProjectId) params.set("project_id", state.selectedProjectId); const data = await api(`/api/v5/memory/search?${params}`); renderMemoryResults(data.results || []); text(elements.memoryActionStatus, `${data.count || 0} passage(s) retrouvé(s).${data.note ? ` ${data.note}` : ""}`); } catch (error) { text(elements.memoryActionStatus, error.message); } });
 elements.refreshMemory.addEventListener("click", refreshMemory);
 elements.refreshStorage.addEventListener("click", refreshStorage);
+elements.vcCardForm.addEventListener("submit", saveVCCard);
+elements.vcSessionForm.addEventListener("submit", startVCSession);
+elements.vcReveal.addEventListener("click", revealVCCard);
+elements.vcRefreshRadar.addEventListener("click", refreshVCStatus);
+elements.vcRefreshStatus.addEventListener("click", refreshVCStatus);
 
 window.addEventListener("hashchange", () => {
   if (internalHashChange) {
@@ -440,7 +501,7 @@ window.addEventListener("hashchange", () => {
   if (requested) activateView(requested, false);
 });
 
-Promise.all([refreshFiles(), refreshOutputs(), loadOverview(), loadIntelligence(), refreshMemory(false)]).then(() => {
+Promise.all([refreshFiles(), refreshOutputs(), loadOverview(), loadIntelligence(), refreshMemory(false), refreshVCStatus()]).then(() => {
   const requested = requestedHashView();
   if (requested && requested !== "assistantView") activateView(requested, false);
 });
