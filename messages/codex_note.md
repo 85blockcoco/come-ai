@@ -323,3 +323,8 @@
 - **Livré** : comptage explicite des lignes sans question ou réponse, affiché dans l’aperçu et après confirmation.
 - **UX** : les lignes incomplètes sont ignorées de l’import mais jamais masquées à l’utilisateur.
 - **Preuve** : `8 passed in 5.59s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+# Livraison VC-140 — garde-fous taille/format CSV (2026-11-02)
+
+- **Livré** : rejet côté navigateur des CSV de plus de 2 Mo ou dont l’extension/type n’est pas CSV.
+- **UX** : message d’erreur immédiat, champ réinitialisé, aucun aperçu ni appel API pour un fichier refusé.
+- **Preuve** : `8 passed in 4.93s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
