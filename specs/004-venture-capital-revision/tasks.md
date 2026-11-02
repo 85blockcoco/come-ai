@@ -536,3 +536,13 @@ Content expansion: 20 topics x 4 packets + 6 coverage/audit tasks.
 - T347 (full suite) is green: 3847 passed. T348 push verification: fast-forward
   `92c6206..d367607` on `agent/n100-carrier-20261101`. T349 final report is in
   `docs/agent-reports/VC-MVP-PROOF.md`.
+
+## Implementation Notes (2026-11-02, EDHEC exam lot)
+
+- `vc paper list|show|template|grade`, `vc cram` and `vc formulas` are delivered;
+  `python nage.py vc` without a subcommand starts the 90-minute plan.
+- Three derived papers are shipped: 2023 (22 questions), 2024 (24), 2025 (21). Raw
+  `docs/vc_study/` papers remain untracked.
+- Targeted VC suite: 160 passed. Full suite, sequential and alone in the clean copy:
+  3904 passed in 170.13s. Ruff clean on `academics/vc` and `tests/test_vc_*.py`.
+- Evidence: `docs/agent-reports/VC-MVP-PROOF.md` section 9; code commit `5662820`.
