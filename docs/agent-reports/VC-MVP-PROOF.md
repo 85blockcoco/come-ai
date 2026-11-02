@@ -6,6 +6,8 @@ Branche de livraison : `agent/n100-carrier-20261101`
 
 Commit de code US6 : `2671d0f33dd20a2f91d1aac3d888fe7960821270`
 
+Commit de code EDHEC : `56628202c1a84fb3e5a84b2bdb8e287fd8f5b74c`
+
 Commit de code US4 : `6d2a72e187c785ed2f87ef049e63d162b2f3e0ae`
 
 ## Périmètre prouvé
@@ -21,7 +23,9 @@ Le package `academics/vc/` et la sous-commande `nage.py vc` livrent :
 - US6 : ingestion de notes `.txt`/`.md`/PDF texte, citations exactes, approbation explicite,
   rejet persistant et détection de source modifiée ;
 - US7 : lexique FR/EN et décodeur de term sheet ;
-- US8 : rapport de progression et rétention.
+- US8 : rapport de progression et rétention ;
+- outil d'examen EDHEC 2023-2025 : annales dérivées, correction automatique, fiche de
+  formules, plan de 90 minutes et page HTML hors-ligne.
 
 Les données restent dans `~/.nage/vc/` ou dans `NAGE_VC_HOME`. Aucun appel réseau, aucune
 soumission automatique, aucun secret et aucune donnée personnelle ne sont ajoutés au dépôt.
@@ -237,3 +241,102 @@ cd "$(git rev-parse --show-toplevel)"
 .venv/bin/python nage.py vc exam start --questions 20 --minutes 30 --seed 7
 .venv/bin/python nage.py vc oral VC07 --count 5
 ```
+
+## 9. Lot outil d'examen EDHEC (annales 2023-2025)
+
+### Contenu livré
+
+- `academics/vc/pastpapers.py` : chargement et validation des sujets, payload, template,
+  correction déterministe des QCM et des réponses numériques (unités et tolérances),
+  auto-évaluation des questions ouvertes et des cas.
+- `academics/vc/cram.py` : fiche de 7 familles de formules, 14 pièges, plan de 90 minutes
+  paramétrable, rendu Markdown et HTML autonome/imprimable.
+- `academics/vc/content/paper_2023.json` : 22 questions.
+- `academics/vc/content/paper_2024.json` : 24 questions.
+- `academics/vc/content/paper_2025.json` : 21 questions.
+- `tests/test_vc_pastpapers.py` : 15 tests.
+- CLI : `vc paper list|show|template|grade`, `vc cram`, `vc formulas`, et `nage.py vc`
+  sans sous-commande qui lance directement le plan de 90 minutes.
+
+Les sujets sont un **pack dérivé** : questions condensées et paraphrasées, réponses
+numériques et corrigés pas à pas reproduits. Les annales brutes `docs/vc_study/` ne sont
+pas suivies par Git et ne sont pas livrées.
+
+### Tests ciblés
+
+Commande exécutée dans la copie propre :
+
+```text
+.venv/bin/python -m pytest -q tests/test_vc_*.py
+```
+
+Résultat :
+
+```text
+160 passed in 5.03s
+```
+
+### Suite complète
+
+Copie propre construite depuis le working tree, avec les deux exclusions volontaires :
+
+- `nage.py` remis à `HEAD` (les modifications utilisateur importent `vc_tutor.py`, qui
+  recharge `.env` dans `os.environ`) ;
+- `academics/vc/cli.py` reconstruit depuis `HEAD` avec uniquement les hunks EDHEC
+  (`paper`, `cram`, `formulas`, `vc` sans sous-commande) ; les hunks `tutor`/`master`
+  sont absents.
+
+Commande réellement exécutée, seule et séquentielle :
+
+```text
+.venv/bin/python -m pytest -q
+```
+
+Résultat :
+
+```text
+3904 passed in 170.13s (0:02:50)
+```
+
+### Ruff
+
+```text
+.venv/bin/python -m ruff check academics/vc tests/test_vc_*.py
+All checks passed!
+```
+
+### Smoke CLI réel
+
+```text
+python nage.py vc
+python nage.py vc paper list --json
+python nage.py vc paper template 2025 --output answers.json
+python nage.py vc paper grade 2025 --answers answers.json
+python nage.py vc cram --html cram.html --markdown cram.md
+```
+
+- `vc` sans argument affiche le plan de 90 minutes ;
+- `paper list` renvoie `[(2023, 22), (2024, 24), (2025, 21)]` ;
+- `paper template 2025` écrit 28 réponses auto-corrigeables ;
+- `paper grade 2025` avec les bonnes réponses donne `35/35 (100.0%)` ;
+- `cram` écrit un HTML de 92 029 octets et un Markdown de 49 747 octets ;
+- le HTML contient 67 `<details>` équilibrés et aucun lien `http://` ou `https://` ;
+- résultat final : `SMOKE_EDHEC_OK`.
+
+### Livraison du lot
+
+- Commit de code : `56628202c1a84fb3e5a84b2bdb8e287fd8f5b74c`
+- Branche : `agent/n100-carrier-20261101`
+- Push fast-forward vérifié : `6d38ed3..5662820`
+- `git ls-remote` après push :
+  `56628202c1a84fb3e5a84b2bdb8e287fd8f5b74c refs/heads/agent/n100-carrier-20261101`
+- Aucun force-push, aucun reset, aucune réécriture d'historique.
+
+### Limites assumées
+
+- Le pack est dérivé et paraphrasé ; il ne remplace pas les énoncés originaux.
+- Les questions ouvertes et les cas sont auto-évalués à partir du corrigé, pas notés par
+  un humain.
+- Le cas Apfel 2024 utilise, dans son tableau officiel, un besoin en fonds de roulement
+  égal à 10 % de l'EBITDA alors que l'énoncé indique 10 % du chiffre d'affaires ; le
+  corrigé livré documente cet écart et reproduit les valeurs officielles.
