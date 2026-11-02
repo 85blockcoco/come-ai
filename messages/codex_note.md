@@ -278,3 +278,8 @@
 - **Livré** : chaque carte résistante propose désormais « Réviser ce thème », sélectionne son thème, active le filtre erreurs et amène au formulaire de session.
 - **UX** : le démarrage reste explicite; aucune session n’est lancée automatiquement.
 - **Preuve** : `7 passed in 7.63s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+# Livraison VC-131 — jamais testées vs difficiles (2026-11-02)
+
+- **Livré** : panneau distinct pour les cartes jamais testées, séparé des cartes notées 0–2; chaque carte propose une découverte ciblée de son thème.
+- **Principe** : absence de réponse = « jamais testée », jamais « fragile ».
+- **Preuve** : `7 passed in 11.14s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.

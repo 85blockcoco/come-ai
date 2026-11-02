@@ -35,6 +35,7 @@ const elements = {
   vcCadence: $("vcCadence"),
   vcProgress: $("vcProgress"), vcProgressEmpty: $("vcProgressEmpty"), vcReadiness: $("vcReadiness"), vcQuickFocus: $("vcQuickFocus"), vcShortSession: $("vcShortSession"), vcExpressSession: $("vcExpressSession"),
   vcResistantCards: $("vcResistantCards"), vcResistantEmpty: $("vcResistantEmpty"),
+  vcUntestedCards: $("vcUntestedCards"), vcUntestedEmpty: $("vcUntestedEmpty"),
 };
 
 async function api(path, options = {}) {
@@ -452,6 +453,9 @@ function renderVCResistantCards(cards) {
   const rows = (cards || []).filter((card) => card.quality !== null && Number(card.quality) <= 2).slice(0, 5);
   elements.vcResistantCards.replaceChildren(); elements.vcResistantEmpty.hidden = rows.length > 0;
   for (const card of rows) { const row = document.createElement("div"); row.className = "vc-resistant-row"; const title = document.createElement("strong"); title.textContent = card.front; const detail = document.createElement("small"); detail.textContent = `${card.topic} · qualité ${card.quality}/5 · ${card.repetitions} répétition(s)`; const button = document.createElement("button"); button.type = "button"; button.className = "text-button"; button.textContent = "Réviser ce thème"; button.addEventListener("click", () => { elements.vcFocusTopic.value = card.topic; elements.vcWeakOnly.checked = true; activateView("vcView"); elements.vcSessionStatus.textContent = `Thème ciblé : ${card.topic}. Démarre la session quand tu es prêt.`; elements.vcSessionForm.scrollIntoView({ behavior: "smooth", block: "center" }); }); row.append(title, detail, button); elements.vcResistantCards.append(row); }
+  const untested = (cards || []).filter((card) => card.quality === null).slice(0, 5);
+  elements.vcUntestedCards.replaceChildren(); elements.vcUntestedEmpty.hidden = untested.length > 0;
+  for (const card of untested) { const row = document.createElement("div"); row.className = "vc-resistant-row"; const title = document.createElement("strong"); title.textContent = card.front; const detail = document.createElement("small"); detail.textContent = `${card.topic} · jamais testée`; const button = document.createElement("button"); button.type = "button"; button.className = "text-button"; button.textContent = "Découvrir cette carte"; button.addEventListener("click", () => { elements.vcFocusTopic.value = card.topic; elements.vcWeakOnly.checked = false; activateView("vcView"); elements.vcSessionStatus.textContent = `Thème sélectionné : ${card.topic}. Démarre la session pour découvrir la carte.`; elements.vcSessionForm.scrollIntoView({ behavior: "smooth", block: "center" }); }); row.append(title, detail, button); elements.vcUntestedCards.append(row); }
 }
 function renderVCExamHistory(exams) {
   const rows = Array.isArray(exams) ? [...exams].reverse() : [];
