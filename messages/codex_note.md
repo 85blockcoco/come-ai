@@ -150,6 +150,13 @@
   bilingue documenté, clauses inconnues marquées à vérifier et rapport de progression
   recalculable.
 - Preuve : `tests/test_vc_glossary_report.py tests/test_vc_drills.py tests/test_vc_cases.py tests/test_vc_notes.py tests/test_vc_mastery.py tests/test_vc_exams.py tests/test_vc_scheduler.py` — `25 passed in 2.05s`; Ruff et diff-check verts.
+
+## RAPPORT CODEX — 2026-11-02 — VC-091 à VC-100, extraction PDF/DOCX locale
+
+- Livré : extraction bornée TXT/MD/PDF/DOCX, citations ligne/page/paragraphe,
+  propositions de cartes à approuver et refus des formats non supportés.
+- Aucun support personnel ni fichier réel de cours n'a été ajouté au dépôt.
+- Preuve : `tests/test_vc_notes.py tests/test_vc_glossary_report.py tests/test_vc_drills.py tests/test_vc_cases.py tests/test_vc_mastery.py tests/test_vc_exams.py tests/test_vc_scheduler.py` — `26 passed in 1.27s`; Ruff et diff-check verts.
 # Candidate consolidée Codex (2026-11-01)
 
 - Branche : `codex/n100-consolidated-20261101`.

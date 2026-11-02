@@ -23,7 +23,7 @@ from .drills import (
 from .cases import CaseGrade, CaseQuestion, CaseStudy, down_round_case, grade_case, liquidation_waterfall_case, seed_round_case, series_a_case
 from .exams import ExamQuestion, ExamResult, MockExam, build_mock_exam, grade_mock_exam
 from .mastery import build_radar, build_study_plan
-from .notes import NoteProposal, approve_proposal, propose_cards
+from .notes import NoteProposal, approve_proposal, extract_note_lines, propose_cards, propose_cards_from_file
 from .glossary import decode_clause, lookup_term
 from .report import progress_report
 
@@ -34,6 +34,6 @@ __all__ = [
     "CaseGrade", "CaseQuestion", "CaseStudy", "grade_case", "seed_round_case", "series_a_case", "down_round_case", "liquidation_waterfall_case",
     "ExamQuestion", "ExamResult", "MockExam", "build_mock_exam", "grade_mock_exam",
     "build_radar", "build_study_plan",
-    "NoteProposal", "approve_proposal", "propose_cards",
+    "NoteProposal", "approve_proposal", "propose_cards", "extract_note_lines", "propose_cards_from_file",
     "lookup_term", "decode_clause", "progress_report",
 ]

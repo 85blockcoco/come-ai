@@ -1,6 +1,6 @@
 import pytest
 
-from academics.vc.notes import approve_proposal, propose_cards
+from academics.vc.notes import approve_proposal, extract_note_lines, propose_cards, propose_cards_from_file
 
 
 def test_notes_produce_cited_cards_that_need_approval():
@@ -20,3 +20,11 @@ def test_approval_requires_citation_and_pending_status():
     proposal = propose_cards("MOIC : multiple", source_name="synthetic.md")[0]
     with pytest.raises(ValueError):
         approve_proposal(type(proposal)(proposal.proposal_id, proposal.topic, proposal.front, proposal.back, "", "approved"))
+
+
+def test_local_text_file_keeps_line_citations(tmp_path):
+    source = tmp_path / "vc-notes.txt"
+    source.write_text("Pre-money : valorisation avant tour\nPhrase sans définition\n", encoding="utf-8")
+    assert extract_note_lines(source)[0][0] == "vc-notes.txt:ligne 1"
+    proposal = propose_cards_from_file(source, topic="valuation")[0]
+    assert proposal.citation.startswith("vc-notes.txt:ligne 1")
