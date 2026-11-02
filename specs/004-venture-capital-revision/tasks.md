@@ -452,8 +452,8 @@ Release evidence, privacy, performance, documentation and delivery.
 - [x] T345 Update `.specify/feature.json` to `specs/004-venture-capital-revision`.
 - [ ] T346 Update `docs/VC_REVISION_GUIDE.md` with the final 20-topic study calendar.
 - [x] T347 Run the full test suite sequentially and alone; record the exact output in `docs/agent-reports/VC-MVP-PROOF.md`.
-- [ ] T348 Commit the feature on the delivery branch and verify the pushed SHA with `git ls-remote`.
-- [ ] T349 Report the final state: tasks done, tests, ruff, content counts and remaining P2/P3 work.
+- [x] T348 Commit the feature on the delivery branch and verify the pushed SHA with `git ls-remote`.
+- [x] T349 Report the final state: tasks done, tests, ruff, content counts and remaining P2/P3 work.
 
 ---
 
@@ -533,5 +533,6 @@ Content expansion: 20 topics x 4 packets + 6 coverage/audit tasks.
   open. US4 content is empty and no exam command is wired.
 - The content expansion targets (200 cards / 100 drills / 20 cases / 100 questions /
   120 terms) remain open; the delivered MVP has 50 / 24 / 4 / 0 / 42.
-- T347 (full suite), T348 (push verification) and T349 (final report) are completed during
-  the release step, after this file is committed.
+- T347 (full suite) is green: 3847 passed. T348 push verification: fast-forward
+  `92c6206..c24560b` on `agent/n100-carrier-20261101`. T349 final report is in
+  `docs/agent-reports/VC-MVP-PROOF.md`.

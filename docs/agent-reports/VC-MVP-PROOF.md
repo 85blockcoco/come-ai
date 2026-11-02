@@ -144,7 +144,16 @@ Vérifications réalisées :
   100 questions / 120 termes reste un backlog.
 - Le score des cas est une grille déterministe, pas une évaluation humaine.
 
-## 7. Reproduce
+## 7. Livraison
+
+- Branche : `agent/n100-carrier-20261101`
+- Commit de code : `41084f458c8de66fe2983aeac121e489a8f63910`
+- Push fast-forward vérifié : `92c6206..c24560b`
+- `git ls-remote` après push :
+  `c24560bd7432d2f57a60d754665e5d08e276acc0 refs/heads/agent/n100-carrier-20261101`
+- Aucun force-push, aucun reset, aucune réécriture d'historique.
+
+## 8. Reproduce
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
