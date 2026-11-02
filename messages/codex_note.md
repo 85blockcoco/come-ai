@@ -248,3 +248,8 @@
 - **Livré** : date de fin enregistrée pour chaque session et recommandation de cadence sur les 7 derniers jours.
 - **UX** : message neutre lorsqu’aucune session récente n’existe; suggestion d’une session courte, sans objectif artificiel ni pression de score.
 - **Preuve** : `11 passed in 7.69s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+# Livraison VC-125 — durée suggérée selon les cartes dues (2026-11-02)
+
+- **Livré** : le statut VC calcule le nombre de cartes dues et une durée suggérée bornée entre 5 et 30 minutes (`2 min/carte`, plafonnée), sans carte due = 0 minute.
+- **UX** : la cadence affiche la durée du jour et rappelle que la qualité prime sur la quantité.
+- **Preuve** : `7 passed in 4.53s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.

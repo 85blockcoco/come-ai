@@ -220,7 +220,11 @@ def create_academics_router() -> APIRouter:
     @router.get("/api/academics/vc/status")
     def vc_status() -> dict[str, Any]:
         store = VCStore()
-        return {"local_only": True, "cards": len(store.load_cards()), "reviews": len(store.load_reviews()), "cloud": False}
+        cards = store.load_cards()
+        reviews = store.load_reviews()
+        today = date.today().isoformat()
+        due = sum(1 for card in cards if card.approved and (card.id not in reviews or str(reviews[card.id].get("due_on", "")) <= today))
+        return {"local_only": True, "cards": len(cards), "reviews": len(reviews), "due": due, "suggested_minutes": min(30, max(5, due * 2)) if due else 0, "cloud": False}
 
     @router.post("/api/academics/vc/cards")
     def vc_cards(payload: VCCardsPayload) -> dict[str, Any]:

@@ -458,7 +458,7 @@ function renderVCExamHistory(exams) {
     row.append(score, details, topics); elements.vcExamHistory.append(row);
   }
 }
-function renderVCSessionHistory(sessions) {
+function renderVCSessionHistory(sessions, suggestedMinutes = 0) {
   const rows = Array.isArray(sessions) ? [...sessions].reverse().slice(0, 10) : [];
   elements.vcSessionHistory.replaceChildren(); elements.vcSessionHistoryEmpty.hidden = rows.length > 0;
   for (const session of rows) {
@@ -469,7 +469,8 @@ function renderVCSessionHistory(sessions) {
   }
   const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const recent = (sessions || []).filter((session) => session.completed_on && Date.parse(session.completed_on) >= cutoff).length;
-  text(elements.vcCadence, recent ? `Cadence récente : ${recent} session(s) sur 7 jours. Vise une session courte régulière, sans sacrifier la qualité des réponses.` : "Cadence : aucune session récente. Commence par une session courte aujourd’hui.");
+  const duration = suggestedMinutes ? ` Durée suggérée aujourd’hui : ${suggestedMinutes} min.` : " Aucune carte due détectée.";
+  text(elements.vcCadence, `${recent ? `Cadence récente : ${recent} session(s) sur 7 jours.` : "Cadence : aucune session récente."}${duration} La qualité des réponses prime sur la quantité.`);
 }
 function renderVCReadiness(exams, radar) {
   const rows = Array.isArray(exams) ? exams.slice(-3) : [];
@@ -499,8 +500,8 @@ async function refreshVCStatus() {
   elements.vcStatus.setAttribute("aria-busy", "true");
   try {
     const [status, radar, exams, sessions] = await Promise.all([api("/api/academics/vc/status"), api("/api/academics/vc/radar"), api("/api/academics/vc/exams"), api("/api/academics/vc/sessions")]);
-    text(elements.vcStatus, `${status.cards || 0} carte(s) · ${status.reviews || 0} réponse(s) · ${(sessions.sessions || []).length} session(s) · ${(exams.exams || []).length} examen(s) · stockage local uniquement.`);
-    renderVCSessionHistory(sessions.sessions || []);
+    text(elements.vcStatus, `${status.cards || 0} carte(s) · ${status.due || 0} due(s) · ${status.reviews || 0} réponse(s) · ${(sessions.sessions || []).length} session(s) · ${(exams.exams || []).length} examen(s) · stockage local uniquement.`);
+    renderVCSessionHistory(sessions.sessions || [], status.suggested_minutes || 0);
     renderVCExamHistory(exams.exams || []);
     renderVCProgress(exams.exams || []);
     renderVCReadiness(exams.exams || [], radar.radar || []);

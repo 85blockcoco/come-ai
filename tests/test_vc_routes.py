@@ -8,6 +8,8 @@ def test_vc_http_flow_hides_answers_and_persists_reviews(tmp_path, monkeypatch):
     with TestClient(create_app(base_dir=tmp_path)) as client:
         saved = client.post("/api/academics/vc/cards", json={"cards": [{"id": "pm", "topic": "valuation", "front": "Post-money ?", "back": "10", "source": "synthetic"}]})
         assert saved.status_code == 200 and saved.json()["saved"] == 1
+        status = client.get("/api/academics/vc/status")
+        assert status.json()["due"] == 1 and status.json()["suggested_minutes"] == 5
         session = client.post("/api/academics/vc/session", json={"today": "2026-11-02", "limit": 1})
         assert session.status_code == 200
         assert session.json()["cards"][0]["id"] == "pm"
