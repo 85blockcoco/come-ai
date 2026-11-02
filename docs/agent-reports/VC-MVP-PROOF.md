@@ -148,10 +148,14 @@ Vérifications réalisées :
 
 - Branche : `agent/n100-carrier-20261101`
 - Commit de code : `41084f458c8de66fe2983aeac121e489a8f63910`
-- Push fast-forward vérifié : `92c6206..c24560b`
+- Push fast-forward vérifié : `92c6206..d367607`
 - `git ls-remote` après push :
-  `c24560bd7432d2f57a60d754665e5d08e276acc0 refs/heads/agent/n100-carrier-20261101`
+  `d367607ddff4dc3389b72cb688116b0734bbc286 refs/heads/agent/n100-carrier-20261101`
 - Aucun force-push, aucun reset, aucune réécriture d'historique.
+- Un commit de documentation postérieur peut déplacer le tip ; le SHA de code reste
+  `41084f458c8de66fe2983aeac121e489a8f63910`.
+- Serveurs locaux après redémarrage : `8765/` = 200, `8765/career` = 200,
+  `8765/v5` = 200, `8766/` = 200.
 
 ## 8. Reproduce
 

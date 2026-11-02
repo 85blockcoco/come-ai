@@ -534,5 +534,5 @@ Content expansion: 20 topics x 4 packets + 6 coverage/audit tasks.
 - The content expansion targets (200 cards / 100 drills / 20 cases / 100 questions /
   120 terms) remain open; the delivered MVP has 50 / 24 / 4 / 0 / 42.
 - T347 (full suite) is green: 3847 passed. T348 push verification: fast-forward
-  `92c6206..c24560b` on `agent/n100-carrier-20261101`. T349 final report is in
+  `92c6206..d367607` on `agent/n100-carrier-20261101`. T349 final report is in
   `docs/agent-reports/VC-MVP-PROOF.md`.
