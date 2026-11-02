@@ -30,6 +30,7 @@ const elements = {
   storageLibrarySize: $("storageLibrarySize"), storageFiles: $("storageFiles"), storageFreeSpace: $("storageFreeSpace"), storageIndexing: $("storageIndexing"), storageLocation: $("storageLocation"), storageIndexSize: $("storageIndexSize"), storageBackupStatus: $("storageBackupStatus"), storageQueueStatus: $("storageQueueStatus"), storageLargestFiles: $("storageLargestFiles"), emptyLargestFiles: $("emptyLargestFiles"), refreshStorage: $("refreshStorage"),
   vcStatus: $("vcStatus"), vcCardForm: $("vcCardForm"), vcQuestion: $("vcQuestion"), vcAnswer: $("vcAnswer"), vcTopic: $("vcTopic"), vcSource: $("vcSource"), vcCardStatus: $("vcCardStatus"), vcSessionForm: $("vcSessionForm"), vcTodayOnly: $("vcTodayOnly"), vcLimit: $("vcLimit"), vcSessionCount: $("vcSessionCount"), vcPrompt: $("vcPrompt"), vcReveal: $("vcReveal"), vcCorrection: $("vcCorrection"), vcAnswerDisplay: $("vcAnswerDisplay"), vcCitationDisplay: $("vcCitationDisplay"), vcGrades: $("vcGrades"), vcSessionStatus: $("vcSessionStatus"), vcRadar: $("vcRadar"), vcRadarEmpty: $("vcRadarEmpty"), vcPlan: $("vcPlan"), vcRefreshRadar: $("vcRefreshRadar"), vcRefreshStatus: $("vcRefreshStatus"),
   vcExamLimit: $("vcExamLimit"), vcExamStart: $("vcExamStart"), vcExamSubmit: $("vcExamSubmit"), vcExamQuestions: $("vcExamQuestions"), vcExamTimer: $("vcExamTimer"), vcExamResult: $("vcExamResult"),
+  vcExamHistory: $("vcExamHistory"), vcExamHistoryEmpty: $("vcExamHistoryEmpty"),
 };
 
 async function api(path, options = {}) {
@@ -442,10 +443,22 @@ function renderVCRadar(radar) {
     row.append(label, status, count); elements.vcRadar.append(row);
   }
 }
+function renderVCExamHistory(exams) {
+  const rows = Array.isArray(exams) ? [...exams].reverse() : [];
+  elements.vcExamHistory.replaceChildren(); elements.vcExamHistoryEmpty.hidden = rows.length > 0;
+  for (const exam of rows.slice(0, 10)) {
+    const row = document.createElement("div"); row.className = "vc-exam-history-row";
+    const score = document.createElement("strong"); score.textContent = `${exam.score || 0}/${exam.max_score || 0}`;
+    const details = document.createElement("span"); details.textContent = `${exam.answered || 0} réponse(s) · ${exam.timed_out ? "temps dépassé" : "temps respecté"}`;
+    const topics = document.createElement("small"); topics.textContent = exam.weak_topics && exam.weak_topics.length ? `À revoir : ${exam.weak_topics.join(", ")}` : "Aucun thème fragile détecté";
+    row.append(score, details, topics); elements.vcExamHistory.append(row);
+  }
+}
 async function refreshVCStatus() {
   try {
     const [status, radar, exams] = await Promise.all([api("/api/academics/vc/status"), api("/api/academics/vc/radar"), api("/api/academics/vc/exams")]);
     text(elements.vcStatus, `${status.cards || 0} carte(s) · ${status.reviews || 0} réponse(s) · ${(exams.exams || []).length} examen(s) · stockage local uniquement.`);
+    renderVCExamHistory(exams.exams || []);
     renderVCRadar(radar.radar);
     const fragile = (radar.radar || []).filter((item) => ["non testé", "fragile"].includes(item.status)).map((item) => item.topic);
     const latest = (exams.exams || []).at(-1);

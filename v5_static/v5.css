@@ -233,6 +233,12 @@ input { min-width: 0; padding: 9px 10px; font-size: 12px; }
 .vc-exam-question { display: grid; gap: 7px; padding: 12px; background: #f8fbfa; border: 1px solid #e0ece5; border-radius: 10px; }
 .vc-exam-question span { color: #315747; font-size: 12px; line-height: 1.45; }
 .vc-exam-question input { padding: 9px 10px; }
+.vc-history-title { padding-top: 16px; margin-top: 17px; border-top: 1px solid #deebe4; color: #315747; font-size: 13px; }
+.vc-exam-history { display: grid; gap: 7px; margin-top: 9px; }
+.vc-exam-history-row { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 2px 9px; padding: 9px 10px; background: #fbfdfc; border: 1px solid #e0ebe5; border-radius: 9px; }
+.vc-exam-history-row strong { grid-row: span 2; align-self: center; color: #1f6c50; font-family: Georgia, "Times New Roman", serif; font-size: 18px; }
+.vc-exam-history-row span { color: #4f655b; font-size: 10px; }
+.vc-exam-history-row small { color: #7b8b83; font-size: 10px; overflow-wrap: anywhere; }
 
 .storage-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0 0 17px; }
 .storage-metric { min-height: 92px; padding: 16px; background: linear-gradient(145deg, rgba(255, 255, 255, .94), rgba(231, 245, 238, .72)); border: 1px solid #d7e9df; border-radius: 14px; box-shadow: 0 9px 24px rgba(6, 78, 59, .045); }

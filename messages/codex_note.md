@@ -197,3 +197,8 @@
 - **Interface** : le statut VC affiche désormais le nombre d’examens et la prochaine priorité reprend le dernier score lorsqu’il existe.
 - **Preuve** : `13 passed in 5.36s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
 - **Protection** : stockage sous `NAGE_VC_HOME`, dossier 0700, fichier 0600, aucune donnée envoyée au cloud.
+# Livraison VC-115 — historique d’examens visible (2026-11-02)
+
+- **Livré** : affichage des 10 dernières tentatives dans l’espace VC, avec score, nombre de réponses, statut du temps et thèmes fragiles.
+- **UX** : état vide explicite, historique trié du plus récent au plus ancien, aucun corrigé affiché avant soumission.
+- **Preuve** : `11 passed in 4.92s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
