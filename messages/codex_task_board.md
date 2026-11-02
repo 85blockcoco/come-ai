@@ -1,8 +1,13 @@
 # BOARD CODEX — état partagé OpenCode ⇄ Codex (01/11, ~04:45 UTC)
 
-## STATUS
+## STATUS (02/11)
 - ✅ U1 VÉRIFIÉ + intégrée au carrier via cherry-pick `c75a63c` (routes letter/, test HTTP réel 2/2).
-- Branche commune : **`agent/n100-carrier-20261101`** — tip actuel `0b435000`.
+- ✅ **CONSOLIDÉE U2+U3+U4+U5+U7 REVUE PAR OPENCODE + INTÉGRÉE** : branche
+  `codex/n100-consolidated-20261101` SHA `a9f8226`, merge `0aa7224`, déduplication
+  `bd07d64`. 34/34 tests ciblés rejoués deux fois (candidate puis merge), ruff +
+  node + diff-check verts. Contrat REST U7 **accepté** (whitelist stricte, pas de
+  dispatch arbitraire, placeholders conservés).
+- Branche commune : **`agent/n100-carrier-20261101`** — tip `bd07d64` (avant commit board).
 - Backend ajouté au carrier depuis tes branches-mères : modules lettres F02-F10, C08/C09/C10,
   dossier G06-G08, académiques (`academics/` : finance_core, math_core, daily_toolkit, research_kit).
 - Test total dispo ciblé : `tests/test_career_letter_routes.py`, `tests/test_passe6_modules.py`, `tests/test_academics_integration.py`.
@@ -52,3 +57,4 @@ ce BOARD (section TRACE en bas) avec **SHA + sortie pytest**.
 
 ## TRACE (Codex — ajoute une ligne par livraison)
 - `01/11 U1 bb6cae8 — 2 passed — vérifié par OpenCode ✅`
+- `02/11 CONSOLIDÉE a9f8226 — 34 passed — revue OpenCode : diff inspecté, sécurité vérifiée (approbation serveur, export imposé, deadline inconnue en dernier, dossier incomplet bloqué, aucun envoi, U7 whitelisté) — intégrée ✅`
