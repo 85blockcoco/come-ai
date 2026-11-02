@@ -33,6 +33,7 @@ const elements = {
   vcExamHistory: $("vcExamHistory"), vcExamHistoryEmpty: $("vcExamHistoryEmpty"),
   vcSessionHistory: $("vcSessionHistory"), vcSessionHistoryEmpty: $("vcSessionHistoryEmpty"),
   vcCadence: $("vcCadence"),
+  vcExportReport: $("vcExportReport"), vcExportStatus: $("vcExportStatus"),
   vcProgress: $("vcProgress"), vcProgressEmpty: $("vcProgressEmpty"), vcReadiness: $("vcReadiness"), vcQuickFocus: $("vcQuickFocus"), vcShortSession: $("vcShortSession"), vcExpressSession: $("vcExpressSession"),
   vcResistantCards: $("vcResistantCards"), vcResistantEmpty: $("vcResistantEmpty"),
   vcUntestedCards: $("vcUntestedCards"), vcUntestedEmpty: $("vcUntestedEmpty"),
@@ -536,6 +537,9 @@ async function refreshVCStatus() {
   } catch (error) { text(elements.vcStatus, error.message); }
   finally { elements.vcStatus.removeAttribute("aria-busy"); }
 }
+async function exportVCReport() {
+  try { const [status, radar, exams, sessions] = await Promise.all([api("/api/academics/vc/status"), api("/api/academics/vc/radar"), api("/api/academics/vc/exams"), api("/api/academics/vc/sessions")]); const report = { exported_on: new Date().toISOString(), status, radar: radar.radar || [], exams: exams.exams || [], sessions: sessions.sessions || [], cards: vcCardStats.map(({ id, topic, front, source, quality, repetitions, due_on }) => ({ id, topic, front, source, quality, repetitions, due_on })) }; const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }); const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `nage-vc-bilan-${new Date().toISOString().slice(0, 10)}.json`; link.click(); URL.revokeObjectURL(link.href); text(elements.vcExportStatus, "Bilan exporté localement, sans les réponses des cartes."); } catch (error) { text(elements.vcExportStatus, error.message); }
+}
 async function saveVCCard(event) {
   event.preventDefault();
   const card = { id: `vc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, topic: elements.vcTopic.value, front: elements.vcQuestion.value.trim(), back: elements.vcAnswer.value.trim(), source: elements.vcSource.value.trim() || "Notes locales", approved: true };
@@ -596,6 +600,7 @@ elements.vcShortSession.addEventListener("click", () => { elements.vcLimit.value
 elements.vcExpressSession.addEventListener("click", () => { elements.vcLimit.value = "3"; activateView("vcView"); elements.vcSessionStatus.textContent = "Révision express configurée : 3 cartes dues maximum."; elements.vcSessionForm.scrollIntoView({ behavior: "smooth", block: "center" }); });
 elements.vcCardSearch.addEventListener("input", renderVCAllCards);
 elements.vcCardSort.addEventListener("change", renderVCAllCards);
+elements.vcExportReport.addEventListener("click", exportVCReport);
 elements.vcExamStart.addEventListener("click", startVCExam);
 elements.vcExamSubmit.addEventListener("click", submitVCExam);
 

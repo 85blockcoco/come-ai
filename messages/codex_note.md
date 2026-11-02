@@ -293,3 +293,8 @@
 - **Livré** : tri local des cartes par difficulté, thème ou échéance, en complément de la recherche.
 - **Contrat** : cartes sans échéance placées après les cartes planifiées; cartes jamais testées restent distinguées des cartes faibles.
 - **Preuve** : `7 passed in 5.01s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+# Livraison VC-134 — export local du bilan (2026-11-02)
+
+- **Livré** : bouton d’export JSON du statut, radar, examens, sessions et métadonnées de cartes.
+- **Protection** : les champs `back`/réponses ne sont jamais inclus dans l’export; fichier généré côté navigateur, sans envoi réseau.
+- **Preuve** : `7 passed in 4.74s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
