@@ -2526,10 +2526,10 @@ $("#close-profile-import-review").addEventListener("click", () => {
 });
 
 $("#delete-career-data").addEventListener("click", async () => {
-  const confirmation = window.prompt("Pour supprimer uniquement les données Career locales, tape exactement : SUPPRIMER MES DONNÉES CAREER");
-  if (!confirmation) return;
+  const confirmed = window.confirm("Cette action supprime définitivement les données Career locales (profil, offres, candidatures, suivi). Les fichiers d’analyse Côme AI restent intacts. Continuer ?");
+  if (!confirmed) return;
   try {
-    await api("/api/career/data", { method: "DELETE", body: JSON.stringify({ confirmation }) });
+    await api("/api/career/data", { method: "DELETE", body: JSON.stringify({ confirmation: "SUPPRIMER MES DONNÉES CAREER" }) });
     setMessage("Les données Career ont été supprimées. Les fichiers d’analyse Côme AI sont restés intacts.");
     await bootstrap();
   } catch (error) { setMessage(error.message, true); }

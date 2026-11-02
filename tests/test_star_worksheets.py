@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from career.star_worksheets import StarWorksheet, build_worksheet, compute_completeness, ready_worksheets
 

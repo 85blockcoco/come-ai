@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
 
 @dataclass
@@ -22,10 +21,8 @@ def compute_completeness(ws: StarWorksheet) -> float:
     return round(filled / 4.0, 2)
 
 
-def build_worksheet(question_id: str, situation: str = "", task: str = "",
-                    action: str = "", result: str = "") -> StarWorksheet:
-    ws = StarWorksheet(question_id=question_id, situation=situation, task=task,
-                       action=action, result=result)
+def build_worksheet(question_id: str, situation: str = "", task: str = "", action: str = "", result: str = "") -> StarWorksheet:
+    ws = StarWorksheet(question_id=question_id, situation=situation, task=task, action=action, result=result)
     ws.completeness = compute_completeness(ws)
     return ws
 

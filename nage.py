@@ -13,6 +13,9 @@ Exemples :
     .venv/bin/python nage.py research --topic "Finance durable" \
         --section "Introduction" --section "Données" --fact "La BCE publie..."
     .venv/bin/python nage.py homework --type npv --level master
+    .venv/bin/python nage.py vc review --minutes 10
+    .venv/bin/python nage.py vc drill run VC04-D001 --answer "10 M€"
+    .venv/bin/python nage.py vc case grade VC03-CASE01 --answers answers.json
 """
 
 from __future__ import annotations
@@ -61,9 +64,7 @@ def _parse_tasks(values: list[str]) -> list[Task]:
     for value in values:
         parts = [part.strip() for part in value.split("|")]
         if len(parts) < 3:
-            raise ValueError(
-                f"tâche attendue au format Titre|AAAA-MM-JJ|minutes[|priorité] : {value!r}"
-            )
+            raise ValueError(f"tâche attendue au format Titre|AAAA-MM-JJ|minutes[|priorité] : {value!r}")
         title, due, estimate = parts[0], parts[1], int(parts[2])
         priority = int(parts[3]) if len(parts) > 3 and parts[3] else 2
         tasks.append(Task(title=title, due=due, estimate_minutes=estimate, priority=priority))
@@ -85,9 +86,7 @@ def _emit(payload: Any, as_json: bool) -> None:
         print(payload)
 
 
-def _operation_result(
-    operations: dict[str, Any], operation: str, arguments: dict[str, Any]
-) -> dict[str, Any]:
+def _operation_result(operations: dict[str, Any], operation: str, arguments: dict[str, Any]) -> dict[str, Any]:
     function = operations.get(operation)
     if function is None:
         allowed = ", ".join(sorted(operations))
@@ -163,6 +162,11 @@ def build_parser() -> argparse.ArgumentParser:
     homework.add_argument("--level", default="")
 
     _budget_parser(subparsers)
+
+    from academics.vc.cli import build_vc_parser
+
+    vc = subparsers.add_parser("vc", help="Révision Venture Capital (local, hors-ligne)")
+    build_vc_parser(vc)
     return parser
 
 
@@ -211,6 +215,10 @@ def run(args: argparse.Namespace) -> Any:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.command == "vc":
+        from academics.vc.cli import run_vc
+
+        return run_vc(args)
     try:
         payload = run(args)
     except (TypeError, ValueError, ZeroDivisionError) as error:
