@@ -1,0 +1,188 @@
+{
+  "schema_version": 1,
+  "pack_id": "cases-core",
+  "topic_id": "VC03",
+  "language": "fr",
+  "source_type": "original",
+  "license": "Contenu original NAGE",
+  "items": [
+    {
+      "kind": "case",
+      "id": "VC03-CASE01",
+      "topic_id": "VC03",
+      "title": "Seed round NovaFarm",
+      "context": "NovaFarm négocie un tour seed de 2 M€ avec un pre-money de 8 M€. La société a 8 millions d'actions existantes et un prix par action de 1 €. L'investisseur demande une part calculée sur le post-money.",
+      "facts": [
+        {"id": "f1", "label": "Pre-money", "value": 8, "unit": "M€"},
+        {"id": "f2", "label": "Investissement", "value": 2, "unit": "M€"},
+        {"id": "f3", "label": "Actions existantes", "value": 8, "unit": "millions"},
+        {"id": "f4", "label": "Prix par action", "value": 1, "unit": "€"}
+      ],
+      "questions": [
+        {
+          "id": "q1",
+          "prompt": "Calculez le post-money et la part de l'investisseur.",
+          "criteria": [
+            {"id": "q1-c1", "label": "Post-money = 10 M€", "weight": 0.25, "required_keywords": ["post-money"], "expected_numbers": [{"value": 10, "tolerance": 0.01}], "model_answer": "Post-money = 8 + 2 = 10 M€."},
+            {"id": "q1-c2", "label": "Part investisseur = 20 %", "weight": 0.25, "required_keywords": ["investisseur"], "expected_numbers": [{"value": 20, "tolerance": 0.01}], "model_answer": "Part = 2 / 10 = 20 %."}
+          ]
+        },
+        {
+          "id": "q2",
+          "prompt": "Combien d'actions nouvelles faut-il émettre au prix de 1 € par action ?",
+          "criteria": [
+            {"id": "q2-c1", "label": "2 millions d'actions nouvelles", "weight": 0.25, "required_keywords": ["actions"], "expected_numbers": [{"value": 2, "tolerance": 0.01}], "model_answer": "2 M€ / 1 € = 2 millions d'actions."}
+          ]
+        },
+        {
+          "id": "q3",
+          "prompt": "Citez un risque majeur si le seed est retardé et qu'un bridge devient nécessaire.",
+          "criteria": [
+            {"id": "q3-c1", "label": "Risque de runway et de dilution", "weight": 0.25, "required_keywords": ["runway"], "any_keywords": ["dilution", "bridge"], "model_answer": "Le runway se raccourcit et le bridge peut diluer davantage ou imposer des conditions défavorables."}
+          ]
+        }
+      ],
+      "model_answer": "Post-money 10 M€, investisseur 20 %, 2 millions d'actions nouvelles. Un bridge retardé réduit le runway et peut augmenter la dilution.",
+      "allowed_numbers": [8, 2, 10, 1, 20],
+      "difficulty": 2
+    },
+    {
+      "kind": "case",
+      "id": "VC04-CASE02",
+      "topic_id": "VC04",
+      "title": "Series A Helio",
+      "context": "Helio lève 6 M€ sur un pre-money de 24 M€. Le term sheet prévoit un option pool de 10 % du post-money, inclus dans le pre-money. Aucune autre dilution n'est prévue.",
+      "facts": [
+        {"id": "f1", "label": "Pre-money", "value": 24, "unit": "M€"},
+        {"id": "f2", "label": "Investissement", "value": 6, "unit": "M€"},
+        {"id": "f3", "label": "Option pool", "value": 10, "unit": "%"}
+      ],
+      "questions": [
+        {
+          "id": "q1",
+          "prompt": "Calculez le post-money et la part de l'investisseur.",
+          "criteria": [
+            {"id": "q1-c1", "label": "Post-money = 30 M€", "weight": 0.2, "required_keywords": ["post-money"], "expected_numbers": [{"value": 30, "tolerance": 0.01}], "model_answer": "Post-money = 24 + 6 = 30 M€."},
+            {"id": "q1-c2", "label": "Part investisseur = 20 %", "weight": 0.2, "required_keywords": ["investisseur"], "expected_numbers": [{"value": 20, "tolerance": 0.01}], "model_answer": "Part = 6 / 30 = 20 %."}
+          ]
+        },
+        {
+          "id": "q2",
+          "prompt": "Calculez la valeur de l'option pool et la part des fondateurs après le pool.",
+          "criteria": [
+            {"id": "q2-c1", "label": "Pool = 3 M€", "weight": 0.2, "required_keywords": ["pool"], "expected_numbers": [{"value": 3, "tolerance": 0.01}], "model_answer": "Pool = 10 % × 30 = 3 M€."},
+            {"id": "q2-c2", "label": "Fondateurs = 70 %", "weight": 0.2, "required_keywords": ["fondateurs"], "expected_numbers": [{"value": 70, "tolerance": 0.01}], "model_answer": "Fondateurs = 100 - 20 - 10 = 70 %."}
+          ]
+        },
+        {
+          "id": "q3",
+          "prompt": "Expliquez qui supporte la dilution du pool et pourquoi la convention pre-money est importante.",
+          "criteria": [
+            {"id": "q3-c1", "label": "Les fondateurs supportent le pool pre-money", "weight": 0.2, "required_keywords": ["fondateurs"], "any_keywords": ["pre-money", "dilution"], "model_answer": "Un pool inclus dans le pre-money est prélevé avant l'entrée de l'investisseur : les fondateurs en supportent la dilution."}
+          ]
+        }
+      ],
+      "model_answer": "Post-money 30 M€, investisseur 20 %, pool 3 M€, fondateurs 70 %. La convention pre-money fait supporter le pool aux fondateurs.",
+      "allowed_numbers": [24, 6, 10, 30, 20, 3, 70, 100],
+      "difficulty": 2
+    },
+    {
+      "kind": "case",
+      "id": "VC05-CASE03",
+      "topic_id": "VC05",
+      "title": "Cap table Orion",
+      "context": "Orion a 6 millions d'actions fondateurs, 1 million d'options attribuées et 3 millions d'actions détenues par un investisseur, soit 10 millions d'actions fully diluted. Un nouveau tour de 4 M€ à un post-money de 20 M€ prévoit un pool porté à 12 % du post-money.",
+      "facts": [
+        {"id": "f1", "label": "Actions fondateurs", "value": 6, "unit": "millions"},
+        {"id": "f2", "label": "Options attribuées", "value": 1, "unit": "millions"},
+        {"id": "f3", "label": "Actions investisseur existant", "value": 3, "unit": "millions"},
+        {"id": "f4", "label": "Total fully diluted", "value": 10, "unit": "millions"},
+        {"id": "f5", "label": "Nouvel investissement", "value": 4, "unit": "M€"},
+        {"id": "f6", "label": "Post-money du nouveau tour", "value": 20, "unit": "M€"},
+        {"id": "f7", "label": "Pool cible", "value": 12, "unit": "%"}
+      ],
+      "questions": [
+        {
+          "id": "q1",
+          "prompt": "Calculez la part des fondateurs et celle de l'investisseur existant sur la base fully diluted actuelle.",
+          "criteria": [
+            {"id": "q1-c1", "label": "Fondateurs = 60 %", "weight": 0.125, "required_keywords": ["fondateurs"], "expected_numbers": [{"value": 60, "tolerance": 0.01}], "model_answer": "6 / 10 = 60 %."},
+            {"id": "q1-c2", "label": "Investisseur existant = 30 %", "weight": 0.125, "required_keywords": ["investisseur"], "expected_numbers": [{"value": 30, "tolerance": 0.01}], "model_answer": "3 / 10 = 30 %."}
+          ]
+        },
+        {
+          "id": "q2",
+          "prompt": "Quelle est la part du nouvel investisseur dans le nouveau tour ?",
+          "criteria": [
+            {"id": "q2-c1", "label": "Nouvel investisseur = 20 %", "weight": 0.25, "required_keywords": ["investisseur"], "expected_numbers": [{"value": 20, "tolerance": 0.01}], "model_answer": "4 / 20 = 20 %."}
+          ]
+        },
+        {
+          "id": "q3",
+          "prompt": "Quelle est la valeur du pool cible de 12 % ?",
+          "criteria": [
+            {"id": "q3-c1", "label": "Pool = 2,4 M€", "weight": 0.25, "required_keywords": ["pool"], "expected_numbers": [{"value": 2.4, "tolerance": 0.01}], "model_answer": "12 % × 20 = 2,4 M€."}
+          ]
+        },
+        {
+          "id": "q4",
+          "prompt": "Dans quel ordre vérifiez-vous la cap table après le tour ?",
+          "criteria": [
+            {"id": "q4-c1", "label": "Ordre : pool, nouvelles actions, total, pourcentages", "weight": 0.25, "required_keywords": ["pool"], "any_keywords": ["total", "pourcentage", "dilution"], "model_answer": "On fixe le pool, on émet les nouvelles actions, on recalcule le total fully diluted, puis on vérifie que les pourcentages somment à 100 %."}
+          ]
+        }
+      ],
+      "model_answer": "Fondateurs 60 %, investisseur existant 30 %, nouvel investisseur 20 %, pool 2,4 M€. Vérifier le total fully diluted et la somme à 100 %.",
+      "allowed_numbers": [6, 1, 3, 10, 4, 20, 12, 60, 30, 20, 2.4, 100],
+      "difficulty": 3
+    },
+    {
+      "kind": "case",
+      "id": "VC07-CASE04",
+      "topic_id": "VC07",
+      "title": "Waterfall Apex",
+      "context": "Apex est vendu pour 12 M€. L'investisseur A a investi 4 M€ avec une préférence 1x participating sans cap et détient 25 % des actions. L'investisseur B a investi 2 M€ avec une préférence 1x participating et détient 15 %. Les fondateurs détiennent 60 %. Aucune dette ni coût de transaction.",
+      "facts": [
+        {"id": "f1", "label": "Produit de sortie", "value": 12, "unit": "M€"},
+        {"id": "f2", "label": "Investissement A", "value": 4, "unit": "M€"},
+        {"id": "f3", "label": "Investissement B", "value": 2, "unit": "M€"},
+        {"id": "f4", "label": "Actions A", "value": 25, "unit": "%"},
+        {"id": "f5", "label": "Actions B", "value": 15, "unit": "%"},
+        {"id": "f6", "label": "Actions fondateurs", "value": 60, "unit": "%"}
+      ],
+      "questions": [
+        {
+          "id": "q1",
+          "prompt": "Combien reçoit l'investisseur A ?",
+          "criteria": [
+            {"id": "q1-c1", "label": "A reçoit 5,5 M€", "weight": 0.3, "required_keywords": ["A"], "expected_numbers": [{"value": 5.5, "tolerance": 0.01}], "model_answer": "A reçoit 4 M€ de préférence + 25 % × (12 - 4 - 2) = 4 + 1,5 = 5,5 M€."}
+          ]
+        },
+        {
+          "id": "q2",
+          "prompt": "Combien reçoit l'investisseur B ?",
+          "criteria": [
+            {"id": "q2-c1", "label": "B reçoit 2,9 M€", "weight": 0.3, "required_keywords": ["B"], "expected_numbers": [{"value": 2.9, "tolerance": 0.01}], "model_answer": "B reçoit 2 M€ de préférence + 15 % × 6 = 2 + 0,9 = 2,9 M€."}
+          ]
+        },
+        {
+          "id": "q3",
+          "prompt": "Combien reçoivent les fondateurs ?",
+          "criteria": [
+            {"id": "q3-c1", "label": "Fondateurs = 3,6 M€", "weight": 0.2, "required_keywords": ["fondateurs"], "expected_numbers": [{"value": 3.6, "tolerance": 0.01}], "model_answer": "Les fondateurs reçoivent 60 % × 6 = 3,6 M€."}
+          ]
+        },
+        {
+          "id": "q4",
+          "prompt": "Expliquez l'ordre du waterfall et vérifiez que le total distribué est de 12 M€.",
+          "criteria": [
+            {"id": "q4-c1", "label": "Préférences puis résidu, total 12 M€", "weight": 0.2, "required_keywords": ["préférence"], "any_keywords": ["résidu", "total"], "model_answer": "On paie d'abord les préférences (4 + 2 = 6 M€), puis on partage le résidu de 6 M€ au prorata : A 1,5, B 0,9, fondateurs 3,6. Total 12 M€."}
+          ]
+        }
+      ],
+      "model_answer": "A 5,5 M€, B 2,9 M€, fondateurs 3,6 M€. Total 12 M€. Préférences d'abord, puis résidu au prorata.",
+      "allowed_numbers": [12, 4, 2, 25, 15, 60, 5.5, 2.9, 3.6, 6, 1.5, 0.9],
+      "difficulty": 3
+    }
+  ]
+}

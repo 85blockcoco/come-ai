@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "pack_id": "cards-vc07",
+  "topic_id": "VC07",
+  "language": "fr",
+  "source_type": "original",
+  "license": "Contenu original NAGE",
+  "items": [
+    {
+      "kind": "card",
+      "id": "VC07-C001",
+      "topic_id": "VC07",
+      "question": "Qu'est-ce qu'une liquidation preference ?",
+      "answer": "Le droit pour un actionnaire préférentiel de recevoir un montant prioritaire avant les actionnaires ordinaires lors d'une liquidation ou d'une sortie, généralement un multiple de son investissement.",
+      "explanation": "C'est une clause économique majeure du term sheet, distincte du prix d'entrée.",
+      "status": "active",
+      "tags": ["liquidation", "preference"]
+    },
+    {
+      "kind": "card",
+      "id": "VC07-C002",
+      "topic_id": "VC07",
+      "question": "Que signifie une liquidation preference 1x non participating ?",
+      "answer": "L'investisseur récupère d'abord 1x son investissement, puis ne participe pas au partage du résidu avec les actionnaires ordinaires. Il peut parfois convertir en actions ordinaires si c'est plus favorable.",
+      "explanation": "Non participating signifie pas de double dip : préférence ou conversion, pas les deux.",
+      "status": "active",
+      "tags": ["liquidation", "non-participating"]
+    },
+    {
+      "kind": "card",
+      "id": "VC07-C003",
+      "topic_id": "VC07",
+      "question": "Que signifie une liquidation preference participating ?",
+      "answer": "L'investisseur récupère sa préférence, puis participe au résidu au prorata de ses actions. Il peut recevoir à la fois le remboursement prioritaire et une part du partage.",
+      "explanation": "La participation augmente fortement la part de l'investisseur dans les sorties modestes.",
+      "status": "active",
+      "tags": ["liquidation", "participating"]
+    },
+    {
+      "kind": "card",
+      "id": "VC07-C004",
+      "topic_id": "VC07",
+      "question": "À quoi sert un cap sur une liquidation preference participating ?",
+      "answer": "À plafonner le montant total reçu par l'investisseur, souvent à un multiple de son investissement (par exemple 3x). Au-delà du cap, le reste va aux autres actionnaires.",
+      "explanation": "Le cap limite le double dip et protège les fondateurs sur les grosses sorties.",
+      "status": "active",
+      "tags": ["liquidation", "cap"]
+    },
+    {
+      "kind": "card",
+      "id": "VC07-C005",
+      "topic_id": "VC07",
+      "question": "Qu'est-ce que la seniority dans un waterfall ?",
+      "answer": "L'ordre de priorité entre plusieurs classes d'actions préférentielles. Une classe senior est remboursée avant une classe junior, ce qui peut rendre la junior très dépendante du produit de sortie.",
+      "explanation": "La seniority est un facteur de risque supplémentaire dans les tours empilés.",
+      "status": "active",
+      "tags": ["waterfall", "seniority"]
+    },
+    {
+      "kind": "card",
+      "id": "VC07-C006",
+      "topic_id": "VC07",
+      "question": "Quel est l'ordre général d'un waterfall de sortie ?",
+      "answer": "1) Dette et coûts de transaction ; 2) préférences de liquidation par seniority ; 3) participation éventuelle des préférentiels ; 4) partage du résidu entre actions ordinaires et participantes selon les droits.",
+      "explanation": "L'ordre exact dépend des statuts et du term sheet ; il faut toujours lire les définitions.",
+      "status": "active",
+      "tags": ["waterfall", "order"]
+    },
+    {
+      "kind": "card",
+      "id": "VC07-C007",
+      "topic_id": "VC07",
+      "question": "Quand un investisseur préfère-t-il convertir ses actions de préférence en actions ordinaires ?",
+      "answer": "Lorsque la valeur de sa part en actions ordinaires dépasse ce qu'il recevrait via sa préférence. La conversion est souvent optionnelle et se décide au moment de la sortie.",
+      "explanation": "Un bon calcul compare les deux scénarios : préférence seule vs conversion.",
+      "status": "active",
+      "tags": ["conversion", "waterfall"]
+    },
+    {
+      "kind": "card",
+      "id": "VC07-C008",
+      "topic_id": "VC07",
+      "question": "Un investisseur a mis 2 M€ avec une préférence 1x non participating. La sortie est de 6 M€ et il détient 20 % du capital. Que reçoit-il ?",
+      "answer": "Sa préférence 1x lui donne 2 M€. En conversion, il aurait 20 % × 6 M€ = 1,2 M€. Il choisit donc la préférence et reçoit 2 M€ ; les 4 M€ restants vont aux autres actionnaires selon leurs droits.",
+      "explanation": "On compare toujours préférence et conversion, puis on retient le maximum.",
+      "status": "active",
+      "tags": ["example", "non-participating"]
+    },
+    {
+      "kind": "card",
+      "id": "VC07-C009",
+      "topic_id": "VC07",
+      "question": "Un investisseur a mis 2 M€ avec une préférence 1x participating sans cap. La sortie est de 10 M€ et il détient 20 %. Que reçoit-il ?",
+      "answer": "Il reçoit d'abord 2 M€ de préférence, puis 20 % du résidu de 8 M€, soit 1,6 M€. Total = 3,6 M€, soit 1,8x son investissement.",
+      "explanation": "La participation s'applique au résidu après la préférence, pas au produit total.",
+      "status": "active",
+      "tags": ["example", "participating"]
+    },
+    {
+      "kind": "card",
+      "id": "VC07-C010",
+      "topic_id": "VC07",
+      "question": "Pourquoi un down round peut-il rendre une liquidation preference très défavorable aux fondateurs ?",
+      "answer": "Parce que la préférence est calculée sur l'investissement initial, pas sur la nouvelle valorisation. Si la sortie est faible, les investisseurs récupèrent d'abord leur préférence et il peut ne rester presque rien pour les actions ordinaires.",
+      "explanation": "C'est l'effet « liquidation overhang » : la valeur des actions ordinaires peut être nulle même avec une sortie positive.",
+      "status": "active",
+      "tags": ["down-round", "waterfall"]
+    }
+  ]
+}

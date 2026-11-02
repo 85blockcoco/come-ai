@@ -1,0 +1,205 @@
+{
+  "schema_version": 1,
+  "topics": [
+    {
+      "id": "VC01",
+      "code": "VC01",
+      "title_fr": "Écosystème du capital-risque et acteurs",
+      "title_en": "Venture capital ecosystem and players",
+      "order": 1,
+      "exam_weight": 0.03,
+      "description": "Fonds, LPs, GPs, business angels, accélérateurs, family offices et rôle de chaque acteur.",
+      "prerequisites": []
+    },
+    {
+      "id": "VC02",
+      "code": "VC02",
+      "title_fr": "Économie d'un fonds : frais, carry, hurdle",
+      "title_en": "Fund economics: fees, carry, hurdle",
+      "order": 2,
+      "exam_weight": 0.05,
+      "description": "Management fee, carried interest, hurdle rate, waterfall LP/GP et durée de vie d'un fonds.",
+      "prerequisites": ["VC01"]
+    },
+    {
+      "id": "VC03",
+      "code": "VC03",
+      "title_fr": "Étapes de financement et instruments",
+      "title_en": "Financing stages and instruments",
+      "order": 3,
+      "exam_weight": 0.06,
+      "description": "Pre-seed, seed, Series A/B/C, bridge, extension, convertible notes, SAFE et actions de préférence.",
+      "prerequisites": ["VC01"]
+    },
+    {
+      "id": "VC04",
+      "code": "VC04",
+      "title_fr": "Pre-money, post-money et propriété",
+      "title_en": "Pre-money, post-money and ownership",
+      "order": 4,
+      "exam_weight": 0.08,
+      "description": "Calcul du post-money, de la propriété de l'investisseur et de la dilution des fondateurs.",
+      "prerequisites": ["VC03"]
+    },
+    {
+      "id": "VC05",
+      "code": "VC05",
+      "title_fr": "Cap table et option pool",
+      "title_en": "Cap table and option pool",
+      "order": 5,
+      "exam_weight": 0.08,
+      "description": "Table de capitalisation, fully diluted, ESOP, création et dilution de l'option pool.",
+      "prerequisites": ["VC04"]
+    },
+    {
+      "id": "VC06",
+      "code": "VC06",
+      "title_fr": "Term sheet : économie et contrôle",
+      "title_en": "Term sheet: economics and control",
+      "order": 6,
+      "exam_weight": 0.06,
+      "description": "Clauses économiques et clauses de contrôle, négociation et effets pratiques.",
+      "prerequisites": ["VC03"]
+    },
+    {
+      "id": "VC07",
+      "code": "VC07",
+      "title_fr": "Liquidation preference et waterfall",
+      "title_en": "Liquidation preference and waterfall",
+      "order": 7,
+      "exam_weight": 0.09,
+      "description": "Préférence de liquidation 1x, participating, cap, seniority et ordre de partage du produit de sortie.",
+      "prerequisites": ["VC05", "VC06"]
+    },
+    {
+      "id": "VC08",
+      "code": "VC08",
+      "title_fr": "Anti-dilution et down rounds",
+      "title_en": "Anti-dilution and down rounds",
+      "order": 8,
+      "exam_weight": 0.06,
+      "description": "Full ratchet, broad-based weighted average, pay-to-play et conséquences d'un down round.",
+      "prerequisites": ["VC05"]
+    },
+    {
+      "id": "VC09",
+      "code": "VC09",
+      "title_fr": "Métriques de rendement : IRR, MOIC, TVPI, DPI, RVPI, J-curve",
+      "title_en": "Return metrics: IRR, MOIC, TVPI, DPI, RVPI, J-curve",
+      "order": 9,
+      "exam_weight": 0.08,
+      "description": "Mesure de la performance d'un fonds et d'un investissement, brute et nette.",
+      "prerequisites": ["VC02"]
+    },
+    {
+      "id": "VC10",
+      "code": "VC10",
+      "title_fr": "Processus de levée et due diligence",
+      "title_en": "Fundraising process and due diligence",
+      "order": 10,
+      "exam_weight": 0.04,
+      "description": "Pipeline, teaser, data room, due diligence, comité d'investissement et closing.",
+      "prerequisites": ["VC03", "VC06"]
+    },
+    {
+      "id": "VC11",
+      "code": "VC11",
+      "title_fr": "Construction de portefeuille et réserves",
+      "title_en": "Portfolio construction and reserves",
+      "order": 11,
+      "exam_weight": 0.05,
+      "description": "Thèse, diversification, réserves de suivi, concentration et gestion du risque.",
+      "prerequisites": ["VC02", "VC10"]
+    },
+    {
+      "id": "VC12",
+      "code": "VC12",
+      "title_fr": "Gouvernance et dynamique de board",
+      "title_en": "Governance and board dynamics",
+      "order": 12,
+      "exam_weight": 0.03,
+      "description": "Composition du board, droits de veto, information rights et alignement des intérêts.",
+      "prerequisites": ["VC06"]
+    },
+    {
+      "id": "VC13",
+      "code": "VC13",
+      "title_fr": "Sorties : M&A, IPO, secondaire, continuation funds",
+      "title_en": "Exits: M&A, IPO, secondary, continuation funds",
+      "order": 13,
+      "exam_weight": 0.05,
+      "description": "Canaux de sortie, timing, décote d'illiquidité et distribution aux LPs.",
+      "prerequisites": ["VC09"]
+    },
+    {
+      "id": "VC14",
+      "code": "VC14",
+      "title_fr": "Métriques startup et unit economics",
+      "title_en": "Startup metrics and unit economics",
+      "order": 14,
+      "exam_weight": 0.06,
+      "description": "ARR, MRR, churn, CAC, LTV, burn, runway, Rule of 40 et qualité de la croissance.",
+      "prerequisites": ["VC03"]
+    },
+    {
+      "id": "VC15",
+      "code": "VC15",
+      "title_fr": "Modélisation financière et scénarios",
+      "title_en": "Financial modeling and scenarios",
+      "order": 15,
+      "exam_weight": 0.05,
+      "description": "Construction d'un modèle simple, hypothèses, sensibilité et scénarios bull/base/bear.",
+      "prerequisites": ["VC05", "VC14"]
+    },
+    {
+      "id": "VC16",
+      "code": "VC16",
+      "title_fr": "Instruments juridiques : SAFE, convertible notes, actions de préférence",
+      "title_en": "Legal instruments: SAFE, convertible notes, preferred shares",
+      "order": 16,
+      "exam_weight": 0.05,
+      "description": "Mécanique de conversion, décote, cap, intérêts et droits attachés aux actions de préférence.",
+      "prerequisites": ["VC03"]
+    },
+    {
+      "id": "VC17",
+      "code": "VC17",
+      "title_fr": "Contexte VC français et européen",
+      "title_en": "French and European VC context",
+      "order": 17,
+      "exam_weight": 0.02,
+      "description": "Écosystème français, fonds européens, BPI, régulation et spécificités de marché.",
+      "prerequisites": ["VC01"]
+    },
+    {
+      "id": "VC18",
+      "code": "VC18",
+      "title_fr": "Mémo d'investissement et thèse",
+      "title_en": "Investment memo and thesis",
+      "order": 18,
+      "exam_weight": 0.03,
+      "description": "Structurer une thèse, un mémo, les risques, les catalyseurs et la recommandation.",
+      "prerequisites": ["VC10", "VC14"]
+    },
+    {
+      "id": "VC19",
+      "code": "VC19",
+      "title_fr": "Venture debt et financements alternatifs",
+      "title_en": "Venture debt and alternative financing",
+      "order": 19,
+      "exam_weight": 0.02,
+      "description": "Dette venture, warrants, revenue-based financing et usage prudent du leverage.",
+      "prerequisites": ["VC03", "VC14"]
+    },
+    {
+      "id": "VC20",
+      "code": "VC20",
+      "title_fr": "Méthode d'examen et pratique des cas",
+      "title_en": "Exam method and case practice",
+      "order": 20,
+      "exam_weight": 0.01,
+      "description": "Lecture d'énoncé, hypothèses, calculs, structuration et gestion du temps.",
+      "prerequisites": ["VC04", "VC07", "VC09"]
+    }
+  ]
+}

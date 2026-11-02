@@ -1,0 +1,212 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://nage.local/schemas/vc-content-pack.json",
+  "title": "VC content pack",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "pack_id", "topic_id", "language", "source_type", "license", "items"],
+  "properties": {
+    "schema_version": {"type": "integer", "minimum": 1, "maximum": 1},
+    "pack_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{1,63}$"},
+    "topic_id": {"type": "string", "pattern": "^VC[0-9]{2}$"},
+    "language": {"type": "string", "enum": ["fr", "en", "fr-en"]},
+    "source_type": {"type": "string", "enum": ["original", "user_note", "public_domain"]},
+    "license": {"type": "string", "minLength": 1, "maxLength": 120},
+    "items": {
+      "type": "array",
+      "minItems": 0,
+      "items": {"$ref": "#/definitions/item"}
+    }
+  },
+  "definitions": {
+    "citation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "locator", "quote"],
+      "properties": {
+        "source_id": {"type": "string", "minLength": 1},
+        "locator": {"type": "string", "minLength": 1},
+        "quote": {"type": "string", "minLength": 1}
+      }
+    },
+    "item": {
+      "oneOf": [
+        {"$ref": "#/definitions/card"},
+        {"$ref": "#/definitions/drill"},
+        {"$ref": "#/definitions/case"},
+        {"$ref": "#/definitions/glossary"},
+        {"$ref": "#/definitions/exam_question"}
+      ]
+    },
+    "card": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "topic_id", "question", "answer", "status"],
+      "properties": {
+        "kind": {"const": "card"},
+        "id": {"type": "string", "pattern": "^VC[0-9]{2}-C[0-9]{3}$"},
+        "topic_id": {"type": "string", "pattern": "^VC[0-9]{2}$"},
+        "question": {"type": "string", "minLength": 8},
+        "answer": {"type": "string", "minLength": 1},
+        "explanation": {"type": "string"},
+        "status": {"type": "string", "enum": ["active", "proposed", "a_completer"]},
+        "citation": {"$ref": "#/definitions/citation"},
+        "tags": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "drill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "topic_id", "prompt", "variables", "answer", "answer_unit", "tolerance", "steps", "difficulty"],
+      "properties": {
+        "kind": {"const": "drill"},
+        "id": {"type": "string", "pattern": "^VC[0-9]{2}-D[0-9]{3}$"},
+        "topic_id": {"type": "string", "pattern": "^VC[0-9]{2}$"},
+        "prompt": {"type": "string", "minLength": 8},
+        "variables": {"type": "object"},
+        "answer": {"type": "number"},
+        "answer_unit": {"type": "string", "enum": ["eur", "k_eur", "m_eur", "percent", "ratio", "years"]},
+        "tolerance": {"type": "number", "exclusiveMinimum": 0},
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["label", "expression", "result"],
+            "properties": {
+              "label": {"type": "string"},
+              "expression": {"type": "string"},
+              "result": {"type": "number"}
+            }
+          }
+        },
+        "error_paths": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["value", "category", "message"],
+            "properties": {
+              "value": {"type": "number"},
+              "category": {"type": "string", "enum": ["formula", "order", "unit", "missing_data", "convention"]},
+              "message": {"type": "string"}
+            }
+          }
+        },
+        "alternative_conventions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["value", "explanation"],
+            "properties": {
+              "value": {"type": "number"},
+              "explanation": {"type": "string"}
+            }
+          }
+        },
+        "difficulty": {"type": "integer", "minimum": 1, "maximum": 5}
+      }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "topic_id", "title", "context", "facts", "questions", "model_answer", "allowed_numbers", "difficulty"],
+      "properties": {
+        "kind": {"const": "case"},
+        "id": {"type": "string", "pattern": "^VC[0-9]{2}-CASE[0-9]{2}$"},
+        "topic_id": {"type": "string", "pattern": "^VC[0-9]{2}$"},
+        "title": {"type": "string", "minLength": 4},
+        "context": {"type": "string", "minLength": 20},
+        "facts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "label", "value"],
+            "properties": {
+              "id": {"type": "string"},
+              "label": {"type": "string"},
+              "value": {"type": "number"},
+              "unit": {"type": "string"}
+            }
+          }
+        },
+        "questions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "prompt", "criteria"],
+            "properties": {
+              "id": {"type": "string"},
+              "prompt": {"type": "string"},
+              "criteria": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["id", "label", "weight"],
+                  "properties": {
+                    "id": {"type": "string"},
+                    "label": {"type": "string"},
+                    "weight": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+                    "required_keywords": {"type": "array", "items": {"type": "string"}},
+                    "any_keywords": {"type": "array", "items": {"type": "string"}},
+                    "expected_numbers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["value", "tolerance"],
+                        "properties": {
+                          "value": {"type": "number"},
+                          "tolerance": {"type": "number", "minimum": 0}
+                        }
+                      }
+                    },
+                    "model_answer": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "model_answer": {"type": "string", "minLength": 20},
+        "allowed_numbers": {"type": "array", "items": {"type": "number"}},
+        "difficulty": {"type": "integer", "minimum": 1, "maximum": 5}
+      }
+    },
+    "glossary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "term_fr", "term_en", "definition", "topic_id"],
+      "properties": {
+        "kind": {"const": "glossary"},
+        "term_fr": {"type": "string", "minLength": 1},
+        "term_en": {"type": "string", "minLength": 1},
+        "definition": {"type": "string", "minLength": 10},
+        "example": {"type": "string"},
+        "topic_id": {"type": "string", "pattern": "^VC[0-9]{2}$"}
+      }
+    },
+    "exam_question": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "topic_id", "question", "answer", "points", "format"],
+      "properties": {
+        "kind": {"const": "exam_question"},
+        "id": {"type": "string", "pattern": "^VC[0-9]{2}-E[0-9]{3}$"},
+        "topic_id": {"type": "string", "pattern": "^VC[0-9]{2}$"},
+        "question": {"type": "string", "minLength": 8},
+        "answer": {"type": "string", "minLength": 1},
+        "points": {"type": "integer", "minimum": 1, "maximum": 100},
+        "format": {"type": "string", "enum": ["mcq", "numeric", "open"]},
+        "choices": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

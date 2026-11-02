@@ -1,0 +1,119 @@
+{
+  "schema_version": 1,
+  "pack_id": "drills-vc04",
+  "topic_id": "VC04",
+  "language": "fr",
+  "source_type": "original",
+  "license": "Contenu original NAGE",
+  "items": [
+    {
+      "kind": "drill",
+      "id": "VC04-D001",
+      "topic_id": "VC04",
+      "prompt": "Une société a un pre-money de 8 M€. Un investisseur investit 2 M€. Quel est le post-money, en M€ ?",
+      "variables": {"pre_money": 8, "investment": 2},
+      "answer": 10,
+      "answer_unit": "m_eur",
+      "tolerance": 0.01,
+      "steps": [
+        {"label": "Formule", "expression": "post_money = pre_money + investment", "result": 10},
+        {"label": "Substitution", "expression": "8 + 2", "result": 10}
+      ],
+      "error_paths": [
+        {"value": 8, "category": "formula", "message": "Vous avez donné le pre-money ; le post-money ajoute l'investissement."}
+      ],
+      "difficulty": 1
+    },
+    {
+      "kind": "drill",
+      "id": "VC04-D002",
+      "topic_id": "VC04",
+      "prompt": "Le post-money d'un tour est de 15 M€ et l'investissement est de 3 M€. Quel est le pre-money, en M€ ?",
+      "variables": {"post_money": 15, "investment": 3},
+      "answer": 12,
+      "answer_unit": "m_eur",
+      "tolerance": 0.01,
+      "steps": [
+        {"label": "Formule", "expression": "pre_money = post_money - investment", "result": 12},
+        {"label": "Substitution", "expression": "15 - 3", "result": 12}
+      ],
+      "error_paths": [
+        {"value": 15, "category": "formula", "message": "Vous avez donné le post-money ; le pre-money retire l'investissement."}
+      ],
+      "difficulty": 1
+    },
+    {
+      "kind": "drill",
+      "id": "VC04-D003",
+      "topic_id": "VC04",
+      "prompt": "Un investisseur met 3 M€ dans un tour dont le post-money est de 15 M€. Quelle est sa part, en % ?",
+      "variables": {"investment": 3, "post_money": 15},
+      "answer": 20,
+      "answer_unit": "percent",
+      "tolerance": 0.01,
+      "steps": [
+        {"label": "Formule", "expression": "ownership = investment / post_money", "result": 20},
+        {"label": "Substitution", "expression": "3 / 15", "result": 20}
+      ],
+      "error_paths": [
+        {"value": 25, "category": "formula", "message": "Vous avez divisé par le pre-money (12) au lieu du post-money (15)."},
+        {"value": 0.2, "category": "unit", "message": "La réponse est correcte mais exprimée en ratio ; attendez un pourcentage."}
+      ],
+      "difficulty": 1
+    },
+    {
+      "kind": "drill",
+      "id": "VC04-D004",
+      "topic_id": "VC04",
+      "prompt": "Pre-money 12 M€, investissement 3 M€, pas d'option pool. Quelle part les fondateurs conservent-ils, en % ?",
+      "variables": {"pre_money": 12, "investment": 3},
+      "answer": 80,
+      "answer_unit": "percent",
+      "tolerance": 0.01,
+      "steps": [
+        {"label": "Post-money", "expression": "12 + 3", "result": 15},
+        {"label": "Part des fondateurs", "expression": "pre_money / post_money = 12 / 15", "result": 80}
+      ],
+      "error_paths": [
+        {"value": 20, "category": "formula", "message": "Vous avez donné la part de l'investisseur, pas celle des fondateurs."}
+      ],
+      "difficulty": 2
+    },
+    {
+      "kind": "drill",
+      "id": "VC04-D005",
+      "topic_id": "VC04",
+      "prompt": "Une société vaut 20 M€ pre-money et lève 5 M€. Quel est le post-money, en M€ ?",
+      "variables": {"pre_money": 20, "investment": 5},
+      "answer": 25,
+      "answer_unit": "m_eur",
+      "tolerance": 0.01,
+      "steps": [
+        {"label": "Formule", "expression": "post_money = pre_money + investment", "result": 25},
+        {"label": "Substitution", "expression": "20 + 5", "result": 25}
+      ],
+      "error_paths": [
+        {"value": 20, "category": "formula", "message": "Vous avez donné le pre-money ; le post-money inclut les 5 M€ levés."}
+      ],
+      "difficulty": 1
+    },
+    {
+      "kind": "drill",
+      "id": "VC04-D006",
+      "topic_id": "VC04",
+      "prompt": "Pre-money 20 M€, investissement 5 M€, option pool de 10 % du post-money. Quelle est la valeur du pool, en M€ ?",
+      "variables": {"pre_money": 20, "investment": 5, "pool_percent": 10},
+      "answer": 2.5,
+      "answer_unit": "m_eur",
+      "tolerance": 0.01,
+      "steps": [
+        {"label": "Post-money", "expression": "20 + 5", "result": 25},
+        {"label": "Pool", "expression": "10 % × 25", "result": 2.5}
+      ],
+      "error_paths": [
+        {"value": 2.0, "category": "convention", "message": "Le pool est calculé sur le post-money (25), pas sur le pre-money (20)."}
+      ],
+      "difficulty": 2
+    }
+  ]
+}
