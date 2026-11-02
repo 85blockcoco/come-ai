@@ -31,6 +31,7 @@ const elements = {
   vcStatus: $("vcStatus"), vcCardForm: $("vcCardForm"), vcQuestion: $("vcQuestion"), vcAnswer: $("vcAnswer"), vcTopic: $("vcTopic"), vcSource: $("vcSource"), vcCardStatus: $("vcCardStatus"), vcSessionForm: $("vcSessionForm"), vcTodayOnly: $("vcTodayOnly"), vcLimit: $("vcLimit"), vcSessionCount: $("vcSessionCount"), vcPrompt: $("vcPrompt"), vcReveal: $("vcReveal"), vcCorrection: $("vcCorrection"), vcAnswerDisplay: $("vcAnswerDisplay"), vcCitationDisplay: $("vcCitationDisplay"), vcGrades: $("vcGrades"), vcSessionStatus: $("vcSessionStatus"), vcRadar: $("vcRadar"), vcRadarEmpty: $("vcRadarEmpty"), vcPlan: $("vcPlan"), vcRefreshRadar: $("vcRefreshRadar"), vcRefreshStatus: $("vcRefreshStatus"),
   vcExamLimit: $("vcExamLimit"), vcExamStart: $("vcExamStart"), vcExamSubmit: $("vcExamSubmit"), vcExamQuestions: $("vcExamQuestions"), vcExamTimer: $("vcExamTimer"), vcExamResult: $("vcExamResult"),
   vcExamHistory: $("vcExamHistory"), vcExamHistoryEmpty: $("vcExamHistoryEmpty"),
+  vcProgress: $("vcProgress"), vcProgressEmpty: $("vcProgressEmpty"),
 };
 
 async function api(path, options = {}) {
@@ -455,11 +456,25 @@ function renderVCExamHistory(exams) {
     row.append(score, details, topics); elements.vcExamHistory.append(row);
   }
 }
+function renderVCProgress(exams) {
+  const rows = Array.isArray(exams) ? exams.slice(-8) : [];
+  elements.vcProgress.replaceChildren(); elements.vcProgressEmpty.hidden = rows.length >= 2;
+  if (rows.length < 2) return;
+  const scores = rows.map((exam) => Math.round((Number(exam.score || 0) / Math.max(1, Number(exam.max_score || 1))) * 100));
+  const average = Math.round(scores.reduce((sum, value) => sum + value, 0) / scores.length);
+  const best = Math.max(...scores);
+  const header = document.createElement("div"); header.className = "vc-progress-summary"; header.textContent = `Moyenne récente ${average}% · meilleur score ${best}%`;
+  elements.vcProgress.append(header);
+  const bars = document.createElement("div"); bars.className = "vc-progress-bars";
+  scores.forEach((score, index) => { const bar = document.createElement("div"); bar.className = "vc-progress-bar"; bar.title = `Tentative ${index + 1} : ${score}%`; const fill = document.createElement("span"); fill.style.height = `${Math.max(5, score)}%`; bar.append(fill); bars.append(bar); });
+  elements.vcProgress.append(bars);
+}
 async function refreshVCStatus() {
   try {
     const [status, radar, exams] = await Promise.all([api("/api/academics/vc/status"), api("/api/academics/vc/radar"), api("/api/academics/vc/exams")]);
     text(elements.vcStatus, `${status.cards || 0} carte(s) · ${status.reviews || 0} réponse(s) · ${(exams.exams || []).length} examen(s) · stockage local uniquement.`);
     renderVCExamHistory(exams.exams || []);
+    renderVCProgress(exams.exams || []);
     renderVCRadar(radar.radar);
     const fragile = (radar.radar || []).filter((item) => ["non testé", "fragile"].includes(item.status)).map((item) => item.topic);
     const latest = (exams.exams || []).at(-1);

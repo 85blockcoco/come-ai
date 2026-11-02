@@ -207,3 +207,8 @@
 - **Livré** : brouillon local de tentative via `localStorage`, restauration automatique d’une session interrompue, réponses déjà saisies conservées et suppression du brouillon après correction.
 - **UX** : message explicite de restauration; l’utilisateur garde la main avant de soumettre; aucune tentative interrompue n’est transformée silencieusement en résultat.
 - **Preuve** : `11 passed in 7.24s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+# Livraison VC-117 — progression multi-examens (2026-11-02)
+
+- **Livré** : mini-vue de progression locale basée sur les 8 dernières tentatives : moyenne récente, meilleur score et barres visuelles; elle reste masquée tant que deux examens n’ont pas été passés.
+- **UX** : signal simple, lisible et non trompeur; aucune extrapolation lorsque l’historique est insuffisant.
+- **Preuve** : `11 passed in 5.14s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
