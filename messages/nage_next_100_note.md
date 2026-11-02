@@ -75,3 +75,18 @@ C10) → SHA `90ccadf`. **91/100 N100 done** (registre `missions_next100.json` �
 OpenCode pousse désormais exclusivement via :
   `git push origin HEAD:refs/heads/agent/n100-carrier-20261101`
 et vérifie par `git ls-remote origin agent/n100-carrier-20261101` avant tout "done".
+## CONSOLIDÉE CODEX + CLI + RECETTE (02/11) — 99/100 ✅
+
+- Candidate `codex/n100-consolidated-20261101` @ **a9f8226** (base 99a2069) :
+  U2 shortlist/urgence/export, U3 ATS/dossier, U4 atelier lettre, U5 a11y,
+  U7 routes académiques bornées, durcissement approbation/export.
+- Revue OpenCode : diff complet inspecté, **34 tests rejoués deux fois**
+  (candidate puis merge) = 34 passed, ruff + node + diff-check verts.
+- Intégration carrier : merge **0aa7224**, dédup U2 **bd07d64**, board **9806f9e**.
+- CLI immédiat : `nage.py` (finance, maths, budget `~/.nage/`, plan du jour,
+  brief, recherche, méthode devoirs) + `tests/test_nage_cli.py` (8 verts).
+- Recette J10 : **42 passed in 14.14s**, routes vérifiées en direct 8765/8766,
+  rapport `docs/agent-reports/N100-J10-RECIPE.md`.
+- Guide utilisateur : `docs/USER_GUIDE_V2.md`.
+- Registre N100 : **99/100**. Seule **J04 (PWA hors-ligne)** reste ouverte :
+  non pertinente sans serveur local, décision humaine.

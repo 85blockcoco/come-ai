@@ -1366,7 +1366,7 @@
    "id": "J01",
    "lot": "J",
    "title": "Recette bout-en-bout (10 offres)",
-   "status": "todo",
+   "status": "done",
    "priority": "P1",
    "files": [
     "tests/test_e2e_recipe.py"
@@ -1376,33 +1376,42 @@
     "H04"
    ],
    "tests_min": 10,
-   "note": "attente coordination"
+   "note": "attente coordination",
+   "merged_sha": "99a2069",
+   "description": "Recette E2E backend sur 10 offres synthetiques : offres -> shortlist -> lettre -> kit -> rapport, 3 tests verts.",
+   "tests": "tests/test_e2e_local_pipeline.py"
   },
   {
    "id": "J02",
    "lot": "J",
    "title": "Accessibilite (a11y) UI",
-   "status": "todo",
+   "status": "done",
    "priority": "P1",
    "files": [
     "(reserve Codex) desktop_static/**"
    ],
    "depends_on": [],
    "tests_min": 0,
-   "note": "attente coordination"
+   "note": "attente coordination",
+   "merged_sha": "9806f9e",
+   "description": "U5 : labels accessibles, focus visible, aria-busy, test HTTP dedie.",
+   "tests": "tests/test_n100_career_accessibility.py"
   },
   {
    "id": "J03",
    "lot": "J",
    "title": "Performance percue (skeleton)",
-   "status": "todo",
+   "status": "done",
    "priority": "P1",
    "files": [
     "(reserve Codex) desktop_static/**"
    ],
    "depends_on": [],
    "tests_min": 0,
-   "note": "attente coordination"
+   "note": "attente coordination",
+   "merged_sha": "9806f9e",
+   "description": "U5 : skeletons de chargement et etat aria-busy pendant les appels Career.",
+   "tests": "tests/test_n100_career_accessibility.py"
   },
   {
    "id": "J04",
@@ -1415,20 +1424,23 @@
    ],
    "depends_on": [],
    "tests_min": 0,
-   "note": "attente coordination"
+   "note": "App locale : le mode hors-ligne reseau est deja natif. Une PWA sans serveur local n apporte pas de valeur et risquerait de cacher des donnees personnelles. Decision humaine requise avant implementation."
   },
   {
    "id": "J05",
    "lot": "J",
    "title": "Responsive mobile",
-   "status": "todo",
+   "status": "done",
    "priority": "P1",
    "files": [
     "(reserve Codex) desktop_static/**"
    ],
    "depends_on": [],
    "tests_min": 0,
-   "note": "attente coordination"
+   "note": "attente coordination",
+   "merged_sha": "9806f9e",
+   "description": "U5 : responsive mobile et reduction des animations (prefers-reduced-motion).",
+   "tests": "tests/test_n100_career_accessibility.py"
   },
   {
    "id": "J06",
@@ -1484,7 +1496,7 @@
    "id": "J10",
    "lot": "J",
    "title": "Rapport de recette final",
-   "status": "todo",
+   "status": "done",
    "priority": "P1",
    "files": [
     "docs/agent-reports/NAGE_NEXT_100_RECIPE.md"
@@ -1501,7 +1513,10 @@
     "J09"
    ],
    "tests_min": 0,
-   "note": "attente coordination"
+   "note": "attente coordination",
+   "merged_sha": "9806f9e",
+   "description": "Rapport de recette final avec preuves : 42 tests verts, lint, routes verifiees en direct, checklist securite.",
+   "tests": "docs/agent-reports/N100-J10-RECIPE.md"
   }
  ],
  "summary": {
