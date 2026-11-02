@@ -222,3 +222,8 @@
 - **Livré** : filtre de session VC par thème, utilisable depuis l’interface; la recommandation peut maintenant être transformée en action sans mélanger les cartes d’autres domaines.
 - **Contrat** : champ `topic` optionnel, comparé de façon insensible à la casse; sans thème, comportement historique inchangé.
 - **Preuve** : `11 passed in 14.89s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+# Livraison VC-120 — raccourci vers la priorité (2026-11-02)
+
+- **Livré** : bouton « Réviser le thème prioritaire »; il sélectionne le premier thème fragile/non testé, ouvre l’espace VC et positionne le filtre de session.
+- **UX** : bouton désactivé lorsqu’aucune priorité fiable n’est disponible; l’utilisateur démarre ensuite explicitement la session.
+- **Preuve** : `11 passed in 5.88s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.

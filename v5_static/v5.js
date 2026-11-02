@@ -31,7 +31,7 @@ const elements = {
   vcStatus: $("vcStatus"), vcCardForm: $("vcCardForm"), vcQuestion: $("vcQuestion"), vcAnswer: $("vcAnswer"), vcTopic: $("vcTopic"), vcSource: $("vcSource"), vcCardStatus: $("vcCardStatus"), vcSessionForm: $("vcSessionForm"), vcTodayOnly: $("vcTodayOnly"), vcFocusTopic: $("vcFocusTopic"), vcLimit: $("vcLimit"), vcSessionCount: $("vcSessionCount"), vcPrompt: $("vcPrompt"), vcReveal: $("vcReveal"), vcCorrection: $("vcCorrection"), vcAnswerDisplay: $("vcAnswerDisplay"), vcCitationDisplay: $("vcCitationDisplay"), vcGrades: $("vcGrades"), vcSessionStatus: $("vcSessionStatus"), vcRadar: $("vcRadar"), vcRadarEmpty: $("vcRadarEmpty"), vcPlan: $("vcPlan"), vcRefreshRadar: $("vcRefreshRadar"), vcRefreshStatus: $("vcRefreshStatus"),
   vcExamLimit: $("vcExamLimit"), vcExamStart: $("vcExamStart"), vcExamSubmit: $("vcExamSubmit"), vcExamQuestions: $("vcExamQuestions"), vcExamTimer: $("vcExamTimer"), vcExamResult: $("vcExamResult"),
   vcExamHistory: $("vcExamHistory"), vcExamHistoryEmpty: $("vcExamHistoryEmpty"),
-  vcProgress: $("vcProgress"), vcProgressEmpty: $("vcProgressEmpty"), vcReadiness: $("vcReadiness"),
+  vcProgress: $("vcProgress"), vcProgressEmpty: $("vcProgressEmpty"), vcReadiness: $("vcReadiness"), vcQuickFocus: $("vcQuickFocus"),
 };
 
 async function api(path, options = {}) {
@@ -461,6 +461,8 @@ function renderVCReadiness(exams, radar) {
   const scores = rows.map((exam) => Number(exam.score || 0) / Math.max(1, Number(exam.max_score || 1)));
   const average = scores.length ? scores.reduce((sum, value) => sum + value, 0) / scores.length : 0;
   const weak = (radar || []).filter((item) => ["non testé", "fragile"].includes(item.status));
+  elements.vcQuickFocus.disabled = weak.length === 0;
+  elements.vcQuickFocus.dataset.topic = weak[0]?.topic || "";
   if (rows.length < 3) { elements.vcReadiness.className = "vc-readiness neutral"; text(elements.vcReadiness, `Signal de préparation : encore ${3 - rows.length} examen(s) nécessaire(s) pour une tendance.`); return; }
   if (average >= 0.8 && weak.length === 0) { elements.vcReadiness.className = "vc-readiness positive"; text(elements.vcReadiness, "Signal favorable : moyenne récente ≥ 80 %, sans thème fragile détecté. Ce n’est pas une garantie de résultat."); return; }
   elements.vcReadiness.className = "vc-readiness caution"; text(elements.vcReadiness, `Signal à consolider : moyenne récente ${Math.round(average * 100)} %${weak.length ? ` · ${weak.length} thème(s) fragile(s)` : ""}.`);
@@ -546,6 +548,7 @@ elements.vcSessionForm.addEventListener("submit", startVCSession);
 elements.vcReveal.addEventListener("click", revealVCCard);
 elements.vcRefreshRadar.addEventListener("click", refreshVCStatus);
 elements.vcRefreshStatus.addEventListener("click", refreshVCStatus);
+elements.vcQuickFocus.addEventListener("click", () => { const topic = elements.vcQuickFocus.dataset.topic; if (!topic) return; elements.vcFocusTopic.value = topic; activateView("vcView"); elements.vcSessionStatus.textContent = `Thème prioritaire sélectionné : ${topic}. Démarre la session quand tu es prêt.`; elements.vcSessionForm.scrollIntoView({ behavior: "smooth", block: "center" }); });
 elements.vcExamStart.addEventListener("click", startVCExam);
 elements.vcExamSubmit.addEventListener("click", submitVCExam);
 
