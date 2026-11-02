@@ -232,3 +232,9 @@
 - **Livré** : annonces `aria-live` pour la question et le radar, rôle de liste pour les indicateurs, et état `aria-busy` pendant l’actualisation locale.
 - **UX** : les changements de question, correction et progression sont annoncés aux technologies d’assistance sans modifier le parcours clavier.
 - **Preuve** : `7 passed in 5.91s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+# Livraison VC-122 — résumés de sessions persistants (2026-11-02)
+
+- **Livré** : résumé local de chaque session terminée, avec session_id, cartes proposées, réponses, maîtrise, cartes à revoir et restantes dues.
+- **Routes** : `POST /api/academics/vc/session/summary` et `GET /api/academics/vc/sessions`.
+- **UX** : le résumé est enregistré automatiquement uniquement après la dernière notation de la session; une session interrompue n’est pas déclarée terminée.
+- **Preuve** : `11 passed in 5.87s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.

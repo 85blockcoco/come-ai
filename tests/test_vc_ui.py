@@ -24,6 +24,7 @@ def test_vc_frontend_uses_local_routes_and_keeps_answer_out_of_session_payload()
         "/api/academics/vc/exam",
         "/api/academics/vc/exam/grade",
         "/api/academics/vc/exams",
+        "/api/academics/vc/session/summary",
     ):
         assert route in script
     assert "correction.back" in script

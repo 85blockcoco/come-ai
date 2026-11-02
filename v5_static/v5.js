@@ -417,7 +417,7 @@ async function refreshMemory(includeStorage = true) {
   } catch (error) { text(elements.memoryHealth, error.message); }
 }
 
-const vcState = { cards: [], index: 0, revealed: false };
+const vcState = { cards: [], index: 0, revealed: false, sessionId: "" };
 const vcExamState = { exam: null, startedAt: 0, timer: null };
 const VC_EXAM_DRAFT_KEY = "nage-vc-exam-draft-v1";
 function vcToday() { return new Date().toISOString().slice(0, 10); }
@@ -502,7 +502,7 @@ async function saveVCCard(event) {
 }
 async function startVCSession(event) {
   event.preventDefault();
-  try { const payload = { limit: Number(elements.vcLimit.value), seed: 0 }; if (elements.vcTodayOnly.checked) payload.today = vcToday(); if (elements.vcFocusTopic.value) payload.topic = elements.vcFocusTopic.value; const result = await api("/api/academics/vc/session", { method: "POST", body: JSON.stringify(payload) }); vcState.cards = result.cards || []; vcState.index = 0; text(elements.vcSessionStatus, vcState.cards.length ? "Lis la question, réponds à voix haute ou sur papier, puis révèle la correction." : (result.blockers || ["Aucune carte due pour ce thème."])[0]); renderVCPrompt(); } catch (error) { text(elements.vcSessionStatus, error.message); }
+  try { const payload = { limit: Number(elements.vcLimit.value), seed: 0 }; if (elements.vcTodayOnly.checked) payload.today = vcToday(); if (elements.vcFocusTopic.value) payload.topic = elements.vcFocusTopic.value; const result = await api("/api/academics/vc/session", { method: "POST", body: JSON.stringify(payload) }); vcState.cards = result.cards || []; vcState.sessionId = result.session_id || ""; vcState.index = 0; text(elements.vcSessionStatus, vcState.cards.length ? "Lis la question, réponds à voix haute ou sur papier, puis révèle la correction." : (result.blockers || ["Aucune carte due pour ce thème."])[0]); renderVCPrompt(); } catch (error) { text(elements.vcSessionStatus, error.message); }
 }
 async function revealVCCard() {
   const card = vcState.cards[vcState.index]; if (!card) return;
@@ -512,7 +512,7 @@ async function revealVCCard() {
 }
 async function reviewVCCard(quality) {
   const card = vcState.cards[vcState.index]; if (!card) return;
-  try { await api("/api/academics/vc/review", { method: "POST", body: JSON.stringify({ card_id: card.id, quality, reviewed_on: vcToday() }) }); vcState.index += 1; text(elements.vcSessionStatus, vcState.index < vcState.cards.length ? "Réponse enregistrée. Passe à la suivante." : "Session terminée. Ton bilan est à jour."); renderVCPrompt(); await refreshVCStatus(); } catch (error) { text(elements.vcSessionStatus, error.message); }
+  try { await api("/api/academics/vc/review", { method: "POST", body: JSON.stringify({ card_id: card.id, quality, reviewed_on: vcToday() }) }); vcState.index += 1; if (vcState.index >= vcState.cards.length && vcState.sessionId) await api("/api/academics/vc/session/summary", { method: "POST", body: JSON.stringify({ session_id: vcState.sessionId, card_ids: vcState.cards.map((item) => item.id), today: vcToday() }) }); text(elements.vcSessionStatus, vcState.index < vcState.cards.length ? "Réponse enregistrée. Passe à la suivante." : "Session terminée. Ton bilan est à jour."); renderVCPrompt(); await refreshVCStatus(); } catch (error) { text(elements.vcSessionStatus, error.message); }
 }
 async function startVCExam() {
   try { const data = await api("/api/academics/vc/exam", { method: "POST", body: JSON.stringify({ limit: Number(elements.vcExamLimit.value) }) }); mountVCExam(data.exam, Date.now()); text(elements.vcExamResult, "Réponds sans consulter le corrigé, puis corrige une seule fois."); } catch (error) { text(elements.vcExamResult, error.message); }

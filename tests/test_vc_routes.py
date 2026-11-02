@@ -12,10 +12,14 @@ def test_vc_http_flow_hides_answers_and_persists_reviews(tmp_path, monkeypatch):
         assert session.status_code == 200
         assert session.json()["cards"][0]["id"] == "pm"
         assert "back" not in session.json()["cards"][0]
+        session_id = session.json()["session_id"]
         review = client.post("/api/academics/vc/review", json={"card_id": "pm", "quality": 2, "reviewed_on": "2026-11-02"})
         assert review.status_code == 200 and review.json()["review"]["due_on"] == "2026-11-03"
         radar = client.get("/api/academics/vc/radar")
         assert radar.json()["radar"][0]["status"] == "fragile"
+        summary = client.post("/api/academics/vc/session/summary", json={"session_id": session_id, "card_ids": ["pm"], "today": "2026-11-02"})
+        assert summary.status_code == 200 and summary.json()["summary"]["answered"] == 1
+        assert client.get("/api/academics/vc/sessions").json()["sessions"]
 
 
 def test_vc_route_rejects_unknown_card_without_external_action(tmp_path, monkeypatch):

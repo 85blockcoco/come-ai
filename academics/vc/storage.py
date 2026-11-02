@@ -46,6 +46,7 @@ class VCStore:
         self.cards_path = self.root / "deck.json"
         self.reviews_path = self.root / "reviews.json"
         self.exams_path = self.root / "exams.json"
+        self.sessions_path = self.root / "sessions.json"
 
     def save_cards(self, cards: list[Card]) -> None:
         seen: set[str] = set()
@@ -90,4 +91,15 @@ class VCStore:
         if not self.exams_path.is_file():
             return []
         payload = json.loads(self.exams_path.read_text(encoding="utf-8"))
+        return [item for item in payload if isinstance(item, dict)] if isinstance(payload, list) else []
+
+    def save_session(self, summary: dict[str, Any]) -> None:
+        sessions = self.load_sessions()
+        sessions.append(dict(summary))
+        _atomic_json(self.sessions_path, sessions[-200:])
+
+    def load_sessions(self) -> list[dict[str, Any]]:
+        if not self.sessions_path.is_file():
+            return []
+        payload = json.loads(self.sessions_path.read_text(encoding="utf-8"))
         return [item for item in payload if isinstance(item, dict)] if isinstance(payload, list) else []

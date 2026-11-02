@@ -16,7 +16,7 @@ from . import finance_core, math_core
 from .daily_toolkit import Task, daily_plan
 from .research_kit import build_outline
 from .vc.models import Card
-from .vc.scheduler import start_session, submit_review
+from .vc.scheduler import start_session, submit_review, summarize_session
 from .vc.storage import VCStore
 from .vc.mastery import build_radar
 from .vc.exams import build_mock_exam, grade_mock_exam
@@ -85,6 +85,13 @@ class VCExamGradePayload(BaseModel):
     limit: int = Field(default=5, ge=1, le=20)
     answers: dict[str, str] = Field(default_factory=dict, max_length=100)
     elapsed_minutes: int = Field(default=0, ge=0, le=1_440)
+
+
+class VCSessionSummaryPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    session_id: str = Field(min_length=1, max_length=160)
+    card_ids: list[str] = Field(default_factory=list, max_length=100)
+    today: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
 
 
 FINANCE_OPERATIONS: dict[str, Callable[..., Any]] = {
@@ -277,6 +284,19 @@ def create_academics_router() -> APIRouter:
             return {"review": asdict(review), "warnings": [], "blockers": []}
         except (TypeError, ValueError) as error:
             return {"review": None, "warnings": [], "blockers": [str(error)]}
+
+    @router.post("/api/academics/vc/session/summary")
+    def vc_session_summary(payload: VCSessionSummaryPayload) -> dict[str, Any]:
+        try:
+            summary = asdict(summarize_session(VCStore(), payload.card_ids, today=payload.today, session_id=payload.session_id))
+            VCStore().save_session(summary)
+            return {"summary": summary, "warnings": [], "blockers": []}
+        except (TypeError, ValueError) as error:
+            return {"summary": None, "warnings": [], "blockers": [str(error)]}
+
+    @router.get("/api/academics/vc/sessions")
+    def vc_sessions() -> dict[str, Any]:
+        return {"sessions": VCStore().load_sessions(), "warnings": [], "blockers": []}
 
     @router.get("/api/academics/vc/radar")
     def vc_radar() -> dict[str, Any]:
