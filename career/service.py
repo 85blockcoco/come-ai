@@ -282,10 +282,83 @@ class CareerService:
         from .letter_approval import decide, to_dict
         return to_dict(decide(**kwargs))
 
-    @staticmethod
-    def export_letter(**kwargs: Any) -> dict[str, Any]:
+    def export_letter(self, **kwargs: Any) -> dict[str, Any]:
+        from .letter_approval import is_approved
         from .letter_export import export_letter
-        return export_letter(**kwargs)
+        title = clean_text(kwargs.get("title"), limit=240)
+        fmt = clean_text(kwargs.get("fmt"), limit=8).lower()
+        if not is_approved(title):
+            return {"ok": False, "error": "export bloqué : lettre non approuvée par un humain"}
+        target = self.export_dir / f"{re_sub_filename(title)}.{fmt}"
+        return export_letter(
+            letter_body=kwargs.get("letter_body", ""),
+            title=title,
+            language=kwargs.get("language", "fr"),
+            target=target,
+            fmt=fmt,
+            approved=True,
+        )
+
+    def shortlist(self) -> list[dict[str, Any]]:
+        return self.list_jobs(shortlisted=True)
+
+    @staticmethod
+    def rank_offers(offers: list[dict[str, Any]], today: str | None = None) -> dict[str, Any]:
+        from .urgency_ranking import rank_by_urgency
+        rows, ordered = rank_by_urgency(offers, today=today)
+        return {"rows": [row.to_dict() for row in rows], "ordered": ordered, "warnings": [], "blockers": []}
+
+    @staticmethod
+    def render_shortlist(offers: list[dict[str, Any]], today: str | None = None) -> dict[str, Any]:
+        from .shortlist_dashboard import render_dashboard, to_dict
+        result = to_dict(render_dashboard(offers, today=today))
+        result.update({"warnings": [], "blockers": []})
+        return result
+
+    def export_shortlist(self, offers: list[dict[str, Any]], fmt: str, fields: list[str]) -> dict[str, Any]:
+        if not offers:
+            return {"ok": False, "warnings": [], "blockers": ["Aucune offre à exporter."]}
+        from .shortlist_export import export_shortlist_csv, export_shortlist_json
+        normalized = fmt.lower()
+        if normalized not in {"csv", "json"}:
+            return {"ok": False, "warnings": [], "blockers": ["Format shortlist non supporté."]}
+        target = self.export_dir / f"shortlist.{normalized}"
+        if normalized == "csv":
+            result = export_shortlist_csv(offers, target, fields=fields or None)
+        else:
+            result = export_shortlist_json(offers, target)
+        return {"ok": True, **result.__dict__, "warnings": [], "blockers": []}
+
+    def ats_fields(self, platform: str) -> dict[str, Any]:
+        from .ats_fields import missing_required, prefill_fields, to_dict
+        fields = prefill_fields(platform, self.get_profile())
+        missing = missing_required(fields)
+        return {
+            "platform": platform or "generic",
+            "fields": [to_dict(field) for field in fields],
+            "warnings": [],
+            "blockers": [f"Champ obligatoire manquant : {name}" for name in missing],
+        }
+
+    @staticmethod
+    def dossier_checklist(dossier: str, provided: list[str]) -> dict[str, Any]:
+        from .dossier_checklist import checklist_for, completeness, to_dict
+        items = checklist_for(dossier, provided)
+        status = completeness(items)
+        return {
+            "dossier": dossier or "stage",
+            "items": [to_dict(item) for item in items],
+            "completeness": status,
+            "warnings": [],
+            "blockers": [f"Document obligatoire manquant : {name}" for name in status["missing_required"]],
+        }
+
+    @staticmethod
+    def dossier_preview(**kwargs: Any) -> dict[str, Any]:
+        from .dossier_preview import build_preview, to_dict
+        result = to_dict(build_preview(**kwargs))
+        result.setdefault("blockers", [])
+        return result
 
     def shortlist(self) -> list[dict[str, Any]]:
         return self.list_jobs(shortlisted=True)

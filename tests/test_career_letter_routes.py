@@ -38,3 +38,33 @@ def test_letter_export_refuses_unapproved_binary(tmp_path: Path) -> None:
         assert response.status_code == 200
         assert response.json()["ok"] is False
         assert response.json()["blockers"]
+
+
+def test_client_approved_flag_cannot_bypass_server_gate(tmp_path: Path) -> None:
+    with client(tmp_path) as http:
+        response = http.post("/api/career/letter/export", json={
+            "letter_body": "Synthetic letter",
+            "title": "not-approved",
+            "fmt": "md",
+            "target": "/tmp/client-controlled.md",
+            "approved": True,
+        })
+        assert response.status_code == 200
+        assert response.json()["ok"] is False
+        assert not (tmp_path / "client-controlled.md").exists()
+
+
+def test_approved_letter_exports_only_under_server_directory(tmp_path: Path) -> None:
+    with client(tmp_path) as http:
+        assert http.post("/api/career/letter/approve", json={"letter_id": "approved-letter", "approved": True}).status_code == 200
+        response = http.post("/api/career/letter/export", json={
+            "letter_body": "Synthetic approved letter",
+            "title": "approved-letter",
+            "fmt": "md",
+            "target": "/tmp/client-controlled.md",
+            "approved": True,
+        })
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["ok"] is True
+        assert payload["path"].endswith("career_data/exports/approved-letter.md")

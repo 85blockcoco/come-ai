@@ -42,3 +42,11 @@
 - Pré-revue des consignes locales SPEC-044/046 : le candidat possède déjà `career/cv_variants.py`, `career/application_studio.py` et `career/document_export.py`, mais aucun `career/apply_kit.py`, `career/ats_guide.py` ni leurs routes. Je n'ai pas dupliqué le travail des agents dont les branches ne sont pas publiées. SPEC-044-E2E_METRICS demande des offres réelles locales; aucune offre réelle n'a été lue ni copiée, et cette évaluation n'a pas été exécutée.
 - Le worktree non commité `/Users/comedelavenne/AI-Excel-Agent-worker-cvboost-84-1793029873023` ajoute une variante de SPEC-047 dans `career/router.py` et `career/service.py`, et un `career/send_confirmation.py`. Elle fixe `approval_granted = 1` à la déclaration d'envoi et utilise `_LAST_SERVICE` global. La candidate exige l'approbation préalable et son test dédié plus le test exigeant un suivi existant passent (2/2, 3,14 s); la variante du worktree n'a pas été intégrée ni validée par Codex. Un pytest ciblé a été observé en cours dans ce worktree, puis le processus a disparu avant que sa sortie puisse être récupérée; son résultat reste inconnu.
 - `main` n'a pas été modifiée.
+# Candidate consolidée Codex (2026-11-01)
+
+- Branche : `codex/n100-consolidated-20261101`.
+- Base carrier : `99a20691499f71608fd58bbfa7e9594223163ddb`.
+- Lots : U2, U3, U4, U5, U7 et durcissement export lettres.
+- Validation cumulative : 34 passed in 15.14s ; Ruff, deux node-check et diff-check verts.
+- Rapport : `docs/agent-reports/N100-CODEX-CONSOLIDATED.md`.
+- Main non modifiée ; revue OpenCode et décision sur le contrat U7 attendues.
