@@ -19,6 +19,7 @@ from .vc.models import Card
 from .vc.scheduler import start_session, submit_review
 from .vc.storage import VCStore
 from .vc.mastery import build_radar
+from .vc.exams import build_mock_exam, grade_mock_exam
 
 
 class CalculationPayload(BaseModel):
@@ -70,6 +71,19 @@ class VCReviewPayload(BaseModel):
     card_id: str = Field(min_length=1, max_length=160)
     quality: int = Field(ge=0, le=5)
     reviewed_on: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+
+
+class VCExamPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    limit: int = Field(default=5, ge=1, le=20)
+
+
+class VCExamGradePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    exam_id: str = Field(min_length=1, max_length=160)
+    limit: int = Field(default=5, ge=1, le=20)
+    answers: dict[str, str] = Field(default_factory=dict, max_length=100)
+    elapsed_minutes: int = Field(default=0, ge=0, le=1_440)
 
 
 FINANCE_OPERATIONS: dict[str, Callable[..., Any]] = {
@@ -226,6 +240,24 @@ def create_academics_router() -> APIRouter:
             return {"session_id": session_id, "cards": public_cards, "warnings": [], "blockers": []}
         except (TypeError, ValueError) as error:
             return {"session_id": None, "cards": [], "warnings": [], "blockers": [str(error)]}
+
+    @router.post("/api/academics/vc/exam")
+    def vc_exam(payload: VCExamPayload) -> dict[str, Any]:
+        try:
+            exam = build_mock_exam(limit=payload.limit)
+            questions = [{"id": item.id, "topic": item.topic, "prompt": item.prompt, "points": item.points} for item in exam.questions]
+            return {"exam": {"id": exam.id, "duration_minutes": exam.duration_minutes, "questions": questions}, "warnings": [], "blockers": []}
+        except ValueError as error:
+            return {"exam": None, "warnings": [], "blockers": [str(error)]}
+
+    @router.post("/api/academics/vc/exam/grade")
+    def vc_exam_grade(payload: VCExamGradePayload) -> dict[str, Any]:
+        try:
+            exam = build_mock_exam(exam_id=payload.exam_id, limit=payload.limit)
+            result = grade_mock_exam(exam, payload.answers, elapsed_minutes=payload.elapsed_minutes)
+            return {"result": asdict(result), "warnings": [], "blockers": []}
+        except ValueError as error:
+            return {"result": None, "warnings": [], "blockers": [str(error)]}
 
     @router.post("/api/academics/vc/review")
     def vc_review(payload: VCReviewPayload) -> dict[str, Any]:

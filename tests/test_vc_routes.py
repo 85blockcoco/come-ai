@@ -24,3 +24,24 @@ def test_vc_route_rejects_unknown_card_without_external_action(tmp_path, monkeyp
         response = client.post("/api/academics/vc/review", json={"card_id": "missing", "quality": 3})
         assert response.status_code == 200
         assert "introuvable" in response.json()["blockers"][0]
+
+
+def test_vc_exam_hides_answers_until_grade(tmp_path, monkeypatch):
+    monkeypatch.setenv("NAGE_VC_HOME", str(tmp_path / "vc"))
+    with TestClient(create_app(base_dir=tmp_path)) as client:
+        exam = client.post("/api/academics/vc/exam", json={"limit": 2})
+        assert exam.status_code == 200
+        payload = exam.json()["exam"]
+        assert payload["duration_minutes"] == 30
+        assert len(payload["questions"]) == 2
+        assert all("answer" not in question for question in payload["questions"])
+        result = client.post("/api/academics/vc/exam/grade", json={"exam_id": payload["id"], "limit": 2, "answers": {"q-pm": "10"}})
+        assert result.status_code == 200
+        assert result.json()["result"]["score"] == 2
+
+
+def test_vc_exam_rejects_unbounded_limit(tmp_path, monkeypatch):
+    monkeypatch.setenv("NAGE_VC_HOME", str(tmp_path / "vc"))
+    with TestClient(create_app(base_dir=tmp_path)) as client:
+        response = client.post("/api/academics/vc/exam", json={"limit": 21})
+        assert response.status_code == 422

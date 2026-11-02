@@ -6,7 +6,7 @@ ROOT = Path(__file__).parents[1]
 
 def test_vc_view_exposes_complete_revision_flow() -> None:
     html = (ROOT / "v5_static" / "index.html").read_text(encoding="utf-8")
-    for marker in ("vcView", "vcCardForm", "vcSessionForm", "vcReveal", "vcRadar"):
+    for marker in ("vcView", "vcCardForm", "vcSessionForm", "vcReveal", "vcRadar", "vcExamStart", "vcExamSubmit"):
         assert marker in html
     assert 'data-view-target="vcView"' in html
 
@@ -19,6 +19,8 @@ def test_vc_frontend_uses_local_routes_and_keeps_answer_out_of_session_payload()
         "/api/academics/vc/session",
         "/api/academics/vc/review",
         "/api/academics/vc/radar",
+        "/api/academics/vc/exam",
+        "/api/academics/vc/exam/grade",
     ):
         assert route in script
     assert "correction.back" in script

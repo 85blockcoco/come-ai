@@ -225,6 +225,14 @@ input { min-width: 0; padding: 9px 10px; font-size: 12px; }
 .vc-radar-row span { padding: 3px 7px; color: #3f735c; font-size: 10px; font-weight: 750; background: #e5f2e9; border-radius: 999px; }
 .vc-radar-row small { color: var(--faint); font-size: 10px; }
 .vc-plan { min-height: 68px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.vc-exam-card { margin-top: 17px; }
+.vc-exam-actions { display: flex; gap: 10px; align-items: end; margin-bottom: 15px; }
+.vc-exam-actions label { display: grid; gap: 5px; color: #465a72; font-size: 12px; font-weight: 700; }
+.vc-exam-actions select { padding: 9px 10px; color: var(--ink); font: inherit; background: #fff; border: 1px solid #cfd9e4; border-radius: 10px; }
+.vc-exam-questions { display: grid; gap: 10px; }
+.vc-exam-question { display: grid; gap: 7px; padding: 12px; background: #f8fbfa; border: 1px solid #e0ece5; border-radius: 10px; }
+.vc-exam-question span { color: #315747; font-size: 12px; line-height: 1.45; }
+.vc-exam-question input { padding: 9px 10px; }
 
 .storage-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0 0 17px; }
 .storage-metric { min-height: 92px; padding: 16px; background: linear-gradient(145deg, rgba(255, 255, 255, .94), rgba(231, 245, 238, .72)); border: 1px solid #d7e9df; border-radius: 14px; box-shadow: 0 9px 24px rgba(6, 78, 59, .045); }
@@ -288,6 +296,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid #2270d4; outline-offs
   .storage-details { grid-template-columns: 1fr; }
   .vc-form-row { grid-template-columns: 1fr; }
   .vc-session-form { align-items: stretch; flex-direction: column; }
+  .vc-exam-actions { align-items: stretch; flex-direction: column; }
 }
 :root { --developer-border: #dce8e2; }
 .developer-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }

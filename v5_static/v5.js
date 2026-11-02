@@ -29,6 +29,7 @@ const elements = {
   projectForm: $("projectForm"), projectName: $("projectName"), projectList: $("projectList"), memoryHealth: $("memoryHealth"), memorySelectedFile: $("memorySelectedFile"), indexSelected: $("indexSelected"), cancelMemoryIndex: $("cancelMemoryIndex"), memorySearchForm: $("memorySearchForm"), memorySearchInput: $("memorySearchInput"), memoryActionStatus: $("memoryActionStatus"), memoryResults: $("memoryResults"), refreshMemory: $("refreshMemory"), sourceList: $("sourceList"), emptySources: $("emptySources"),
   storageLibrarySize: $("storageLibrarySize"), storageFiles: $("storageFiles"), storageFreeSpace: $("storageFreeSpace"), storageIndexing: $("storageIndexing"), storageLocation: $("storageLocation"), storageIndexSize: $("storageIndexSize"), storageBackupStatus: $("storageBackupStatus"), storageQueueStatus: $("storageQueueStatus"), storageLargestFiles: $("storageLargestFiles"), emptyLargestFiles: $("emptyLargestFiles"), refreshStorage: $("refreshStorage"),
   vcStatus: $("vcStatus"), vcCardForm: $("vcCardForm"), vcQuestion: $("vcQuestion"), vcAnswer: $("vcAnswer"), vcTopic: $("vcTopic"), vcSource: $("vcSource"), vcCardStatus: $("vcCardStatus"), vcSessionForm: $("vcSessionForm"), vcTodayOnly: $("vcTodayOnly"), vcLimit: $("vcLimit"), vcSessionCount: $("vcSessionCount"), vcPrompt: $("vcPrompt"), vcReveal: $("vcReveal"), vcCorrection: $("vcCorrection"), vcAnswerDisplay: $("vcAnswerDisplay"), vcCitationDisplay: $("vcCitationDisplay"), vcGrades: $("vcGrades"), vcSessionStatus: $("vcSessionStatus"), vcRadar: $("vcRadar"), vcRadarEmpty: $("vcRadarEmpty"), vcPlan: $("vcPlan"), vcRefreshRadar: $("vcRefreshRadar"), vcRefreshStatus: $("vcRefreshStatus"),
+  vcExamLimit: $("vcExamLimit"), vcExamStart: $("vcExamStart"), vcExamSubmit: $("vcExamSubmit"), vcExamQuestions: $("vcExamQuestions"), vcExamTimer: $("vcExamTimer"), vcExamResult: $("vcExamResult"),
 };
 
 async function api(path, options = {}) {
@@ -415,6 +416,7 @@ async function refreshMemory(includeStorage = true) {
 }
 
 const vcState = { cards: [], index: 0, revealed: false };
+const vcExamState = { exam: null, startedAt: 0 };
 function vcToday() { return new Date().toISOString().slice(0, 10); }
 function renderVCPrompt() {
   const card = vcState.cards[vcState.index];
@@ -468,6 +470,15 @@ async function reviewVCCard(quality) {
   const card = vcState.cards[vcState.index]; if (!card) return;
   try { await api("/api/academics/vc/review", { method: "POST", body: JSON.stringify({ card_id: card.id, quality, reviewed_on: vcToday() }) }); vcState.index += 1; text(elements.vcSessionStatus, vcState.index < vcState.cards.length ? "Réponse enregistrée. Passe à la suivante." : "Session terminée. Ton bilan est à jour."); renderVCPrompt(); await refreshVCStatus(); } catch (error) { text(elements.vcSessionStatus, error.message); }
 }
+async function startVCExam() {
+  try { const data = await api("/api/academics/vc/exam", { method: "POST", body: JSON.stringify({ limit: Number(elements.vcExamLimit.value) }) }); vcExamState.exam = data.exam; vcExamState.startedAt = Date.now(); elements.vcExamQuestions.replaceChildren(); for (const question of data.exam.questions) { const label = document.createElement("label"); label.className = "vc-exam-question"; const prompt = document.createElement("span"); prompt.textContent = `${question.topic} · ${question.prompt}`; const input = document.createElement("input"); input.dataset.questionId = question.id; input.maxLength = 500; input.placeholder = "Ta réponse"; label.append(prompt, input); elements.vcExamQuestions.append(label); } elements.vcExamSubmit.disabled = false; elements.vcExamStart.disabled = true; text(elements.vcExamTimer, `${data.exam.duration_minutes} min maximum`); text(elements.vcExamResult, "Réponds sans consulter le corrigé, puis corrige une seule fois."); } catch (error) { text(elements.vcExamResult, error.message); }
+}
+async function submitVCExam() {
+  if (!vcExamState.exam) return;
+  const answers = {}; elements.vcExamQuestions.querySelectorAll("input[data-question-id]").forEach((input) => { answers[input.dataset.questionId] = input.value; });
+  const elapsed = Math.floor((Date.now() - vcExamState.startedAt) / 60000);
+  try { const data = await api("/api/academics/vc/exam/grade", { method: "POST", body: JSON.stringify({ exam_id: vcExamState.exam.id, limit: vcExamState.exam.questions.length, answers, elapsed_minutes: elapsed }) }); const result = data.result; text(elements.vcExamResult, `Score : ${result.score}/${result.max_score} · ${result.answered} réponse(s) · ${result.timed_out ? "temps dépassé" : "temps respecté"}. Thèmes à revoir : ${result.weak_topics.length ? result.weak_topics.join(", ") : "aucun identifié"}.`); elements.vcExamSubmit.disabled = true; elements.vcExamStart.disabled = false; text(elements.vcExamTimer, "Corrigé enregistré localement"); } catch (error) { text(elements.vcExamResult, error.message); }
+}
 
 document.querySelectorAll(".nav-item[data-view-target]").forEach((button) => button.addEventListener("click", () => activateView(button.dataset.viewTarget)));
 document.querySelectorAll(".suggestion").forEach((button) => button.addEventListener("click", () => { elements.message.value = button.dataset.prompt || ""; elements.message.focus(); }));
@@ -491,6 +502,8 @@ elements.vcSessionForm.addEventListener("submit", startVCSession);
 elements.vcReveal.addEventListener("click", revealVCCard);
 elements.vcRefreshRadar.addEventListener("click", refreshVCStatus);
 elements.vcRefreshStatus.addEventListener("click", refreshVCStatus);
+elements.vcExamStart.addEventListener("click", startVCExam);
+elements.vcExamSubmit.addEventListener("click", submitVCExam);
 
 window.addEventListener("hashchange", () => {
   if (internalHashChange) {

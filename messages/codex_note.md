@@ -179,3 +179,10 @@
 - **Preuve** : `22 passed in 5.77s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
 - **Sécurité/UX** : les réponses ne sont pas incluses dans la réponse de démarrage de session; aucune URL externe ni soumission automatique; les données restent derrière le stockage local VC.
 - **Reste** : parcours navigateur sur le lanceur réel et import de notes PDF/DOCX à vérifier dans la recette finale; aucun contenu de cours personnel ajouté au dépôt.
+# Livraison VC-112 — examen blanc intégré (2026-11-02)
+
+- **Livré** : mode examen blanc VC dans V5, limité à 2/5/10 questions, réponses masquées jusqu’à correction, durée de 30 minutes, score, réponses manquantes, délai dépassé et thèmes fragiles.
+- **Routes** : `POST /api/academics/vc/exam` et `POST /api/academics/vc/exam/grade`, avec payloads stricts et limites bornées.
+- **Preuve** : `27 passed in 7.66s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+- **Règle produit** : aucun corrigé transmis dans le sujet d’examen; la correction n’est produite qu’après soumission explicite, sans appel externe.
+- **Reste** : recette navigateur réelle du parcours examen et enrichissement progressif de la banque à partir de notes approuvées, sans ajouter de contenu personnel au dépôt.
