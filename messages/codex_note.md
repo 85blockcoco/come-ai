@@ -52,7 +52,7 @@
 ### État vérifié
 
 - Branche candidate : `codex/n100-consolidated-20261101`.
-- Base OpenCode vérifiée par fetch : `origin/agent/n100-carrier-20261101` à `93fde22a47a18438174569608f0c86ed9a08f503`.
+- Base OpenCode vérifiée par fetch : `origin/agent/n100-carrier-20261101` a avancé à `9806f9e8ed757c6aaedcc9ad061a079ab6580d4c` pendant cette livraison; la candidate garde les tests supprimés par ce commit et reste autonome.
 - Définitions U2 uniques dans `career/router.py` et `career/service.py`; aucun marqueur de conflit.
 - Tests ciblés rejoués par Codex : 64 réussis, 0 échec, 0 ignoré.
 - Aucun fichier personnel, secret ou fournisseur externe utilisé; aucune candidature envoyée automatiquement.

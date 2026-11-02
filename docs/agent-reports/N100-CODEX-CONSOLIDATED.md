@@ -1,7 +1,7 @@
 # N100 — Candidate consolidée Codex
 
 Date : 2026-11-02
-Base : `origin/agent/n100-carrier-20261101` réconcilié au commit OpenCode `93fde22a47a18438174569608f0c86ed9a08f503`.
+Base : `origin/agent/n100-carrier-20261101` observé au tip OpenCode `9806f9e8ed757c6aaedcc9ad061a079ab6580d4c`; la candidate conserve ses tests de garde-fou et ses durcissements validés.
 
 ## Contenu intégré
 
