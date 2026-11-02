@@ -253,3 +253,8 @@
 - **Livré** : le statut VC calcule le nombre de cartes dues et une durée suggérée bornée entre 5 et 30 minutes (`2 min/carte`, plafonnée), sans carte due = 0 minute.
 - **UX** : la cadence affiche la durée du jour et rappelle que la qualité prime sur la quantité.
 - **Preuve** : `7 passed in 4.53s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+# Livraison VC-126 — session courte en un clic (2026-11-02)
+
+- **Livré** : bouton « Session courte · 5 cartes » qui configure le format, ouvre la zone de session et laisse la validation finale à l’utilisateur.
+- **UX** : parcours rapide pour les journées chargées, sans contourner le filtre des cartes dues ni la notation manuelle.
+- **Preuve** : `7 passed in 8.68s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.

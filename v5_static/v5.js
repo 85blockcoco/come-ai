@@ -33,7 +33,7 @@ const elements = {
   vcExamHistory: $("vcExamHistory"), vcExamHistoryEmpty: $("vcExamHistoryEmpty"),
   vcSessionHistory: $("vcSessionHistory"), vcSessionHistoryEmpty: $("vcSessionHistoryEmpty"),
   vcCadence: $("vcCadence"),
-  vcProgress: $("vcProgress"), vcProgressEmpty: $("vcProgressEmpty"), vcReadiness: $("vcReadiness"), vcQuickFocus: $("vcQuickFocus"),
+  vcProgress: $("vcProgress"), vcProgressEmpty: $("vcProgressEmpty"), vcReadiness: $("vcReadiness"), vcQuickFocus: $("vcQuickFocus"), vcShortSession: $("vcShortSession"),
 };
 
 async function api(path, options = {}) {
@@ -568,6 +568,7 @@ elements.vcReveal.addEventListener("click", revealVCCard);
 elements.vcRefreshRadar.addEventListener("click", refreshVCStatus);
 elements.vcRefreshStatus.addEventListener("click", refreshVCStatus);
 elements.vcQuickFocus.addEventListener("click", () => { const topic = elements.vcQuickFocus.dataset.topic; if (!topic) return; elements.vcFocusTopic.value = topic; activateView("vcView"); elements.vcSessionStatus.textContent = `Thème prioritaire sélectionné : ${topic}. Démarre la session quand tu es prêt.`; elements.vcSessionForm.scrollIntoView({ behavior: "smooth", block: "center" }); });
+elements.vcShortSession.addEventListener("click", () => { elements.vcLimit.value = "5"; activateView("vcView"); elements.vcSessionStatus.textContent = "Session courte configurée : 5 cartes dues maximum."; elements.vcSessionForm.scrollIntoView({ behavior: "smooth", block: "center" }); });
 elements.vcExamStart.addEventListener("click", startVCExam);
 elements.vcExamSubmit.addEventListener("click", submitVCExam);
 
