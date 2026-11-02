@@ -36,6 +36,7 @@ const elements = {
   vcProgress: $("vcProgress"), vcProgressEmpty: $("vcProgressEmpty"), vcReadiness: $("vcReadiness"), vcQuickFocus: $("vcQuickFocus"), vcShortSession: $("vcShortSession"), vcExpressSession: $("vcExpressSession"),
   vcResistantCards: $("vcResistantCards"), vcResistantEmpty: $("vcResistantEmpty"),
   vcUntestedCards: $("vcUntestedCards"), vcUntestedEmpty: $("vcUntestedEmpty"),
+  vcCardSearch: $("vcCardSearch"), vcAllCards: $("vcAllCards"), vcAllCardsEmpty: $("vcAllCardsEmpty"),
 };
 
 async function api(path, options = {}) {
@@ -422,6 +423,7 @@ async function refreshMemory(includeStorage = true) {
 }
 
 const vcState = { cards: [], index: 0, revealed: false, sessionId: "" };
+let vcCardStats = [];
 const vcExamState = { exam: null, startedAt: 0, timer: null };
 const VC_EXAM_DRAFT_KEY = "nage-vc-exam-draft-v1";
 function vcToday() { return new Date().toISOString().slice(0, 10); }
@@ -456,6 +458,12 @@ function renderVCResistantCards(cards) {
   const untested = (cards || []).filter((card) => card.quality === null).slice(0, 5);
   elements.vcUntestedCards.replaceChildren(); elements.vcUntestedEmpty.hidden = untested.length > 0;
   for (const card of untested) { const row = document.createElement("div"); row.className = "vc-resistant-row"; const title = document.createElement("strong"); title.textContent = card.front; const detail = document.createElement("small"); detail.textContent = `${card.topic} · jamais testée`; const button = document.createElement("button"); button.type = "button"; button.className = "text-button"; button.textContent = "Découvrir cette carte"; button.addEventListener("click", () => { elements.vcFocusTopic.value = card.topic; elements.vcWeakOnly.checked = false; activateView("vcView"); elements.vcSessionStatus.textContent = `Thème sélectionné : ${card.topic}. Démarre la session pour découvrir la carte.`; elements.vcSessionForm.scrollIntoView({ behavior: "smooth", block: "center" }); }); row.append(title, detail, button); elements.vcUntestedCards.append(row); }
+}
+function renderVCAllCards() {
+  const query = elements.vcCardSearch.value.trim().toLocaleLowerCase();
+  const rows = vcCardStats.filter((card) => !query || [card.front, card.topic, card.source].join(" ").toLocaleLowerCase().includes(query)).slice(0, 50);
+  elements.vcAllCards.replaceChildren(); elements.vcAllCardsEmpty.hidden = rows.length > 0;
+  for (const card of rows) { const row = document.createElement("div"); row.className = "vc-resistant-row"; const title = document.createElement("strong"); title.textContent = card.front; const detail = document.createElement("small"); detail.textContent = `${card.topic} · ${card.source || "source locale"} · ${card.quality === null ? "jamais testée" : `qualité ${card.quality}/5`}`; row.append(title, detail); elements.vcAllCards.append(row); }
 }
 function renderVCExamHistory(exams) {
   const rows = Array.isArray(exams) ? [...exams].reverse() : [];
@@ -517,6 +525,8 @@ async function refreshVCStatus() {
     renderVCReadiness(exams.exams || [], radar.radar || []);
     renderVCRadar(radar.radar);
     renderVCResistantCards(cardStats.cards || []);
+    vcCardStats = cardStats.cards || [];
+    renderVCAllCards();
     const fragile = (radar.radar || []).filter((item) => ["non testé", "fragile"].includes(item.status)).map((item) => item.topic);
     const latest = (exams.exams || []).at(-1);
     text(elements.vcPlan, fragile.length ? `Priorité suggérée : ${fragile.slice(0, 3).join(", ")}. Revois ces thèmes avant de passer aux cas avancés.` : latest ? `Dernier examen : ${latest.score}/${latest.max_score}. Continue une session courte chaque jour pour transformer tes réponses en maîtrise durable.` : "Continue une session courte chaque jour pour transformer tes réponses en maîtrise durable.");
@@ -581,6 +591,7 @@ elements.vcRefreshStatus.addEventListener("click", refreshVCStatus);
 elements.vcQuickFocus.addEventListener("click", () => { const topic = elements.vcQuickFocus.dataset.topic; if (!topic) return; elements.vcFocusTopic.value = topic; activateView("vcView"); elements.vcSessionStatus.textContent = `Thème prioritaire sélectionné : ${topic}. Démarre la session quand tu es prêt.`; elements.vcSessionForm.scrollIntoView({ behavior: "smooth", block: "center" }); });
 elements.vcShortSession.addEventListener("click", () => { elements.vcLimit.value = "5"; activateView("vcView"); elements.vcSessionStatus.textContent = "Session courte configurée : 5 cartes dues maximum."; elements.vcSessionForm.scrollIntoView({ behavior: "smooth", block: "center" }); });
 elements.vcExpressSession.addEventListener("click", () => { elements.vcLimit.value = "3"; activateView("vcView"); elements.vcSessionStatus.textContent = "Révision express configurée : 3 cartes dues maximum."; elements.vcSessionForm.scrollIntoView({ behavior: "smooth", block: "center" }); });
+elements.vcCardSearch.addEventListener("input", renderVCAllCards);
 elements.vcExamStart.addEventListener("click", startVCExam);
 elements.vcExamSubmit.addEventListener("click", submitVCExam);
 

@@ -283,3 +283,8 @@
 - **Livré** : panneau distinct pour les cartes jamais testées, séparé des cartes notées 0–2; chaque carte propose une découverte ciblée de son thème.
 - **Principe** : absence de réponse = « jamais testée », jamais « fragile ».
 - **Preuve** : `7 passed in 11.14s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+# Livraison VC-132 — recherche locale de cartes (2026-11-02)
+
+- **Livré** : recherche instantanée dans les cartes par question, thème ou source; résultats bornés et état vide explicite.
+- **UX** : recherche locale uniquement, sans appel réseau et sans exposition de la réponse au moment de l’inventaire.
+- **Preuve** : `7 passed in 8.37s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
