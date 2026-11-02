@@ -25,6 +25,8 @@ def test_vc_frontend_uses_local_routes_and_keeps_answer_out_of_session_payload()
     ):
         assert route in script
     assert "correction.back" in script
+    assert "VC_EXAM_DRAFT_KEY" in script
+    assert "restoreVCExamDraft" in script
     assert "local" in script
 
 

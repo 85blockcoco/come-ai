@@ -202,3 +202,8 @@
 - **Livré** : affichage des 10 dernières tentatives dans l’espace VC, avec score, nombre de réponses, statut du temps et thèmes fragiles.
 - **UX** : état vide explicite, historique trié du plus récent au plus ancien, aucun corrigé affiché avant soumission.
 - **Preuve** : `11 passed in 4.92s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+# Livraison VC-116 — reprise d’examen interrompu (2026-11-02)
+
+- **Livré** : brouillon local de tentative via `localStorage`, restauration automatique d’une session interrompue, réponses déjà saisies conservées et suppression du brouillon après correction.
+- **UX** : message explicite de restauration; l’utilisateur garde la main avant de soumettre; aucune tentative interrompue n’est transformée silencieusement en résultat.
+- **Preuve** : `11 passed in 7.24s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.

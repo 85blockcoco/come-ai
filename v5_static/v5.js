@@ -418,6 +418,7 @@ async function refreshMemory(includeStorage = true) {
 
 const vcState = { cards: [], index: 0, revealed: false };
 const vcExamState = { exam: null, startedAt: 0, timer: null };
+const VC_EXAM_DRAFT_KEY = "nage-vc-exam-draft-v1";
 function vcToday() { return new Date().toISOString().slice(0, 10); }
 function renderVCPrompt() {
   const card = vcState.cards[vcState.index];
@@ -485,14 +486,17 @@ async function reviewVCCard(quality) {
   try { await api("/api/academics/vc/review", { method: "POST", body: JSON.stringify({ card_id: card.id, quality, reviewed_on: vcToday() }) }); vcState.index += 1; text(elements.vcSessionStatus, vcState.index < vcState.cards.length ? "Réponse enregistrée. Passe à la suivante." : "Session terminée. Ton bilan est à jour."); renderVCPrompt(); await refreshVCStatus(); } catch (error) { text(elements.vcSessionStatus, error.message); }
 }
 async function startVCExam() {
-  try { const data = await api("/api/academics/vc/exam", { method: "POST", body: JSON.stringify({ limit: Number(elements.vcExamLimit.value) }) }); vcExamState.exam = data.exam; vcExamState.startedAt = Date.now(); clearInterval(vcExamState.timer); vcExamState.timer = setInterval(updateVCExamTimer, 1000); updateVCExamTimer(); elements.vcExamQuestions.replaceChildren(); for (const question of data.exam.questions) { const label = document.createElement("label"); label.className = "vc-exam-question"; const prompt = document.createElement("span"); prompt.textContent = `${question.topic} · ${question.prompt}`; const input = document.createElement("input"); input.dataset.questionId = question.id; input.maxLength = 500; input.placeholder = "Ta réponse"; label.append(prompt, input); elements.vcExamQuestions.append(label); } elements.vcExamSubmit.disabled = false; elements.vcExamStart.disabled = true; text(elements.vcExamResult, "Réponds sans consulter le corrigé, puis corrige une seule fois."); } catch (error) { text(elements.vcExamResult, error.message); }
+  try { const data = await api("/api/academics/vc/exam", { method: "POST", body: JSON.stringify({ limit: Number(elements.vcExamLimit.value) }) }); mountVCExam(data.exam, Date.now()); text(elements.vcExamResult, "Réponds sans consulter le corrigé, puis corrige une seule fois."); } catch (error) { text(elements.vcExamResult, error.message); }
 }
+function mountVCExam(exam, startedAt, answers = {}) { vcExamState.exam = exam; vcExamState.startedAt = startedAt; clearInterval(vcExamState.timer); vcExamState.timer = setInterval(updateVCExamTimer, 1000); updateVCExamTimer(); elements.vcExamQuestions.replaceChildren(); for (const question of exam.questions) { const label = document.createElement("label"); label.className = "vc-exam-question"; const prompt = document.createElement("span"); prompt.textContent = `${question.topic} · ${question.prompt}`; const input = document.createElement("input"); input.dataset.questionId = question.id; input.maxLength = 500; input.placeholder = "Ta réponse"; input.value = answers[question.id] || ""; input.addEventListener("input", saveVCExamDraft); label.append(prompt, input); elements.vcExamQuestions.append(label); } elements.vcExamSubmit.disabled = false; elements.vcExamStart.disabled = true; }
+function saveVCExamDraft() { if (!vcExamState.exam) return; const answers = {}; elements.vcExamQuestions.querySelectorAll("input[data-question-id]").forEach((input) => { answers[input.dataset.questionId] = input.value; }); localStorage.setItem(VC_EXAM_DRAFT_KEY, JSON.stringify({ exam: vcExamState.exam, startedAt: vcExamState.startedAt, answers })); }
+function restoreVCExamDraft() { try { const draft = JSON.parse(localStorage.getItem(VC_EXAM_DRAFT_KEY) || "null"); if (!draft || !draft.exam || !Array.isArray(draft.exam.questions)) return; mountVCExam(draft.exam, Number(draft.startedAt) || Date.now(), draft.answers || {}); text(elements.vcExamResult, "Une tentative interrompue a été restaurée localement. Vérifie tes réponses avant de corriger."); } catch { localStorage.removeItem(VC_EXAM_DRAFT_KEY); } }
 function updateVCExamTimer() { if (!vcExamState.exam) return; const remaining = Math.max(0, vcExamState.exam.duration_minutes * 60 - Math.floor((Date.now() - vcExamState.startedAt) / 1000)); const minutes = Math.floor(remaining / 60); const seconds = String(remaining % 60).padStart(2, "0"); text(elements.vcExamTimer, `${minutes}:${seconds} restantes`); if (!remaining) { clearInterval(vcExamState.timer); elements.vcExamSubmit.disabled = false; text(elements.vcExamResult, "Temps écoulé : corrige maintenant pour enregistrer une copie honnête."); } }
 async function submitVCExam() {
   if (!vcExamState.exam) return;
   const answers = {}; elements.vcExamQuestions.querySelectorAll("input[data-question-id]").forEach((input) => { answers[input.dataset.questionId] = input.value; });
   const elapsed = Math.floor((Date.now() - vcExamState.startedAt) / 60000);
-  try { const data = await api("/api/academics/vc/exam/grade", { method: "POST", body: JSON.stringify({ exam_id: vcExamState.exam.id, limit: vcExamState.exam.questions.length, answers, elapsed_minutes: elapsed }) }); const result = data.result; clearInterval(vcExamState.timer); text(elements.vcExamResult, `Score : ${result.score}/${result.max_score} · ${result.answered} réponse(s) · ${result.timed_out ? "temps dépassé" : "temps respecté"}. Thèmes à revoir : ${result.weak_topics.length ? result.weak_topics.join(", ") : "aucun identifié"}.`); elements.vcExamSubmit.disabled = true; elements.vcExamStart.disabled = false; text(elements.vcExamTimer, "Corrigé enregistré localement"); } catch (error) { text(elements.vcExamResult, error.message); }
+  try { const data = await api("/api/academics/vc/exam/grade", { method: "POST", body: JSON.stringify({ exam_id: vcExamState.exam.id, limit: vcExamState.exam.questions.length, answers, elapsed_minutes: elapsed }) }); const result = data.result; clearInterval(vcExamState.timer); localStorage.removeItem(VC_EXAM_DRAFT_KEY); text(elements.vcExamResult, `Score : ${result.score}/${result.max_score} · ${result.answered} réponse(s) · ${result.timed_out ? "temps dépassé" : "temps respecté"}. Thèmes à revoir : ${result.weak_topics.length ? result.weak_topics.join(", ") : "aucun identifié"}.`); elements.vcExamSubmit.disabled = true; elements.vcExamStart.disabled = false; text(elements.vcExamTimer, "Corrigé enregistré localement"); } catch (error) { text(elements.vcExamResult, error.message); }
 }
 
 document.querySelectorAll(".nav-item[data-view-target]").forEach((button) => button.addEventListener("click", () => activateView(button.dataset.viewTarget)));
@@ -530,6 +534,7 @@ window.addEventListener("hashchange", () => {
 });
 
 Promise.all([refreshFiles(), refreshOutputs(), loadOverview(), loadIntelligence(), refreshMemory(false), refreshVCStatus()]).then(() => {
+  restoreVCExamDraft();
   const requested = requestedHashView();
   if (requested && requested !== "assistantView") activateView(requested, false);
 });
