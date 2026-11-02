@@ -1,8 +1,10 @@
 # Preuve — MVP révision Venture Capital
 
-Date de recette : 2 novembre 2026  
-Branche de livraison : `agent/n100-carrier-20261101`  
-Commit de code : à compléter après commit
+Date de recette : 2 novembre 2026
+
+Branche de livraison : `agent/n100-carrier-20261101`
+
+Commit de code : `41084f458c8de66fe2983aeac121e489a8f63910`
 
 ## Périmètre prouvé
 
