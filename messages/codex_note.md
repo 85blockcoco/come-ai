@@ -217,3 +217,8 @@
 - **Livré** : indicateur local de préparation basé sur les 3 dernières tentatives, moyenne récente et radar des thèmes fragiles.
 - **Interprétation** : « tendance insuffisante » avant 3 examens; « à consolider » si le seuil n’est pas atteint; signal favorable seulement à partir de 80 % sans thème fragile, avec mention explicite que ce n’est pas une garantie de réussite.
 - **Preuve** : `11 passed in 9.46s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+# Livraison VC-119 — sessions ciblées par thème (2026-11-02)
+
+- **Livré** : filtre de session VC par thème, utilisable depuis l’interface; la recommandation peut maintenant être transformée en action sans mélanger les cartes d’autres domaines.
+- **Contrat** : champ `topic` optionnel, comparé de façon insensible à la casse; sans thème, comportement historique inchangé.
+- **Preuve** : `11 passed in 14.89s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.

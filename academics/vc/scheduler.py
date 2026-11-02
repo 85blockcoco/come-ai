@@ -25,12 +25,14 @@ def grade_card(card_id: str, quality: int, reviewed_on: str, previous: dict | No
     return Review(card_id, quality, current.isoformat(), (current + timedelta(days=interval)).isoformat(), interval, repetitions)
 
 
-def start_session(store: VCStore, *, today: str | None = None, limit: int = 10, seed: int = 0) -> tuple[str, list[Card]]:
+def start_session(store: VCStore, *, today: str | None = None, limit: int = 10, seed: int = 0, topic: str | None = None) -> tuple[str, list[Card]]:
     if isinstance(limit, bool) or not 1 <= limit <= 100:
         raise ValueError("Une session VC doit contenir de 1 à 100 cartes.")
     current = _today(today).isoformat()
     reviews = store.load_reviews()
     cards = [card for card in store.load_cards() if card.approved]
+    if topic:
+        cards = [card for card in cards if card.topic.casefold() == topic.strip().casefold()]
     due = [card for card in cards if card.id not in reviews or str(reviews[card.id].get("due_on", "")) <= current]
     # Stable ordering with an optional deterministic rotation for equal workloads.
     due.sort(key=lambda card: (card.topic.casefold(), card.id))

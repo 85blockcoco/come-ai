@@ -37,3 +37,10 @@ def test_high_quality_card_is_not_due_immediately(tmp_path):
     submit_review(store, cards[0], 5, reviewed_on="2026-11-02")
     _, due = start_session(store, today="2026-11-03", limit=10)
     assert cards[0].id not in {card.id for card in due}
+
+
+def test_session_can_focus_one_topic(tmp_path):
+    store = VCStore(tmp_path)
+    store.save_cards([Card("a", "valuation", "q", "a"), Card("b", "returns", "q", "a")])
+    _, cards = start_session(store, today="2026-11-02", topic="valuation")
+    assert [card.id for card in cards] == ["a"]
