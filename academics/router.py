@@ -65,6 +65,7 @@ class VCSessionPayload(BaseModel):
     limit: int = Field(default=10, ge=1, le=100)
     seed: int = Field(default=0, ge=0, le=1_000_000)
     topic: str | None = Field(default=None, max_length=80)
+    weak_only: bool = False
 
 
 class VCReviewPayload(BaseModel):
@@ -246,7 +247,7 @@ def create_academics_router() -> APIRouter:
     @router.post("/api/academics/vc/session")
     def vc_session(payload: VCSessionPayload) -> dict[str, Any]:
         try:
-            session_id, cards = start_session(VCStore(), today=payload.today, limit=payload.limit, seed=payload.seed, topic=payload.topic)
+            session_id, cards = start_session(VCStore(), today=payload.today, limit=payload.limit, seed=payload.seed, topic=payload.topic, weak_only=payload.weak_only)
             # Never send the answer in the session response.
             public_cards = [{"id": card.id, "topic": card.topic, "front": card.front, "source": card.source} for card in cards]
             return {"session_id": session_id, "cards": public_cards, "warnings": [], "blockers": []}

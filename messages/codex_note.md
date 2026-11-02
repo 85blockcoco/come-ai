@@ -263,3 +263,8 @@
 - **Livré** : bouton « Révision express · 3 cartes » pour une micro-session prioritaire, en complément du format court de 5 cartes.
 - **UX** : le format est préparé automatiquement puis l’utilisateur lance explicitement la session.
 - **Preuve** : `7 passed in 7.62s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+# Livraison VC-128 — mode erreurs uniquement (2026-11-02)
+
+- **Livré** : filtre de session « Erreurs uniquement » pour revoir les cartes notées 0, 1 ou 2, combinable avec le thème et les cartes dues.
+- **Contrat** : filtrage local strict sur la dernière qualité enregistrée; sans filtre, comportement inchangé.
+- **Preuve** : `12 passed in 7.58s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.

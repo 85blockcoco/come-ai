@@ -44,3 +44,11 @@ def test_session_can_focus_one_topic(tmp_path):
     store.save_cards([Card("a", "valuation", "q", "a"), Card("b", "returns", "q", "a")])
     _, cards = start_session(store, today="2026-11-02", topic="valuation")
     assert [card.id for card in cards] == ["a"]
+
+
+def test_session_can_focus_weak_cards(tmp_path):
+    store = _store(tmp_path)
+    _, cards = start_session(store, today="2026-11-02", limit=1)
+    submit_review(store, cards[0], 2, reviewed_on="2026-11-02")
+    _, weak = start_session(store, today="2026-11-03", weak_only=True)
+    assert weak and weak[0].id == cards[0].id
