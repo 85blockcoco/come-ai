@@ -32,6 +32,7 @@ const elements = {
   vcExamLimit: $("vcExamLimit"), vcExamStart: $("vcExamStart"), vcExamSubmit: $("vcExamSubmit"), vcExamQuestions: $("vcExamQuestions"), vcExamTimer: $("vcExamTimer"), vcExamResult: $("vcExamResult"),
   vcExamHistory: $("vcExamHistory"), vcExamHistoryEmpty: $("vcExamHistoryEmpty"),
   vcSessionHistory: $("vcSessionHistory"), vcSessionHistoryEmpty: $("vcSessionHistoryEmpty"),
+  vcCadence: $("vcCadence"),
   vcProgress: $("vcProgress"), vcProgressEmpty: $("vcProgressEmpty"), vcReadiness: $("vcReadiness"), vcQuickFocus: $("vcQuickFocus"),
 };
 
@@ -466,6 +467,9 @@ function renderVCSessionHistory(sessions) {
     const detail = document.createElement("span"); detail.textContent = `${session.mastered || 0} maîtrisée(s) · ${session.to_review || 0} à revoir`;
     row.append(title, detail); elements.vcSessionHistory.append(row);
   }
+  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const recent = (sessions || []).filter((session) => session.completed_on && Date.parse(session.completed_on) >= cutoff).length;
+  text(elements.vcCadence, recent ? `Cadence récente : ${recent} session(s) sur 7 jours. Vise une session courte régulière, sans sacrifier la qualité des réponses.` : "Cadence : aucune session récente. Commence par une session courte aujourd’hui.");
 }
 function renderVCReadiness(exams, radar) {
   const rows = Array.isArray(exams) ? exams.slice(-3) : [];

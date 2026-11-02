@@ -289,6 +289,7 @@ def create_academics_router() -> APIRouter:
     def vc_session_summary(payload: VCSessionSummaryPayload) -> dict[str, Any]:
         try:
             summary = asdict(summarize_session(VCStore(), payload.card_ids, today=payload.today, session_id=payload.session_id))
+            summary["completed_on"] = payload.today
             VCStore().save_session(summary)
             return {"summary": summary, "warnings": [], "blockers": []}
         except (TypeError, ValueError) as error:

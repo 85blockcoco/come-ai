@@ -243,3 +243,8 @@
 - **Livré** : affichage séparé des 10 dernières sessions de rappel, avec réponses, cartes maîtrisées et cartes à revoir.
 - **Statut** : le compteur VC distingue maintenant cartes, réponses, sessions et examens.
 - **Preuve** : `7 passed in 6.00s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+# Livraison VC-124 — cadence quotidienne explicable (2026-11-02)
+
+- **Livré** : date de fin enregistrée pour chaque session et recommandation de cadence sur les 7 derniers jours.
+- **UX** : message neutre lorsqu’aucune session récente n’existe; suggestion d’une session courte, sans objectif artificiel ni pression de score.
+- **Preuve** : `11 passed in 7.69s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
