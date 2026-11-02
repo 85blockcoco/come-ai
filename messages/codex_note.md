@@ -258,3 +258,8 @@
 - **Livré** : bouton « Session courte · 5 cartes » qui configure le format, ouvre la zone de session et laisse la validation finale à l’utilisateur.
 - **UX** : parcours rapide pour les journées chargées, sans contourner le filtre des cartes dues ni la notation manuelle.
 - **Preuve** : `7 passed in 8.68s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+# Livraison VC-127 — révision express (2026-11-02)
+
+- **Livré** : bouton « Révision express · 3 cartes » pour une micro-session prioritaire, en complément du format court de 5 cartes.
+- **UX** : le format est préparé automatiquement puis l’utilisateur lance explicitement la session.
+- **Preuve** : `7 passed in 7.62s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
