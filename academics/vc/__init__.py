@@ -24,6 +24,13 @@ from .models import (
     StudyPlan,
 )
 from .exams import build_exam, grade_exam, oral_questions, record_exam_result
+from .notes import (
+    approve_proposal,
+    ingest_file,
+    ingest_notes,
+    list_notes,
+    reject_proposal,
+)
 from .storage import VcStore, default_vc_home
 
 __all__ = [
@@ -47,9 +54,14 @@ __all__ = [
     "ReviewSession",
     "StudyPlan",
     "VcStore",
+    "approve_proposal",
     "build_exam",
     "default_vc_home",
     "grade_exam",
+    "ingest_file",
+    "ingest_notes",
+    "list_notes",
     "oral_questions",
     "record_exam_result",
+    "reject_proposal",
 ]

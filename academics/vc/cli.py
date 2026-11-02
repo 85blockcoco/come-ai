@@ -125,6 +125,27 @@ def build_vc_parser(parser) -> None:
     oral.add_argument("--count", type=int, default=5)
     _add_common(oral)
 
+    notes = sub.add_parser("notes", help="Importer et approuver des notes de cours")
+    notes_sub = notes.add_subparsers(dest="notes_action", required=True)
+    notes_ingest = notes_sub.add_parser("ingest", help="Proposer des cartes citées")
+    notes_ingest.add_argument("file", type=Path)
+    notes_ingest.add_argument("--topic", required=True)
+    notes_ingest.add_argument(
+        "--replace", action="store_true", help="Remplacer une source modifiée"
+    )
+    _add_common(notes_ingest)
+    notes_list = notes_sub.add_parser("list", help="Lister sources et propositions")
+    _add_common(notes_list)
+    notes_approve = notes_sub.add_parser("approve", help="Ajouter une carte au deck")
+    notes_approve.add_argument("proposal_id")
+    notes_approve.add_argument(
+        "--answer", default=None, help="Compléter une proposition « à compléter »"
+    )
+    _add_common(notes_approve)
+    notes_reject = notes_sub.add_parser("reject", help="Rejeter une proposition")
+    notes_reject.add_argument("proposal_id")
+    _add_common(notes_reject)
+
     radar = sub.add_parser("radar", help="Radar de maîtrise")
     radar.add_argument("--today", default=None)
     _add_common(radar)
@@ -351,6 +372,38 @@ def _oral(args, store: VcStore, content) -> int:
     return 0
 
 
+def _notes(args, store: VcStore, content) -> int:
+    from .notes import (
+        approve_proposal,
+        ingest_file,
+        list_notes,
+        reject_proposal,
+    )
+
+    if args.notes_action == "ingest":
+        try:
+            content.topic(args.topic)
+        except ContentError as error:
+            raise InputError(f"Topic inconnu : {args.topic}") from error
+        result = ingest_file(
+            store, args.file, topic_id=args.topic, replace=args.replace
+        )
+        _emit(result, args.json)
+        return 0
+    if args.notes_action == "list":
+        _emit(list_notes(store), args.json)
+        return 0
+    if args.notes_action == "approve":
+        card = approve_proposal(store, args.proposal_id, answer=args.answer)
+        _emit({"approved": True, "card": card.to_dict()}, args.json)
+        return 0
+    if args.notes_action == "reject":
+        reject_proposal(store, args.proposal_id)
+        _emit({"rejected": True, "proposal_id": args.proposal_id}, args.json)
+        return 0
+    raise InputError("Action de notes inconnue.")
+
+
 def _radar(args, store: VcStore, content) -> int:
     from .dates import now_iso, today_iso
 
@@ -433,7 +486,7 @@ def _term_sheet(args, store: VcStore, content) -> int:
 def run_vc(args) -> int:
     try:
         store = _store(args)
-        content = load_content()
+        content = load_content().with_cards(store.load_deck())
         if args.vc_action == "review":
             return _review(args, store, content)
         if args.vc_action == "drill":
@@ -444,6 +497,8 @@ def run_vc(args) -> int:
             return _exam(args, store, content)
         if args.vc_action == "oral":
             return _oral(args, store, content)
+        if args.vc_action == "notes":
+            return _notes(args, store, content)
         if args.vc_action == "radar":
             return _radar(args, store, content)
         if args.vc_action == "plan":

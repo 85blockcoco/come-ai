@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 from .cases import normalize_text
 from .drills import parse_number
@@ -70,6 +70,25 @@ class ContentPack:
             return self.exam_by_id[question_id]
         except KeyError as error:
             raise ContentError(f"Question d'examen inconnue : {question_id}") from error
+
+    def with_cards(self, cards: Iterable[Flashcard]) -> "ContentPack":
+        """Return a copy that also exposes approved note cards.
+
+        Original cards win on an identifier collision and only active cards are
+        merged, so a rejected or incomplete proposal can never enter a session.
+        """
+        merged = list(self.cards)
+        known = {card.id for card in merged}
+        for card in cards:
+            if card.status != "active" or card.id in known:
+                continue
+            merged.append(card)
+            known.add(card.id)
+        return replace(
+            self,
+            cards=tuple(merged),
+            card_by_id={card.id: card for card in merged},
+        )
 
 
 def _read_json(path: Path) -> dict[str, Any]:

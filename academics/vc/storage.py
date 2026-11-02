@@ -14,7 +14,14 @@ from pathlib import Path
 from typing import Any
 
 from .errors import InputError, StorageError
-from .models import CardProgress, CaseAttempt, ExamSession, ReviewEvent, ReviewSession
+from .models import (
+    CardProgress,
+    CaseAttempt,
+    ExamSession,
+    Flashcard,
+    ReviewEvent,
+    ReviewSession,
+)
 
 SCHEMA_VERSION = 1
 CONFIRMATION_PHRASE = "SUPPRIMER MES DONNEES VC"
@@ -101,6 +108,23 @@ class VcStore:
                 pass
             raise StorageError(f"Écriture locale impossible : {path.name}") from error
 
+    def _write_text(self, path: Path, text: str) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        temporary = path.with_name(f"{path.name}.tmp")
+        try:
+            with temporary.open("w", encoding="utf-8") as handle:
+                handle.write(text)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, path)
+            os.chmod(path, 0o600)
+        except OSError as error:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise StorageError(f"Écriture locale impossible : {path.name}") from error
+
     # -------------------------------------------------------------- progress
     def load_progress(self) -> dict[str, CardProgress]:
         payload = self._read_json(self.path("progress.json"), {})
@@ -173,6 +197,67 @@ class VcStore:
 
     def load_exam_history(self) -> list[dict[str, Any]]:
         return self._read_jsonl(self.path("exams", "history.jsonl"))
+
+    # ------------------------------------------------------------------ notes
+    def load_note_index(self) -> dict[str, Any]:
+        payload = self._read_json(self.path("notes", "index.json"), {})
+        if not isinstance(payload, dict):
+            payload = {}
+        sources = payload.get("sources")
+        proposals = payload.get("proposals")
+        rejected = payload.get("rejected_signatures")
+        return {
+            "schema_version": SCHEMA_VERSION,
+            "sources": sources if isinstance(sources, dict) else {},
+            "proposals": proposals if isinstance(proposals, dict) else {},
+            "rejected_signatures": [
+                str(item) for item in rejected if isinstance(item, str)
+            ]
+            if isinstance(rejected, list)
+            else [],
+        }
+
+    def save_note_index(self, index: dict[str, Any]) -> None:
+        self._write_json(self.path("notes", "index.json"), index)
+
+    def load_note_text(self, source_id: str) -> str | None:
+        path = self.path("notes", f"{source_id}.txt")
+        if not path.exists():
+            return None
+        try:
+            return path.read_text(encoding="utf-8")
+        except OSError as error:
+            raise StorageError("Lecture des notes locales impossible.") from error
+
+    def save_note_text(self, source_id: str, text: str) -> None:
+        self._write_text(self.path("notes", f"{source_id}.txt"), text)
+
+    def remove_note_text(self, source_id: str) -> None:
+        try:
+            self.path("notes", f"{source_id}.txt").unlink(missing_ok=True)
+        except OSError as error:
+            raise StorageError("Suppression de la copie locale impossible.") from error
+
+    # ------------------------------------------------------------------- deck
+    def load_deck(self) -> list[Flashcard]:
+        payload = self._read_json(self.path("deck.json"), {})
+        raw = payload.get("cards", []) if isinstance(payload, dict) else []
+        cards: list[Flashcard] = []
+        for item in raw if isinstance(raw, list) else []:
+            if not isinstance(item, dict):
+                continue
+            try:
+                cards.append(Flashcard.from_dict(item))
+            except (TypeError, ValueError):
+                self.warnings.append("Carte importée illisible ignorée.")
+        return sorted(cards, key=lambda card: card.id)
+
+    def save_deck(self, cards: list[Flashcard]) -> None:
+        payload = {
+            "schema_version": SCHEMA_VERSION,
+            "cards": [card.to_dict() for card in sorted(cards, key=lambda item: item.id)],
+        }
+        self._write_json(self.path("deck.json"), payload)
 
     # ------------------------------------------------------------ case attempts
     def append_case_attempt(self, attempt: CaseAttempt) -> None:

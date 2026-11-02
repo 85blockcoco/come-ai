@@ -732,3 +732,338 @@ def test_exam_and_oral_errors_exit_two(tmp_path: Path, capsys) -> None:
     )
     assert code == 2
     assert "Topic inconnu" in err
+
+
+NOTES_FIXTURES = Path(__file__).parent / "fixtures" / "vc_notes"
+
+
+def test_notes_ingest_list_approve_and_reject(tmp_path: Path, capsys) -> None:
+    home = str(tmp_path / "vc")
+    fixture = NOTES_FIXTURES / "definitions.md"
+
+    code, out, _ = invoke(
+        capsys,
+        "vc",
+        "notes",
+        "ingest",
+        str(fixture),
+        "--topic",
+        "VC04",
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 0
+    ingested = json.loads(out)
+    assert ingested["created"] >= 4
+    assert ingested["source"]["kind"] == "md"
+    assert all(item["citation"]["quote"] for item in ingested["proposals"])
+
+    code, out, _ = invoke(capsys, "vc", "notes", "list", "--json", "--home", home)
+    assert code == 0
+    listed = json.loads(out)
+    assert listed["counts"]["proposed"] >= 4
+    assert listed["sources"][0]["filename"] == "definitions.md"
+
+    proposed = [
+        item for item in ingested["proposals"] if item["status"] == "proposed"
+    ]
+    code, out, _ = invoke(
+        capsys,
+        "vc",
+        "notes",
+        "approve",
+        proposed[0]["proposal_id"],
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 0
+    approved = json.loads(out)
+    assert approved["approved"] is True
+    assert approved["card"]["source_type"] == "user_note"
+    assert approved["card"]["status"] == "active"
+    assert approved["card"]["citation"] == proposed[0]["citation"]
+    assert (Path(home) / "deck.json").exists()
+
+    code, out, _ = invoke(
+        capsys,
+        "vc",
+        "notes",
+        "reject",
+        proposed[1]["proposal_id"],
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 0
+    assert json.loads(out)["rejected"] is True
+
+    code, out, _ = invoke(
+        capsys,
+        "vc",
+        "notes",
+        "ingest",
+        str(fixture),
+        "--topic",
+        "VC04",
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 0
+    again = json.loads(out)
+    assert again["created"] == 0
+    assert again["rejected_skipped"] >= 1
+
+
+def test_notes_a_completer_requires_an_explicit_answer(tmp_path: Path, capsys) -> None:
+    home = str(tmp_path / "vc")
+    fixture = NOTES_FIXTURES / "questions.txt"
+    code, out, _ = invoke(
+        capsys,
+        "vc",
+        "notes",
+        "ingest",
+        str(fixture),
+        "--topic",
+        "VC07",
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 0
+    proposals = json.loads(out)["proposals"]
+    missing = next(item for item in proposals if item["status"] == "a_completer")
+    assert missing["answer"] is None
+
+    code, _, err = invoke(
+        capsys,
+        "vc",
+        "notes",
+        "approve",
+        missing["proposal_id"],
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 2
+    assert "à compléter" in err
+
+    code, out, _ = invoke(
+        capsys,
+        "vc",
+        "notes",
+        "approve",
+        missing["proposal_id"],
+        "--answer",
+        "Une préférence qui participe au résidu après remboursement.",
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 0
+    card = json.loads(out)["card"]
+    assert card["answer"].startswith("Une préférence")
+    assert card["status"] == "active"
+
+
+def test_notes_changed_source_requires_replace(tmp_path: Path, capsys) -> None:
+    home = str(tmp_path / "vc")
+    path = tmp_path / "cours.md"
+    path.write_text(
+        "Post-money : définition initiale du post-money après le cash.\n",
+        encoding="utf-8",
+    )
+    code, _, _ = invoke(
+        capsys,
+        "vc",
+        "notes",
+        "ingest",
+        str(path),
+        "--topic",
+        "VC04",
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 0
+
+    path.write_text(
+        "Pre-money : définition remplacée du pre-money avant le cash.\n",
+        encoding="utf-8",
+    )
+    code, _, err = invoke(
+        capsys,
+        "vc",
+        "notes",
+        "ingest",
+        str(path),
+        "--topic",
+        "VC04",
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 2
+    assert "changé" in err
+
+    code, out, _ = invoke(
+        capsys,
+        "vc",
+        "notes",
+        "ingest",
+        str(path),
+        "--topic",
+        "VC04",
+        "--replace",
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 0
+    replaced = json.loads(out)
+    assert replaced["source"]["kind"] == "md"
+    assert replaced["created"] == 1
+
+
+def test_notes_errors_exit_two_and_do_not_echo_note_text(
+    tmp_path: Path, capsys
+) -> None:
+    home = str(tmp_path / "vc")
+    missing = tmp_path / "missing.md"
+    code, _, err = invoke(
+        capsys,
+        "vc",
+        "notes",
+        "ingest",
+        str(missing),
+        "--topic",
+        "VC04",
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 2
+    assert "introuvable" in err
+
+    fixture = NOTES_FIXTURES / "definitions.md"
+    code, _, err = invoke(
+        capsys,
+        "vc",
+        "notes",
+        "ingest",
+        str(fixture),
+        "--topic",
+        "VC99",
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 2
+    assert "Topic inconnu" in err
+
+    code, _, err = invoke(
+        capsys,
+        "vc",
+        "notes",
+        "approve",
+        "prop-inconnu",
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 2
+    assert "introuvable" in err
+
+    code, out, _ = invoke(
+        capsys,
+        "vc",
+        "notes",
+        "ingest",
+        str(fixture),
+        "--topic",
+        "VC04",
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 0
+    proposal = next(
+        item for item in json.loads(out)["proposals"] if item["status"] == "proposed"
+    )
+    code, _, _ = invoke(
+        capsys,
+        "vc",
+        "notes",
+        "approve",
+        proposal["proposal_id"],
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 0
+    code, _, err = invoke(
+        capsys,
+        "vc",
+        "notes",
+        "reject",
+        proposal["proposal_id"],
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 2
+    assert "déjà approuvée" in err
+
+
+def test_approved_note_card_is_available_to_review(tmp_path: Path, capsys) -> None:
+    from academics.vc.content import load_content
+
+    home = str(tmp_path / "vc")
+    fixture = NOTES_FIXTURES / "definitions.md"
+    code, out, _ = invoke(
+        capsys,
+        "vc",
+        "notes",
+        "ingest",
+        str(fixture),
+        "--topic",
+        "VC04",
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 0
+    proposal = next(
+        item for item in json.loads(out)["proposals"] if item["status"] == "proposed"
+    )
+    code, _, _ = invoke(
+        capsys,
+        "vc",
+        "notes",
+        "approve",
+        proposal["proposal_id"],
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 0
+
+    code, out, _ = invoke(
+        capsys,
+        "vc",
+        "review",
+        "--minutes",
+        "60",
+        "--mode",
+        "custom",
+        "--today",
+        "2026-11-02",
+        "--json",
+        "--home",
+        home,
+    )
+    assert code == 0
+    session = json.loads(out)
+    assert session["total"] == len(load_content().cards) + 1

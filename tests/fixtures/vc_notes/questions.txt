@@ -1,0 +1,7 @@
+Q: Qu'est-ce qu'un SAFE ?
+R: Un contrat convertible qui donne droit à des actions lors d'un prochain tour.
+
+Q: Que mesure le MOIC ?
+R: Le multiple brut reçu sur le capital investi.
+
+Q: Que signifie une préférence participating ?

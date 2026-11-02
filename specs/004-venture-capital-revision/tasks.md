@@ -258,30 +258,30 @@ Deliver an honest per-topic radar and a plan that never exceeds the learner's av
 
 Turn local course notes into cited proposals that require explicit approval.
 
-- [ ] T182 [P] [US6] Test `.txt` and `.md` ingestion with `Term : definition` patterns in `tests/test_vc_notes.py`.
-- [ ] T183 [P] [US6] Test `**Term** : definition` and `Term — definition` patterns in `tests/test_vc_notes.py`.
-- [ ] T184 [P] [US6] Test `Q:` / `R:` pairs in `tests/test_vc_notes.py`.
-- [ ] T185 [P] [US6] Test bullet-list cloze candidates and `a_completer` when the heading is missing in `tests/test_vc_notes.py`.
-- [ ] T186 [P] [US6] Test that every proposal carries a source id, locator and exact quote in `tests/test_vc_notes.py`.
-- [ ] T187 [P] [US6] Test that no proposal is active before approval in `tests/test_vc_notes.py`.
-- [ ] T188 [P] [US6] Test approval moves a proposal to `deck.json` with `source_type: user_note` in `tests/test_vc_notes.py`.
-- [ ] T189 [P] [US6] Test rejection records the proposal and prevents automatic reintroduction in `tests/test_vc_notes.py`.
-- [ ] T190 [P] [US6] Test duplicate proposals from the same source are deduplicated in `tests/test_vc_notes.py`.
-- [ ] T191 [P] [US6] Test a changed source file is flagged, not silently re-ingested in `tests/test_vc_notes.py`.
-- [ ] T192 [P] [US6] Test a scanned PDF without text returns a readable error in `tests/test_vc_notes.py`.
-- [ ] T193 [US6] Implement text and Markdown ingestion in `academics/vc/notes.py`.
-- [ ] T194 [US6] Implement text-based PDF extraction with `pypdf` in `academics/vc/notes.py`.
-- [ ] T195 [US6] Implement definition, Q/R and bullet extraction patterns in `academics/vc/notes.py`.
-- [ ] T196 [US6] Implement citation locators (line number and offset) in `academics/vc/notes.py`.
-- [ ] T197 [US6] Implement the `proposed`/`approved`/`rejected`/`a_completer` state machine in `academics/vc/notes.py`.
-- [ ] T198 [US6] Store note sources under `~/.nage/vc/notes/` with a content hash in `academics/vc/storage.py`.
-- [ ] T199 [US6] Add `vc notes ingest`, `list`, `approve` and `reject` in `academics/vc/cli.py`.
-- [ ] T200 [US6] Add a 2 MB size limit and a readable error in `academics/vc/notes.py`.
-- [ ] T201 [US6] Add a test that no note content is written to the repository in `tests/test_vc_notes.py`.
-- [ ] T202 [P] [US6] Add CLI tests for ingest, approve and reject in `tests/test_vc_cli.py`.
-- [ ] T203 [US6] Add three synthetic note fixtures in `tests/fixtures/vc_notes/`.
-- [ ] T204 [US6] Add a privacy test that logs contain no note text in `tests/test_vc_notes.py`.
-- [ ] T205 [US6] Document the notes workflow and the citation review in `docs/VC_REVISION_GUIDE.md`.
+- [x] T182 [P] [US6] Test `.txt` and `.md` ingestion with `Term : definition` patterns in `tests/test_vc_notes.py`.
+- [x] T183 [P] [US6] Test `**Term** : definition` and `Term — definition` patterns in `tests/test_vc_notes.py`.
+- [x] T184 [P] [US6] Test `Q:` / `R:` pairs in `tests/test_vc_notes.py`.
+- [x] T185 [P] [US6] Test bullet-list cloze candidates and `a_completer` when the heading is missing in `tests/test_vc_notes.py`.
+- [x] T186 [P] [US6] Test that every proposal carries a source id, locator and exact quote in `tests/test_vc_notes.py`.
+- [x] T187 [P] [US6] Test that no proposal is active before approval in `tests/test_vc_notes.py`.
+- [x] T188 [P] [US6] Test approval moves a proposal to `deck.json` with `source_type: user_note` in `tests/test_vc_notes.py`.
+- [x] T189 [P] [US6] Test rejection records the proposal and prevents automatic reintroduction in `tests/test_vc_notes.py`.
+- [x] T190 [P] [US6] Test duplicate proposals from the same source are deduplicated in `tests/test_vc_notes.py`.
+- [x] T191 [P] [US6] Test a changed source file is flagged, not silently re-ingested in `tests/test_vc_notes.py`.
+- [x] T192 [P] [US6] Test a scanned PDF without text returns a readable error in `tests/test_vc_notes.py`.
+- [x] T193 [US6] Implement text and Markdown ingestion in `academics/vc/notes.py`.
+- [x] T194 [US6] Implement text-based PDF extraction with `pypdf` in `academics/vc/notes.py`.
+- [x] T195 [US6] Implement definition, Q/R and bullet extraction patterns in `academics/vc/notes.py`.
+- [x] T196 [US6] Implement citation locators (line number and offset) in `academics/vc/notes.py`.
+- [x] T197 [US6] Implement the `proposed`/`approved`/`rejected`/`a_completer` state machine in `academics/vc/notes.py`.
+- [x] T198 [US6] Store note sources under `~/.nage/vc/notes/` with a content hash in `academics/vc/storage.py`.
+- [x] T199 [US6] Add `vc notes ingest`, `list`, `approve` and `reject` in `academics/vc/cli.py`.
+- [x] T200 [US6] Add a 2 MB size limit and a readable error in `academics/vc/notes.py`.
+- [x] T201 [US6] Add a test that no note content is written to the repository in `tests/test_vc_notes.py`.
+- [x] T202 [P] [US6] Add CLI tests for ingest, approve and reject in `tests/test_vc_cli.py`.
+- [x] T203 [US6] Add three synthetic note fixtures in `tests/fixtures/vc_notes/`.
+- [x] T204 [US6] Add a privacy test that logs contain no note text in `tests/test_vc_notes.py`.
+- [x] T205 [US6] Document the notes workflow and the citation review in `docs/VC_REVISION_GUIDE.md`.
 
 ---
 

@@ -155,3 +155,39 @@ def test_exam_active_roundtrip_and_history(tmp_path: Path) -> None:
     assert store.load_exam_history() == [{"exam_id": "exam-1", "score": 0.5}]
     store.clear_active_exam()
     assert store.load_active_exam() is None
+
+
+def test_note_index_text_and_deck_roundtrip(tmp_path: Path) -> None:
+    from academics.vc.models import Flashcard
+
+    store = VcStore(tmp_path / "vc")
+    index = {
+        "schema_version": 1,
+        "sources": {"src-1": {"source_id": "src-1", "filename": "cours.md"}},
+        "proposals": {"prop-1": {"proposal_id": "prop-1"}},
+        "rejected_signatures": ["sig-1"],
+    }
+    store.save_note_index(index)
+    loaded = store.load_note_index()
+    assert loaded["sources"] == index["sources"]
+    assert loaded["proposals"] == index["proposals"]
+    assert loaded["rejected_signatures"] == ["sig-1"]
+
+    store.save_note_text("src-1", "Post-money : définition locale.\n")
+    assert store.load_note_text("src-1") == "Post-money : définition locale.\n"
+    assert (store.path("notes", "src-1.txt").stat().st_mode & 0o777) == 0o600
+
+    card = Flashcard(
+        id="vcnote-1",
+        topic_id="VC04",
+        question="Que signifie « post-money » ?",
+        answer="La valorisation après le cash.",
+        source_type="user_note",
+        citation={"source_id": "src-1", "locator": "ligne 1", "quote": "Post-money"},
+        status="active",
+    )
+    store.save_deck([card])
+    assert store.load_deck() == [card]
+
+    store.remove_note_text("src-1")
+    assert store.load_note_text("src-1") is None

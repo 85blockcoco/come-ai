@@ -121,7 +121,92 @@ Checklist de relecture d'un cas avant de l'ajouter au contenu :
 - la réponse modèle est originale et ne révèle rien avant la soumission ;
 - aucune donnée personnelle ou entreprise réelle identifiable n'est présente.
 
-## 6. Examen blanc et oral
+## 6. Notes de cours et citations
+
+```bash
+.venv/bin/python nage.py vc notes ingest cours_vc.md --topic VC04
+.venv/bin/python nage.py vc notes list
+.venv/bin/python nage.py vc notes approve <proposal_id>
+.venv/bin/python nage.py vc notes approve <proposal_id> --answer "Réponse rédigée"
+.venv/bin/python nage.py vc notes reject <proposal_id>
+```
+
+### Formats acceptés
+
+- `.txt` et `.md`/`.markdown` en UTF-8 ;
+- `.pdf` contenant du texte extractible via `pypdf` ;
+- limite de **2 Mo** par fichier. Les erreurs sont lisibles et ne recopient jamais le
+  contenu des notes.
+
+Un PDF scanné sans couche texte est refusé avec un message explicite : il faut fournir une
+version texte ou passer le document par un OCR avant l'import.
+
+### Motifs extraits
+
+L'import ne devine rien : une proposition n'est créée que si la réponse figure déjà dans la
+note. Les motifs reconnus sont :
+
+```text
+Post-money : valorisation après l'entrée du cash.
+**Pre-money** : valorisation avant l'entrée du cash.
+Liquidation preference — montant récupéré avant les fondateurs.
+Q: Qu'est-ce qu'un SAFE ?
+R: Un contrat convertible qui donne droit à des actions.
+- L'investisseur récupère sa **liquidation preference** avant les fondateurs.
+```
+
+Les puces utilisent le titre de section pour transformer le terme en clé à compléter. Sans
+titre de section identifiable, la proposition est marquée `a_completer` et ne peut pas être
+approuvée sans réponse explicite.
+
+### Citations et approbation
+
+Chaque proposition porte une citation exacte :
+
+```json
+{
+  "source_id": "sha256 de la source",
+  "locator": "ligne 12 ou p. 3, lignes 4-5",
+  "quote": "texte exact de la note"
+}
+```
+
+- Rien n'est actif avant `vc notes approve` : le deck reste vide et la carte n'apparaît pas
+  dans `vc review`.
+- Une proposition `a_completer` exige `--answer` ; sans réponse, la commande renvoie le
+  code 2.
+- `vc notes reject` mémorise une signature persistante : la même question n'est plus
+  reproposée lors d'un import ultérieur.
+- Les doublons sont comptés et ignorés, y compris les doublons internes à un même fichier.
+- Un import approuvé ajoute une carte `source_type: user_note` à `deck.json` ; elle est
+  fusionnée dans les sessions de rappel sans modifier le contenu livré.
+- Un export de progression ne contient jamais le texte brut des notes, seulement les cartes
+  approuvées et leurs citations.
+
+### Source modifiée
+
+Le hash SHA-256 de la source est conservé. Si le même nom de fichier est réimporté avec un
+contenu différent, l'import est refusé pour éviter un mélange silencieux :
+
+```bash
+.venv/bin/python nage.py vc notes ingest cours_vc.md --topic VC04 --replace
+```
+
+`--replace` marque l'ancienne source `superseded`, supprime sa copie locale et ses
+propositions encore en attente, puis réimporte le nouveau contenu.
+
+### Stockage local
+
+```text
+~/.nage/vc/notes/index.json          sources, propositions, rejets
+~/.nage/vc/notes/<source_id>.txt     copie locale privée de la note
+~/.nage/vc/deck.json                 cartes approuvées
+```
+
+Les fichiers sont créés en `600` et les dossiers en `700`. Le texte des notes reste hors du
+dépôt Git et n'est jamais inclus dans un message d'erreur.
+
+## 7. Examen blanc et oral
 
 ```bash
 .venv/bin/python nage.py vc exam start --questions 20 --minutes 30 --seed 7
@@ -158,7 +243,7 @@ Checklist de relecture d'un cas avant de l'ajouter au contenu :
 - L'historique est écrit dans `exams/history.jsonl` et alimente le radar, le plan et le
   rapport. L'examen actif est stocké dans `exams/active.json` et supprimé après soumission.
 
-## 7. Radar, plan et rapport
+## 8. Radar, plan et rapport
 
 ```bash
 .venv/bin/python nage.py vc radar --today 2026-11-02
@@ -175,7 +260,7 @@ Checklist de relecture d'un cas avant de l'ajouter au contenu :
   une rétention 7 j basse signale les notions oubliées, et les prochaines actions donnent le
   temps à investir par activité.
 
-## 8. Lexique et term sheet
+## 9. Lexique et term sheet
 
 ```bash
 .venv/bin/python nage.py vc glossary search "liquidation preference"
@@ -186,7 +271,7 @@ Le lexique est bilingue FR/EN et insensible aux accents. Le décodeur de term sh
 les clauses documentées et explique leur effet économique ; une clause inconnue est listée
 dans `unknown_clauses` et marquée `non documenté` plutôt que devinée.
 
-## 9. Suppression des données VC
+## 10. Suppression des données VC
 
 ```bash
 .venv/bin/python nage.py vc delete --confirm "SUPPRIMER MES DONNEES VC"
@@ -195,18 +280,18 @@ dans `unknown_clauses` et marquée `non documenté` plutôt que devinée.
 Une phrase incorrecte renvoie le code 2 et ne supprime rien. La commande ne touche jamais aux
 données Career ni au reste du dépôt.
 
-## 10. Tests et qualité
+## 11. Tests et qualité
 
 ```bash
 .venv/bin/python -m pytest -q tests/test_vc_*.py
 .venv/bin/python -m ruff check academics/vc nage.py tests/test_vc_*.py
 ```
 
-La recette du MVP P1 et P2 couvre le stockage, le scheduler, les drills, les cas, l'examen
-blanc chronométré, l'oral, le radar, le plan, le rapport, le lexique, le term sheet et le
-parcours CLI complet.
+La recette du MVP P1 et P2 couvre le stockage, le scheduler, les drills, les cas, l'import
+de notes citées avec approbation, l'examen blanc chronométré, l'oral, le radar, le plan, le
+rapport, le lexique, le term sheet et le parcours CLI complet.
 
-## 11. Périmètre livré et limites
+## 12. Périmètre livré et limites
 
 Livré et prouvé :
 
@@ -215,12 +300,13 @@ Livré et prouvé :
 - US3 cas chiffrés avec grille de critères ;
 - US4 examen blanc chronométré, notation multi-format, topics faibles et oral simulé ;
 - US5 radar et plan de révision ;
+- US6 ingestion de notes de cours avec citations exactes, approbation explicite et rejet
+  persistant ;
 - US7 lexique et décodeur de term sheet ;
 - US8 rapport de progression.
 
 Non encore livré :
 
-- US6 ingestion de notes de cours ;
 - façade HTTP et page statique ;
 - extension du contenu aux objectifs 200 cartes, 100 drills, 20 cas, 100 questions et
   120 termes.
