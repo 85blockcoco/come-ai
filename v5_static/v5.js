@@ -31,6 +31,7 @@ const elements = {
   vcStatus: $("vcStatus"), vcCardForm: $("vcCardForm"), vcQuestion: $("vcQuestion"), vcAnswer: $("vcAnswer"), vcTopic: $("vcTopic"), vcSource: $("vcSource"), vcCardStatus: $("vcCardStatus"), vcSessionForm: $("vcSessionForm"), vcTodayOnly: $("vcTodayOnly"), vcFocusTopic: $("vcFocusTopic"), vcLimit: $("vcLimit"), vcSessionCount: $("vcSessionCount"), vcPrompt: $("vcPrompt"), vcReveal: $("vcReveal"), vcCorrection: $("vcCorrection"), vcAnswerDisplay: $("vcAnswerDisplay"), vcCitationDisplay: $("vcCitationDisplay"), vcGrades: $("vcGrades"), vcSessionStatus: $("vcSessionStatus"), vcRadar: $("vcRadar"), vcRadarEmpty: $("vcRadarEmpty"), vcPlan: $("vcPlan"), vcRefreshRadar: $("vcRefreshRadar"), vcRefreshStatus: $("vcRefreshStatus"),
   vcExamLimit: $("vcExamLimit"), vcExamStart: $("vcExamStart"), vcExamSubmit: $("vcExamSubmit"), vcExamQuestions: $("vcExamQuestions"), vcExamTimer: $("vcExamTimer"), vcExamResult: $("vcExamResult"),
   vcExamHistory: $("vcExamHistory"), vcExamHistoryEmpty: $("vcExamHistoryEmpty"),
+  vcSessionHistory: $("vcSessionHistory"), vcSessionHistoryEmpty: $("vcSessionHistoryEmpty"),
   vcProgress: $("vcProgress"), vcProgressEmpty: $("vcProgressEmpty"), vcReadiness: $("vcReadiness"), vcQuickFocus: $("vcQuickFocus"),
 };
 
@@ -456,6 +457,16 @@ function renderVCExamHistory(exams) {
     row.append(score, details, topics); elements.vcExamHistory.append(row);
   }
 }
+function renderVCSessionHistory(sessions) {
+  const rows = Array.isArray(sessions) ? [...sessions].reverse().slice(0, 10) : [];
+  elements.vcSessionHistory.replaceChildren(); elements.vcSessionHistoryEmpty.hidden = rows.length > 0;
+  for (const session of rows) {
+    const row = document.createElement("div"); row.className = "vc-session-history-row";
+    const title = document.createElement("strong"); title.textContent = `${session.answered || 0}/${session.offered || 0} réponses`;
+    const detail = document.createElement("span"); detail.textContent = `${session.mastered || 0} maîtrisée(s) · ${session.to_review || 0} à revoir`;
+    row.append(title, detail); elements.vcSessionHistory.append(row);
+  }
+}
 function renderVCReadiness(exams, radar) {
   const rows = Array.isArray(exams) ? exams.slice(-3) : [];
   const scores = rows.map((exam) => Number(exam.score || 0) / Math.max(1, Number(exam.max_score || 1)));
@@ -483,8 +494,9 @@ function renderVCProgress(exams) {
 async function refreshVCStatus() {
   elements.vcStatus.setAttribute("aria-busy", "true");
   try {
-    const [status, radar, exams] = await Promise.all([api("/api/academics/vc/status"), api("/api/academics/vc/radar"), api("/api/academics/vc/exams")]);
-    text(elements.vcStatus, `${status.cards || 0} carte(s) · ${status.reviews || 0} réponse(s) · ${(exams.exams || []).length} examen(s) · stockage local uniquement.`);
+    const [status, radar, exams, sessions] = await Promise.all([api("/api/academics/vc/status"), api("/api/academics/vc/radar"), api("/api/academics/vc/exams"), api("/api/academics/vc/sessions")]);
+    text(elements.vcStatus, `${status.cards || 0} carte(s) · ${status.reviews || 0} réponse(s) · ${(sessions.sessions || []).length} session(s) · ${(exams.exams || []).length} examen(s) · stockage local uniquement.`);
+    renderVCSessionHistory(sessions.sessions || []);
     renderVCExamHistory(exams.exams || []);
     renderVCProgress(exams.exams || []);
     renderVCReadiness(exams.exams || [], radar.radar || []);

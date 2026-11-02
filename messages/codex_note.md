@@ -238,3 +238,8 @@
 - **Routes** : `POST /api/academics/vc/session/summary` et `GET /api/academics/vc/sessions`.
 - **UX** : le résumé est enregistré automatiquement uniquement après la dernière notation de la session; une session interrompue n’est pas déclarée terminée.
 - **Preuve** : `11 passed in 5.87s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+# Livraison VC-123 — bilan des sessions quotidiennes (2026-11-02)
+
+- **Livré** : affichage séparé des 10 dernières sessions de rappel, avec réponses, cartes maîtrisées et cartes à revoir.
+- **Statut** : le compteur VC distingue maintenant cartes, réponses, sessions et examens.
+- **Preuve** : `7 passed in 6.00s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
