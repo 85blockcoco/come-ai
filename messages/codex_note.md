@@ -157,6 +157,13 @@
   propositions de cartes à approuver et refus des formats non supportés.
 - Aucun support personnel ni fichier réel de cours n'a été ajouté au dépôt.
 - Preuve : `tests/test_vc_notes.py tests/test_vc_glossary_report.py tests/test_vc_drills.py tests/test_vc_cases.py tests/test_vc_mastery.py tests/test_vc_exams.py tests/test_vc_scheduler.py` — `26 passed in 1.27s`; Ruff et diff-check verts.
+
+## RAPPORT CODEX — 2026-11-02 — VC-101 à VC-110, routes locales
+
+- Livré : `/api/academics/vc/status`, `/cards`, `/session`, `/review` et `/radar`.
+- La réponse de session masque le corrigé ; les cartes et réponses sont persistées
+  dans `NAGE_VC_HOME`; le flux reste local et sans cloud.
+- Preuve : `tests/test_vc_routes.py` avec les suites academics et VC — `43 passed in 18.05s`; Ruff et diff-check verts.
 # Candidate consolidée Codex (2026-11-01)
 
 - Branche : `codex/n100-consolidated-20261101`.

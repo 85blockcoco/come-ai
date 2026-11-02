@@ -15,6 +15,10 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model
 from . import finance_core, math_core
 from .daily_toolkit import Task, daily_plan
 from .research_kit import build_outline
+from .vc.models import Card
+from .vc.scheduler import start_session, submit_review
+from .vc.storage import VCStore
+from .vc.mastery import build_radar
 
 
 class CalculationPayload(BaseModel):
@@ -47,6 +51,25 @@ class ResearchOutlinePayload(BaseModel):
     topic: str = Field(default="", max_length=500)
     sections: list[Annotated[str, Field(max_length=500)]] = Field(default_factory=list, max_length=30)
     facts: list[Annotated[str, Field(max_length=2_000)]] = Field(default_factory=list, max_length=100)
+
+
+class VCCardsPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    cards: list[dict[str, Any]] = Field(default_factory=list, max_length=200)
+
+
+class VCSessionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    today: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    limit: int = Field(default=10, ge=1, le=100)
+    seed: int = Field(default=0, ge=0, le=1_000_000)
+
+
+class VCReviewPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    card_id: str = Field(min_length=1, max_length=160)
+    quality: int = Field(ge=0, le=5)
+    reviewed_on: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
 
 
 FINANCE_OPERATIONS: dict[str, Callable[..., Any]] = {
@@ -171,5 +194,47 @@ def create_academics_router() -> APIRouter:
         outline = build_outline(payload.topic, payload.sections, payload.facts)
         blockers = [] if outline.ok else list(outline.checks)
         return {"outline": asdict(outline), "warnings": [], "blockers": blockers}
+
+    @router.get("/api/academics/vc/status")
+    def vc_status() -> dict[str, Any]:
+        store = VCStore()
+        return {"local_only": True, "cards": len(store.load_cards()), "reviews": len(store.load_reviews()), "cloud": False}
+
+    @router.post("/api/academics/vc/cards")
+    def vc_cards(payload: VCCardsPayload) -> dict[str, Any]:
+        try:
+            cards = [Card(**item) for item in payload.cards]
+            store = VCStore()
+            store.save_cards(cards)
+            return {"saved": len(cards), "warnings": [], "blockers": []}
+        except (TypeError, ValueError) as error:
+            return {"saved": 0, "warnings": [], "blockers": [str(error)]}
+
+    @router.post("/api/academics/vc/session")
+    def vc_session(payload: VCSessionPayload) -> dict[str, Any]:
+        try:
+            session_id, cards = start_session(VCStore(), today=payload.today, limit=payload.limit, seed=payload.seed)
+            # Never send the answer in the session response.
+            public_cards = [{"id": card.id, "topic": card.topic, "front": card.front, "source": card.source} for card in cards]
+            return {"session_id": session_id, "cards": public_cards, "warnings": [], "blockers": []}
+        except (TypeError, ValueError) as error:
+            return {"session_id": None, "cards": [], "warnings": [], "blockers": [str(error)]}
+
+    @router.post("/api/academics/vc/review")
+    def vc_review(payload: VCReviewPayload) -> dict[str, Any]:
+        try:
+            store = VCStore()
+            card = next((item for item in store.load_cards() if item.id == payload.card_id), None)
+            if card is None:
+                return {"review": None, "warnings": [], "blockers": ["Carte VC introuvable."]}
+            review = submit_review(store, card, payload.quality, reviewed_on=payload.reviewed_on)
+            return {"review": asdict(review), "warnings": [], "blockers": []}
+        except (TypeError, ValueError) as error:
+            return {"review": None, "warnings": [], "blockers": [str(error)]}
+
+    @router.get("/api/academics/vc/radar")
+    def vc_radar() -> dict[str, Any]:
+        store = VCStore()
+        return {"radar": build_radar(store.load_cards(), store.load_reviews()), "warnings": [], "blockers": []}
 
     return router
