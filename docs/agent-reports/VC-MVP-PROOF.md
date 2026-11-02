@@ -4,6 +4,8 @@ Date de recette : 2 novembre 2026
 
 Branche de livraison : `agent/n100-carrier-20261101`
 
+Commit de code US6 : `2671d0f33dd20a2f91d1aac3d888fe7960821270`
+
 Commit de code US4 : `6d2a72e187c785ed2f87ef049e63d162b2f3e0ae`
 
 ## Périmètre prouvé
@@ -16,6 +18,8 @@ Le package `academics/vc/` et la sous-commande `nage.py vc` livrent :
 - US4 : examen blanc chronométré, notation QCM/numérique/ouverte, topics faibles,
   séance de rattrapage et oral simulé sans corrigé ;
 - US5 : radar de maîtrise et plan de révision borné ;
+- US6 : ingestion de notes `.txt`/`.md`/PDF texte, citations exactes, approbation explicite,
+  rejet persistant et détection de source modifiée ;
 - US7 : lexique FR/EN et décodeur de term sheet ;
 - US8 : rapport de progression et rétention.
 
@@ -33,9 +37,10 @@ Commande réellement exécutée :
 Résultat :
 
 ```text
-........................................................................ [ 58%]
-...................................................                      [100%]
-123 passed in 9.19s
+........................................................................ [ 49%]
+........................................................................ [ 99%]
+.                                                                        [100%]
+145 passed in 4.76s
 ```
 
 Les fichiers couverts sont :
@@ -48,6 +53,7 @@ tests/test_vc_drills.py
 tests/test_vc_exams.py
 tests/test_vc_glossary.py
 tests/test_vc_mastery.py
+tests/test_vc_notes.py
 tests/test_vc_report.py
 tests/test_vc_scheduler.py
 tests/test_vc_smoke.py
@@ -55,6 +61,14 @@ tests/test_vc_storage.py
 ```
 
 ## 1 bis. Suite complète
+
+La suite complète a été rejouée dans une copie propre construite depuis le working tree,
+avec deux exclusions volontaires pour isoler le lot US6 :
+
+- `nage.py` remis à `HEAD` (les modifications utilisateur `vc tutor`/`vc master` non
+  commitées importent `vc_tutor`, qui charge `.env` dans `os.environ`) ;
+- `academics/vc/cli.py` limité aux hunks US6 (les hunks utilisateur `tutor`/`master` sont
+  absents).
 
 Commande réellement exécutée, seule et séquentielle :
 
@@ -65,15 +79,26 @@ Commande réellement exécutée, seule et séquentielle :
 Résultat :
 
 ```text
-3867 passed in 292.00s (0:04:52)
+3888 passed, 1 skipped in 177.77s (0:02:57)
 ```
+
+Le skip est le test `tests/test_offer_summary_exhaustiveness.py::...` qui exige un script
+ou une base absents de la copie isolée.
+
+Contrôle de non-régression : la même suite exécutée dans le working tree complet donne
+`3865 passed, 24 failed`. Les 24 échecs sont tous dans des tests réseau/configuration
+(`test_hybrid_chat.py`, `test_come_ai_v3.py`, `test_intelligence_router.py`) et sont causés
+par les modifications utilisateur non commitées de `nage.py`. Preuve : `vc_tutor.load_env()`
+copie `.env` dans `os.environ` dès l'import, et `AppConfig.load()` donne priorité à
+`os.environ` sur le `.env` temporaire du test. Aucun de ces échecs ne touche `academics/vc/`
+ni les fichiers du commit US6. Les tests concernés passent seuls et le lot VC reste vert.
 
 ## 2. Qualité statique
 
-Commande réellement exécutée :
+Commande réellement exécutée sur la copie propre `HEAD + US6` :
 
 ```text
-.venv/bin/python -m ruff check academics/vc nage.py tests/test_vc_*.py
+.venv/bin/python -m ruff check academics/vc tests/test_vc_*.py
 ```
 
 Résultat :
@@ -81,6 +106,11 @@ Résultat :
 ```text
 All checks passed!
 ```
+
+Dans le working tree complet, `nage.py` et les sections utilisateur de
+`academics/vc/cli.py` contiennent des erreurs ruff préexistantes (`E401` sur
+`import subprocess, sys`, `F841`/`F821` dans les commandes `tutor`). Elles sont hors du
+périmètre US6, n'ont pas été modifiées et ne sont pas présentes dans le commit.
 
 ## 3. Smoke CLI réel
 
@@ -118,6 +148,26 @@ SMOKE_OK /private/var/folders/jd/ymcfd0zs7kzc6f90p1x6gh5c0000gp/T/opencode/vc-sm
 session ses-63bbd86f504c total 20 report /private/var/folders/jd/ymcfd0zs7kzc6f90p1x6gh5c0000gp/T/opencode/vc-smoke-qh43ll4m/vc/reports/2026-11-02-progress.md
 ```
 
+### Smoke US6 — notes citées
+
+```text
+SMOKE_INGEST 5 fe4a9a0ab9ef
+SMOKE_LIST {'proposed': 4, 'a_completer': 1, 'approved': 0, 'rejected': 0}
+SMOKE_APPROVE vcnote-45d5ab2056df
+SMOKE_A_COMPLETER blocked
+SMOKE_A_COMPLETER answered
+SMOKE_REJECT_REINGEST 1
+SMOKE_REPLACE {'imported', 'superseded'}
+SMOKE_SCAN_PDF rejected
+SMOKE_REVIEW_TOTAL 10
+SMOKE_NO_REPO_LEAK ok
+SMOKE_NOTES_OK /private/var/folders/jd/ymcfd0zs7kzc6f90p1x6gh5c0000gp/T/vc-notes-smoke-3jgjhs0r
+```
+
+Le smoke crée un marqueur privé dans une note temporaire, vérifie qu'il reste dans
+`notes/<source_id>.txt`, puis exécute `git grep` et `git status` pour prouver qu'il n'apparaît
+jamais dans le dépôt. Les erreurs de source modifiée ne recopient pas le texte de la note.
+
 ## 4. Contenu livré
 
 | Élément | Quantité vérifiée |
@@ -150,37 +200,40 @@ Vérifications réalisées :
 - refus d'un `NAGE_VC_HOME` relatif ;
 - suppression limitée au dossier VC avec phrase exacte ;
 - aucune écriture dans le dépôt : `.nage/` et `vc_data/` sont dans `.gitignore` ;
+- les notes importées restent dans `~/.nage/vc/notes/` et ne sont jamais recopiées dans un
+  message d'erreur ou dans le dépôt ;
 - scan de secrets sur `academics/vc/`, `specs/004-venture-capital-revision/` et
   `tests/test_vc_*.py` : aucun motif de clé ou de clé privée.
 
 ## 6. Limites assumées
 
-- US6 (ingestion de notes) n'est pas livrée.
 - La façade HTTP et la page statique ne sont pas livrées.
 - Le contenu est un MVP original : l'extension à 200 cartes / 100 drills / 20 cas /
   100 questions / 120 termes reste un backlog.
 - Les scores de cas et d'examen sont des grilles déterministes, pas une évaluation humaine.
+- L'extraction PDF dépend de la couche texte ; un scan sans OCR est refusé explicitement.
 
 ## 7. Livraison
 
 - Branche : `agent/n100-carrier-20261101`
-- Commit de code US4 : `6d2a72e187c785ed2f87ef049e63d162b2f3e0ae`
-- Push fast-forward vérifié : `8ffbcb2..6d2a72e`
+- Commit de code US6 : `2671d0f33dd20a2f91d1aac3d888fe7960821270`
+- Push fast-forward vérifié : `48cb521..2671d0f`
 - `git ls-remote` après push :
-  `6d2a72e187c785ed2f87ef049e63d162b2f3e0ae refs/heads/agent/n100-carrier-20261101`
+  `2671d0f33dd20a2f91d1aac3d888fe7960821270 refs/heads/agent/n100-carrier-20261101`
+- Commit de code US4 : `6d2a72e187c785ed2f87ef049e63d162b2f3e0ae`
 - Aucun force-push, aucun reset, aucune réécriture d'historique.
-- Un commit de documentation postérieur peut déplacer le tip ; le SHA de code US4 reste
-  `6d2a72e187c785ed2f87ef049e63d162b2f3e0ae`.
-- Serveurs locaux après redémarrage : `8765/` = 200, `8765/career` = 200,
-  `8765/v5` = 200, `8766/` = 200.
+- Un commit de documentation postérieur peut déplacer le tip ; les SHA de code US4 et US6
+  restent ceux ci-dessus.
 
 ## 8. Reproduce
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
 .venv/bin/python -m pytest -q tests/test_vc_*.py
-.venv/bin/python -m ruff check academics/vc nage.py tests/test_vc_*.py
+.venv/bin/python -m ruff check academics/vc tests/test_vc_*.py
 .venv/bin/python nage.py vc review --minutes 10
+.venv/bin/python nage.py vc notes ingest cours_vc.md --topic VC04
+.venv/bin/python nage.py vc notes list
 .venv/bin/python nage.py vc exam start --questions 20 --minutes 30 --seed 7
 .venv/bin/python nage.py vc oral VC07 --count 5
 ```
