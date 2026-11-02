@@ -117,6 +117,13 @@
   IRR annualisé, tolérance numérique et diagnostics format/valeur.
 - Chaque calcul retourne l'unité, le résultat et les étapes de correction.
 - Preuve : `tests/test_vc_drills.py tests/test_vc_scheduler.py tests/test_academics_routes.py tests/test_academics_route_boundaries.py` — `27 passed in 7.61s`; Ruff et diff-check verts.
+
+## RAPPORT CODEX — 2026-11-02 — VC-031 à VC-040, case study studio
+
+- Livré : cas seed round original, cinq questions guidées, grille sur 10 points,
+  critères détaillés, hypothèses visibles et détection rudimentaire d'affirmations
+  non justifiées.
+- Preuve : `tests/test_vc_cases.py tests/test_vc_drills.py tests/test_vc_scheduler.py` — `13 passed in 0.36s`; Ruff et diff-check verts.
 # Candidate consolidée Codex (2026-11-01)
 
 - Branche : `codex/n100-consolidated-20261101`.

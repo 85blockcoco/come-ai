@@ -19,9 +19,11 @@ from .drills import (
     rvpi,
     tvpi,
 )
+from .cases import CaseGrade, CaseQuestion, CaseStudy, grade_case, seed_round_case
 
 __all__ = [
     "Card", "Review", "SessionSummary", "VCStore", "grade_card", "start_session", "submit_review",
     "post_money", "ownership_after_investment", "dilution", "option_pool_adjusted_ownership",
     "moic", "dpi", "rvpi", "tvpi", "irr", "grade_numeric",
+    "CaseGrade", "CaseQuestion", "CaseStudy", "grade_case", "seed_round_case",
 ]
