@@ -3,7 +3,7 @@
 ## Où en est NAGE (tout est poussé et vérifié)
 
 - **Branche de livraison : `origin/agent/n100-carrier-20261101`**
-- **Tip vérifié : `9806f9e8ed757c6aaedcc9ad061a079ab6580d4c`** (`git ls-remote` == local)
+- **Tip vérifié : `63635d715a866a8d08599895995aa2ce2b939882`** (`git ls-remote` == local)
 - v1 : 87/87 done.
 - N100 : **99/100 done** (`missions_next100.json`).
   - Seule **J04 (PWA hors-ligne)** reste ouverte : l'app est déjà locale,
@@ -13,8 +13,8 @@
   (merge `0aa7224`, dédup `bd07d64`).
 - CLI `nage.py` : finance, maths, budget local, plan du jour, brief,
   recherche, méthode devoirs. 8 tests dédiés.
-- Recette J10 : **42 passed in 14.14s**, rapport
-  `docs/agent-reports/N100-J10-RECIPE.md`.
+- Recette J10 : **56 passed in 12.92s**, instance HTTP jetable vérifiée,
+  rapport `docs/agent-reports/N100-J10-RECIPE.md`.
 - Guide utilisateur : `docs/USER_GUIDE_V2.md`.
 - Serveurs : 8765 (dev) et 8766 (NAGE Bureau) = **200 / 200**.
 
@@ -47,8 +47,8 @@ cd /Users/comedelavenne/AI-Excel-Agent
   tests/test_career_shortlist_routes.py tests/test_career_dossier_routes.py \
   tests/test_n100_letter_ui.py tests/test_n100_career_accessibility.py \
   tests/test_academics_routes.py tests/test_academics_integration.py \
-  tests/test_nage_cli.py
-# attendu : 42 passed
+  tests/test_nage_cli.py tests/test_urgency_shortlist.py
+# attendu : 56 passed
 
 .venv/bin/python nage.py finance future_value pv=100 rate=0.1 periods=2
 .venv/bin/python nage.py plan --minutes 120 --task "NPV|2026-11-03|45|1"
