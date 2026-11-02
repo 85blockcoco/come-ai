@@ -22,6 +22,7 @@ from .drills import (
 from .cases import CaseGrade, CaseQuestion, CaseStudy, grade_case, seed_round_case
 from .exams import ExamQuestion, ExamResult, MockExam, build_mock_exam, grade_mock_exam
 from .mastery import build_radar, build_study_plan
+from .notes import NoteProposal, approve_proposal, propose_cards
 
 __all__ = [
     "Card", "Review", "SessionSummary", "VCStore", "grade_card", "start_session", "submit_review",
@@ -30,4 +31,5 @@ __all__ = [
     "CaseGrade", "CaseQuestion", "CaseStudy", "grade_case", "seed_round_case",
     "ExamQuestion", "ExamResult", "MockExam", "build_mock_exam", "grade_mock_exam",
     "build_radar", "build_study_plan",
+    "NoteProposal", "approve_proposal", "propose_cards",
 ]
