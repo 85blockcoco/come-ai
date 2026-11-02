@@ -86,6 +86,18 @@
   `study_coach/**`, `devkit/**`) et les chemins inexistants sont refusés.
 - Preuve : `28 passed in 7.32s` sur backlog, store et routes Dev Kit; Ruff vert; commande
   CLI dry-run exécutée sur 3 missions avec `automatic_run: false`.
+
+## RAPPORT CODEX — 2026-11-02 — audit complet de la candidate
+
+- Audit détaillé : [`docs/agent-reports/NAGE-AUDIT-2026-11-02.md`](../docs/agent-reports/NAGE-AUDIT-2026-11-02.md).
+- Campagne Career + Dev Kit + évolution + academics + UI : `847 passed in 120.91s`.
+- Smoke HTTP isolé : `/api/health`, `/api/career/health`, `/career`, `/app`, dashboard,
+  pipeline et academics en HTTP 200.
+- Régressions trouvées puis corrigées : `window.prompt` résiduel et versions de cache
+  Career divergentes. Les 4 tests initialement rouges sont maintenant verts.
+- Restent P0 : recette depuis l'icône du bureau, mesure pipeline chargée sur 150/1 000
+  offres, persistance après redémarrage, parcours trois interactions, préparation du
+  diff vers `main`.
 # Candidate consolidée Codex (2026-11-01)
 
 - Branche : `codex/n100-consolidated-20261101`.
