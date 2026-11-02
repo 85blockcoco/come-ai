@@ -247,6 +247,10 @@ input { min-width: 0; padding: 9px 10px; font-size: 12px; }
 .vc-session-history-row strong { color: #315747; font-size: 12px; }
 .vc-session-history-row span { color: #6d8177; font-size: 10px; }
 .vc-cadence { padding: 9px 10px; margin-bottom: 10px; color: #3f6b58; font-size: 11px; line-height: 1.4; background: #eef7f1; border: 1px solid #d5e9dc; border-radius: 9px; }
+.vc-resistant-cards { display: grid; gap: 7px; }
+.vc-resistant-row { display: grid; gap: 4px; padding: 9px 10px; background: #fffaf0; border: 1px solid #eee0c2; border-radius: 9px; }
+.vc-resistant-row strong { color: #66522d; font-size: 11px; line-height: 1.4; }
+.vc-resistant-row small { color: #917a4e; font-size: 10px; }
 .vc-progress { margin-top: 14px; }
 .vc-progress-summary { color: #3d6756; font-size: 11px; font-weight: 750; }
 .vc-progress-bars { display: flex; gap: 7px; align-items: end; height: 72px; padding: 10px 4px 0; border-bottom: 1px solid #dbe9e0; }

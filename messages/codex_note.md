@@ -268,3 +268,8 @@
 - **Livré** : filtre de session « Erreurs uniquement » pour revoir les cartes notées 0, 1 ou 2, combinable avec le thème et les cartes dues.
 - **Contrat** : filtrage local strict sur la dernière qualité enregistrée; sans filtre, comportement inchangé.
 - **Preuve** : `12 passed in 7.58s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+# Livraison VC-129 — notions résistantes (2026-11-02)
+
+- **Livré** : endpoint `GET /api/academics/vc/card-stats` et panneau « Notions résistantes » affichant les cartes notées 0–2, leur dernière qualité et le nombre de répétitions.
+- **UX** : liste bornée à cinq cartes, état vide explicite, contenu local uniquement.
+- **Preuve** : `12 passed in 8.32s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.

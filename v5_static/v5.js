@@ -34,6 +34,7 @@ const elements = {
   vcSessionHistory: $("vcSessionHistory"), vcSessionHistoryEmpty: $("vcSessionHistoryEmpty"),
   vcCadence: $("vcCadence"),
   vcProgress: $("vcProgress"), vcProgressEmpty: $("vcProgressEmpty"), vcReadiness: $("vcReadiness"), vcQuickFocus: $("vcQuickFocus"), vcShortSession: $("vcShortSession"), vcExpressSession: $("vcExpressSession"),
+  vcResistantCards: $("vcResistantCards"), vcResistantEmpty: $("vcResistantEmpty"),
 };
 
 async function api(path, options = {}) {
@@ -447,6 +448,11 @@ function renderVCRadar(radar) {
     row.append(label, status, count); elements.vcRadar.append(row);
   }
 }
+function renderVCResistantCards(cards) {
+  const rows = (cards || []).filter((card) => card.quality !== null && Number(card.quality) <= 2).slice(0, 5);
+  elements.vcResistantCards.replaceChildren(); elements.vcResistantEmpty.hidden = rows.length > 0;
+  for (const card of rows) { const row = document.createElement("div"); row.className = "vc-resistant-row"; const title = document.createElement("strong"); title.textContent = card.front; const detail = document.createElement("small"); detail.textContent = `${card.topic} · qualité ${card.quality}/5 · ${card.repetitions} répétition(s)`; row.append(title, detail); elements.vcResistantCards.append(row); }
+}
 function renderVCExamHistory(exams) {
   const rows = Array.isArray(exams) ? [...exams].reverse() : [];
   elements.vcExamHistory.replaceChildren(); elements.vcExamHistoryEmpty.hidden = rows.length > 0;
@@ -499,13 +505,14 @@ function renderVCProgress(exams) {
 async function refreshVCStatus() {
   elements.vcStatus.setAttribute("aria-busy", "true");
   try {
-    const [status, radar, exams, sessions] = await Promise.all([api("/api/academics/vc/status"), api("/api/academics/vc/radar"), api("/api/academics/vc/exams"), api("/api/academics/vc/sessions")]);
+    const [status, radar, exams, sessions, cardStats] = await Promise.all([api("/api/academics/vc/status"), api("/api/academics/vc/radar"), api("/api/academics/vc/exams"), api("/api/academics/vc/sessions"), api("/api/academics/vc/card-stats")]);
     text(elements.vcStatus, `${status.cards || 0} carte(s) · ${status.due || 0} due(s) · ${status.reviews || 0} réponse(s) · ${(sessions.sessions || []).length} session(s) · ${(exams.exams || []).length} examen(s) · stockage local uniquement.`);
     renderVCSessionHistory(sessions.sessions || [], status.suggested_minutes || 0);
     renderVCExamHistory(exams.exams || []);
     renderVCProgress(exams.exams || []);
     renderVCReadiness(exams.exams || [], radar.radar || []);
     renderVCRadar(radar.radar);
+    renderVCResistantCards(cardStats.cards || []);
     const fragile = (radar.radar || []).filter((item) => ["non testé", "fragile"].includes(item.status)).map((item) => item.topic);
     const latest = (exams.exams || []).at(-1);
     text(elements.vcPlan, fragile.length ? `Priorité suggérée : ${fragile.slice(0, 3).join(", ")}. Revois ces thèmes avant de passer aux cas avancés.` : latest ? `Dernier examen : ${latest.score}/${latest.max_score}. Continue une session courte chaque jour pour transformer tes réponses en maîtrise durable.` : "Continue une session courte chaque jour pour transformer tes réponses en maîtrise durable.");
