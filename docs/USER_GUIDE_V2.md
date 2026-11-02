@@ -7,7 +7,7 @@ sortent jamais de la machine.
 ## 1. Démarrer l'application
 
 ```bash
-cd /Users/comedelavenne/AI-Excel-Agent
+cd $HOME/AI-Excel-Agent
 .venv/bin/python run_come_ai_v3.py --no-browser --port 8765
 ```
 

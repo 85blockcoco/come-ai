@@ -21,7 +21,7 @@
 ## Reprendre après redémarrage machine
 
 ```bash
-cd /Users/comedelavenne/AI-Excel-Agent
+cd $HOME/AI-Excel-Agent
 git fetch origin
 git checkout agent/n100-carrier-20261101
 git merge --ff-only origin/agent/n100-carrier-20261101
@@ -29,8 +29,8 @@ git merge --ff-only origin/agent/n100-carrier-20261101
 # serveur dev (8765)
 .venv/bin/python run_come_ai_v3.py --no-browser --port 8765
 # NAGE Bureau (8766), dans un autre terminal
-cd /Users/comedelavenne/NAGE-release
-/Users/comedelavenne/AI-Excel-Agent/.venv/bin/python run_come_ai_v3.py --no-browser --port 8766
+cd $HOME/NAGE-release
+$HOME/AI-Excel-Agent/.venv/bin/python run_come_ai_v3.py --no-browser --port 8766
 ```
 
 Puis ouvrir :
@@ -41,7 +41,7 @@ Puis ouvrir :
 ## Vérifications rapides
 
 ```bash
-cd /Users/comedelavenne/AI-Excel-Agent
+cd $HOME/AI-Excel-Agent
 .venv/bin/python -m pytest -q \
   tests/test_e2e_local_pipeline.py tests/test_career_letter_routes.py \
   tests/test_career_shortlist_routes.py tests/test_career_dossier_routes.py \
