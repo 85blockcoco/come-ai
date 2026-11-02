@@ -318,7 +318,7 @@ def create_academics_router() -> APIRouter:
             if not card.approved:
                 continue
             review = reviews.get(card.id, {})
-            stats.append({"id": card.id, "topic": card.topic, "front": card.front, "quality": review.get("quality"), "repetitions": int(review.get("repetitions", 0))})
+            stats.append({"id": card.id, "topic": card.topic, "front": card.front, "source": card.source, "quality": review.get("quality"), "repetitions": int(review.get("repetitions", 0)), "due_on": review.get("due_on")})
         stats.sort(key=lambda item: (item["quality"] is not None, item["quality"] if item["quality"] is not None else -1, -item["repetitions"]))
         return {"cards": stats[:50], "warnings": [], "blockers": []}
 

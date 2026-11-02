@@ -6,7 +6,7 @@ ROOT = Path(__file__).parents[1]
 
 def test_vc_view_exposes_complete_revision_flow() -> None:
     html = (ROOT / "v5_static" / "index.html").read_text(encoding="utf-8")
-    for marker in ("vcView", "vcCardForm", "vcSessionForm", "vcWeakOnly", "vcFocusTopic", "vcReveal", "vcRadar", "vcResistantCards", "vcUntestedCards", "vcCardSearch", "vcAllCards", "vcExamStart", "vcExamSubmit", "vcExamHistory", "vcSessionHistory", "vcCadence", "vcProgress", "vcReadiness", "vcQuickFocus", "vcShortSession", "vcExpressSession"):
+    for marker in ("vcView", "vcCardForm", "vcSessionForm", "vcWeakOnly", "vcFocusTopic", "vcReveal", "vcRadar", "vcResistantCards", "vcUntestedCards", "vcCardSearch", "vcCardSort", "vcAllCards", "vcExamStart", "vcExamSubmit", "vcExamHistory", "vcSessionHistory", "vcCadence", "vcProgress", "vcReadiness", "vcQuickFocus", "vcShortSession", "vcExpressSession"):
         assert marker in html
     assert 'data-view-target="vcView"' in html
     assert 'aria-live="polite"' in html

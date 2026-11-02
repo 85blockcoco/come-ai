@@ -36,7 +36,7 @@ const elements = {
   vcProgress: $("vcProgress"), vcProgressEmpty: $("vcProgressEmpty"), vcReadiness: $("vcReadiness"), vcQuickFocus: $("vcQuickFocus"), vcShortSession: $("vcShortSession"), vcExpressSession: $("vcExpressSession"),
   vcResistantCards: $("vcResistantCards"), vcResistantEmpty: $("vcResistantEmpty"),
   vcUntestedCards: $("vcUntestedCards"), vcUntestedEmpty: $("vcUntestedEmpty"),
-  vcCardSearch: $("vcCardSearch"), vcAllCards: $("vcAllCards"), vcAllCardsEmpty: $("vcAllCardsEmpty"),
+  vcCardSearch: $("vcCardSearch"), vcCardSort: $("vcCardSort"), vcAllCards: $("vcAllCards"), vcAllCardsEmpty: $("vcAllCardsEmpty"),
 };
 
 async function api(path, options = {}) {
@@ -461,7 +461,10 @@ function renderVCResistantCards(cards) {
 }
 function renderVCAllCards() {
   const query = elements.vcCardSearch.value.trim().toLocaleLowerCase();
-  const rows = vcCardStats.filter((card) => !query || [card.front, card.topic, card.source].join(" ").toLocaleLowerCase().includes(query)).slice(0, 50);
+  const rows = vcCardStats.filter((card) => !query || [card.front, card.topic, card.source].join(" ").toLocaleLowerCase().includes(query));
+  const sort = elements.vcCardSort.value;
+  rows.sort((left, right) => sort === "topic" ? left.topic.localeCompare(right.topic) : sort === "due" ? String(left.due_on || "9999").localeCompare(String(right.due_on || "9999")) : (left.quality ?? -1) - (right.quality ?? -1));
+  rows.splice(50);
   elements.vcAllCards.replaceChildren(); elements.vcAllCardsEmpty.hidden = rows.length > 0;
   for (const card of rows) { const row = document.createElement("div"); row.className = "vc-resistant-row"; const title = document.createElement("strong"); title.textContent = card.front; const detail = document.createElement("small"); detail.textContent = `${card.topic} · ${card.source || "source locale"} · ${card.quality === null ? "jamais testée" : `qualité ${card.quality}/5`}`; row.append(title, detail); elements.vcAllCards.append(row); }
 }
@@ -592,6 +595,7 @@ elements.vcQuickFocus.addEventListener("click", () => { const topic = elements.v
 elements.vcShortSession.addEventListener("click", () => { elements.vcLimit.value = "5"; activateView("vcView"); elements.vcSessionStatus.textContent = "Session courte configurée : 5 cartes dues maximum."; elements.vcSessionForm.scrollIntoView({ behavior: "smooth", block: "center" }); });
 elements.vcExpressSession.addEventListener("click", () => { elements.vcLimit.value = "3"; activateView("vcView"); elements.vcSessionStatus.textContent = "Révision express configurée : 3 cartes dues maximum."; elements.vcSessionForm.scrollIntoView({ behavior: "smooth", block: "center" }); });
 elements.vcCardSearch.addEventListener("input", renderVCAllCards);
+elements.vcCardSort.addEventListener("change", renderVCAllCards);
 elements.vcExamStart.addEventListener("click", startVCExam);
 elements.vcExamSubmit.addEventListener("click", submitVCExam);
 

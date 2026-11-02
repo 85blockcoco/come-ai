@@ -288,3 +288,8 @@
 - **Livré** : recherche instantanée dans les cartes par question, thème ou source; résultats bornés et état vide explicite.
 - **UX** : recherche locale uniquement, sans appel réseau et sans exposition de la réponse au moment de l’inventaire.
 - **Preuve** : `7 passed in 8.37s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+# Livraison VC-133 — tri de la bibliothèque (2026-11-02)
+
+- **Livré** : tri local des cartes par difficulté, thème ou échéance, en complément de la recherche.
+- **Contrat** : cartes sans échéance placées après les cartes planifiées; cartes jamais testées restent distinguées des cartes faibles.
+- **Preuve** : `7 passed in 5.01s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
