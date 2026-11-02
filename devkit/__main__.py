@@ -45,6 +45,10 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--task")
     run.add_argument("--max-requests", type=int, default=2)
     run.add_argument("--max-attempts", type=int, default=2)
+    import_backlog = evolution_actions.add_parser("import-backlog", help="Importer le backlog FINAL-* sans lancer de mission.")
+    import_backlog.add_argument("--path", type=Path)
+    import_backlog.add_argument("--limit", type=int, default=200)
+    import_backlog.add_argument("--dry-run", action="store_true")
     check = commands.add_parser("check", help="Tous les tests et diagnostics, avec rapport local.")
     check.add_argument("--candidate", help="Valider un correctif préparé, dans la sandbox du Mac.")
     check.add_argument("--timeout", type=int, default=600, help="Durée totale maximale en secondes.")
@@ -100,6 +104,9 @@ def main(argv: list[str] | None = None) -> int:
                 result = manager.engine.store.add_task(args.title, args.description, args.files, args.acceptance)
             elif args.evolution_action == "demo":
                 result = manager.run_demo(max_requests=args.max_requests)
+            elif args.evolution_action == "import-backlog":
+                result = manager.import_backlog(args.path or root / "docs" / "NAGE_FINAL_200_MISSIONS.md",
+                                                limit=args.limit, dry_run=args.dry_run)
             else:
                 result = manager.run(args.task, max_requests=args.max_requests, max_attempts=args.max_attempts)
             print(json.dumps(result, ensure_ascii=False, indent=2))

@@ -168,3 +168,9 @@ class EvolutionManager:
             result["diff"] = PatchWorkspace(root, state).preview(result["candidate_id"])["diff"]
         _atomic_write(self.directory / "latest_demo.json", json.dumps(result, ensure_ascii=False, indent=2).encode(), 0o600)
         return result
+
+    def import_backlog(self, backlog_path: Path, *, limit: int = 200, dry_run: bool = False) -> dict[str, Any]:
+        """Importer le backlog lisible dans la file locale, sans lancer de modèle."""
+        from devkit.backlog import import_backlog
+
+        return import_backlog(self.project_root, self.engine.store, backlog_path, limit=limit, dry_run=dry_run)

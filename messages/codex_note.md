@@ -74,6 +74,18 @@
 - Commit poussé : `78818f7e2d650e26e2e750e7357d0b0c8f63c56b`.
 - Ces missions sont planifiées, pas déclarées réalisées ; chaque livraison future devra
   fournir son propre commit, ses tests et une preuve de parcours.
+
+## RAPPORT CODEX — 2026-11-02 — intégration Spec Kit du backlog
+
+- Le Dev Kit reconnaît maintenant `evolution import-backlog`.
+- Source : `docs/NAGE_FINAL_200_MISSIONS.md`; import borné à 1–200 missions.
+- Le mode `--dry-run` prévisualise les missions sans les mettre en file.
+- L’import normal alimente la file SQLite persistante du Dev Kit, déduplique les tâches et
+  ne lance jamais de modèle ni de mission automatiquement.
+- Les fichiers sélectionnés sont dérivés d’une allowlist existante (`career/**`,
+  `study_coach/**`, `devkit/**`) et les chemins inexistants sont refusés.
+- Preuve : `28 passed in 7.32s` sur backlog, store et routes Dev Kit; Ruff vert; commande
+  CLI dry-run exécutée sur 3 missions avec `automatic_run: false`.
 # Candidate consolidée Codex (2026-11-01)
 
 - Branche : `codex/n100-consolidated-20261101`.
