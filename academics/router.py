@@ -232,8 +232,11 @@ def create_academics_router() -> APIRouter:
         try:
             cards = [Card(**item) for item in payload.cards]
             store = VCStore()
-            store.save_cards(cards)
-            return {"saved": len(cards), "warnings": [], "blockers": []}
+            existing = store.load_cards()
+            existing_ids = {card.id for card in existing}
+            additions = [card for card in cards if card.id not in existing_ids]
+            store.save_cards(existing + additions)
+            return {"saved": len(additions), "warnings": [], "blockers": []}
         except (TypeError, ValueError) as error:
             return {"saved": 0, "warnings": [], "blockers": [str(error)]}
 

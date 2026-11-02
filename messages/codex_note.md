@@ -303,3 +303,8 @@
 - **Livré** : export CSV UTF-8 compatible Excel des cartes, thèmes, sources, qualité, répétitions et échéances.
 - **Protection** : aucune colonne de réponse; export généré localement côté navigateur.
 - **Preuve** : `7 passed in 5.16s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+# Livraison VC-136 — import CSV contrôlé (2026-11-02)
+
+- **Livré** : import CSV local des cartes avec colonnes question/réponse/thème/source, limité à 200 lignes exploitables.
+- **Protection** : l’API fusionne les nouvelles cartes avec le deck existant et ignore les identifiants déjà présents; aucune carte existante n’est remplacée.
+- **Preuve** : `8 passed in 5.25s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.

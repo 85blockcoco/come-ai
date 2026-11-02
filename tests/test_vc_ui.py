@@ -6,7 +6,7 @@ ROOT = Path(__file__).parents[1]
 
 def test_vc_view_exposes_complete_revision_flow() -> None:
     html = (ROOT / "v5_static" / "index.html").read_text(encoding="utf-8")
-    for marker in ("vcView", "vcCardForm", "vcSessionForm", "vcWeakOnly", "vcFocusTopic", "vcReveal", "vcRadar", "vcResistantCards", "vcUntestedCards", "vcCardSearch", "vcCardSort", "vcAllCards", "vcExamStart", "vcExamSubmit", "vcExamHistory", "vcSessionHistory", "vcCadence", "vcExportReport", "vcExportCsv", "vcProgress", "vcReadiness", "vcQuickFocus", "vcShortSession", "vcExpressSession"):
+    for marker in ("vcView", "vcCardForm", "vcCsvInput", "vcSessionForm", "vcWeakOnly", "vcFocusTopic", "vcReveal", "vcRadar", "vcResistantCards", "vcUntestedCards", "vcCardSearch", "vcCardSort", "vcAllCards", "vcExamStart", "vcExamSubmit", "vcExamHistory", "vcSessionHistory", "vcCadence", "vcExportReport", "vcExportCsv", "vcProgress", "vcReadiness", "vcQuickFocus", "vcShortSession", "vcExpressSession"):
         assert marker in html
     assert 'data-view-target="vcView"' in html
     assert 'aria-live="polite"' in html
@@ -34,6 +34,7 @@ def test_vc_frontend_uses_local_routes_and_keeps_answer_out_of_session_payload()
     assert "jamais testée" in script
     assert "sans les réponses" in script
     assert "text/csv" in script
+    assert "n’ont pas été remplacées" in script
     assert "VC_EXAM_DRAFT_KEY" in script
     assert "restoreVCExamDraft" in script
     assert "local" in script

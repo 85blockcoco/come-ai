@@ -32,6 +32,15 @@ def test_vc_route_rejects_unknown_card_without_external_action(tmp_path, monkeyp
         assert "introuvable" in response.json()["blockers"][0]
 
 
+def test_vc_card_import_appends_without_replacing_existing_cards(tmp_path, monkeypatch):
+    monkeypatch.setenv("NAGE_VC_HOME", str(tmp_path / "vc"))
+    with TestClient(create_app(base_dir=tmp_path)) as client:
+        client.post("/api/academics/vc/cards", json={"cards": [{"id": "one", "topic": "valuation", "front": "q", "back": "a"}]})
+        client.post("/api/academics/vc/cards", json={"cards": [{"id": "two", "topic": "returns", "front": "q", "back": "a"}]})
+        stats = client.get("/api/academics/vc/card-stats")
+        assert {item["id"] for item in stats.json()["cards"]} == {"one", "two"}
+
+
 def test_vc_exam_hides_answers_until_grade(tmp_path, monkeypatch):
     monkeypatch.setenv("NAGE_VC_HOME", str(tmp_path / "vc"))
     with TestClient(create_app(base_dir=tmp_path)) as client:
