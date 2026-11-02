@@ -318,3 +318,8 @@
 - **Livré** : parseur CSV local gérant les champs quotés, les guillemets doublés et les virgules dans une question, une réponse ou une source.
 - **Protection** : l’aperçu et la confirmation restent obligatoires; aucune modification automatique du deck.
 - **Preuve** : `8 passed in 5.39s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+# Livraison VC-139 — lignes CSV incomplètes signalées (2026-11-02)
+
+- **Livré** : comptage explicite des lignes sans question ou réponse, affiché dans l’aperçu et après confirmation.
+- **UX** : les lignes incomplètes sont ignorées de l’import mais jamais masquées à l’utilisateur.
+- **Preuve** : `8 passed in 5.59s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.

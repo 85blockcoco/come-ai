@@ -37,6 +37,7 @@ def test_vc_frontend_uses_local_routes_and_keeps_answer_out_of_session_payload()
     assert "n’ont pas été remplacées" in script
     assert "Confirmer l’import" in (ROOT / "v5_static" / "index.html").read_text(encoding="utf-8")
     assert "parseVCCsvLine" in script
+    assert "ligne(s) incomplète(s) ignorée(s)" in script
     assert "VC_EXAM_DRAFT_KEY" in script
     assert "restoreVCExamDraft" in script
     assert "local" in script
