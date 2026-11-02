@@ -212,3 +212,8 @@
 - **Livré** : mini-vue de progression locale basée sur les 8 dernières tentatives : moyenne récente, meilleur score et barres visuelles; elle reste masquée tant que deux examens n’ont pas été passés.
 - **UX** : signal simple, lisible et non trompeur; aucune extrapolation lorsque l’historique est insuffisant.
 - **Preuve** : `11 passed in 5.14s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+# Livraison VC-118 — signal de préparation explicable (2026-11-02)
+
+- **Livré** : indicateur local de préparation basé sur les 3 dernières tentatives, moyenne récente et radar des thèmes fragiles.
+- **Interprétation** : « tendance insuffisante » avant 3 examens; « à consolider » si le seuil n’est pas atteint; signal favorable seulement à partir de 80 % sans thème fragile, avec mention explicite que ce n’est pas une garantie de réussite.
+- **Preuve** : `11 passed in 9.46s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.

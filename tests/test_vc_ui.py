@@ -6,7 +6,7 @@ ROOT = Path(__file__).parents[1]
 
 def test_vc_view_exposes_complete_revision_flow() -> None:
     html = (ROOT / "v5_static" / "index.html").read_text(encoding="utf-8")
-    for marker in ("vcView", "vcCardForm", "vcSessionForm", "vcReveal", "vcRadar", "vcExamStart", "vcExamSubmit", "vcExamHistory", "vcProgress"):
+    for marker in ("vcView", "vcCardForm", "vcSessionForm", "vcReveal", "vcRadar", "vcExamStart", "vcExamSubmit", "vcExamHistory", "vcProgress", "vcReadiness"):
         assert marker in html
     assert 'data-view-target="vcView"' in html
 

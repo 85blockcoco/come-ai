@@ -31,7 +31,7 @@ const elements = {
   vcStatus: $("vcStatus"), vcCardForm: $("vcCardForm"), vcQuestion: $("vcQuestion"), vcAnswer: $("vcAnswer"), vcTopic: $("vcTopic"), vcSource: $("vcSource"), vcCardStatus: $("vcCardStatus"), vcSessionForm: $("vcSessionForm"), vcTodayOnly: $("vcTodayOnly"), vcLimit: $("vcLimit"), vcSessionCount: $("vcSessionCount"), vcPrompt: $("vcPrompt"), vcReveal: $("vcReveal"), vcCorrection: $("vcCorrection"), vcAnswerDisplay: $("vcAnswerDisplay"), vcCitationDisplay: $("vcCitationDisplay"), vcGrades: $("vcGrades"), vcSessionStatus: $("vcSessionStatus"), vcRadar: $("vcRadar"), vcRadarEmpty: $("vcRadarEmpty"), vcPlan: $("vcPlan"), vcRefreshRadar: $("vcRefreshRadar"), vcRefreshStatus: $("vcRefreshStatus"),
   vcExamLimit: $("vcExamLimit"), vcExamStart: $("vcExamStart"), vcExamSubmit: $("vcExamSubmit"), vcExamQuestions: $("vcExamQuestions"), vcExamTimer: $("vcExamTimer"), vcExamResult: $("vcExamResult"),
   vcExamHistory: $("vcExamHistory"), vcExamHistoryEmpty: $("vcExamHistoryEmpty"),
-  vcProgress: $("vcProgress"), vcProgressEmpty: $("vcProgressEmpty"),
+  vcProgress: $("vcProgress"), vcProgressEmpty: $("vcProgressEmpty"), vcReadiness: $("vcReadiness"),
 };
 
 async function api(path, options = {}) {
@@ -456,6 +456,15 @@ function renderVCExamHistory(exams) {
     row.append(score, details, topics); elements.vcExamHistory.append(row);
   }
 }
+function renderVCReadiness(exams, radar) {
+  const rows = Array.isArray(exams) ? exams.slice(-3) : [];
+  const scores = rows.map((exam) => Number(exam.score || 0) / Math.max(1, Number(exam.max_score || 1)));
+  const average = scores.length ? scores.reduce((sum, value) => sum + value, 0) / scores.length : 0;
+  const weak = (radar || []).filter((item) => ["non testé", "fragile"].includes(item.status));
+  if (rows.length < 3) { elements.vcReadiness.className = "vc-readiness neutral"; text(elements.vcReadiness, `Signal de préparation : encore ${3 - rows.length} examen(s) nécessaire(s) pour une tendance.`); return; }
+  if (average >= 0.8 && weak.length === 0) { elements.vcReadiness.className = "vc-readiness positive"; text(elements.vcReadiness, "Signal favorable : moyenne récente ≥ 80 %, sans thème fragile détecté. Ce n’est pas une garantie de résultat."); return; }
+  elements.vcReadiness.className = "vc-readiness caution"; text(elements.vcReadiness, `Signal à consolider : moyenne récente ${Math.round(average * 100)} %${weak.length ? ` · ${weak.length} thème(s) fragile(s)` : ""}.`);
+}
 function renderVCProgress(exams) {
   const rows = Array.isArray(exams) ? exams.slice(-8) : [];
   elements.vcProgress.replaceChildren(); elements.vcProgressEmpty.hidden = rows.length >= 2;
@@ -475,6 +484,7 @@ async function refreshVCStatus() {
     text(elements.vcStatus, `${status.cards || 0} carte(s) · ${status.reviews || 0} réponse(s) · ${(exams.exams || []).length} examen(s) · stockage local uniquement.`);
     renderVCExamHistory(exams.exams || []);
     renderVCProgress(exams.exams || []);
+    renderVCReadiness(exams.exams || [], radar.radar || []);
     renderVCRadar(radar.radar);
     const fragile = (radar.radar || []).filter((item) => ["non testé", "fragile"].includes(item.status)).map((item) => item.topic);
     const latest = (exams.exams || []).at(-1);
