@@ -1,0 +1,563 @@
+{
+  "schema_version": 1,
+  "paper_id": "edhec-pevc-2023",
+  "year": 2023,
+  "title": "EDHEC Private Equity, VC & M&A — Final Exam 2023",
+  "duration_minutes": 120,
+  "language": "en",
+  "source": "docs/vc_study/PEVC final exam 2023 (1).txt; docs/vc_study/Final exam 2023.txt",
+  "notice": "Derived study pack: questions are condensed and paraphrased from the 2023 EDHEC past paper; numerical answers and worked solutions are reproduced.",
+  "sections": [
+    {
+      "id": "A",
+      "title": "Multiple choice questions",
+      "points": 20
+    },
+    {
+      "id": "B",
+      "title": "Open-ended questions",
+      "points": 10
+    },
+    {
+      "id": "C",
+      "title": "Case studies",
+      "points": 30
+    }
+  ],
+  "questions": [
+    {
+      "id": "2023-A01",
+      "number": 1,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC01",
+      "prompt": "Which statement about private equity is FALSE?",
+      "choices": [
+        {
+          "text": "There is a liquid secondary market for trading PE investments."
+        },
+        {
+          "text": "PE is sometimes accused of short-term measures that boost exit value at the expense of long-term prospects."
+        },
+        {
+          "text": "A company may use PE financing to repurchase shares and go private."
+        },
+        {
+          "text": "An entrepreneur can use business-angel networks to source seed capital."
+        }
+      ],
+      "answer": "A",
+      "solution": "PE interests are illiquid and trade only on a limited secondary market, usually through fund stakes or structured secondaries."
+    },
+    {
+      "id": "2023-A02",
+      "number": 2,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC01",
+      "prompt": "Which PE strategy sees the highest euro amount invested in Europe every year?",
+      "choices": [
+        {
+          "text": "Buyout."
+        },
+        {
+          "text": "Growth equity."
+        },
+        {
+          "text": "Venture capital."
+        },
+        {
+          "text": "Rescue / turnaround."
+        }
+      ],
+      "answer": "A",
+      "solution": "Buyout is the largest PE segment by invested capital in Europe; VC is much smaller in euro terms."
+    },
+    {
+      "id": "2023-A03",
+      "number": 3,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC03",
+      "prompt": "VC firms typically use staged financing in order to:",
+      "choices": [
+        {
+          "text": "Incentivize the entrepreneur to reach predefined milestones."
+        },
+        {
+          "text": "Acquire information about the founder's true ability, reducing informational asymmetries."
+        },
+        {
+          "text": "Keep the option to abandon low-return ventures and fund only good performers."
+        },
+        {
+          "text": "All of the above."
+        }
+      ],
+      "answer": "D",
+      "solution": "All three motives are standard: incentives, information acquisition and the abandonment option."
+    },
+    {
+      "id": "2023-A04",
+      "number": 4,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC04",
+      "prompt": "The amount invested in a venture deal:",
+      "choices": [
+        {
+          "text": "Affects pre-money valuation."
+        },
+        {
+          "text": "Affects post-money valuation."
+        },
+        {
+          "text": "Affects both pre- and post-money valuation."
+        },
+        {
+          "text": "Does not affect valuation."
+        }
+      ],
+      "answer": "B",
+      "solution": "Post-money = pre-money + investment. The negotiated pre-money value is independent of the cheque size."
+    },
+    {
+      "id": "2023-A05",
+      "number": 5,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC05",
+      "prompt": "A stock-options pool is 'fully diluted' when:",
+      "choices": [
+        {
+          "text": "Later rounds dilute the pool's ownership stake."
+        },
+        {
+          "text": "All options are exercised and converted into common shares."
+        },
+        {
+          "text": "Employees let options expire because they are worthless."
+        },
+        {
+          "text": "Grants exceed the issued share capital."
+        }
+      ],
+      "answer": "B",
+      "solution": "Fully diluted treats all options and convertibles as exercised/converted."
+    },
+    {
+      "id": "2023-A06",
+      "number": 6,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC13",
+      "prompt": "Which characteristics represent an attractive LBO candidate?",
+      "choices": [
+        {
+          "text": "Irregular cash flow and substantial assets."
+        },
+        {
+          "text": "High capex requirements and a small asset base."
+        },
+        {
+          "text": "Predictable cash flow and substantial assets."
+        },
+        {
+          "text": "Substantial assets and insubstantial cash flow."
+        }
+      ],
+      "answer": "C",
+      "solution": "LBOs need stable cash flow to service debt and assets to collateralize it."
+    },
+    {
+      "id": "2023-A07",
+      "number": 7,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC14",
+      "prompt": "All of the following are reasons why EBITDA matters in comparable-company analysis EXCEPT:",
+      "choices": [
+        {
+          "text": "It is a more accurate look at operating cash flow."
+        },
+        {
+          "text": "It is free from capital-structure differences."
+        },
+        {
+          "text": "It represents profit after all expenses have been netted out."
+        },
+        {
+          "text": "It is free from tax differences."
+        }
+      ],
+      "answer": "C",
+      "solution": "EBITDA is before interest, taxes, depreciation and amortization; it is not profit after all expenses."
+    },
+    {
+      "id": "2023-A08",
+      "number": 8,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC13",
+      "prompt": "What happens to enterprise value if a company issues equity and uses the proceeds to repay debt?",
+      "choices": [
+        {
+          "text": "EV goes up."
+        },
+        {
+          "text": "EV remains the same."
+        },
+        {
+          "text": "EV goes down."
+        },
+        {
+          "text": "It depends."
+        }
+      ],
+      "answer": "B",
+      "solution": "Equity rises by the amount debt falls (cash is unchanged after the round-trip), so EV = equity + debt - cash is unchanged."
+    },
+    {
+      "id": "2023-A09",
+      "number": 9,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC13",
+      "prompt": "In an LBO, which correctly ranks the capital structure from most senior to most junior?",
+      "choices": [
+        {
+          "text": "High-yield bonds, mezzanine, equity, bank debt."
+        },
+        {
+          "text": "Equity, mezzanine, high-yield bonds, bank debt."
+        },
+        {
+          "text": "Equity, high-yield bonds, mezzanine, bank debt."
+        },
+        {
+          "text": "Bank debt, mezzanine, high-yield bonds, equity."
+        }
+      ],
+      "answer": "D",
+      "solution": "Bank debt is senior secured; mezzanine is subordinated; high-yield bonds are typically unsecured/junior; equity is last."
+    },
+    {
+      "id": "2023-A10",
+      "number": 10,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC13",
+      "prompt": "Which generally provides the highest valuation on a football-field graphic?",
+      "choices": [
+        {
+          "text": "DCF."
+        },
+        {
+          "text": "LBO."
+        },
+        {
+          "text": "Company comparables."
+        },
+        {
+          "text": "Transaction comparables."
+        }
+      ],
+      "answer": "D",
+      "solution": "Transaction comparables include a control premium and synergies, so they usually sit at the top of the football field."
+    },
+    {
+      "id": "2023-A11",
+      "number": 11,
+      "section": "A",
+      "points": 2,
+      "kind": "mcq",
+      "topic_id": "VC14",
+      "prompt": "EBITDA is $200m, COGS $200m, sales $1,000m and net income $150m. What is the EBITDA margin?",
+      "choices": [
+        {
+          "text": "20%."
+        },
+        {
+          "text": "15%."
+        },
+        {
+          "text": "40%."
+        },
+        {
+          "text": "25%."
+        }
+      ],
+      "answer": "A",
+      "solution": "EBITDA margin = 200 / 1,000 = 20%. COGS and net income are distractors."
+    },
+    {
+      "id": "2023-A12",
+      "number": 12,
+      "section": "A",
+      "points": 2,
+      "kind": "mcq",
+      "topic_id": "VC13",
+      "prompt": "Offer price $20, fully diluted shares 100m, total debt $200m, cash $100m. What is the implied enterprise value ($m)?",
+      "choices": [
+        {
+          "text": "2,000."
+        },
+        {
+          "text": "1,900."
+        },
+        {
+          "text": "2,100."
+        },
+        {
+          "text": "1,700."
+        }
+      ],
+      "answer": "C",
+      "solution": "Equity value = 20 × 100 = $2,000m. EV = equity + debt - cash = 2,000 + 200 - 100 = $2,100m."
+    },
+    {
+      "id": "2023-A13",
+      "number": 13,
+      "section": "A",
+      "points": 2,
+      "kind": "mcq",
+      "topic_id": "VC13",
+      "prompt": "EBITDA $600m, capex $100m, interest $150m, increase in NWC $40m, D&A $200m, tax rate 40%. What is free cash flow ($m)?",
+      "choices": [
+        {
+          "text": "310."
+        },
+        {
+          "text": "340."
+        },
+        {
+          "text": "210."
+        },
+        {
+          "text": "300."
+        }
+      ],
+      "answer": "C",
+      "solution": "EBIT = 600 - 200 = 400; EBT = 400 - 150 = 250; tax = 100. FCF = 600 - 100 - 40 - 150 - 100 = $210m."
+    },
+    {
+      "id": "2023-A14",
+      "number": 14,
+      "section": "A",
+      "points": 2,
+      "kind": "mcq",
+      "topic_id": "VC13",
+      "prompt": "XO invested $10m five years ago in 5m convertible preferred shares (3 common each). Its common position is 30% of equity. IPO price $10, 8% underwriting fee. What exit proceeds can XO expect ($m)?",
+      "choices": [
+        {
+          "text": "46."
+        },
+        {
+          "text": "50."
+        },
+        {
+          "text": "138."
+        },
+        {
+          "text": "150."
+        }
+      ],
+      "answer": "C",
+      "solution": "XO's 15m common shares are 30% of 50m total. Market cap = 50m × $10 = $500m; after the 8% fee = $460m; XO gets 30% = $138m."
+    },
+    {
+      "id": "2023-A15",
+      "number": 15,
+      "section": "A",
+      "points": 2,
+      "kind": "mcq",
+      "topic_id": "VC09",
+      "prompt": "Using the XO data above, what is the IRR on the investment?",
+      "choices": [
+        {
+          "text": "35.7%."
+        },
+        {
+          "text": "38.0%."
+        },
+        {
+          "text": "69.0%."
+        },
+        {
+          "text": "71.9%."
+        }
+      ],
+      "answer": "C",
+      "solution": "CCM = 138/10 = 13.8x over 5 years. IRR = 13.8^(1/5) - 1 = 69.0%."
+    },
+    {
+      "id": "2023-B11",
+      "number": 16,
+      "section": "B",
+      "points": 2,
+      "kind": "open",
+      "topic_id": "VC02",
+      "prompt": "What are the steps of capital allocation in a distribution waterfall?",
+      "answer": "1) Return contributed capital to LPs. 2) Pay the preferred return/hurdle (about 8%). 3) GP catch-up until the GP has 20% of profits. 4) Split the remainder 80/20 between LPs and GP. 5) Clawback if the GP was overpaid.",
+      "solution": "The standard European waterfall is deal-by-deal or fund-wide: capital, hurdle, catch-up, 80/20 carry, then a clawback/true-up at the end."
+    },
+    {
+      "id": "2023-B12",
+      "number": 17,
+      "section": "B",
+      "points": 2,
+      "kind": "open",
+      "topic_id": "VC16",
+      "prompt": "In seed investing, what are convertible notes and when/why are they used?",
+      "answer": "Short-term debt-like instruments that convert into preferred shares at the next priced round, usually with a discount (10-20%) and/or a valuation cap. They avoid pricing an immature startup, are fast and cheap, and give the investor downside protection and control rights. Typical maturity is 12-24 months.",
+      "solution": "Key points: no valuation at issuance, conversion at a discount/cap, maturity and interest, speed and standardisation, and the tension between founder and investor incentives if the next round is delayed."
+    },
+    {
+      "id": "2023-B13",
+      "number": 18,
+      "section": "B",
+      "points": 2,
+      "kind": "open",
+      "topic_id": "VC03",
+      "prompt": "Growth-equity funds target firms with high capex and working-capital needs. What are the three main types of target firms?",
+      "answer": "Mature SMEs; late-stage VC-backed firms/startups; corporate spin-offs/carve-outs.",
+      "solution": "Growth equity sits between VC and buyout: minority stakes, proven business models, capital for scaling rather than survival."
+    },
+    {
+      "id": "2023-B14",
+      "number": 19,
+      "section": "B",
+      "points": 2,
+      "kind": "open",
+      "topic_id": "VC13",
+      "prompt": "Explain rollover equity. Is it a positive or a negative sign?",
+      "answer": "Equity that key pre-buyout shareholders (management, sometimes the seller) reinvest into the post-buyout company instead of cashing out. It is generally positive: it aligns management with the PE owner and signals the seller's continued belief; it also reduces the PE equity cheque. It can be negative if the seller wanted a full exit or if the fit with the PE is poor.",
+      "solution": "Mention alignment, signalling and financing benefits; also mention the seller's liquidity preference and potential conflicts."
+    },
+    {
+      "id": "2023-B15",
+      "number": 20,
+      "section": "B",
+      "points": 2,
+      "kind": "open",
+      "topic_id": "VC13",
+      "prompt": "When would a sell-side M&A advisor recommend a broad auction?",
+      "answer": "When maximizing competition and price is the priority: a broad auction reaches many strategic and financial buyers, limits any single buyer's bargaining power and helps the board meet its fiduciary duty. Costs: heavy preparation, confidentiality risk, business disruption and 'taint' if the auction fails.",
+      "solution": "Contrast with a targeted process: a broad auction maximizes price but is noisy; a targeted process protects confidentiality and is better when the buyer set is narrow."
+    },
+    {
+      "id": "2023-C16",
+      "number": 21,
+      "section": "C",
+      "points": 15,
+      "kind": "case",
+      "topic_id": "VC04",
+      "prompt": "Epäkunnossa Partners considers two startups. Both need €2m and would exit at €20m after two years if successful. Häviäjä: 10% success probability; Voittaja: 30%. Each founder has €3m expected lifetime income. The fund does not observe the founders' beliefs and assumes 20% success for both. It offers €2m at an €8m post-money with a 10% annual dividend and a 1.3x liquidation preference.",
+      "parts": [
+        {
+          "id": "2023-C16a",
+          "prompt": "What is each startup's expected exit value under the founder's belief? Is it worth investing (scrap value 0)?",
+          "kind": "open",
+          "points": 4,
+          "answer": "Häviäjä: 10% × €20m = €2m (indifferent, not worth it after any hurdle). Voittaja: 30% × €20m = €6m (worth it).",
+          "unit": "ratio",
+          "tolerance": 0.0,
+          "solution": "Expected exit value = probability × exit value: €2m vs €6m. Against a €2m investment, Häviäjä barely breaks even; Voittaja has a positive expected payoff."
+        },
+        {
+          "id": "2023-C16b",
+          "prompt": "What ownership fraction and preferred terms does the offer imply? What is the conversion threshold?",
+          "kind": "open",
+          "points": 4,
+          "answer": "Ownership = 2/8 = 25%. Preferred value = 2×1.3 + 2×10%×2 = €3.0m. Conversion threshold = 3.0/0.25 = €12m.",
+          "unit": "ratio",
+          "tolerance": 0.0,
+          "solution": "Preferred terms: 1.3× liquidation preference (€2.6m) plus two years of 10% dividends (€0.4m) = €3.0m. The VC converts when 25% of exit exceeds €3m, i.e. above €12m."
+        },
+        {
+          "id": "2023-C16c",
+          "prompt": "On success, what are the payoffs for the VC and the founders?",
+          "kind": "open",
+          "points": 3,
+          "answer": "Exit €20m > €12m threshold, so the VC converts: VC = 25% × €20m = €5m; founders = €15m.",
+          "unit": "ratio",
+          "tolerance": 0.0,
+          "solution": "Because conversion beats the preference (€5m > €3m), the VC converts. Founders keep the residual €15m."
+        },
+        {
+          "id": "2023-C16d",
+          "prompt": "Would each founder accept, given €3m lifetime income? Does the term sheet screen out the weaker startup?",
+          "kind": "open",
+          "points": 4,
+          "answer": "Häviäjä: 10% × €15m = €1.5m < €3m → reject. Voittaja: 30% × €15m = €4.5m > €3m → accept. Yes, the contract screens out the low-quality startup.",
+          "unit": "ratio",
+          "tolerance": 0.0,
+          "solution": "The founder compares the expected payoff with the outside option (€3m). Only the high-type founder accepts, so the term sheet is a screening device."
+        }
+      ],
+      "solution": ""
+    },
+    {
+      "id": "2023-C17",
+      "number": 22,
+      "section": "C",
+      "points": 15,
+      "kind": "case",
+      "topic_id": "VC13",
+      "prompt": "Æble PE Partners buys Eple Co. at 8x LTM EBITDA and exits after three years at the same 8x. 50% debt at 10% with a cash sweep. LTM revenue $100m, growing 20% for two years; EBITDA margin 40%, flat; capex and depreciation 20% of revenue; no change in NWC; no tax for three years.",
+      "parts": [
+        {
+          "id": "2023-C17a",
+          "prompt": "Compute revenue, EBITDA, entry EV and exit EV ($m).",
+          "kind": "open",
+          "points": 4,
+          "answer": "Revenue 100 / 120 / 144 / 172.8; EBITDA 40 / 48 / 57.6 / 69.12; entry EV $320m; exit EV $552.96m.",
+          "unit": "ratio",
+          "tolerance": 0.0,
+          "solution": "Revenue grows 20%: 100, 120, 144, 172.8. EBITDA = 40% of revenue: 40, 48, 57.6, 69.12. EV = 8 × EBITDA: 320 entry, 552.96 exit."
+        },
+        {
+          "id": "2023-C17b",
+          "prompt": "Compute free cash flow and debt for each year ($m).",
+          "kind": "open",
+          "points": 5,
+          "answer": "CFADS 24.0 / 28.8 / 34.56; interest 16.0 / 15.2 / 13.84; FCF 8.0 / 13.6 / 20.72; debt 160 / 152 / 138.4 / 117.68.",
+          "unit": "ratio",
+          "tolerance": 0.0,
+          "solution": "CFADS = EBITDA - capex (20% of revenue), NWC change 0. Interest = 10% of opening debt. FCF = CFADS - interest. Debt falls by FCF each year (cash sweep)."
+        },
+        {
+          "id": "2023-C17c",
+          "prompt": "Compute the exit equity value, cash return, CCM and IRR. Would you invest?",
+          "kind": "open",
+          "points": 4,
+          "answer": "Exit equity = 552.96 - 117.68 = $435.28m; entry equity = $160m; return = $275.28m; CCM = 2.72x; IRR = 39.6%; yes (above the ~20-25% LBO threshold).",
+          "unit": "ratio",
+          "tolerance": 0.0,
+          "solution": "Equity = EV - debt. CCM = 435.28/160 = 2.72x. IRR = 2.72^(1/3) - 1 = 39.6%. The deal clears the usual LBO hurdle."
+        },
+        {
+          "id": "2023-C17d",
+          "prompt": "Decompose the return into EBITDA, multiple and net-debt effects.",
+          "kind": "open",
+          "points": 2,
+          "answer": "EBITDA: (69.12-40)×8 = $232.96m (84.6%); multiple: 0 (same 8x); net debt: 160-117.68 = $42.32m (15.4%).",
+          "unit": "ratio",
+          "tolerance": 0.0,
+          "solution": "EBITDA impact = ΔEBITDA × entry multiple. Multiple impact = (exit multiple - entry multiple) × exit EBITDA = 0. Net-debt impact = entry debt - exit debt. The three sum to the $275.28m return."
+        }
+      ],
+      "solution": ""
+    }
+  ]
+}

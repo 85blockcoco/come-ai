@@ -1,0 +1,613 @@
+{
+  "schema_version": 1,
+  "paper_id": "edhec-pevc-2024",
+  "year": 2024,
+  "title": "EDHEC Private Equity, VC & M&A — Final Exam 2024",
+  "duration_minutes": 120,
+  "language": "en",
+  "source": "docs/vc_study/PEVC final exam 2024 solutions.txt",
+  "notice": "Derived study pack: questions are condensed and paraphrased from the 2024 EDHEC past paper; numerical answers and worked solutions are reproduced.",
+  "sections": [
+    {
+      "id": "A",
+      "title": "Multiple choice questions",
+      "points": 20
+    },
+    {
+      "id": "B",
+      "title": "Open-ended questions",
+      "points": 10
+    },
+    {
+      "id": "C",
+      "title": "Case studies",
+      "points": 20
+    }
+  ],
+  "questions": [
+    {
+      "id": "2024-A01",
+      "number": 1,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC10",
+      "prompt": "What does 'first closing' mean in private-equity fundraising?",
+      "choices": [
+        {
+          "text": "The point at which the fund starts investing."
+        },
+        {
+          "text": "The stage when the fund reaches its minimum required commitments to begin operations."
+        },
+        {
+          "text": "The deadline for all LPs to make initial capital contributions."
+        },
+        {
+          "text": "The stage when the manager finalizes total commitments."
+        }
+      ],
+      "answer": "B",
+      "solution": "First closing is when the fund has enough committed capital (the minimum size) to start investing; later closings add LPs."
+    },
+    {
+      "id": "2024-A02",
+      "number": 2,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC02",
+      "prompt": "A 'catch-up' clause in private equity typically refers to:",
+      "choices": [
+        {
+          "text": "Allocating the first profits to LPs to meet the hurdle rate."
+        },
+        {
+          "text": "Adjusting portfolio valuation to market conditions."
+        },
+        {
+          "text": "Allocating profits disproportionately to GPs after LPs reach the hurdle rate."
+        },
+        {
+          "text": "Reinvesting distributions into follow-on investments."
+        }
+      ],
+      "answer": "C",
+      "solution": "After the LP hurdle, the catch-up gives the GP a disproportionate share of subsequent profits until the 80/20 split is restored."
+    },
+    {
+      "id": "2024-A03",
+      "number": 3,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC09",
+      "prompt": "Which best explains the J-curve in private equity?",
+      "choices": [
+        {
+          "text": "Performance dips early due to fees and initial losses, then rises as value is created."
+        },
+        {
+          "text": "Portfolio companies grow exponentially through operational improvements."
+        },
+        {
+          "text": "Initial distributions are delayed until all investments exit."
+        },
+        {
+          "text": "GP compensation rises exponentially as the fund matures."
+        }
+      ],
+      "answer": "A",
+      "solution": "Early management fees and write-downs push returns below zero; later exits and value creation lift them."
+    },
+    {
+      "id": "2024-A04",
+      "number": 4,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC14",
+      "prompt": "EBITDA is a proxy for:",
+      "choices": [
+        {
+          "text": "Sales."
+        },
+        {
+          "text": "Operating cash flow."
+        },
+        {
+          "text": "Growth."
+        },
+        {
+          "text": "Debt."
+        }
+      ],
+      "answer": "B",
+      "solution": "EBITDA approximates operating cash flow before capex, working capital, interest and taxes."
+    },
+    {
+      "id": "2024-A05",
+      "number": 5,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC03",
+      "prompt": "Which characteristic represents an attractive growth-equity candidate?",
+      "choices": [
+        {
+          "text": "Early-stage company with no product-market fit."
+        },
+        {
+          "text": "Mature company with stagnant growth and limited scalability."
+        },
+        {
+          "text": "Significant revenue growth, proven product-market fit and scaling potential."
+        },
+        {
+          "text": "Company requiring heavy restructuring and capex."
+        }
+      ],
+      "answer": "C",
+      "solution": "Growth equity funds proven models into scaling, not turnarounds or unproven startups."
+    },
+    {
+      "id": "2024-A06",
+      "number": 6,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC08",
+      "prompt": "What is the primary purpose of an anti-dilution clause?",
+      "choices": [
+        {
+          "text": "To prevent existing investor ownership from being diluted in future rounds."
+        },
+        {
+          "text": "To restrict new shares issued to employees."
+        },
+        {
+          "text": "To limit founders' ability to issue equity."
+        },
+        {
+          "text": "To ensure debt is paid before equity."
+        }
+      ],
+      "answer": "A",
+      "solution": "It adjusts the preferred conversion price in a down round."
+    },
+    {
+      "id": "2024-A07",
+      "number": 7,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC03",
+      "prompt": "What is the primary difference between seed-stage and Series A?",
+      "choices": [
+        {
+          "text": "Series A investors typically require board seats."
+        },
+        {
+          "text": "Seed focuses on scaling; Series A on product-market fit."
+        },
+        {
+          "text": "Seed builds and validates the product; Series A scales the business."
+        },
+        {
+          "text": "Series A requires higher founder equity stakes."
+        }
+      ],
+      "answer": "C",
+      "solution": "Seed validates; Series A scales a repeatable model."
+    },
+    {
+      "id": "2024-A08",
+      "number": 8,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC04",
+      "prompt": "In venture capital, pre-money valuation is:",
+      "choices": [
+        {
+          "text": "Always higher than post-money."
+        },
+        {
+          "text": "Always lower than post-money."
+        },
+        {
+          "text": "Lower than post-money if the venture progresses after investment."
+        },
+        {
+          "text": "Lower than post-money if the entrepreneur negotiates well."
+        }
+      ],
+      "answer": "B",
+      "solution": "Post-money = pre-money + investment."
+    },
+    {
+      "id": "2024-A09",
+      "number": 9,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC04",
+      "prompt": "The key inputs of the VC valuation model are:",
+      "choices": [
+        {
+          "text": "Investment, time-to-exit, exit value, hurdle rate."
+        },
+        {
+          "text": "Investment, time-to-exit, exit value, risk-free rate, risk premium."
+        },
+        {
+          "text": "Investment, number of rounds, exit value, hurdle rate."
+        },
+        {
+          "text": "Investment, number of rounds, exit value, risk-free rate, risk premium."
+        }
+      ],
+      "answer": "A",
+      "solution": "The standard VC method uses I, t, exit value and hurdle."
+    },
+    {
+      "id": "2024-A10",
+      "number": 10,
+      "section": "A",
+      "points": 2,
+      "kind": "mcq",
+      "topic_id": "VC04",
+      "prompt": "Palooka Products receives $5m today, exits at $50m in 5 years, VC hurdle 40%. What equity share does the VC require?",
+      "choices": [
+        {
+          "text": "26%."
+        },
+        {
+          "text": "38%."
+        },
+        {
+          "text": "54%."
+        },
+        {
+          "text": "14%."
+        }
+      ],
+      "answer": "C",
+      "solution": "CCM = 1.4^5 = 5.378; post-money = 50/5.378 = 9.297; share = 5/9.297 = 53.8% ≈ 54%."
+    },
+    {
+      "id": "2024-A11",
+      "number": 11,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC13",
+      "prompt": "Which financing structure most likely improves equity IRR in an LBO?",
+      "choices": [
+        {
+          "text": "Increasing subordinated debt."
+        },
+        {
+          "text": "Reducing the equity contribution and increasing leverage."
+        },
+        {
+          "text": "Interest-only senior debt in early years."
+        },
+        {
+          "text": "Replacing floating-rate debt with fixed-rate debt."
+        }
+      ],
+      "answer": "B",
+      "solution": "More leverage means less equity for the same enterprise, so the equity return is magnified (if the deal performs)."
+    },
+    {
+      "id": "2024-A12",
+      "number": 12,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC13",
+      "prompt": "What is the primary purpose of a dividend recapitalization?",
+      "choices": [
+        {
+          "text": "Return capital to investors while retaining ownership."
+        },
+        {
+          "text": "Reduce the company's debt burden."
+        },
+        {
+          "text": "Raise new equity for growth."
+        },
+        {
+          "text": "Refinance debt at a lower rate."
+        }
+      ],
+      "answer": "A",
+      "solution": "The portfolio company borrows to pay a dividend to the sponsor, returning cash without an exit."
+    },
+    {
+      "id": "2024-A13",
+      "number": 13,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC13",
+      "prompt": "Which represents an attractive LBO candidate?",
+      "choices": [
+        {
+          "text": "Stable margins, low capex, declining industry."
+        },
+        {
+          "text": "Strong cash flow, low leverage, cyclical demand."
+        },
+        {
+          "text": "High margins, strong free cash flow, dominant position in a fragmented but stable industry."
+        },
+        {
+          "text": "High growth, high retention, high working-capital needs and R&D."
+        }
+      ],
+      "answer": "C",
+      "solution": "Stable, cash-generative, defensible businesses support debt service."
+    },
+    {
+      "id": "2024-A14",
+      "number": 14,
+      "section": "A",
+      "points": 2,
+      "kind": "mcq",
+      "topic_id": "VC13",
+      "prompt": "An LBO target is bought for $1,500m with $500m equity. After 5 years no debt is repaid and EV rises by $500m. What is the cash-on-cash multiple?",
+      "choices": [
+        {
+          "text": "3x."
+        },
+        {
+          "text": "2x."
+        },
+        {
+          "text": "1x."
+        },
+        {
+          "text": "5x."
+        }
+      ],
+      "answer": "B",
+      "solution": "Entry debt = 1,000; exit EV = 2,000; exit equity = 1,000; 1,000/500 = 2x."
+    },
+    {
+      "id": "2024-A15",
+      "number": 15,
+      "section": "A",
+      "points": 2,
+      "kind": "mcq",
+      "topic_id": "VC13",
+      "prompt": "CFO $125m, CFI $50m, mandatory debt repayment $30m, cash from balance sheet $20m. Cash available for optional debt repayment?",
+      "choices": [
+        {
+          "text": "$65m."
+        },
+        {
+          "text": "$165m."
+        },
+        {
+          "text": "$45m."
+        },
+        {
+          "text": "$20m."
+        }
+      ],
+      "answer": "A",
+      "solution": "125 - 50 - 30 + 20 = $65m."
+    },
+    {
+      "id": "2024-A16",
+      "number": 16,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC13",
+      "prompt": "What is most critical when identifying buyers in a sell-side M&A transaction?",
+      "choices": [
+        {
+          "text": "Ability to secure financing."
+        },
+        {
+          "text": "Alignment with the seller's strategic objectives and valuation expectations."
+        },
+        {
+          "text": "Experience in previous M&A deals."
+        },
+        {
+          "text": "Ability to retain management."
+        }
+      ],
+      "answer": "B",
+      "solution": "Strategic fit and price expectations determine whether a buyer is credible and likely to close."
+    },
+    {
+      "id": "2024-A17",
+      "number": 17,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC13",
+      "prompt": "Which metric is most commonly used in merger-consequences analysis?",
+      "choices": [
+        {
+          "text": "EV/EBITDA."
+        },
+        {
+          "text": "Return on equity."
+        },
+        {
+          "text": "Earnings per share."
+        },
+        {
+          "text": "Internal rate of return."
+        }
+      ],
+      "answer": "C",
+      "solution": "Merger consequences focus on EPS accretion/dilution for the acquirer."
+    },
+    {
+      "id": "2024-B18",
+      "number": 18,
+      "section": "B",
+      "points": 2,
+      "kind": "open",
+      "topic_id": "VC04",
+      "prompt": "Discuss how financial-market conditions may affect the valuation of a new venture.",
+      "answer": "In the VC method, value depends on exit value, hurdle rate and time to exit. Interest rates raise hurdle rates and lower multiples; risk appetite lowers hurdles and raises multiples; liquidity affects both entry and exit; inflation affects projected revenue/EBITDA and multiples.",
+      "solution": "Structure: the three inputs; then rates, sentiment, liquidity and inflation, each with direction of effect."
+    },
+    {
+      "id": "2024-B19",
+      "number": 19,
+      "section": "B",
+      "points": 2,
+      "kind": "open",
+      "topic_id": "VC07",
+      "prompt": "Do you agree that 'investor liquidation rights are fundamentally a way to force founders to do investors' will and should be resisted'?",
+      "answer": "No. Liquidation rights protect the investor's downside and enforce the need for an exit, which is necessary to return capital to LPs. They are tough but within fair practice; the real issue is calibration (preference size, participation, caps), not the existence of the right.",
+      "solution": "Take a clear position, explain the economic function (downside protection, exit discipline, LP liquidity) and qualify with the cost to founders."
+    },
+    {
+      "id": "2024-B20",
+      "number": 20,
+      "section": "B",
+      "points": 2,
+      "kind": "open",
+      "topic_id": "VC03",
+      "prompt": "Discuss the trade-offs created by staged financing for the entrepreneur.",
+      "answer": "Advantages: progressively higher valuations, less dilution, strategic discipline. Disadvantages: funding risk if milestones are missed, short-termism, less freedom to pivot, dependence on market conditions at each round.",
+      "solution": "Give both sides and a conclusion: staging is efficient but shifts risk to the founder."
+    },
+    {
+      "id": "2024-B21",
+      "number": 21,
+      "section": "B",
+      "points": 2,
+      "kind": "open",
+      "topic_id": "VC13",
+      "prompt": "What are four key credit statistics used to size LBO debt?",
+      "answer": "Total debt/EBITDA; senior debt/EBITDA; EBITDA interest coverage; fixed-charge coverage; debt-service coverage.",
+      "solution": "Any four of the five are accepted; explain that they cap leverage and protect lenders."
+    },
+    {
+      "id": "2024-B22",
+      "number": 22,
+      "section": "B",
+      "points": 2,
+      "kind": "open",
+      "topic_id": "VC13",
+      "prompt": "Why have strategic buyers traditionally been able to outbid financial buyers in auctions?",
+      "answer": "Synergies (cost and revenue), a longer investment horizon, and cheaper/less constrained financing. Financial buyers need a 3-7 year exit and are limited by debt coverage.",
+      "solution": "Explain synergy value, horizon and cost of capital; note that financial buyers can still win when synergies are low or financing is cheap."
+    },
+    {
+      "id": "2024-C23",
+      "number": 23,
+      "section": "C",
+      "points": 10,
+      "kind": "case",
+      "topic_id": "VC04",
+      "prompt": "Magical Genie: VW offers $2m at a $5m post-money; XY offers $1m at a $3m pre-money. Founder owns 3m shares. Sale at $10m after one year. Scenario 1 (75%): $1m more at $2/share. Scenario 2 (25%): $2m more at $0.25/share.",
+      "parts": [
+        {
+          "id": "2024-C23a",
+          "prompt": "Initial round: compute pre/post-money, price, investor shares, total shares and founder ownership.",
+          "kind": "open",
+          "points": 3,
+          "answer": "VW: pre $3m, post $5m, price $1, 2m shares, 5m total, founder 60%. XY: pre $3m, post $4m, price $1, 1m shares, 4m total, founder 75%.",
+          "unit": "ratio",
+          "tolerance": 0.0,
+          "solution": "VW: 5-2=3 pre; 3/3=$1; 2/1=2m; 3/5=60%. XY: 3+1=4 post; 3/3=$1; 1/1=1m; 3/4=75%."
+        },
+        {
+          "id": "2024-C23b",
+          "prompt": "Second round under both scenarios: new shares and founder ownership.",
+          "kind": "open",
+          "points": 3,
+          "answer": "Scenario 1: VW 60%; XY 0.5m new, 4.5m total, founder 66.7%. Scenario 2: VW 4m new, 9m total, founder 33.3%; XY 8m new, 12m total, founder 25%.",
+          "unit": "ratio",
+          "tolerance": 0.0,
+          "solution": "Shares issued = amount / price. Scenario 1: 1/2=0.5m. Scenario 2: 1/0.25=4m and 2/0.25=8m."
+        },
+        {
+          "id": "2024-C23c",
+          "prompt": "Compute expected founder wealth with 75% probability on Scenario 1 and recommend an offer.",
+          "kind": "open",
+          "points": 3,
+          "answer": "VW: 53.33% × $10m = $5.333m. XY: 56.25% × $10m = $5.625m. Take XY.",
+          "unit": "ratio",
+          "tolerance": 0.0,
+          "solution": "VW: 0.75×60% + 0.25×33.3% = 53.33%. XY: 0.75×66.7% + 0.25×25% = 56.25%."
+        },
+        {
+          "id": "2024-C23d",
+          "prompt": "If the angels used a complex VC term sheet instead of common equity, which part of the calculations would change?",
+          "kind": "open",
+          "points": 1,
+          "answer": "The exit-value distribution, not the ownership maths: liquidation preferences, participation and anti-dilution change the split between founder and investor, so the founder's expected wealth falls.",
+          "unit": "ratio",
+          "tolerance": 0.0,
+          "solution": "Preferred terms reallocate exit proceeds; ownership fractions can stay the same while payoffs change."
+        }
+      ],
+      "solution": ""
+    },
+    {
+      "id": "2024-C24",
+      "number": 24,
+      "section": "C",
+      "points": 10,
+      "kind": "case",
+      "topic_id": "VC13",
+      "prompt": "Alma PE buys Apfel at 8x LTM EBITDA and exits after 2 years at 8.5x. 60% term-loan debt at 10% with cash sweep; management rolls over 10% of equity, sponsor funds 90%. LTM revenue $100m, +10% p.a.; EBITDA margin 35%, then 38%, then 40%. NWC and capex 10% of revenue; depreciation 10% of revenue; 0% tax.",
+      "parts": [
+        {
+          "id": "2024-C24a",
+          "prompt": "Compute revenue, EBITDA, entry EV and exit EV ($m).",
+          "kind": "open",
+          "points": 3,
+          "answer": "Revenue 100 / 110 / 121; EBITDA 35 / 41.8 / 48.4; entry EV $280m; exit EV $411.4m.",
+          "unit": "ratio",
+          "tolerance": 0.0,
+          "solution": "Revenue grows 10%. EBITDA = margin × revenue. EV = 8×35 = 280 entry; 8.5×48.4 = 411.4 exit."
+        },
+        {
+          "id": "2024-C24b",
+          "prompt": "Compute CFADS, interest, FCF and debt for each year ($m).",
+          "kind": "open",
+          "points": 3,
+          "answer": "CFADS 30.12 / 35.64; interest 16.80 / 15.47; FCF 13.32 / 20.17; debt 168 / 154.68 / 134.51.",
+          "unit": "ratio",
+          "tolerance": 0.0,
+          "solution": "The official solution table uses NWC = 10% of EBITDA, although the case wording says 10% of revenue: 10%×35 = 3.50; 10%×41.8 = 4.18 → ΔNWC = 0.68; 10%×48.4 = 4.84 → ΔNWC = 0.66. Capex is 10% of revenue: 11.00 and 12.10. CFADS = EBITDA - ΔNWC - capex. Interest = 10% of opening debt (16.80 then 15.47). FCF = CFADS - interest; debt falls by FCF."
+        },
+        {
+          "id": "2024-C24c",
+          "prompt": "Compute entry/exit equity, sponsor equity cheque, return, CCM and IRR. Invest?",
+          "kind": "open",
+          "points": 3,
+          "answer": "Entry equity $112m; sponsor cheque $100.8m; exit equity $276.89m; proceeds $249.20m; return $148.40m; CCM 2.47x; IRR 57.2%; yes.",
+          "unit": "ratio",
+          "tolerance": 0.0,
+          "solution": "Equity = EV - debt. Sponsor funds 90% of 112 = 100.8. Exit equity = 411.4 - 134.51 = 276.89. Management rolls over 10%, so the sponsor owns 90% of the exit equity: 90% × 276.89 = 249.20. Return = 249.20 - 100.80 = 148.40. CCM = 249.20/100.80 = 2.47x; IRR = 2.47^(1/2) - 1 = 57.2%. Yes, the deal clears the LBO hurdle."
+        },
+        {
+          "id": "2024-C24d",
+          "prompt": "Decompose the return into EBITDA, multiple and net-debt effects.",
+          "kind": "open",
+          "points": 1,
+          "answer": "Official solution: EBITDA impact $96.48m (65.0%), multiple impact $21.78m (14.7%), net-debt impact $30.14m (20.3%).",
+          "unit": "ratio",
+          "tolerance": 0.0,
+          "solution": "Use the case's decomposition: EBITDA impact = ΔEBITDA × entry multiple; multiple impact = Δmultiple × exit EBITDA; net-debt impact = entry debt - exit debt. The three sum to the $148.40m return."
+        }
+      ],
+      "solution": ""
+    }
+  ]
+}

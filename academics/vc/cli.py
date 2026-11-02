@@ -11,6 +11,14 @@ from typing import Any
 
 from .cases import case_payload, case_result_payload, evaluate_case
 from .content import load_content
+from .cram import (
+    FORMULA_GROUPS,
+    TRAPS,
+    formula_payload,
+    plan_blocks,
+    render_html,
+    render_markdown,
+)
 from .drills import drill_payload, grade_drill, random_drill
 from .errors import ContentError, InputError, StorageError, VcError
 from .exams import (
@@ -21,6 +29,7 @@ from .exams import (
     record_exam_result,
 )
 from .mastery import build_study_plan, mastery_radar, radar_payload
+from .pastpapers import answer_template, find_paper, grade_paper, load_papers, paper_payload
 from .report import build_progress_report
 from .scheduler import (
     answer_session,
@@ -47,6 +56,10 @@ def _emit(payload: Any, as_json: bool) -> None:
         print(payload)
 
 
+def _pts(value: float) -> str:
+    return f"{value:g} pt" + ("" if value == 1 else "s")
+
+
 def _store(args) -> VcStore:
     home = getattr(args, "home", None)
     return VcStore(Path(home) if home else None)
@@ -65,7 +78,7 @@ def _add_common(parser) -> None:
 
 
 def build_vc_parser(parser) -> None:
-    sub = parser.add_subparsers(dest="vc_action", required=True)
+    sub = parser.add_subparsers(dest="vc_action")
 
     review = sub.add_parser("review", help="Session de rappel actif")
     review.add_argument("--minutes", type=int, default=10)
@@ -145,6 +158,33 @@ def build_vc_parser(parser) -> None:
     notes_reject = notes_sub.add_parser("reject", help="Rejeter une proposition")
     notes_reject.add_argument("proposal_id")
     _add_common(notes_reject)
+
+    paper = sub.add_parser("paper", help="Vrais sujets EDHEC 2023-2025 avec corrigés")
+    paper_sub = paper.add_subparsers(dest="paper_action", required=True)
+    paper_list = paper_sub.add_parser("list", help="Lister les sujets disponibles")
+    _add_common(paper_list)
+    paper_show = paper_sub.add_parser("show", help="Afficher un sujet")
+    paper_show.add_argument("year", type=int)
+    paper_show.add_argument("--solutions", action="store_true", help="Inclure les corrigés")
+    paper_show.add_argument("--section", default=None, help="Filtrer une section (A, B, C)")
+    _add_common(paper_show)
+    paper_grade = paper_sub.add_parser("grade", help="Corriger un fichier de réponses")
+    paper_grade.add_argument("year", type=int)
+    paper_grade.add_argument("--answers", required=True, type=Path)
+    _add_common(paper_grade)
+    paper_template = paper_sub.add_parser("template", help="Générer un fichier de réponses vide")
+    paper_template.add_argument("year", type=int)
+    paper_template.add_argument("--output", type=Path, default=None)
+    _add_common(paper_template)
+
+    cram = sub.add_parser("cram", help="Plan de bataille 90 min + fiche de formules")
+    cram.add_argument("--minutes", type=int, default=90)
+    cram.add_argument("--html", type=Path, default=None, help="Écrire la fiche HTML")
+    cram.add_argument("--markdown", type=Path, default=None, help="Écrire la fiche Markdown")
+    cram.add_argument("--json", action="store_true")
+
+    formulas = sub.add_parser("formulas", help="Fiche de formules VC")
+    formulas.add_argument("--json", action="store_true")
 
     radar = sub.add_parser("radar", help="Radar de maîtrise")
     radar.add_argument("--today", default=None)
@@ -404,6 +444,207 @@ def _notes(args, store: VcStore, content) -> int:
     raise InputError("Action de notes inconnue.")
 
 
+def _print_paper(paper, *, solutions: bool = False, section: str | None = None) -> None:
+    if section:
+        section = section.upper()
+        known = {item["id"] for item in paper.sections}
+        if section not in known:
+            raise InputError(
+                f"Section inconnue : {section}. Sections : {', '.join(sorted(known))}."
+            )
+    questions = [
+        question
+        for question in paper.questions
+        if section is None or question.section == section
+    ]
+    print(f"{paper.title} — {paper.duration_minutes} min — {_pts(paper.points)}")
+    print(f"Source : {paper.source}")
+    print()
+    for question in questions:
+        print(
+            f"Q{question.number} [{question.section}] {_pts(question.points)} "
+            f"— {question.topic_id}"
+        )
+        print(question.prompt)
+        for choice in question.choices:
+            print(f"  {choice.label}. {choice.text}")
+        for part in question.parts:
+            print(f"  {part.id}. {part.prompt}")
+            if solutions:
+                if part.answer:
+                    print(f"     Answer: {part.answer}")
+                print(f"     Solution: {part.solution}")
+        if solutions:
+            if question.answer and not question.parts:
+                print(f"  Answer: {question.answer}")
+            if question.solution:
+                print(f"  Solution: {question.solution}")
+        print()
+
+
+def _paper(args, store: VcStore, content) -> int:
+    papers = load_papers()
+    if args.paper_action == "list":
+        payload = {
+            "papers": [
+                {
+                    "year": paper.year,
+                    "paper_id": paper.paper_id,
+                    "title": paper.title,
+                    "duration_minutes": paper.duration_minutes,
+                    "questions": len(paper.questions),
+                    "points": paper.points,
+                    "sections": [section["id"] for section in paper.sections],
+                }
+                for paper in papers
+            ],
+            "notice": "Sujets dérivés des annales EDHEC ; corrigés inclus.",
+        }
+        _emit(payload, args.json)
+        return 0
+
+    paper = find_paper(args.year, papers)
+
+    if args.paper_action == "show":
+        if args.json:
+            _emit(
+                paper_payload(paper, solutions=args.solutions),
+                True,
+            )
+        else:
+            _print_paper(paper, solutions=args.solutions, section=args.section)
+        return 0
+
+    if args.paper_action == "template":
+        template = answer_template(paper)
+        if args.output:
+            args.output.write_text(
+                json.dumps(template, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            _emit({"written": str(args.output), "answers": len(template)}, args.json)
+        else:
+            _emit(template, args.json)
+        return 0
+
+    if args.paper_action == "grade":
+        answers_path = args.answers
+        try:
+            answers = json.loads(answers_path.read_text(encoding="utf-8"))
+        except FileNotFoundError as error:
+            raise InputError(f"Fichier de réponses introuvable : {answers_path}") from error
+        except json.JSONDecodeError as error:
+            raise InputError(f"Fichier de réponses JSON invalide : {error.msg}") from error
+        result = grade_paper(paper, answers)
+        if args.json:
+            _emit(result, True)
+            return 0
+        print(
+            f"{paper.title} — auto-correction : "
+            f"{result['auto_points']:g}/{result['auto_max']:g} "
+            f"({result['auto_percent']}%)"
+        )
+        for item in result["items"]:
+            if item["status"] == "self_assess":
+                print(f"- {item['question_id']} : à auto-évaluer")
+                continue
+            marker = {
+                "correct": "OK",
+                "incorrect": "NON",
+                "missing": "VIDE",
+            }.get(item["status"], item["status"])
+            expected = item.get("expected")
+            given = item.get("given")
+            print(
+                f"- {item['question_id']} : {marker} "
+                f"(donné {given!r}, attendu {expected!r})"
+            )
+            if item["status"] != "correct" and item.get("solution"):
+                print(f"  Corrigé : {item['solution']}")
+        print()
+        print(result["notice"])
+        return 0
+
+    raise InputError("Action de sujet inconnue.")
+
+
+def _formulas(args, store: VcStore, content) -> int:
+    payload = formula_payload()
+    if args.json:
+        _emit(payload, True)
+        return 0
+    print("FICHE DE FORMULES VC — EDHEC")
+    print()
+    for group in FORMULA_GROUPS:
+        print(group.title)
+        for item in group.items:
+            print(f"  • {item.name}")
+            print(f"    {item.formula}")
+            print(f"    {item.note}")
+        print()
+    print("LES PIÈGES QUI COÛTENT DES POINTS")
+    for index, (wrong, right, why) in enumerate(TRAPS, start=1):
+        print(f"  {index}. {wrong} → {right}")
+        print(f"     {why}")
+    return 0
+
+
+def _cram(args, store: VcStore, content) -> int:
+    papers = load_papers()
+    blocks = plan_blocks(args.minutes)
+    if args.html:
+        args.html.parent.mkdir(parents=True, exist_ok=True)
+        args.html.write_text(
+            render_html(papers, minutes=args.minutes), encoding="utf-8"
+        )
+    if args.markdown:
+        args.markdown.parent.mkdir(parents=True, exist_ok=True)
+        args.markdown.write_text(
+            render_markdown(papers, minutes=args.minutes), encoding="utf-8"
+        )
+    if args.json:
+        _emit(
+            {
+                "minutes": args.minutes,
+                "plan": blocks,
+                "formulas": formula_payload(),
+                "papers": [
+                    {
+                        "year": paper.year,
+                        "questions": len(paper.questions),
+                        "points": paper.points,
+                    }
+                    for paper in papers
+                ],
+                "html": str(args.html) if args.html else None,
+                "markdown": str(args.markdown) if args.markdown else None,
+            },
+            True,
+        )
+        return 0
+    print(f"PLAN DE BATAILLE — {args.minutes} MINUTES")
+    for block in blocks:
+        print(
+            f"  [{block['start_minute']:>2}–{block['end_minute']:>2} min] "
+            f"{block['title']} — {block['detail']}"
+        )
+    print()
+    print("Commandes utiles :")
+    print("  python nage.py vc formulas")
+    print("  python nage.py vc paper list")
+    print("  python nage.py vc paper show 2025")
+    print("  python nage.py vc paper show 2025 --solutions")
+    print("  python nage.py vc paper template 2025 --output answers.json")
+    print("  python nage.py vc paper grade 2025 --answers answers.json")
+    print()
+    print("Sujets disponibles :", ", ".join(str(paper.year) for paper in papers))
+    if args.html:
+        print(f"Fiche HTML écrite : {args.html}")
+    if args.markdown:
+        print(f"Fiche Markdown écrite : {args.markdown}")
+    return 0
+
+
 def _radar(args, store: VcStore, content) -> int:
     from .dates import now_iso, today_iso
 
@@ -485,6 +726,18 @@ def _term_sheet(args, store: VcStore, content) -> int:
 
 def run_vc(args) -> int:
     try:
+        if getattr(args, "vc_action", None) is None:
+            from types import SimpleNamespace
+
+            print("NAGE VC — révision EDHEC, hors-ligne.")
+            print("Démarrage rapide : plan de 90 minutes + fiche de formules.")
+            print("Tapez `python nage.py vc --help` pour toutes les commandes.")
+            print()
+            return _cram(
+                SimpleNamespace(minutes=90, html=None, markdown=None, json=False),
+                _store(args),
+                load_content(),
+            )
         store = _store(args)
         content = load_content().with_cards(store.load_deck())
         if args.vc_action == "review":
@@ -499,6 +752,12 @@ def run_vc(args) -> int:
             return _oral(args, store, content)
         if args.vc_action == "notes":
             return _notes(args, store, content)
+        if args.vc_action == "paper":
+            return _paper(args, store, content)
+        if args.vc_action == "cram":
+            return _cram(args, store, content)
+        if args.vc_action == "formulas":
+            return _formulas(args, store, content)
         if args.vc_action == "radar":
             return _radar(args, store, content)
         if args.vc_action == "plan":

@@ -280,7 +280,39 @@ dans `unknown_clauses` et marquée `non documenté` plutôt que devinée.
 Une phrase incorrecte renvoie le code 2 et ne supprime rien. La commande ne touche jamais aux
 données Career ni au reste du dépôt.
 
-## 11. Tests et qualité
+## 11. Outil d'examen EDHEC — annales 2023-2025
+
+Trois sujets EDHEC sont livrés sous forme de **pack dérivé** : questions condensées et
+paraphrasées, réponses numériques et corrigés pas à pas reproduits. Les annales brutes
+(`docs/vc_study/`) ne sont pas versionnées.
+
+```bash
+.venv/bin/python nage.py vc                     # plan de 90 minutes
+.venv/bin/python nage.py vc formulas            # fiche de formules + 14 pièges
+.venv/bin/python nage.py vc paper list
+.venv/bin/python nage.py vc paper show 2025
+.venv/bin/python nage.py vc paper show 2025 --solutions
+.venv/bin/python nage.py vc paper show 2025 --section A
+.venv/bin/python nage.py vc paper template 2025 --output answers.json
+.venv/bin/python nage.py vc paper grade 2025 --answers answers.json
+.venv/bin/python nage.py vc cram --html docs/vc_cram.html --markdown docs/vc_cram.md
+```
+
+| Sujet | Durée | Questions | Auto-correction |
+| --- | --- | --- | --- |
+| 2023 | 120 min | 22 | QCM et calculs |
+| 2024 | 120 min | 24 | QCM et calculs |
+| 2025 | 90 min | 21 | 35 points auto-corrigés |
+
+Le fichier de réponses est un objet JSON `{"2025-A01": "D", "2025-B16": "54 %"}`.
+Les unités (`%`, `M€`, `k€`, `x`) et les tolérances sont acceptées. Les questions ouvertes
+et les cas sont marqués `self_assess` : le corrigé s'affiche, la note reste humaine.
+
+`vc cram` produit une page HTML autonome et imprimable (`<details>` repliés à l'écran,
+corrigés visibles à l'impression), sans aucun appel réseau. Le fichier Markdown est le
+même contenu, lisible dans un terminal ou un éditeur.
+
+## 12. Tests et qualité
 
 ```bash
 .venv/bin/python -m pytest -q tests/test_vc_*.py
@@ -291,7 +323,7 @@ La recette du MVP P1 et P2 couvre le stockage, le scheduler, les drills, les cas
 de notes citées avec approbation, l'examen blanc chronométré, l'oral, le radar, le plan, le
 rapport, le lexique, le term sheet et le parcours CLI complet.
 
-## 12. Périmètre livré et limites
+## 13. Périmètre livré et limites
 
 Livré et prouvé :
 
@@ -303,7 +335,9 @@ Livré et prouvé :
 - US6 ingestion de notes de cours avec citations exactes, approbation explicite et rejet
   persistant ;
 - US7 lexique et décodeur de term sheet ;
-- US8 rapport de progression.
+- US8 rapport de progression ;
+- outil d'examen EDHEC 2023-2025 : annales dérivées, correction automatique des QCM et
+  calculs, fiche de formules, plan de 90 minutes et page HTML hors-ligne.
 
 Non encore livré :
 
@@ -312,4 +346,4 @@ Non encore livré :
   120 termes.
 
 Le MVP reste utilisable en l'état avec 20 topics, 50 cartes, 24 drills, 4 cas, 20 questions
-d'examen et 42 termes.
+d'examen, 42 termes et 3 sujets EDHEC corrigés.
