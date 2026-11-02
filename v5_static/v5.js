@@ -444,11 +444,12 @@ function renderVCRadar(radar) {
 }
 async function refreshVCStatus() {
   try {
-    const [status, radar] = await Promise.all([api("/api/academics/vc/status"), api("/api/academics/vc/radar")]);
-    text(elements.vcStatus, `${status.cards || 0} carte(s) · ${status.reviews || 0} réponse(s) · stockage local uniquement.`);
+    const [status, radar, exams] = await Promise.all([api("/api/academics/vc/status"), api("/api/academics/vc/radar"), api("/api/academics/vc/exams")]);
+    text(elements.vcStatus, `${status.cards || 0} carte(s) · ${status.reviews || 0} réponse(s) · ${(exams.exams || []).length} examen(s) · stockage local uniquement.`);
     renderVCRadar(radar.radar);
     const fragile = (radar.radar || []).filter((item) => ["non testé", "fragile"].includes(item.status)).map((item) => item.topic);
-    text(elements.vcPlan, fragile.length ? `Priorité suggérée : ${fragile.slice(0, 3).join(", ")}. Revois ces thèmes avant de passer aux cas avancés.` : "Continue une session courte chaque jour pour transformer tes réponses en maîtrise durable.");
+    const latest = (exams.exams || []).at(-1);
+    text(elements.vcPlan, fragile.length ? `Priorité suggérée : ${fragile.slice(0, 3).join(", ")}. Revois ces thèmes avant de passer aux cas avancés.` : latest ? `Dernier examen : ${latest.score}/${latest.max_score}. Continue une session courte chaque jour pour transformer tes réponses en maîtrise durable.` : "Continue une session courte chaque jour pour transformer tes réponses en maîtrise durable.");
   } catch (error) { text(elements.vcStatus, error.message); }
 }
 async function saveVCCard(event) {

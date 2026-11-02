@@ -191,3 +191,9 @@
 - **Corrigé** : les examens de plus de cinq questions ont désormais des identifiants uniques; le mode 10 questions ne perd plus les réponses par collision de clés.
 - **UX** : minuteur visible en direct (`mm:ss`), arrêt à la correction, message explicite lorsque le temps est dépassé.
 - **Preuve** : `11 passed in 4.65s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+# Livraison VC-114 — historique local des examens (2026-11-02)
+
+- **Livré** : persistance bornée des résultats d’examen dans `exams.json` local, avec conservation des 100 dernières tentatives et endpoint `GET /api/academics/vc/exams`.
+- **Interface** : le statut VC affiche désormais le nombre d’examens et la prochaine priorité reprend le dernier score lorsqu’il existe.
+- **Preuve** : `13 passed in 5.36s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+- **Protection** : stockage sous `NAGE_VC_HOME`, dossier 0700, fichier 0600, aucune donnée envoyée au cloud.

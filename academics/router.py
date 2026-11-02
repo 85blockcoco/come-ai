@@ -255,9 +255,15 @@ def create_academics_router() -> APIRouter:
         try:
             exam = build_mock_exam(exam_id=payload.exam_id, limit=payload.limit)
             result = grade_mock_exam(exam, payload.answers, elapsed_minutes=payload.elapsed_minutes)
-            return {"result": asdict(result), "warnings": [], "blockers": []}
+            result_payload = asdict(result)
+            VCStore().save_exam(result_payload)
+            return {"result": result_payload, "warnings": [], "blockers": []}
         except ValueError as error:
             return {"result": None, "warnings": [], "blockers": [str(error)]}
+
+    @router.get("/api/academics/vc/exams")
+    def vc_exams() -> dict[str, Any]:
+        return {"exams": VCStore().load_exams(), "warnings": [], "blockers": []}
 
     @router.post("/api/academics/vc/review")
     def vc_review(payload: VCReviewPayload) -> dict[str, Any]:

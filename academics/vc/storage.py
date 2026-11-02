@@ -45,6 +45,7 @@ class VCStore:
         os.chmod(self.root, 0o700)
         self.cards_path = self.root / "deck.json"
         self.reviews_path = self.root / "reviews.json"
+        self.exams_path = self.root / "exams.json"
 
     def save_cards(self, cards: list[Card]) -> None:
         seen: set[str] = set()
@@ -79,3 +80,14 @@ class VCStore:
             return {}
         payload = json.loads(self.reviews_path.read_text(encoding="utf-8"))
         return payload if isinstance(payload, dict) else {}
+
+    def save_exam(self, result: dict[str, Any]) -> None:
+        exams = self.load_exams()
+        exams.append(dict(result))
+        _atomic_json(self.exams_path, exams[-100:])
+
+    def load_exams(self) -> list[dict[str, Any]]:
+        if not self.exams_path.is_file():
+            return []
+        payload = json.loads(self.exams_path.read_text(encoding="utf-8"))
+        return [item for item in payload if isinstance(item, dict)] if isinstance(payload, list) else []

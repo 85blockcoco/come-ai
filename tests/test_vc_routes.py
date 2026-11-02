@@ -38,6 +38,9 @@ def test_vc_exam_hides_answers_until_grade(tmp_path, monkeypatch):
         result = client.post("/api/academics/vc/exam/grade", json={"exam_id": payload["id"], "limit": 2, "answers": {"q-pm": "10"}})
         assert result.status_code == 200
         assert result.json()["result"]["score"] == 2
+        history = client.get("/api/academics/vc/exams")
+        assert history.status_code == 200
+        assert history.json()["exams"][-1]["exam_id"] == payload["id"]
 
 
 def test_vc_exam_rejects_unbounded_limit(tmp_path, monkeypatch):
