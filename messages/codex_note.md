@@ -109,6 +109,14 @@
 - Preuve : `tests/test_vc_scheduler.py tests/test_academics_routes.py tests/test_academics_route_boundaries.py` — `20 passed in 7.73s`; Ruff et diff-check verts.
 - Aucun support personnel ni contenu de cours réel n'a été lu ou ajouté. Le paquet est prêt
   à recevoir des notes approuvées dans une mission distincte.
+
+## RAPPORT CODEX — 2026-11-02 — VC-013 à VC-030, laboratoire de calculs
+
+- Périmètre exclusif : `academics/vc/drills.py`, exports du package et tests VC.
+- Livré : pre/post-money, ownership, dilution, option pool, MOIC, DPI, RVPI, TVPI,
+  IRR annualisé, tolérance numérique et diagnostics format/valeur.
+- Chaque calcul retourne l'unité, le résultat et les étapes de correction.
+- Preuve : `tests/test_vc_drills.py tests/test_vc_scheduler.py tests/test_academics_routes.py tests/test_academics_route_boundaries.py` — `27 passed in 7.61s`; Ruff et diff-check verts.
 # Candidate consolidée Codex (2026-11-01)
 
 - Branche : `codex/n100-consolidated-20261101`.
