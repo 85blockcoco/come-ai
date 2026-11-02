@@ -1,4 +1,4 @@
-from academics.vc.cases import grade_case, seed_round_case
+from academics.vc.cases import down_round_case, grade_case, liquidation_waterfall_case, seed_round_case, series_a_case
 
 
 def test_seed_case_has_five_guided_questions_and_ten_points():
@@ -27,3 +27,9 @@ def test_case_does_not_turn_unanswered_questions_into_mastery():
     result = grade_case(seed_round_case(), {"q1": "Je ne sais pas."})
     assert result.score == 0
     assert result.max_score == 10
+
+
+def test_additional_cases_keep_missing_deal_terms_explicit():
+    assert series_a_case().id == "series-a-001"
+    assert down_round_case().questions[1].expected_keywords == ("mécanisme", "inconnu")
+    assert liquidation_waterfall_case().questions[1].points == 2

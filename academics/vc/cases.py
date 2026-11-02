@@ -46,6 +46,24 @@ def seed_round_case() -> CaseStudy:
     )
 
 
+def series_a_case() -> CaseStudy:
+    return CaseStudy("series-a-001", "Series A — dilution et pro rata", "Une Series A finance la croissance. L'investisseur demande un droit pro rata. Les données non fournies restent à compléter.",
+                     (CaseQuestion("q1", "Explique le droit pro rata.", ("pro rata", "participer"), 2),
+                      CaseQuestion("q2", "Liste les données nécessaires pour calculer la dilution.", ("inconnu", "capitalisation"), 2)))
+
+
+def down_round_case() -> CaseStudy:
+    return CaseStudy("down-round-001", "Down round — protection anti-dilution", "Une société lève à une valorisation inférieure au tour précédent. Le mécanisme exact de protection n'est pas précisé.",
+                     (CaseQuestion("q1", "Pourquoi parle-t-on de down round ?", ("valorisation", "inférieure"), 2),
+                      CaseQuestion("q2", "Que faut-il vérifier avant de calculer l'ajustement ?", ("mécanisme", "inconnu"), 2)))
+
+
+def liquidation_waterfall_case() -> CaseStudy:
+    return CaseStudy("waterfall-001", "Liquidation waterfall — ordre de priorité", "À la sortie, plusieurs classes d'actions existent et une préférence 1x est mentionnée. Les participations exactes sont à vérifier.",
+                     (CaseQuestion("q1", "Quelle classe récupère en premier ?", ("préférence", "priorité"), 2),
+                      CaseQuestion("q2", "Pourquoi faut-il connaître participating ou non participating ?", ("participating", "residual"), 2)))
+
+
 def grade_case(case: CaseStudy, answers: dict[str, str]) -> CaseGrade:
     criteria: list[dict[str, Any]] = []
     unsupported: list[str] = []

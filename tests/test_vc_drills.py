@@ -10,6 +10,7 @@ from academics.vc.drills import (
     option_pool_adjusted_ownership,
     ownership_after_investment,
     post_money,
+    parse_vc_number,
     tvpi,
 )
 
@@ -43,6 +44,13 @@ def test_grading_distinguishes_tolerance_and_non_numeric_answers():
     assert not wrong.correct and wrong.diagnosis.startswith("valeur:")
     invalid = grade_numeric("10", "dix")
     assert invalid.actual is None and invalid.diagnosis.startswith("format:")
+
+
+def test_vc_units_are_normalized_without_losing_percent_or_multiple():
+    assert parse_vc_number("2 M€") == Decimal("2000000")
+    assert parse_vc_number("500 k€") == Decimal("500000")
+    assert parse_vc_number("20 %") == Decimal("0.2")
+    assert parse_vc_number("3x") == Decimal("3")
 
 
 @pytest.mark.parametrize("arguments", [((-1, 2),), ((8, -2),)])

@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, getcontext
 from typing import Any
+import re
 
 getcontext().prec = 28
 
@@ -22,6 +23,28 @@ def _d(value: Decimal | int | float | str) -> Decimal:
     if not result.is_finite():
         raise ValueError("Une valeur VC doit être finie.")
     return result
+
+
+def parse_vc_number(value: Decimal | int | float | str, *, unit: str | None = None) -> Decimal:
+    """Parse une valeur d'examen comme ``2 M€``, ``500 k€``, ``20 %`` ou ``3x``."""
+    if isinstance(value, (int, float, Decimal)):
+        number = _d(value)
+    else:
+        text = str(value).strip().replace(" ", "").replace(",", ".")
+        match = re.fullmatch(r"([-+]?\d+(?:\.\d+)?)(k€|k|M€|M|%|x)?", text, re.IGNORECASE)
+        if not match:
+            raise ValueError("Valeur VC avec unité invalide.")
+        number = _d(match.group(1))
+        suffix = (unit or match.group(2) or "").casefold()
+        if suffix in {"m", "m€"}:
+            number *= Decimal(1_000_000)
+        elif suffix in {"k", "k€"}:
+            number *= Decimal(1_000)
+        elif suffix == "%":
+            number /= Decimal(100)
+        elif suffix not in {"", "x"}:
+            raise ValueError("Unité VC non supportée.")
+    return number
 
 
 def post_money(pre_money: Decimal | int | float | str, investment: Decimal | int | float | str) -> dict[str, Any]:

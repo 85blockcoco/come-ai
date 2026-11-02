@@ -143,6 +143,13 @@
 - Livré : propositions de cartes depuis des notes texte locales, citation source par
   ligne, état `à approuver`, approbation explicite et refus des lignes ambiguës.
 - Preuve : `tests/test_vc_notes.py tests/test_vc_mastery.py tests/test_vc_exams.py tests/test_vc_cases.py tests/test_vc_drills.py tests/test_vc_scheduler.py` — `21 passed in 0.85s`; Ruff et diff-check verts.
+
+## RAPPORT CODEX — 2026-11-02 — VC-071 à VC-090, unités, lexique et rapport
+
+- Livré : normalisation `k€`/`M€`/%/x, cas Series A/down round/waterfall, lexique
+  bilingue documenté, clauses inconnues marquées à vérifier et rapport de progression
+  recalculable.
+- Preuve : `tests/test_vc_glossary_report.py tests/test_vc_drills.py tests/test_vc_cases.py tests/test_vc_notes.py tests/test_vc_mastery.py tests/test_vc_exams.py tests/test_vc_scheduler.py` — `25 passed in 2.05s`; Ruff et diff-check verts.
 # Candidate consolidée Codex (2026-11-01)
 
 - Branche : `codex/n100-consolidated-20261101`.
