@@ -34,6 +34,7 @@ const elements = {
   vcSessionHistory: $("vcSessionHistory"), vcSessionHistoryEmpty: $("vcSessionHistoryEmpty"),
   vcCadence: $("vcCadence"),
   vcExportReport: $("vcExportReport"), vcExportStatus: $("vcExportStatus"),
+  vcExportCsv: $("vcExportCsv"),
   vcProgress: $("vcProgress"), vcProgressEmpty: $("vcProgressEmpty"), vcReadiness: $("vcReadiness"), vcQuickFocus: $("vcQuickFocus"), vcShortSession: $("vcShortSession"), vcExpressSession: $("vcExpressSession"),
   vcResistantCards: $("vcResistantCards"), vcResistantEmpty: $("vcResistantEmpty"),
   vcUntestedCards: $("vcUntestedCards"), vcUntestedEmpty: $("vcUntestedEmpty"),
@@ -540,6 +541,7 @@ async function refreshVCStatus() {
 async function exportVCReport() {
   try { const [status, radar, exams, sessions] = await Promise.all([api("/api/academics/vc/status"), api("/api/academics/vc/radar"), api("/api/academics/vc/exams"), api("/api/academics/vc/sessions")]); const report = { exported_on: new Date().toISOString(), status, radar: radar.radar || [], exams: exams.exams || [], sessions: sessions.sessions || [], cards: vcCardStats.map(({ id, topic, front, source, quality, repetitions, due_on }) => ({ id, topic, front, source, quality, repetitions, due_on })) }; const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }); const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `nage-vc-bilan-${new Date().toISOString().slice(0, 10)}.json`; link.click(); URL.revokeObjectURL(link.href); text(elements.vcExportStatus, "Bilan exporté localement, sans les réponses des cartes."); } catch (error) { text(elements.vcExportStatus, error.message); }
 }
+function exportVCCsv() { const escape = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`; const rows = [["id", "theme", "question", "source", "qualite", "repetitions", "echeance"], ...vcCardStats.map((card) => [card.id, card.topic, card.front, card.source, card.quality ?? "jamais testee", card.repetitions, card.due_on || ""])]; const csv = `\ufeff${rows.map((row) => row.map(escape).join(",")).join("\n")}`; const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); link.download = `nage-vc-cartes-${new Date().toISOString().slice(0, 10)}.csv`; link.click(); URL.revokeObjectURL(link.href); text(elements.vcExportStatus, "Cartes exportées en CSV, sans les réponses."); }
 async function saveVCCard(event) {
   event.preventDefault();
   const card = { id: `vc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, topic: elements.vcTopic.value, front: elements.vcQuestion.value.trim(), back: elements.vcAnswer.value.trim(), source: elements.vcSource.value.trim() || "Notes locales", approved: true };
@@ -601,6 +603,7 @@ elements.vcExpressSession.addEventListener("click", () => { elements.vcLimit.val
 elements.vcCardSearch.addEventListener("input", renderVCAllCards);
 elements.vcCardSort.addEventListener("change", renderVCAllCards);
 elements.vcExportReport.addEventListener("click", exportVCReport);
+elements.vcExportCsv.addEventListener("click", exportVCCsv);
 elements.vcExamStart.addEventListener("click", startVCExam);
 elements.vcExamSubmit.addEventListener("click", submitVCExam);
 

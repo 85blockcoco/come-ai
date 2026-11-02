@@ -298,3 +298,8 @@
 - **Livré** : bouton d’export JSON du statut, radar, examens, sessions et métadonnées de cartes.
 - **Protection** : les champs `back`/réponses ne sont jamais inclus dans l’export; fichier généré côté navigateur, sans envoi réseau.
 - **Preuve** : `7 passed in 4.74s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+# Livraison VC-135 — export CSV pour Excel (2026-11-02)
+
+- **Livré** : export CSV UTF-8 compatible Excel des cartes, thèmes, sources, qualité, répétitions et échéances.
+- **Protection** : aucune colonne de réponse; export généré localement côté navigateur.
+- **Preuve** : `7 passed in 5.16s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
