@@ -308,3 +308,8 @@
 - **Livré** : import CSV local des cartes avec colonnes question/réponse/thème/source, limité à 200 lignes exploitables.
 - **Protection** : l’API fusionne les nouvelles cartes avec le deck existant et ignore les identifiants déjà présents; aucune carte existante n’est remplacée.
 - **Preuve** : `8 passed in 5.25s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
+# Livraison VC-137 — aperçu et confirmation CSV (2026-11-02)
+
+- **Livré** : l’import CSV ne modifie plus le deck dès la sélection du fichier; un aperçu de trois lignes et le nombre total sont affichés avant confirmation explicite.
+- **Protection** : annulation implicite si le fichier est invalide; fusion sans remplacement des cartes existantes conservée.
+- **Preuve** : `8 passed in 4.57s`; Ruff `All checks passed!`; `node --check v5_static/v5.js`; `git diff --check`.
