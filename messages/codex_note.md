@@ -63,6 +63,17 @@
 - Rejouer la recette HTTP sur un serveur candidat isolé si une mesure de performance actualisée est requise.
 - Revoir les branches SPEC-044/046 lorsqu'elles seront effectivement publiées; ne pas inventer leur intégration.
 - Une fusion dans `main` reste une opération distincte et non effectuée.
+
+## RAPPORT CODEX — 2026-11-02 — backlog outil final
+
+- Création de [`docs/NAGE_FINAL_200_MISSIONS.md`](../docs/NAGE_FINAL_200_MISSIONS.md).
+- 200 missions comptées et vérifiées par `rg` (`mission_count=200`).
+- Organisation : socle/navigation, Career/sourcing, profil/matching, CV/ATS, lettres,
+  shortlist/dossier, sourcing international, apprentissage/devoirs, intelligence/
+  sécurité, performance/recette finale.
+- Commit poussé : `78818f7e2d650e26e2e750e7357d0b0c8f63c56b`.
+- Ces missions sont planifiées, pas déclarées réalisées ; chaque livraison future devra
+  fournir son propre commit, ses tests et une preuve de parcours.
 # Candidate consolidée Codex (2026-11-01)
 
 - Branche : `codex/n100-consolidated-20261101`.
