@@ -119,3 +119,9 @@
 - Les supports privés restent hors Git dans `/Users/comedelavenne/.nage/vc/course_corpus`.
 - Le score de maîtrise est une observation locale, pas une note officielle; l’examen blanc ne doit pas contourner le seuil de 80 %.
 - `main` n’a pas été modifiée.
+
+## Livraison complémentaire — `ed84aefea2ec2448bff4e47eb32ede7dd74e664a`
+
+- Thème sombre/clair persistant (`localStorage`), sélecteur accessible dans la barre supérieure et raccourcis `Alt+1` à `Alt+5` pour les espaces principaux.
+- Preuve navigateur : le sélecteur a été ouvert, passé à `CLAIR`, puis rétabli à `SOMBRE` sur `/app#learning`; la fiche, le tuteur et les citations sont restés disponibles.
+- Push vérifié : `git ls-remote --heads origin codex/nage-learning-integration-20261103` pointe sur `ed84aefea2ec2448bff4e47eb32ede7dd74e664a`.
