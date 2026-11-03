@@ -125,3 +125,11 @@
 - Thème sombre/clair persistant (`localStorage`), sélecteur accessible dans la barre supérieure et raccourcis `Alt+1` à `Alt+5` pour les espaces principaux.
 - Preuve navigateur : le sélecteur a été ouvert, passé à `CLAIR`, puis rétabli à `SOMBRE` sur `/app#learning`; la fiche, le tuteur et les citations sont restés disponibles.
 - Push vérifié : `git ls-remote --heads origin codex/nage-learning-integration-20261103` pointe sur `ed84aefea2ec2448bff4e47eb32ede7dd74e664a`.
+
+## Ajout corpus — examen passé VC 2024
+
+- Nouveau fichier détecté dans `Desktop/EDHEC COURS/VENTURE CAPITAL` : examen final A du 11 décembre 2024, 14 pages PDF dont 7 pages de contenu.
+- Le PDF est un scan image sans couche texte (`pypdf` : 0 caractère). Une transcription locale prudente a été ajoutée hors Git sous le nom redacted `Past_exam_VC_2024_A_scanned.pdf.txt`; le code étudiant et les informations d’identification ont été omis.
+- Les questions imprimées sont désormais interrogeables par le tuteur et la recherche ; les annotations manuscrites sont explicitement marquées comme réponses d’étudiant non validées, jamais comme corrigé officiel.
+- Ingestion rejouée sur le serveur local : `1` nouveau document, `7` pages textuelles, `7` chunks ; manifeste applicatif observé : `29` documents, `1 501` pages/feuilles, `1 499` chunks.
+- Preuves HTTP : recherche `Magical Genie` → 200 avec citations ; question tuteur sur Apfel Co. → 200 avec 3 citations. Aucun fichier privé n’a été ajouté à Git.
