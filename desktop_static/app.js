@@ -4,6 +4,9 @@
   "use strict";
   window.__appState = null;
 
+  const savedTheme = localStorage.getItem("nage-theme");
+  if (savedTheme === "light") document.documentElement.dataset.theme = "light";
+
   const state = window.__appState = {
     view: "today",
     dashboard: null,
@@ -873,6 +876,12 @@
     button.addEventListener("click", () => setView(button.dataset.view));
   }
   $("#refreshBtn").addEventListener("click", refresh);
+  $("#themeSelect").value = savedTheme === "light" ? "light" : "dark";
+  $("#themeSelect").addEventListener("change", (event) => {
+    const theme = event.target.value === "light" ? "light" : "dark";
+    document.documentElement.dataset.theme = theme === "light" ? "light" : "";
+    localStorage.setItem("nage-theme", theme);
+  });
   $("#searchInput").addEventListener("input", (event) => {
     state.filter = event.target.value;
     renderOffers();
@@ -880,6 +889,11 @@
 
   const initial = (location.hash || "#today").slice(1);
   setView(VIEWS[initial] ? initial : "today");
+  document.addEventListener("keydown", (event) => {
+    if (!event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) return;
+    const shortcut = { "1": "today", "2": "applications", "3": "offers", "4": "assistant", "5": "learning" }[event.key];
+    if (shortcut) { event.preventDefault(); setView(shortcut); }
+  });
   loadAll();
   setInterval(() => {
     if (state.view === "today" || state.view === "missions") {
