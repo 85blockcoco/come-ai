@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "pack_id": "cards-vc15",
+  "topic_id": "VC15",
+  "language": "en",
+  "source_type": "original",
+  "license": "Original NAGE content",
+  "items": [
+    {
+      "kind": "card",
+      "id": "VC15-C001",
+      "topic_id": "VC15",
+      "question": "What is a financial model in VC?",
+      "answer": "A spreadsheet-based projection of a startup's revenues, costs, cash flows and funding needs over several years.",
+      "explanation": "It supports valuation and scenario analysis.",
+      "status": "active",
+      "tags": ["financial model", "projections"]
+    },
+    {
+      "kind": "card",
+      "id": "VC15-C002",
+      "topic_id": "VC15",
+      "question": "What is a scenario analysis?",
+      "answer": "Evaluating multiple possible futures (base, upside, downside) to understand the range of outcomes and risks.",
+      "explanation": "It helps set valuation and terms.",
+      "status": "active",
+      "tags": ["scenario analysis", "risk"]
+    },
+    {
+      "kind": "card",
+      "id": "VC15-C003",
+      "topic_id": "VC15",
+      "question": "What is a sensitivity analysis?",
+      "answer": "Testing how changes in key assumptions (growth rate, margins, churn) affect the model's outputs.",
+      "explanation": "It identifies the drivers of value.",
+      "status": "active",
+      "tags": ["sensitivity", "assumptions"]
+    },
+    {
+      "kind": "card",
+      "id": "VC15-C004",
+      "topic_id": "VC15",
+      "question": "What is bottom-up forecasting?",
+      "answer": "Building projections from unit-level drivers (users, price, conversion) rather than top-down market share assumptions.",
+      "explanation": "Bottom-up is more credible to investors.",
+      "status": "active",
+      "tags": ["bottom-up", "forecasting"]
+    },
+    {
+      "kind": "card",
+      "id": "VC15-C005",
+      "topic_id": "VC15",
+      "question": "What is a cash flow forecast?",
+      "answer": "A projection of cash inflows and outflows over time, used to determine funding needs and runway.",
+      "explanation": "It is essential for avoiding insolvency.",
+      "status": "active",
+      "tags": ["cash flow", "forecast"]
+    },
+    {
+      "kind": "card",
+      "id": "VC15-C006",
+      "topic_id": "VC15",
+      "question": "What is break-even analysis?",
+      "answer": "Determining the level of sales or revenue at which total costs equal total revenues, resulting in zero profit.",
+      "explanation": "It sets a milestone for sustainability.",
+      "status": "active",
+      "tags": ["break-even", "profitability"]
+    },
+    {
+      "kind": "card",
+      "id": "VC15-C007",
+      "topic_id": "VC15",
+      "question": "What is a cap table model?",
+      "answer": "A spreadsheet tracking ownership percentages, share counts and dilution across funding rounds.",
+      "explanation": "It is the foundation of ownership and valuation calculations.",
+      "status": "active",
+      "tags": ["cap table", "model"]
+    },
+    {
+      "kind": "card",
+      "id": "VC15-C008",
+      "topic_id": "VC15",
+      "question": "What is a waterfall model?",
+      "answer": "A model computing the distribution of exit proceeds among shareholders according to liquidation preferences and participation.",
+      "explanation": "It shows who gets what in an exit.",
+      "status": "active",
+      "tags": ["waterfall", "exit"]
+    }
+  ]
+}

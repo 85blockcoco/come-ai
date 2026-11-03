@@ -5,7 +5,7 @@ import time
 import pytest
 
 from academics.vc.content import load_content
-from academics.vc.mastery import build_study_plan, mastery_radar
+from academics.vc.mastery import build_study_plan, content_availability, mastery_radar
 from academics.vc.models import CardProgress, CaseAttempt, MasteryRecord, ReviewEvent
 
 
@@ -78,7 +78,7 @@ def test_top_errors_are_ordered_by_frequency() -> None:
         case_attempts=[attempt, attempt],
     )
     vc04 = next(record for record in records if record.topic_id == "VC04")
-    assert vc04.top_errors == ["rappel", "cas"]
+    assert vc04.top_errors == ["recall", "case"]
     assert vc04.attempts == 5
 
 
@@ -117,7 +117,7 @@ def test_plan_prioritizes_weak_topic_near_exam() -> None:
             last_activity="2026-11-02",
             status="fragile",
             due_cards=0,
-            top_errors=["rappel"],
+            top_errors=["recall"],
         ),
         MasteryRecord(
             topic_id="VC09",
@@ -172,11 +172,122 @@ def test_plan_ignores_topic_without_content() -> None:
             last_activity="2026-11-02",
             status="fragile",
             due_cards=5,
-            top_errors=["rappel"],
+            top_errors=["recall"],
         )
     ]
     plan = build_study_plan(content, records, minutes=60, today="2026-11-02")
     assert all(item["topic_id"] != "VC99" for item in plan.activities)
+
+
+def test_plan_only_recommends_available_content() -> None:
+    content = load_content()
+    records = mastery_radar(content, [], today="2026-11-02")
+    plan = build_study_plan(
+        content, records, minutes=120, today="2026-11-02", exam_date="2026-11-06"
+    )
+    available = content_availability(content)
+    assert plan.activities
+    for activity in plan.activities:
+        if activity["kind"] == "cram":
+            assert activity["ref_id"] == "cram"
+            continue
+        assert activity["topic_id"] in available[activity["kind"]], activity
+        if activity["kind"] == "drill":
+            assert content.drill(activity["ref_id"]).topic_id == activity["topic_id"]
+        elif activity["kind"] == "case":
+            assert content.case(activity["ref_id"]).topic_id == activity["topic_id"]
+
+
+def test_plan_references_real_drills_and_cases() -> None:
+    content = load_content()
+    records = mastery_radar(content, [], today="2026-11-02")
+    plan = build_study_plan(
+        content, records, minutes=300, today="2026-11-02", exam_date="2026-11-06"
+    )
+    drills = [item for item in plan.activities if item["kind"] == "drill"]
+    cases = [item for item in plan.activities if item["kind"] == "case"]
+    assert drills and cases
+    for item in drills:
+        assert content.drill(item["ref_id"]).id == item["ref_id"]
+        assert item["ref_id"] != item["topic_id"]
+    for item in cases:
+        assert content.case(item["ref_id"]).id == item["ref_id"]
+        assert item["ref_id"] != item["topic_id"]
+
+
+def test_plan_never_recommends_the_missing_vc03_drill() -> None:
+    content = load_content()
+    records = [
+        MasteryRecord(
+            topic_id="VC03",
+            title="Financement",
+            attempts=4,
+            correct=1,
+            accuracy=0.25,
+            last_activity="2026-11-02",
+            status="fragile",
+            due_cards=0,
+            top_errors=["recall"],
+        )
+    ]
+    plan = build_study_plan(content, records, minutes=60, today="2026-11-02")
+    assert all(
+        not (item["kind"] == "drill" and item["topic_id"] == "VC03")
+        for item in plan.activities
+    )
+    assert any(
+        item["kind"] == "case" and item["topic_id"] == "VC03"
+        for item in plan.activities
+    )
+
+
+def test_plan_falls_back_to_cram_when_weak_topic_has_no_content(monkeypatch) -> None:
+    content = load_content()
+    from academics.vc import mastery
+
+    monkeypatch.setattr(
+        mastery,
+        "content_availability",
+        lambda c: {"review": set(), "drill": set(), "case": set()},
+    )
+    records = [
+        MasteryRecord(
+            topic_id="VC01",
+            title="Écosystème",
+            attempts=0,
+            correct=0,
+            accuracy=None,
+            last_activity="",
+            status="untested",
+            due_cards=0,
+            top_errors=[],
+        )
+    ]
+    plan = build_study_plan(content, records, minutes=20, today="2026-11-02")
+    assert len(plan.activities) == 1
+    assert plan.activities[0]["kind"] == "cram"
+    assert plan.activities[0]["ref_id"] == "cram"
+    assert plan.total_minutes == 20
+
+
+def test_plan_does_not_fall_back_when_every_topic_is_solid() -> None:
+    content = load_content()
+    records = [
+        MasteryRecord(
+            topic_id="VC01",
+            title="Écosystème",
+            attempts=3,
+            correct=3,
+            accuracy=1.0,
+            last_activity="2026-11-02",
+            status="solid",
+            due_cards=0,
+            top_errors=[],
+        )
+    ]
+    plan = build_study_plan(content, records, minutes=20, today="2026-11-02")
+    assert plan.activities == []
+    assert plan.total_minutes == 0
 
 
 def test_plan_is_deterministic_for_identical_inputs() -> None:

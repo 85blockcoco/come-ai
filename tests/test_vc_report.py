@@ -96,7 +96,7 @@ def test_recent_errors_and_next_actions(tmp_path: Path) -> None:
     report = build_progress_report(
         content, reviews, today="2026-11-02", days=30, output_dir=tmp_path
     )
-    assert report.recent_errors[0] == {"category": "rappel", "count": 2}
+    assert report.recent_errors[0] == {"category": "recall", "count": 2}
     assert report.next_actions
     assert all("minutes" in action and "reason" in action for action in report.next_actions)
     assert sum(action["minutes"] for action in report.next_actions) <= 60

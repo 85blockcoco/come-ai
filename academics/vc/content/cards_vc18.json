@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "pack_id": "cards-vc18",
+  "topic_id": "VC18",
+  "language": "en",
+  "source_type": "original",
+  "license": "Original NAGE content",
+  "items": [
+    {
+      "kind": "card",
+      "id": "VC18-C001",
+      "topic_id": "VC18",
+      "question": "What is an investment thesis?",
+      "answer": "A clear statement of why a particular investment is attractive, including the problem, solution, market and team.",
+      "explanation": "It guides sourcing and decision-making.",
+      "status": "active",
+      "tags": [
+        "thesis",
+        "investment"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC18-C002",
+      "topic_id": "VC18",
+      "question": "What are the key components of an investment memo?",
+      "answer": "Executive summary, company overview, market, product, traction, team, risks, financials, valuation and recommendation.",
+      "explanation": "It documents the full reasoning for the IC.",
+      "status": "active",
+      "tags": [
+        "memo",
+        "structure"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC18-C003",
+      "topic_id": "VC18",
+      "question": "What is a red flag in due diligence?",
+      "answer": "A warning sign that may kill the deal — course examples of fatal flaws: no real customer need, unbeatable competition, poor team fit; also inconsistent financials or unresolved legal issues.",
+      "explanation": "Red flags must be investigated or lead to rejection.",
+      "status": "active",
+      "tags": [
+        "red flag",
+        "due diligence"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC18-C004",
+      "topic_id": "VC18",
+      "question": "What is a competitive moat?",
+      "answer": "A sustainable advantage (network effects, switching costs, brand, technology) that protects the company from competitors.",
+      "explanation": "Moats support long-term value creation.",
+      "status": "active",
+      "tags": [
+        "moat",
+        "competitive advantage"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC18-C005",
+      "topic_id": "VC18",
+      "question": "What is product-market fit?",
+      "answer": "The degree to which a product satisfies a strong market demand, evidenced by retention, growth and customer enthusiasm.",
+      "explanation": "It is a key milestone before scaling.",
+      "status": "active",
+      "tags": [
+        "product-market fit",
+        "traction"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC18-C006",
+      "topic_id": "VC18",
+      "question": "What is traction?",
+      "answer": "Evidence of customer adoption and growth, such as revenue, users, retention and engagement metrics.",
+      "explanation": "Traction reduces investment risk.",
+      "status": "active",
+      "tags": [
+        "traction",
+        "metrics"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC18-C007",
+      "topic_id": "VC18",
+      "question": "What is a go-to-market strategy?",
+      "answer": "The plan for reaching and acquiring customers, including channels, pricing and sales motion.",
+      "explanation": "It shows how the company will scale.",
+      "status": "active",
+      "tags": [
+        "go-to-market",
+        "strategy"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC18-C008",
+      "topic_id": "VC18",
+      "question": "What is a risk assessment in an investment memo?",
+      "answer": "The analysis of the risks that can break the investment — the course names market risk, tech risk and people risk — with their mitigations, written up for the investment committee.",
+      "explanation": "It helps the IC weigh the downside.",
+      "status": "active",
+      "tags": [
+        "risk",
+        "assessment"
+      ]
+    }
+  ]
+}

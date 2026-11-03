@@ -31,6 +31,7 @@ from starlette.datastructures import UploadFile
 from career.profile_import import MAX_PROFILE_IMPORT_BYTES
 from career.router import CAREER_STATIC_DIR, create_career_router
 from academics.router import create_academics_router
+from academics.vc.api import create_vc_router
 from career.service import CareerService
 from personal_memory import PersonalMemoryError, PersonalMemoryStore
 from memory_storage import MemoryStorageError, MemoryStorageService
@@ -280,6 +281,8 @@ def create_app(
     agent_override: Any | None = None,
     career_override: CareerService | None = None,
     hybrid_override: Any | None = None,
+    vc_store_override: Any | None = None,
+    vc_tutor_override: Any | None = None,
 ) -> FastAPI:
     """Build an app instance.
 
@@ -931,6 +934,24 @@ def create_app(
 
     app.include_router(create_career_router(career, ai_generator=career_ai_generator))
     app.include_router(create_academics_router())
+    # VC Révisions API: deterministic engines only, tutor injected so tests
+    # never touch the network.  When a base_dir is given (test runs), the VC
+    # store is kept inside it; production keeps using ~/.nage/vc.
+    if vc_store_override is None and base_dir is not None:
+        from academics.vc.storage import VcStore
+
+        vc_store_override = VcStore(base_dir / "vc")
+    if vc_tutor_override is None and base_dir is not None:
+        # Test/explicit-base runs stay offline unless a tutor is injected:
+        # never read the real .env or call the network from a test app.
+        from vc_tutor import VCTutor
+
+        vc_tutor_override = VCTutor(cloud=False, load_env=False)
+    app.state.vc_store = vc_store_override
+    app.state.vc_tutor = vc_tutor_override
+    app.include_router(
+        create_vc_router(store=vc_store_override, tutor=vc_tutor_override)
+    )
     from devkit.router import create_developer_router
 
     app.include_router(create_developer_router(get_workshop))

@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 310" role="img" aria-label="NAGe — spécimen de graisses">
+  <!--
+    NAGe — wordmark vectoriel monoline (aucun <text>, aucune police, aucun fichier de fonte).
+    Plan de référence : baseline y=112 · capitale 72 (y 40→112) · x-height 42 · abord 40.
+    Tracés purs : <path> + stroke round (linecap/linejoin round), épaisseur constante (monoline).
+    Couleur héritée via currentColor — remplacer par url(#gEm) dans le prototype.
+
+    Le fichier est un spécimen : les trois graisses sont empilées, x-positions STRICTEMENT
+    identiques d'une graisse à l'autre. Pour l'usage, afficher une seule bande :
+      <use href="#word-w2"/>                (standard, recommandée)
+      <use href="#word-w1"/>  ou  <use href="#word-w3"/>
+  -->
+  <defs>
+    <!-- Géométrie partagée : une seule source de vérité pour les 3 graisses -->
+    <g id="nage-glyphs" fill="none" stroke="currentColor"
+       stroke-linecap="round" stroke-linejoin="round">
+      <!-- N : mono-ligne géométrique, diagonale pleine, stems 40 et 96 -->
+      <path d="M40 112 L40 40 L96 112 L96 40"/>
+      <!-- A_cap : deux jambes symétriques + contrebarre standard ; apex adouci par round join -->
+      <path d="M120 112 L150 40 L180 112"/>
+      <path d="M131 86 L169 86"/>
+      <!-- G_cap : arc ouvert en haut à droite, refermé par la barre horizontale entrant au centre -->
+      <path d="M260.6 46.5 A36 36 0 1 0 274 88 L244 88"/>
+      <!-- e minuscule monoline : crossbar pleine largeur + croissant ouvert en bas à droite.
+           Bonus micro-typographique : décalage vertical doux de −2 sur le e final. -->
+      <g transform="translate(0,-2)">
+        <path d="M343 89 L301 89 M343 89 A21 21 0 1 0 334.1 106.2"/>
+      </g>
+    </g>
+  </defs>
+
+  <g id="wordmark">
+    <!-- weight 1.0 — fin (bande 1, baseline y=112) -->
+    <g id="word-w1">
+      <use href="#nage-glyphs" stroke-width="9"/>
+    </g>
+    <!-- weight 2 — standard (bande 2, translatée de +100) -->
+    <g id="word-w2" transform="translate(0,100)">
+      <use href="#nage-glyphs" stroke-width="11"/>
+    </g>
+    <!-- weight 3 — bold 1.25× (bande 3, translatée de +200) -->
+    <g id="word-w3" transform="translate(0,200)">
+      <use href="#nage-glyphs" stroke-width="13.5"/>
+    </g>
+  </g>
+</svg>

@@ -33,8 +33,13 @@ class InternshipConnector(Protocol):
         """Return bounded, classified and ranked postings plus factual counts."""
 
 
-_TITLE_STAGE = re.compile(r"\b(?:intern(?:ship)?s?|stagiaires?|stages?)\b", re.I)
+_WORKING_STUDENT = re.compile(r"\b(?:working\s+student|werkstudent|student\s+job|student\s+worker)\b", re.I)
+_TITLE_STAGE = re.compile(r"\b(?:intern(?:ship)?s?|stagiaires?|stages?|intern|placement|summer\s+internship|industrial\s+placement)\b", re.I)
 _PERMANENT = re.compile(r"\b(?:CDI|permanent(?:\s+(?:role|position|contract))?|contrat\s+ind[eé]termin[eé])\b", re.I)
+_ALTERNANCE = re.compile(r"\b(?:alternance|alternant(?:e)?|apprentissage|apprenti(?:e)?|contrat\s+(?:de\s+)?professionnalisation|contrat\s+en\s+alternance|formation\s+en\s+alternance)\b", re.I)
+_VIE = re.compile(r"\b(?:VIE|volontariat\s+international\s+en\s+entreprise)\b", re.I)
+_WORKING_STUDENT = re.compile(r"\b(?:working\s+student|werkstudent|student\s+job|student\s+worker)\b", re.I)
+_GRADUATE_SCHEME = re.compile(r"\b(?:graduate\s+(?:programme|scheme|rotational|development\s+programme)|talent\s+programme|early\s+career\s+programme|rotation\s+programme)\b", re.I)
 _SENIOR_TITLE = re.compile(
     r"\b(?:senior|sr\.?|lead|head|director|directeur|directrice|manager|vice[ -]president|VP|principal|chief|responsable)\b",
     re.I,
@@ -75,6 +80,25 @@ def classify_internship(job: dict[str, Any]) -> dict[str, Any]:
     employment = clean_text(job.get("employment_type"), limit=120)
     description = clean_text(job.get("description_original"), limit=30_000)
     evidence: list[dict[str, str]] = []
+    full_text = f"{title} {employment} {description}"
+    for field, text in (("title", title), ("employment_type", employment), ("description_original", description)):
+        alt = _ALTERNANCE.search(text)
+        if alt:
+            return {"status": "excluded", "reason": "Contrat en alternance/apprentissage (hors périmètre « stage »).",
+                    "evidence": [_evidence(field, text, alt)]}
+        vie = _VIE.search(text)
+        if vie:
+            return {"status": "excluded", "reason": "VIE (hors périmètre « stage »).",
+                    "evidence": [_evidence(field, text, vie)]}
+    for field, text in (("title", title), ("employment_type", employment), ("description_original", description)):
+        ws = _WORKING_STUDENT.search(text)
+        if ws and not _TITLE_STAGE.search(text):
+            return {"status": "uncertain", "reason": "Working student/Werkstudent sans mention explicite de stage/internship.",
+                    "evidence": [_evidence(field, text, ws)]}
+    if re.search(r"\b(thesis|thèse|end[- ]of[- ]studies\s+project|projet\s+de\s+fin\s+d[’']études)\b", full_text, re.I):
+        if not _TITLE_STAGE.search(full_text):
+            return {"status": "uncertain", "reason": "Projet de fin d’études / thèse sans mention explicite de stage.",
+                    "evidence": [{"field": "description_original", "quote": description[:200]}]}
     for field, text in (("title", title), ("employment_type", employment)):
         mixed = _MIXED_GRADUATE.search(text)
         if mixed:
@@ -92,12 +116,21 @@ def classify_internship(job: dict[str, Any]) -> dict[str, Any]:
     title_stage = _TITLE_STAGE.search(title)
     structured_stage = _TITLE_STAGE.search(employment)
     graduate_contract = _GRADUATE.search(employment)
-    if graduate_contract:
+    if graduate_contract and not structured_stage and not _TITLE_STAGE.search(title):
         return {"status": "uncertain", "reason": "Le type de contrat publié est graduate, non un stage confirmé.",
                 "evidence": [_evidence("employment_type", employment, graduate_contract)]}
+    # If it's clearly a full-time permanent role without any internship hint, be more explicit.
+    if _PERMANENT.search(employment) and not _TITLE_STAGE.search(employment) and not _TITLE_STAGE.search(title):
+        if not description_stage:
+            return {"status": "uncertain", "reason": "Type de contrat potentiellement permanent, sans indication explicite de stage.",
+                    "evidence": [_evidence("employment_type", employment, _PERMANENT.search(employment))]}
     description_stage = _DESCRIPTION_STAGE.search(description) or _CURRENT_INTERN_ROLE.search(description)
     graduate_title = _GRADUATE.search(title)
-    if graduate_title and not title_stage and not structured_stage:
+    scheme = _GRADUATE_SCHEME.search(title) or _GRADUATE_SCHEME.search(description)
+    if scheme and not title_stage and not structured_stage and not description_stage:
+        return {"status": "uncertain", "reason": "Programme graduate/early career sans mention explicite de stage.",
+                "evidence": [_evidence("title", title, scheme) if _GRADUATE_SCHEME.search(title) else _evidence("description_original", description, scheme)]}
+    if graduate_title and not title_stage and not structured_stage and not description_stage:
         return {"status": "uncertain", "reason": "Le titre désigne un poste graduate, sans type stage explicite pour ce poste.",
                 "evidence": [_evidence("title", title, graduate_title)]}
     mixed_description = _MIXED_GRADUATE.search(description)

@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "pack_id": "drills-vc04b",
+  "topic_id": "VC04",
+  "language": "en",
+  "source_type": "original",
+  "license": "Original NAGE content",
+  "items": [
+    {
+      "kind": "drill",
+      "id": "VC04-D007",
+      "topic_id": "VC04",
+      "prompt": "A founder owns 60% of a company. A new investor takes 25% in a new round. What is the founder's ownership after the round? (%)",
+      "variables": {
+        "founder_before": 60,
+        "new_investor_share": 25
+      },
+      "answer": 45,
+      "answer_unit": "percent",
+      "tolerance": 0.01,
+      "steps": [
+        {
+          "label": "Formula",
+          "expression": "founder_after = founder_before * (1 - new_investor_share / 100)",
+          "result": 45
+        },
+        {
+          "label": "Substitution",
+          "expression": "60 * (1 - 25/100)",
+          "result": 45
+        }
+      ],
+      "error_paths": [
+        {
+          "value": 35,
+          "category": "formula",
+          "message": "You subtracted 25 from 60; dilution multiplies, not subtracts."
+        }
+      ],
+      "difficulty": 1
+    },
+    {
+      "kind": "drill",
+      "id": "VC04-D008",
+      "topic_id": "VC04",
+      "prompt": "After a round, the cap table shows: founder 50%, investor A 30%, investor B 15%. What percentage is unallocated? (%)",
+      "variables": {
+        "founder": 50,
+        "investor_a": 30,
+        "investor_b": 15
+      },
+      "answer": 5,
+      "answer_unit": "percent",
+      "tolerance": 0.01,
+      "steps": [
+        {
+          "label": "Formula",
+          "expression": "unallocated = 100 - (founder + investor_a + investor_b)",
+          "result": 5
+        },
+        {
+          "label": "Substitution",
+          "expression": "100 - (50 + 30 + 15)",
+          "result": 5
+        }
+      ],
+      "error_paths": [
+        {
+          "value": 95,
+          "category": "formula",
+          "message": "You summed the allocated shares; the remainder is 100 minus that sum."
+        }
+      ],
+      "difficulty": 1
+    },
+    {
+      "kind": "drill",
+      "id": "VC04-D009",
+      "topic_id": "VC04",
+      "prompt": "A company has a pre-money valuation of $10m and 5m shares outstanding. What is the price per share? ($/share)",
+      "variables": {
+        "pre_money": 10000000,
+        "shares": 5000000
+      },
+      "answer": 2.0,
+      "answer_unit": "ratio",
+      "tolerance": 0.01,
+      "steps": [
+        {
+          "label": "Formula",
+          "expression": "price_per_share = pre_money / shares",
+          "result": 2.0
+        },
+        {
+          "label": "Substitution",
+          "expression": "10000000 / 5000000",
+          "result": 2.0
+        }
+      ],
+      "error_paths": [
+        {
+          "value": 0.5,
+          "category": "formula",
+          "message": "You divided shares by pre-money; price is pre-money divided by shares."
+        }
+      ],
+      "difficulty": 1
+    }
+  ]
+}

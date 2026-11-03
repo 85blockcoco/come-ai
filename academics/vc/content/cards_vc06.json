@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "pack_id": "cards-vc06",
+  "topic_id": "VC06",
+  "language": "en",
+  "source_type": "original",
+  "license": "Original NAGE content",
+  "items": [
+    {
+      "kind": "card",
+      "id": "VC06-C001",
+      "topic_id": "VC06",
+      "question": "What is a term sheet in venture capital?",
+      "answer": "A non-binding (or partially binding) summary of the principal terms of an investment, setting out the economics and control rights before the definitive documents are drafted.",
+      "explanation": "It is the negotiation document; the detailed legal agreements follow.",
+      "status": "active",
+      "tags": ["term sheet", "negotiation"]
+    },
+    {
+      "kind": "card",
+      "id": "VC06-C002",
+      "topic_id": "VC06",
+      "question": "What are protective provisions in a term sheet?",
+      "answer": "Contractual rights that let the preferred investors veto or approve key corporate actions, such as issuing new shares, changing the charter, or selling the company.",
+      "explanation": "They are control rights that protect the investor's position beyond its ownership percentage.",
+      "status": "active",
+      "tags": ["protective provisions", "control"]
+    },
+    {
+      "kind": "card",
+      "id": "VC06-C003",
+      "topic_id": "VC06",
+      "question": "Why might a VC prefer a lower valuation with stronger protective provisions?",
+      "answer": "A lower entry price improves the VC's return, while stronger protective terms limit downside risk; together they improve the risk-return trade-off.",
+      "explanation": "Valuation alone does not determine deal quality; terms matter as much.",
+      "status": "active",
+      "tags": ["valuation", "protections"]
+    },
+    {
+      "kind": "card",
+      "id": "VC06-C004",
+      "topic_id": "VC06",
+      "question": "What is reverse vesting?",
+      "answer": "Founders already hold their shares, but unvested shares can be repurchased by the company if a founder leaves; continued service earns (vests) the shares over time.",
+      "explanation": "It aligns founders with the investor by rewarding continued effort.",
+      "status": "active",
+      "tags": ["reverse vesting", "founders"]
+    },
+    {
+      "kind": "card",
+      "id": "VC06-C005",
+      "topic_id": "VC06",
+      "question": "What does a 4-year reverse-vesting agreement with a 12-month cliff imply?",
+      "answer": "No shares vest until 12 months have passed; after that, vesting occurs (typically linearly) over the remaining period. A founder leaving before the cliff keeps no shares.",
+      "explanation": "The cliff protects the company from a founder departing immediately after funding.",
+      "status": "active",
+      "tags": ["vesting", "cliff"]
+    },
+    {
+      "kind": "card",
+      "id": "VC06-C006",
+      "topic_id": "VC06",
+      "question": "What is a pay-to-play provision?",
+      "answer": "A clause that strips certain preferred rights (such as anti-dilution or liquidation preference) from an investor that does not participate pro rata in a future down round.",
+      "explanation": "It forces investors to keep supporting the company in difficult rounds.",
+      "status": "active",
+      "tags": ["pay-to-play", "down round"]
+    },
+    {
+      "kind": "card",
+      "id": "VC06-C007",
+      "topic_id": "VC06",
+      "question": "What is preemption (pro rata) right?",
+      "answer": "The right of an existing investor to purchase its pro rata share of new shares issued in a future round, in order to maintain its ownership percentage.",
+      "explanation": "It is a standard investor right in VC term sheets.",
+      "status": "active",
+      "tags": ["preemption", "pro rata"]
+    },
+    {
+      "kind": "card",
+      "id": "VC06-C008",
+      "topic_id": "VC06",
+      "question": "What is a drag-along right?",
+      "answer": "The right of a majority or specified group of shareholders (often the investor) to force all other shareholders to sell their shares in an acquisition.",
+      "explanation": "It facilitates a clean exit by preventing minority holdouts.",
+      "status": "active",
+      "tags": ["drag-along", "exit"]
+    }
+  ]
+}

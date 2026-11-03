@@ -53,7 +53,7 @@ def test_malformed_jsonl_line_is_skipped(tmp_path: Path) -> None:
     with (store.home / "reviews.jsonl").open("a", encoding="utf-8") as handle:
         handle.write("{not json}\n")
     assert len(store.load_reviews()) == 1
-    assert any("Ligne ignorée" in warning for warning in store.warnings)
+    assert any("Line ignored" in warning for warning in store.warnings)
 
 
 def test_corrupt_progress_is_backed_up(tmp_path: Path) -> None:
@@ -102,6 +102,23 @@ def test_export_import_progress(tmp_path: Path) -> None:
     other = VcStore(tmp_path / "vc2")
     assert other.import_progress(destination) == 1
     assert other.load_progress()["VC04-C001"].due_date == "2026-11-05"
+
+
+def test_default_settings_target_the_real_exam_slot(tmp_path: Path) -> None:
+    store = VcStore(tmp_path / "vc")
+    settings = store.load_settings()
+    assert settings["exam_date"] == "2026-11-06"
+    assert settings["exam_time"] == "16:00"
+    assert settings["exam_duration_minutes"] == 90
+
+
+def test_partial_settings_update_keeps_exam_slot(tmp_path: Path) -> None:
+    store = VcStore(tmp_path / "vc")
+    store.save_settings({"exam_date": "2026-12-01"})
+    settings = store.load_settings()
+    assert settings["exam_date"] == "2026-12-01"
+    assert settings["exam_time"] == "16:00"
+    assert settings["exam_duration_minutes"] == 90
 
 
 def test_default_home_respects_environment(tmp_path: Path, monkeypatch) -> None:

@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "pack_id": "cards-vc14",
+  "topic_id": "VC14",
+  "language": "en",
+  "source_type": "original",
+  "license": "Original NAGE content",
+  "items": [
+    {
+      "kind": "card",
+      "id": "VC14-C001",
+      "topic_id": "VC14",
+      "question": "What is customer acquisition cost (CAC)?",
+      "answer": "The total sales and marketing cost required to acquire one new customer, usually measured over a period and divided by the number of new customers acquired.",
+      "explanation": "CAC is a core unit-economics metric; it should be compared with lifetime value.",
+      "status": "active",
+      "tags": ["CAC", "unit economics"]
+    },
+    {
+      "kind": "card",
+      "id": "VC14-C002",
+      "topic_id": "VC14",
+      "question": "What is customer lifetime value (LTV)?",
+      "answer": "The total gross margin a company expects to earn from a customer over the entire duration of the relationship.",
+      "explanation": "LTV estimates the value of a customer, net of delivery costs.",
+      "status": "active",
+      "tags": ["LTV", "unit economics"]
+    },
+    {
+      "kind": "card",
+      "id": "VC14-C003",
+      "topic_id": "VC14",
+      "question": "Why is the LTV/CAC ratio important?",
+      "answer": "It measures how much value a customer generates relative to the cost of acquiring them; a ratio above 3x is generally considered healthy for SaaS.",
+      "explanation": "A low ratio means the business cannot profitably grow.",
+      "status": "active",
+      "tags": ["LTV/CAC", "metrics"]
+    },
+    {
+      "kind": "card",
+      "id": "VC14-C004",
+      "topic_id": "VC14",
+      "question": "What is churn rate?",
+      "answer": "The percentage of customers (or revenue) lost over a given period, usually monthly or annually.",
+      "explanation": "High churn erodes LTV and signals weak product-market fit.",
+      "status": "active",
+      "tags": ["churn", "retention"]
+    },
+    {
+      "kind": "card",
+      "id": "VC14-C005",
+      "topic_id": "VC14",
+      "question": "What is net revenue retention (NRR)?",
+      "answer": "The percentage of recurring revenue retained from existing customers over a period, including upgrades, downgrades and churn.",
+      "explanation": "NRR above 100% means growth from existing customers exceeds losses.",
+      "status": "active",
+      "tags": ["NRR", "retention"]
+    },
+    {
+      "kind": "card",
+      "id": "VC14-C006",
+      "topic_id": "VC14",
+      "question": "What is cash burn rate?",
+      "answer": "The amount of cash a startup consumes (loses) per month to fund its operations.",
+      "explanation": "Burn rate drives how long the company can survive before needing new funding.",
+      "status": "active",
+      "tags": ["burn rate", "cash"]
+    },
+    {
+      "kind": "card",
+      "id": "VC14-C007",
+      "topic_id": "VC14",
+      "question": "What is runway?",
+      "answer": "The number of months a startup can continue operating at its current burn rate before running out of cash.",
+      "explanation": "Runway = cash balance / monthly burn rate.",
+      "status": "active",
+      "tags": ["runway", "cash"]
+    },
+    {
+      "kind": "card",
+      "id": "VC14-C008",
+      "topic_id": "VC14",
+      "question": "What is gross margin?",
+      "answer": "Revenue minus cost of goods sold (COGS), expressed as a percentage of revenue; it measures how much revenue remains after direct production costs.",
+      "explanation": "High gross margins leave more room for operating expenses and profit.",
+      "status": "active",
+      "tags": ["gross margin", "profitability"]
+    }
+  ]
+}

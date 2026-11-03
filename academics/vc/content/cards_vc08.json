@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "pack_id": "cards-vc08",
+  "topic_id": "VC08",
+  "language": "en",
+  "source_type": "original",
+  "license": "Original NAGE content",
+  "items": [
+    {
+      "kind": "card",
+      "id": "VC08-C001",
+      "topic_id": "VC08",
+      "question": "What is a down round?",
+      "answer": "A financing round in which the price per share is lower than in a previous round, reducing the value of the company and diluting earlier investors.",
+      "explanation": "Down rounds trigger anti-dilution protections for earlier preferred investors.",
+      "status": "active",
+      "tags": ["down round", "valuation"]
+    },
+    {
+      "kind": "card",
+      "id": "VC08-C002",
+      "topic_id": "VC08",
+      "question": "What is the primary purpose of an anti-dilution clause?",
+      "answer": "To adjust the conversion price of preferred shares downward in a down round, protecting the investor's effective ownership and investment value.",
+      "explanation": "It compensates earlier investors for the lower price of the new round.",
+      "status": "active",
+      "tags": ["anti-dilution", "protection"]
+    },
+    {
+      "kind": "card",
+      "id": "VC08-C003",
+      "topic_id": "VC08",
+      "question": "What is full-ratchet anti-dilution?",
+      "answer": "The conversion price of the earlier preferred shares is reset to the new, lower round price, as if the investor had invested at that price from the start.",
+      "explanation": "Full ratchet is the most investor-friendly and most dilutive form for founders.",
+      "status": "active",
+      "tags": ["full ratchet", "anti-dilution"]
+    },
+    {
+      "kind": "card",
+      "id": "VC08-C004",
+      "topic_id": "VC08",
+      "question": "What is weighted-average anti-dilution?",
+      "answer": "The conversion price is reduced to a weighted average of the old and new prices, taking into account the number of shares issued in the down round.",
+      "explanation": "It is less severe than full ratchet and more common in practice.",
+      "status": "active",
+      "tags": ["weighted average", "anti-dilution"]
+    },
+    {
+      "kind": "card",
+      "id": "VC08-C005",
+      "topic_id": "VC08",
+      "question": "What is the difference between broad-based and narrow-based weighted average?",
+      "answer": "Broad-based includes all outstanding shares (common, preferred, options, convertibles) in the denominator; narrow-based includes only common and preferred, making the adjustment more favourable to the investor.",
+      "explanation": "The choice of base affects how much the conversion price drops.",
+      "status": "active",
+      "tags": ["broad-based", "narrow-based"]
+    },
+    {
+      "kind": "card",
+      "id": "VC08-C006",
+      "topic_id": "VC08",
+      "question": "Why can anti-dilution provisions create tension between founders and investors?",
+      "answer": "Because they shift dilution onto founders and common shareholders, potentially discouraging them and complicating future fundraising.",
+      "explanation": "Heavy anti-dilution can make a company unattractive to new investors.",
+      "status": "active",
+      "tags": ["tension", "founders"]
+    },
+    {
+      "kind": "card",
+      "id": "VC08-C007",
+      "topic_id": "VC08",
+      "question": "What is a conversion price adjustment?",
+      "answer": "The mechanism by which the price at which preferred shares convert into common shares is lowered after a down round, increasing the number of common shares the investor receives.",
+      "explanation": "It is the operational effect of an anti-dilution clause.",
+      "status": "active",
+      "tags": ["conversion price", "adjustment"]
+    },
+    {
+      "kind": "card",
+      "id": "VC08-C008",
+      "topic_id": "VC08",
+      "question": "When does an anti-dilution clause NOT typically apply?",
+      "answer": "It generally does not apply to shares issued under employee option pools, conversion of convertibles, or other carve-outs expressly excluded in the term sheet.",
+      "explanation": "Carve-outs are negotiated to allow normal operations without triggering protection.",
+      "status": "active",
+      "tags": ["carve-outs", "exceptions"]
+    }
+  ]
+}

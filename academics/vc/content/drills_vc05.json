@@ -2,25 +2,25 @@
   "schema_version": 1,
   "pack_id": "drills-vc05",
   "topic_id": "VC05",
-  "language": "fr",
+  "language": "en",
   "source_type": "original",
-  "license": "Contenu original NAGE",
+  "license": "Original NAGE content",
   "items": [
     {
       "kind": "drill",
       "id": "VC05-D001",
       "topic_id": "VC05",
-      "prompt": "Une société a 8 millions d'actions existantes et émet 2 millions d'actions nouvelles. Quelle est la part des nouveaux actionnaires, en % ?",
+      "prompt": "A company has 8 million existing shares and issues 2 million new shares. What is the new shareholders' ownership, in %?",
       "variables": {"existing_shares": 8, "new_shares": 2},
       "answer": 20,
       "answer_unit": "percent",
       "tolerance": 0.01,
       "steps": [
         {"label": "Total", "expression": "8 + 2", "result": 10},
-        {"label": "Part nouvelle", "expression": "2 / 10", "result": 20}
+        {"label": "New share", "expression": "2 / 10", "result": 20}
       ],
       "error_paths": [
-        {"value": 25, "category": "formula", "message": "Vous avez divisé par les actions existantes (8) au lieu du total (10)."}
+        {"value": 25, "category": "formula", "message": "You divided by the existing shares (8) instead of the total (10)."}
       ],
       "difficulty": 1
     },
@@ -28,17 +28,17 @@
       "kind": "drill",
       "id": "VC05-D002",
       "topic_id": "VC05",
-      "prompt": "Cap table : fondateurs 6 M d'actions, option pool 1 M, investisseur 3 M. Quelle est la part de l'investisseur, en % ?",
+      "prompt": "Cap table: founders 6M shares, option pool 1M, investor 3M. What is the investor's ownership, in %?",
       "variables": {"founders": 6, "pool": 1, "investor": 3},
       "answer": 30,
       "answer_unit": "percent",
       "tolerance": 0.01,
       "steps": [
-        {"label": "Total fully diluted", "expression": "6 + 1 + 3", "result": 10},
-        {"label": "Part investisseur", "expression": "3 / 10", "result": 30}
+        {"label": "Fully diluted total", "expression": "6 + 1 + 3", "result": 10},
+        {"label": "Investor share", "expression": "3 / 10", "result": 30}
       ],
       "error_paths": [
-        {"value": 0.3, "category": "unit", "message": "La réponse est correcte mais exprimée en ratio ; attendez un pourcentage."}
+        {"value": 0.3, "category": "unit", "message": "The answer is correct but expressed as a ratio; a percentage is expected."}
       ],
       "difficulty": 1
     },
@@ -46,17 +46,17 @@
       "kind": "drill",
       "id": "VC05-D003",
       "topic_id": "VC05",
-      "prompt": "Un option pool de 10 % est créé sur un post-money de 20 M€. Quelle est sa valeur, en M€ ?",
+      "prompt": "An option pool of 10% is created on a post-money valuation of 20 M€. What is its value, in M€?",
       "variables": {"pool_percent": 10, "post_money": 20},
       "answer": 2,
       "answer_unit": "m_eur",
       "tolerance": 0.01,
       "steps": [
-        {"label": "Formule", "expression": "pool = pool_percent × post_money", "result": 2},
-        {"label": "Substitution", "expression": "10 % × 20", "result": 2}
+        {"label": "Formula", "expression": "pool = pool_percent x post_money", "result": 2},
+        {"label": "Substitution", "expression": "10% x 20", "result": 2}
       ],
       "error_paths": [
-        {"value": 1.8, "category": "convention", "message": "Le pool se calcule sur le post-money de 20 M€, pas sur un pre-money de 18 M€."}
+        {"value": 1.8, "category": "convention", "message": "The pool is computed on the post-money of 20 M€, not on a pre-money of 18 M€."}
       ],
       "difficulty": 1
     },
@@ -64,19 +64,19 @@
       "kind": "drill",
       "id": "VC05-D004",
       "topic_id": "VC05",
-      "prompt": "Pre-money 8 M€, investissement 2 M€, option pool de 10 % du post-money. Quelle part les fondateurs conservent-ils, en % ?",
+      "prompt": "Pre-money 8 M€, investment 2 M€, option pool of 10% of post-money. What ownership do the founders keep, in %?",
       "variables": {"pre_money": 8, "investment": 2, "pool_percent": 10},
       "answer": 70,
       "answer_unit": "percent",
       "tolerance": 0.01,
       "steps": [
         {"label": "Post-money", "expression": "8 + 2", "result": 10},
-        {"label": "Part investisseur", "expression": "2 / 10", "result": 20},
-        {"label": "Pool", "expression": "10 %", "result": 10},
-        {"label": "Fondateurs", "expression": "100 - 20 - 10", "result": 70}
+        {"label": "Investor share", "expression": "2 / 10", "result": 20},
+        {"label": "Pool", "expression": "10%", "result": 10},
+        {"label": "Founders", "expression": "100 - 20 - 10", "result": 70}
       ],
       "error_paths": [
-        {"value": 80, "category": "missing_data", "message": "Vous avez oublié l'option pool de 10 %."}
+        {"value": 80, "category": "missing_data", "message": "You forgot the 10% option pool."}
       ],
       "difficulty": 2
     },
@@ -84,17 +84,17 @@
       "kind": "drill",
       "id": "VC05-D005",
       "topic_id": "VC05",
-      "prompt": "Actions émises : 8 M. Options attribuées : 1 M. Pool réservé : 1 M. Les fondateurs détiennent 6 M d'actions. Quelle est leur part fully diluted, en % ?",
+      "prompt": "Shares issued: 8M. Options granted: 1M. Pool reserved: 1M. Founders hold 6M shares. What is their fully diluted ownership, in %?",
       "variables": {"issued": 8, "options": 1, "pool": 1, "founders": 6},
       "answer": 60,
       "answer_unit": "percent",
       "tolerance": 0.01,
       "steps": [
-        {"label": "Total fully diluted", "expression": "8 + 1 + 1", "result": 10},
-        {"label": "Part fondateurs", "expression": "6 / 10", "result": 60}
+        {"label": "Fully diluted total", "expression": "8 + 1 + 1", "result": 10},
+        {"label": "Founders' share", "expression": "6 / 10", "result": 60}
       ],
       "error_paths": [
-        {"value": 75, "category": "missing_data", "message": "Vous avez utilisé les seules actions émises (8) et oublié les options et le pool."}
+        {"value": 75, "category": "missing_data", "message": "You used only the issued shares (8) and forgot the options and the pool."}
       ],
       "difficulty": 2
     },
@@ -102,16 +102,16 @@
       "kind": "drill",
       "id": "VC05-D006",
       "topic_id": "VC05",
-      "prompt": "Un pool de 12 % est créé sur un post-money de 25 M€. Quelle est sa valeur, en M€ ?",
+      "prompt": "A pool of 12% is created on a post-money valuation of 25 M€. What is its value, in M€?",
       "variables": {"pool_percent": 12, "post_money": 25},
       "answer": 3,
       "answer_unit": "m_eur",
       "tolerance": 0.01,
       "steps": [
-        {"label": "Formule", "expression": "pool = 12 % × 25", "result": 3}
+        {"label": "Formula", "expression": "pool = 12% x 25", "result": 3}
       ],
       "error_paths": [
-        {"value": 2.4, "category": "convention", "message": "Vous avez appliqué 12 % au pre-money (20) au lieu du post-money (25)."}
+        {"value": 2.4, "category": "convention", "message": "You applied 12% to the pre-money (20) instead of the post-money (25)."}
       ],
       "difficulty": 1
     }

@@ -33,7 +33,10 @@ Commandes de contrôle :
 - Un dossier VC qui est un lien symbolique est refusé.
 - Aucune donnée personnelle, aucun terme sheet réel et aucune note de cours ne doit être
   ajouté au dépôt. `.nage/` et `vc_data/` sont ignorés par Git.
-- L'outil ne fait aucun appel réseau et ne soumet jamais une candidature ou un document.
+- L'outil déterministe ne fait aucun appel réseau. Le tuteur IA (`vc tutor`) est désactivé
+  par défaut côté cloud ; il faut `VC_TUTOR_CLOUD=1` pour autoriser Mistral/Gemini, et
+  `VC_TUTOR_LOAD_ENV=1` pour charger `.env`. Par défaut, seul un modèle local (Ollama) peut
+  être utilisé.
 - La suppression exige la phrase exacte `SUPPRIMER MES DONNEES VC` et ne supprime que le
   dossier VC local.
 
@@ -90,6 +93,9 @@ Chaque correction affiche les étapes de calcul et un diagnostic :
 Unités acceptées : `eur`, `k_eur`, `m_eur`, `percent`, `ratio`, `years`.
 Une convention alternative n'est acceptée que si elle est explicitement déclarée dans le
 contenu du drill.
+
+Chaque `vc drill run ... --answer` persiste une tentative dans `drills/attempts.jsonl`.
+Ces tentatives alimentent le radar et le plan, sans modifier les cartes SM-2.
 
 ## 5. Cas chiffrés
 
@@ -243,13 +249,23 @@ dépôt Git et n'est jamais inclus dans un message d'erreur.
 - L'historique est écrit dans `exams/history.jsonl` et alimente le radar, le plan et le
   rapport. L'examen actif est stocké dans `exams/active.json` et supprimé après soumission.
 
-## 8. Radar, plan et rapport
+## 8. Date d'examen, radar, plan et rapport
 
 ```bash
+.venv/bin/python nage.py vc exam-date
+.venv/bin/python nage.py vc exam-date 2026-12-01 --time 09:30 --duration 120
 .venv/bin/python nage.py vc radar --today 2026-11-02
 .venv/bin/python nage.py vc plan --minutes 30 --exam-date 2026-11-15
 .venv/bin/python nage.py vc report --days 30
 ```
+
+- La date, l'heure et la durée d'examen par défaut sont `2026-11-06`, `16:00`, `90 min`.
+  Elles sont persistées dans `settings.json` et partagées avec `vc master`.
+- `--exam-date` reste prioritaire sur la valeur enregistrée.
+- Le plan ne recommande que des activités réellement disponibles (cartes actives, drills,
+  cas) et utilise les identifiants réels (`VC04-D001`, `VC04-CASE02`). Si aucun contenu
+  adaptatif n'est disponible pour un topic faible, il bascule sur une activité `cram`
+  explicite.
 
 - Le radar indique les topics non testés, fragiles, en progression ou solides.
 - Le plan respecte strictement la capacité en minutes et cite la raison de chaque activité.
@@ -308,14 +324,38 @@ Le fichier de réponses est un objet JSON `{"2025-A01": "D", "2025-B16": "54 %"}
 Les unités (`%`, `M€`, `k€`, `x`) et les tolérances sont acceptées. Les questions ouvertes
 et les cas sont marqués `self_assess` : le corrigé s'affiche, la note reste humaine.
 
+Chaque `vc paper grade` persiste une tentative dans `papers/attempts.jsonl`, avec la
+décomposition par topic. Ces tentatives alimentent le radar et le rapport.
+
 `vc cram` produit une page HTML autonome et imprimable (`<details>` repliés à l'écran,
 corrigés visibles à l'impression), sans aucun appel réseau. Le fichier Markdown est le
 même contenu, lisible dans un terminal ou un éditeur.
 
-## 12. Tests et qualité
+## 12. Façade HTTP hors-ligne
 
 ```bash
-.venv/bin/python -m pytest -q tests/test_vc_*.py
+.venv/bin/python nage.py vc serve --port 8765
+```
+
+Le serveur utilise uniquement la bibliothèque standard, reste sur `127.0.0.1` par défaut et
+n'effectue aucun appel réseau. Il expose :
+
+- `GET /` : page HTML autonome ;
+- `GET /api/radar` : radar de maîtrise ;
+- `GET /api/plan?minutes=30` : plan borné ;
+- `GET /api/exam-date` : date et durée d'examen ;
+- `GET /api/drills`, `/api/cases`, `/api/papers` : contenus ;
+- `POST /api/drills/grade` : correction d'un drill.
+
+## 13. Façade HTTP et API (rappel)
+
+Voir la section 12. Endpoints supplémentaires : `/api/topics`, `/api/glossary?q=...`,
+`/api/search?q=...`, `/api/export`, `/api/health`. Pagination via `limit` et `offset`.
+
+## 14. Tests et qualité
+
+```bash
+.venv/bin/python -m pytest -q tests/test_vc_*.py tests/test_vc_tutor.py
 .venv/bin/python -m ruff check academics/vc nage.py tests/test_vc_*.py
 ```
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, Mapping, Sequence
 
 from .dates import parse_date
@@ -28,6 +28,8 @@ def mastery_radar(
     today: str,
     case_attempts: Sequence[CaseAttempt] = (),
     exam_results: Sequence[dict[str, Any]] = (),
+    drill_attempts: Sequence[Any] = (),
+    paper_attempts: Sequence[Any] = (),
     progress: Mapping[str, CardProgress] | None = None,
 ) -> list[MasteryRecord]:
     parse_date(today)
@@ -42,7 +44,7 @@ def mastery_radar(
         bucket["correct"] += 1 if event.correct else 0
         bucket["last"] = max(bucket["last"], event.reviewed_at[:10])
         if not event.correct:
-            bucket["errors"]["rappel"] += 1
+            bucket["errors"]["recall"] += 1
     for attempt in case_attempts:
         try:
             case = content.case(attempt.case_id)
@@ -53,7 +55,35 @@ def mastery_radar(
         bucket["correct"] += 1 if attempt.score >= 0.6 else 0
         bucket["last"] = max(bucket["last"], attempt.submitted_at[:10])
         if attempt.score < 0.6:
-            bucket["errors"]["cas"] += 1
+            bucket["errors"]["case"] += 1
+    for attempt in drill_attempts:
+        try:
+            drill = content.drill(attempt.drill_id)
+        except ContentError:
+            continue
+        bucket = stats[drill.topic_id]
+        bucket["attempts"] += 1
+        bucket["correct"] += 1 if attempt.accepted else 0
+        bucket["last"] = max(bucket["last"], attempt.submitted_at[:10])
+        if not attempt.accepted:
+            bucket["errors"]["formula"] += 1
+    for attempt in paper_attempts:
+        per_topic = getattr(attempt, "per_topic", None)
+        if not isinstance(per_topic, dict):
+            continue
+        for topic_id, value in per_topic.items():
+            if not isinstance(value, dict):
+                continue
+            attempts = int(value.get("attempts", 0))
+            correct = int(value.get("correct", 0))
+            if attempts <= 0:
+                continue
+            bucket = stats[topic_id]
+            bucket["attempts"] += attempts
+            bucket["correct"] += correct
+            bucket["last"] = max(bucket["last"], attempt.submitted_at[:10])
+            if correct / attempts < 0.6:
+                bucket["errors"]["paper"] += 1
     for result in exam_results:
         per_topic = result.get("per_topic") if isinstance(result, dict) else None
         if not isinstance(per_topic, dict):
@@ -70,7 +100,7 @@ def mastery_radar(
             bucket["correct"] += correct
             bucket["last"] = max(bucket["last"], str(result.get("submitted_at", ""))[:10])
             if attempts and correct / attempts < 0.6:
-                bucket["errors"]["examen"] += 1
+                bucket["errors"]["exam"] += 1
 
     card_topic = {card.id: card.topic_id for card in content.cards}
     due_by_topic: dict[str, int] = defaultdict(int)
@@ -96,7 +126,7 @@ def mastery_radar(
         records.append(
             MasteryRecord(
                 topic_id=topic.id,
-                title=topic.title_fr,
+                title=topic.title_en,
                 attempts=attempts,
                 correct=correct,
                 accuracy=accuracy,
@@ -107,6 +137,80 @@ def mastery_radar(
             )
         )
     return records
+
+
+def content_availability(content) -> dict[str, set[str]]:
+    """Return the topics that can actually run each activity kind."""
+    return {
+        "review": {
+            card.topic_id
+            for card in content.cards
+            if getattr(card, "status", "active") == "active"
+        },
+        "drill": {drill.topic_id for drill in content.drills},
+        "case": {case.topic_id for case in content.cases},
+    }
+
+
+def coverage_report(content) -> list[dict[str, Any]]:
+    """Return a per-topic coverage summary for the VC content pack."""
+    availability = content_availability(content)
+    paper_counts: dict[str, int] = {}
+    try:
+        from .pastpapers import load_papers
+        from .content import CONTENT_DIR
+
+        for paper in load_papers(CONTENT_DIR):
+            for question in paper.questions:
+                paper_counts[question.topic_id] = paper_counts.get(question.topic_id, 0) + 1
+    except Exception:
+        paper_counts = {}
+    report: list[dict[str, Any]] = []
+    for topic in content.topics:
+        cards = sum(1 for c in content.cards if c.topic_id == topic.id)
+        drills = sum(1 for d in content.drills if d.topic_id == topic.id)
+        cases = sum(1 for ca in content.cases if ca.topic_id == topic.id)
+        exams = sum(1 for e in content.exams if getattr(e, "topic_id", None) == topic.id)
+        papers = paper_counts.get(topic.id, 0)
+        score = 0
+        if cards:
+            score += 1
+        if drills:
+            score += 1
+        if cases:
+            score += 1
+        if papers:
+            score += 1
+        if exams:
+            score += 1
+        level = "full" if score >= 4 else "partial" if score >= 2 else "thin"
+        report.append(
+            {
+                "topic_id": topic.id,
+                "title": topic.title_en,
+                "exam_weight": topic.exam_weight,
+                "cards": cards,
+                "drills": drills,
+                "cases": cases,
+                "exams": exams,
+                "papers": papers,
+                "has_review": topic.id in availability["review"],
+                "has_drill": topic.id in availability["drill"],
+                "has_case": topic.id in availability["case"],
+                "level": level,
+            }
+        )
+    return report
+    """Return the topics that can actually run each activity kind."""
+    return {
+        "review": {
+            card.topic_id
+            for card in content.cards
+            if getattr(card, "status", "active") == "active"
+        },
+        "drill": {drill.topic_id for drill in content.drills},
+        "case": {case.topic_id for case in content.cases},
+    }
 
 
 def build_study_plan(
@@ -128,66 +232,101 @@ def build_study_plan(
 
     order = {topic.id: topic.order for topic in content.topics}
     weights = {topic.id: topic.exam_weight for topic in content.topics}
+    available = content_availability(content)
+    drill_ref: dict[str, str] = {}
+    for drill in sorted(content.drills, key=lambda item: item.id):
+        drill_ref.setdefault(drill.topic_id, drill.id)
+    case_ref: dict[str, str] = {}
+    for case in sorted(content.cases, key=lambda item: item.id):
+        case_ref.setdefault(case.topic_id, case.id)
     candidates: list[dict[str, Any]] = []
+    needs_practice = False
     for record in radar:
         if record.topic_id not in order:
             continue
+        if record.status in {"untested", "fragile", "developing"}:
+            needs_practice = True
         weakness = {"fragile": 3.0, "untested": 2.0, "developing": 1.5, "solid": 0.0}.get(
             record.status, 0.0
         )
         due_score = min(2.0, record.due_cards * 0.25)
         base = urgency * weights.get(record.topic_id, 0.5) + weakness + due_score
-        if record.due_cards:
+        if record.due_cards and record.topic_id in available["review"]:
             candidates.append(
                 {
                     "kind": "review",
                     "ref_id": record.topic_id,
                     "topic_id": record.topic_id,
                     "minutes": min(20, max(5, record.due_cards * 2)),
-                    "reason": f"{record.due_cards} carte(s) due(s)",
+                    "reason": f"{record.due_cards} due card(s)",
                     "priority": base,
                 }
             )
         elif record.status == "untested":
-            candidates.append(
-                {
-                    "kind": "review",
-                    "ref_id": record.topic_id,
-                    "topic_id": record.topic_id,
-                    "minutes": 10,
-                    "reason": "topic non testé",
-                    "priority": base,
-                }
-            )
+            if record.topic_id in available["review"]:
+                candidates.append(
+                    {
+                        "kind": "review",
+                        "ref_id": record.topic_id,
+                        "topic_id": record.topic_id,
+                        "minutes": 10,
+                        "reason": "topic not yet tested",
+                        "priority": base,
+                    }
+                )
+            if record.topic_id in available["drill"]:
+                candidates.append(
+                    {
+                        "kind": "drill",
+                        "ref_id": drill_ref[record.topic_id],
+                        "topic_id": record.topic_id,
+                        "minutes": 10,
+                        "reason": "topic not yet tested, drill available",
+                        "priority": base - 0.1,
+                    }
+                )
+            if record.topic_id in available["case"]:
+                candidates.append(
+                    {
+                        "kind": "case",
+                        "ref_id": case_ref[record.topic_id],
+                        "topic_id": record.topic_id,
+                        "minutes": 15,
+                        "reason": "topic not yet tested, case available",
+                        "priority": base - 0.2,
+                    }
+                )
         if record.status == "fragile":
+            if record.topic_id in available["drill"]:
+                candidates.append(
+                    {
+                        "kind": "drill",
+                        "ref_id": drill_ref[record.topic_id],
+                        "topic_id": record.topic_id,
+                        "minutes": 10,
+                        "reason": f"success rate {record.accuracy:.0%}",
+                        "priority": base + 0.5,
+                    }
+                )
+            if record.topic_id in available["case"]:
+                candidates.append(
+                    {
+                        "kind": "case",
+                        "ref_id": case_ref[record.topic_id],
+                        "topic_id": record.topic_id,
+                        "minutes": 15,
+                        "reason": "case recommended after a fragile topic",
+                        "priority": base + 0.25,
+                    }
+                )
+        elif record.status == "developing" and record.topic_id in available["drill"]:
             candidates.append(
                 {
                     "kind": "drill",
                     "ref_id": record.topic_id,
                     "topic_id": record.topic_id,
                     "minutes": 10,
-                    "reason": f"taux de réussite {record.accuracy:.0%}",
-                    "priority": base + 0.5,
-                }
-            )
-            candidates.append(
-                {
-                    "kind": "case",
-                    "ref_id": record.topic_id,
-                    "topic_id": record.topic_id,
-                    "minutes": 15,
-                    "reason": "cas recommandé après un topic fragile",
-                    "priority": base + 0.25,
-                }
-            )
-        elif record.status == "developing":
-            candidates.append(
-                {
-                    "kind": "drill",
-                    "ref_id": record.topic_id,
-                    "topic_id": record.topic_id,
-                    "minutes": 10,
-                    "reason": f"taux de réussite {record.accuracy:.0%}",
+                    "reason": f"success rate {record.accuracy:.0%}",
                     "priority": base,
                 }
             )
@@ -215,6 +354,20 @@ def build_study_plan(
             }
         )
         total += candidate["minutes"]
+    if not activities and needs_practice:
+        activities.append(
+            {
+                "kind": "cram",
+                "ref_id": "cram",
+                "topic_id": "",
+                "minutes": minutes,
+                "reason": (
+                    "no adaptive activity available for the topics to study; "
+                    "fallback plan: formula sheet and past papers"
+                ),
+            }
+        )
+        total = minutes
     return StudyPlan(
         date=today,
         capacity_minutes=minutes,
@@ -243,4 +396,54 @@ def radar_payload(records: Sequence[MasteryRecord], *, generated_at: str) -> dic
         "topics": [record.to_dict() for record in records],
         "untested": [record.topic_id for record in records if record.status == "untested"],
         "generated_at": generated_at,
+    }
+
+
+def build_schedule(
+    content,
+    radar: Sequence[MasteryRecord],
+    *,
+    today: str,
+    exam_date: str | None = None,
+    days: int = 7,
+    daily_minutes: int = 60,
+) -> dict[str, Any]:
+    """Build a day-by-day study schedule up to the exam."""
+    parse_date(today)
+    if days < 1:
+        raise ValueError("The number of days must be positive.")
+    if daily_minutes < 1:
+        raise ValueError("The daily capacity must be positive.")
+    total = days * daily_minutes
+    big_plan = build_study_plan(content, radar, minutes=total, today=today, exam_date=exam_date)
+    buckets: list[list[dict[str, Any]]] = [[] for _ in range(days)]
+    bucket_minutes = [0 for _ in range(days)]
+    for activity in big_plan.activities:
+        placed = False
+        for d in range(days):
+            if bucket_minutes[d] + activity["minutes"] <= daily_minutes:
+                buckets[d].append(dict(activity))
+                bucket_minutes[d] += activity["minutes"]
+                placed = True
+                break
+        if not placed:
+            buckets[-1].append(dict(activity))
+            bucket_minutes[-1] += activity["minutes"]
+    start = date.fromisoformat(today)
+    schedule = []
+    for d in range(days):
+        schedule.append(
+            {
+                "date": (start + timedelta(days=d)).isoformat(),
+                "minutes": bucket_minutes[d],
+                "activities": buckets[d],
+            }
+        )
+    return {
+        "today": today,
+        "exam_date": exam_date,
+        "days": days,
+        "daily_minutes": daily_minutes,
+        "total_minutes": sum(bucket_minutes),
+        "schedule": schedule,
     }

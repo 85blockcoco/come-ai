@@ -2,26 +2,26 @@
   "schema_version": 1,
   "pack_id": "drills-vc07",
   "topic_id": "VC07",
-  "language": "fr",
+  "language": "en",
   "source_type": "original",
-  "license": "Contenu original NAGE",
+  "license": "Original NAGE content",
   "items": [
     {
       "kind": "drill",
       "id": "VC07-D001",
       "topic_id": "VC07",
-      "prompt": "Un investisseur a mis 2 M€ avec une préférence 1x non participating et détient 20 %. La sortie est de 6 M€. Combien reçoit-il, en M€ ?",
+      "prompt": "An investor invested 2 M€ with a 1x non-participating preference and holds 20%. The exit is 6 M€. How much does the investor receive, in M€?",
       "variables": {"invested": 2, "ownership": 20, "proceeds": 6},
       "answer": 2,
       "answer_unit": "m_eur",
       "tolerance": 0.01,
       "steps": [
-        {"label": "Préférence", "expression": "1x × 2", "result": 2},
-        {"label": "Conversion", "expression": "20 % × 6", "result": 1.2},
-        {"label": "Maximum", "expression": "max(2 ; 1,2)", "result": 2}
+        {"label": "Preference", "expression": "1x x 2", "result": 2},
+        {"label": "Conversion", "expression": "20% x 6", "result": 1.2},
+        {"label": "Maximum", "expression": "max(2 ; 1.2)", "result": 2}
       ],
       "error_paths": [
-        {"value": 1.2, "category": "formula", "message": "Vous avez calculé la conversion mais oublié de comparer avec la préférence 1x."}
+        {"value": 1.2, "category": "formula", "message": "You computed the conversion but forgot to compare it with the 1x preference."}
       ],
       "difficulty": 2
     },
@@ -29,19 +29,19 @@
       "kind": "drill",
       "id": "VC07-D002",
       "topic_id": "VC07",
-      "prompt": "Préférence 1x participating sans cap, investissement 2 M€, sortie 10 M€, détention 20 %. Combien reçoit l'investisseur, en M€ ?",
+      "prompt": "1x participating preference with no cap, investment 2 M€, exit 10 M€, ownership 20%. How much does the investor receive, in M€?",
       "variables": {"invested": 2, "proceeds": 10, "ownership": 20},
       "answer": 3.6,
       "answer_unit": "m_eur",
       "tolerance": 0.01,
       "steps": [
-        {"label": "Préférence", "expression": "1x × 2", "result": 2},
-        {"label": "Résidu", "expression": "10 - 2", "result": 8},
-        {"label": "Participation", "expression": "20 % × 8", "result": 1.6},
-        {"label": "Total", "expression": "2 + 1,6", "result": 3.6}
+        {"label": "Preference", "expression": "1x x 2", "result": 2},
+        {"label": "Residual", "expression": "10 - 2", "result": 8},
+        {"label": "Participation", "expression": "20% x 8", "result": 1.6},
+        {"label": "Total", "expression": "2 + 1.6", "result": 3.6}
       ],
       "error_paths": [
-        {"value": 2, "category": "formula", "message": "Vous avez oublié la participation au résidu."}
+        {"value": 2, "category": "formula", "message": "You forgot the participation in the residual."}
       ],
       "difficulty": 3
     },
@@ -49,19 +49,19 @@
       "kind": "drill",
       "id": "VC07-D003",
       "topic_id": "VC07",
-      "prompt": "Préférence 1x participating avec cap 2x, investissement 2 M€, sortie 10 M€, détention 20 %. Combien reçoit l'investisseur, en M€ ?",
+      "prompt": "1x participating preference with a 2x cap, investment 2 M€, exit 10 M€, ownership 20%. How much does the investor receive, in M€?",
       "variables": {"invested": 2, "proceeds": 10, "ownership": 20, "cap_multiple": 2},
       "answer": 4,
       "answer_unit": "m_eur",
       "tolerance": 0.01,
       "steps": [
-        {"label": "Préférence", "expression": "1x × 2", "result": 2},
-        {"label": "Participation théorique", "expression": "20 % × 8", "result": 1.6},
-        {"label": "Cap", "expression": "2x × 2", "result": 4},
-        {"label": "Total plafonné", "expression": "min(3,6 ; 4)", "result": 4}
+        {"label": "Preference", "expression": "1x x 2", "result": 2},
+        {"label": "Theoretical participation", "expression": "20% x 8", "result": 1.6},
+        {"label": "Cap", "expression": "2x x 2", "result": 4},
+        {"label": "Capped total", "expression": "min(3.6 ; 4)", "result": 4}
       ],
       "error_paths": [
-        {"value": 3.6, "category": "formula", "message": "Vous avez oublié d'appliquer le cap de 2x."}
+        {"value": 3.6, "category": "formula", "message": "You forgot to apply the 2x cap."}
       ],
       "difficulty": 3
     },
@@ -69,18 +69,18 @@
       "kind": "drill",
       "id": "VC07-D004",
       "topic_id": "VC07",
-      "prompt": "Préférence 1x non participating, investissement 2 M€, sortie 30 M€, détention 10 %. Combien reçoit l'investisseur, en M€ ?",
+      "prompt": "1x non-participating preference, investment 2 M€, exit 30 M€, ownership 10%. How much does the investor receive, in M€?",
       "variables": {"invested": 2, "proceeds": 30, "ownership": 10},
       "answer": 3,
       "answer_unit": "m_eur",
       "tolerance": 0.01,
       "steps": [
-        {"label": "Préférence", "expression": "1x × 2", "result": 2},
-        {"label": "Conversion", "expression": "10 % × 30", "result": 3},
+        {"label": "Preference", "expression": "1x x 2", "result": 2},
+        {"label": "Conversion", "expression": "10% x 30", "result": 3},
         {"label": "Maximum", "expression": "max(2 ; 3)", "result": 3}
       ],
       "error_paths": [
-        {"value": 2, "category": "formula", "message": "Vous avez retenu la préférence alors que la conversion (3 M€) est plus favorable."}
+        {"value": 2, "category": "formula", "message": "You kept the preference although conversion (3 M€) is more favourable."}
       ],
       "difficulty": 2
     },
@@ -88,17 +88,17 @@
       "kind": "drill",
       "id": "VC07-D005",
       "topic_id": "VC07",
-      "prompt": "Waterfall : senior 2 M€ de préférence, junior 3 M€ de préférence, produit de sortie 4 M€. Combien reçoit le junior, en M€ ?",
+      "prompt": "Waterfall: senior preference 2 M€, junior preference 3 M€, exit proceeds 4 M€. How much does the junior receive, in M€?",
       "variables": {"senior_preference": 2, "junior_preference": 3, "proceeds": 4},
       "answer": 2,
       "answer_unit": "m_eur",
       "tolerance": 0.01,
       "steps": [
-        {"label": "Senior d'abord", "expression": "min(4 ; 2)", "result": 2},
-        {"label": "Reste pour le junior", "expression": "4 - 2", "result": 2}
+        {"label": "Senior first", "expression": "min(4 ; 2)", "result": 2},
+        {"label": "Left for junior", "expression": "4 - 2", "result": 2}
       ],
       "error_paths": [
-        {"value": 3, "category": "order", "message": "Vous avez payé le junior avant le senior ; respectez la seniority."}
+        {"value": 3, "category": "order", "message": "You paid the junior before the senior; respect seniority."}
       ],
       "difficulty": 3
     },
@@ -106,19 +106,19 @@
       "kind": "drill",
       "id": "VC07-D006",
       "topic_id": "VC07",
-      "prompt": "Préférence 1x participating sans cap, investissement 2 M€, sortie 6 M€, détention 25 %. Combien reçoit l'investisseur, en M€ ?",
+      "prompt": "1x participating preference with no cap, investment 2 M€, exit 6 M€, ownership 25%. How much does the investor receive, in M€?",
       "variables": {"invested": 2, "proceeds": 6, "ownership": 25},
       "answer": 3,
       "answer_unit": "m_eur",
       "tolerance": 0.01,
       "steps": [
-        {"label": "Préférence", "expression": "1x × 2", "result": 2},
-        {"label": "Résidu", "expression": "6 - 2", "result": 4},
-        {"label": "Participation", "expression": "25 % × 4", "result": 1},
+        {"label": "Preference", "expression": "1x x 2", "result": 2},
+        {"label": "Residual", "expression": "6 - 2", "result": 4},
+        {"label": "Participation", "expression": "25% x 4", "result": 1},
         {"label": "Total", "expression": "2 + 1", "result": 3}
       ],
       "error_paths": [
-        {"value": 2, "category": "formula", "message": "Vous avez oublié la participation au résidu."}
+        {"value": 2, "category": "formula", "message": "You forgot the participation in the residual."}
       ],
       "difficulty": 2
     }

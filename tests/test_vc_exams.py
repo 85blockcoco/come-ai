@@ -208,9 +208,9 @@ def test_oral_follow_ups_never_reveal_the_model_answer() -> None:
 
 def test_insufficient_questions_is_a_readable_error() -> None:
     content = load_content()
-    with pytest.raises(InputError, match="Pas assez"):
+    with pytest.raises(InputError, match="Not enough"):
         build_exam(content, questions=21)
-    with pytest.raises(InputError, match="Pas assez"):
+    with pytest.raises(InputError, match="Not enough"):
         build_exam(content, questions=6, topic_ids=["VC04"])
 
 
@@ -252,7 +252,7 @@ def test_history_entry_keeps_mastery_inputs_only() -> None:
 
 def test_exam_rejects_unknown_topic_filter() -> None:
     content = load_content()
-    with pytest.raises(InputError, match="Topic inconnu"):
+    with pytest.raises(InputError, match="Unknown topic"):
         build_exam(content, questions=1, topic_ids=["VC99"])
 
 

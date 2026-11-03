@@ -216,7 +216,7 @@ def test_session_limits_by_mode(tmp_path: Path) -> None:
     assert len(quick.card_ids) == 20
 
     long = start_session(VcStore(tmp_path / "l"), content, minutes=45, mode="long", today="2026-11-02")
-    assert len(long.card_ids) == len(content.cards)
+    assert len(long.card_ids) == min(60, len(content.cards))
 
     custom = start_session(VcStore(tmp_path / "c"), content, minutes=3, mode="custom", today="2026-11-02")
     assert len(custom.card_ids) == 6
@@ -301,7 +301,7 @@ def test_due_cards_and_reason() -> None:
     assert card_reason(None, "2026-11-02") == "nouvelle carte"
     assert card_reason(progress("a", "2026-11-01"), "2026-11-02") == "carte due"
     assert card_reason(progress("a", "2026-11-03", last_grade="again"), "2026-11-02") == (
-        "carte à revoir après un oubli"
+        "card to review after a lapse"
     )
 
 

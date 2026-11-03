@@ -17,8 +17,10 @@ from .errors import InputError, StorageError
 from .models import (
     CardProgress,
     CaseAttempt,
+    DrillAttempt,
     ExamSession,
     Flashcard,
+    PaperAttempt,
     ReviewEvent,
     ReviewSession,
 )
@@ -26,7 +28,13 @@ from .models import (
 SCHEMA_VERSION = 1
 CONFIRMATION_PHRASE = "SUPPRIMER MES DONNEES VC"
 MARKER = ".nage-vc"
-DEFAULT_SETTINGS = {"language": "fr", "exam_date": None, "daily_capacity": 60}
+DEFAULT_SETTINGS = {
+    "language": "fr",
+    "exam_date": "2026-11-06",
+    "exam_time": "16:00",
+    "exam_duration_minutes": 90,
+    "daily_capacity": 60,
+}
 
 
 def default_vc_home() -> Path:
@@ -34,7 +42,7 @@ def default_vc_home() -> Path:
     if raw:
         path = Path(raw).expanduser()
         if not path.is_absolute():
-            raise StorageError("NAGE_VC_HOME doit être un chemin absolu.")
+            raise StorageError("NAGE_VC_HOME must be an absolute path.")
         return path
     return Path.home() / ".nage" / "vc"
 
@@ -43,7 +51,7 @@ class VcStore:
     def __init__(self, home: Path | None = None) -> None:
         self._home = Path(home).expanduser() if home is not None else default_vc_home()
         if self._home.is_symlink():
-            raise StorageError("Le dossier VC ne doit pas être un lien symbolique.")
+            raise StorageError("The VC folder must not be a symlink.")
         self.warnings: list[str] = []
         self._ensure()
 
@@ -68,7 +76,7 @@ class VcStore:
                 marker.write_text("NAGE VC local storage\n", encoding="utf-8")
             os.chmod(marker, 0o600)
         except OSError as error:
-            raise StorageError("Impossible de préparer le stockage VC local.") from error
+            raise StorageError("Unable to prepare local VC storage.") from error
 
     def path(self, *parts: str) -> Path:
         return self._home.joinpath(*parts)
@@ -87,7 +95,7 @@ class VcStore:
                     shutil.copy2(path, backup)
             except OSError:
                 pass
-            self.warnings.append(f"Fichier local illisible sauvegardé : {path.name}")
+            self.warnings.append(f"Unreadable local file saved: {path.name}")
             return default
 
     def _write_json(self, path: Path, payload: Any) -> None:
@@ -157,7 +165,7 @@ class VcStore:
         try:
             return ReviewSession.from_dict(payload)
         except (TypeError, ValueError):
-            self.warnings.append("Session active illisible ignorée.")
+            self.warnings.append("Unreadable active session ignored.")
             return None
 
     def save_active_session(self, session: ReviewSession) -> None:
@@ -180,7 +188,7 @@ class VcStore:
         try:
             return ExamSession.from_dict(payload)
         except (TypeError, ValueError):
-            self.warnings.append("Examen actif illisible ignoré.")
+            self.warnings.append("Unreadable active exam ignored.")
             return None
 
     def save_active_exam(self, exam: ExamSession) -> None:
@@ -249,7 +257,7 @@ class VcStore:
             try:
                 cards.append(Flashcard.from_dict(item))
             except (TypeError, ValueError):
-                self.warnings.append("Carte importée illisible ignorée.")
+                self.warnings.append("Unreadable imported card ignored.")
         return sorted(cards, key=lambda card: card.id)
 
     def save_deck(self, cards: list[Flashcard]) -> None:
@@ -268,6 +276,33 @@ class VcStore:
             CaseAttempt.from_dict(item)
             for item in self._read_jsonl(self.path("cases", "attempts.jsonl"))
         ]
+
+    # ----------------------------------------------------------- drill attempts
+    def append_drill_attempt(self, attempt: DrillAttempt) -> None:
+        self._append_jsonl(self.path("drills", "attempts.jsonl"), attempt.to_dict())
+
+    def load_drill_attempts(self) -> list[DrillAttempt]:
+        return [
+            DrillAttempt.from_dict(item)
+            for item in self._read_jsonl(self.path("drills", "attempts.jsonl"))
+        ]
+
+    # ----------------------------------------------------------- paper attempts
+    def append_paper_attempt(self, attempt: PaperAttempt) -> None:
+        self._append_jsonl(self.path("papers", "attempts.jsonl"), attempt.to_dict())
+
+    def load_paper_attempts(self) -> list[PaperAttempt]:
+        return [
+            PaperAttempt.from_dict(item)
+            for item in self._read_jsonl(self.path("papers", "attempts.jsonl"))
+        ]
+
+    # ----------------------------------------------------------- time tracking
+    def append_time_entry(self, entry: dict[str, Any]) -> None:
+        self._append_jsonl(self.path("time.jsonl"), entry)
+
+    def load_time_entries(self) -> list[dict[str, Any]]:
+        return self._read_jsonl(self.path("time.jsonl"))
 
     # --------------------------------------------------------------- settings
     def load_settings(self) -> dict[str, Any]:
@@ -314,10 +349,10 @@ class VcStore:
     # ----------------------------------------------------------------- delete
     def delete_all(self, confirmation: str) -> bool:
         if confirmation != CONFIRMATION_PHRASE:
-            raise InputError("Phrase de confirmation incorrecte ; aucune donnée supprimée.")
+            raise InputError("Incorrect confirmation phrase; no data deleted.")
         marker = self._home / MARKER
         if not marker.exists():
-            raise StorageError("Dossier VC non reconnu ; aucune donnée supprimée.")
+            raise StorageError("VC folder not recognised; no data deleted.")
         try:
             shutil.rmtree(self._home)
         except OSError as error:
@@ -351,7 +386,7 @@ class VcStore:
                         item = json.loads(line)
                     except json.JSONDecodeError:
                         self.warnings.append(
-                            f"Ligne ignorée dans {path.name} (ligne {line_number})."
+                            f"Line ignored in {path.name} (line {line_number})."
                         )
                         continue
                     if isinstance(item, dict):

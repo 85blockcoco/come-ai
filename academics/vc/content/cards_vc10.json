@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "pack_id": "cards-vc10",
+  "topic_id": "VC10",
+  "language": "en",
+  "source_type": "original",
+  "license": "Original NAGE content",
+  "items": [
+    {
+      "kind": "card",
+      "id": "VC10-C001",
+      "topic_id": "VC10",
+      "question": "What is the typical VC fundraising process?",
+      "answer": "Sourcing, screening, due diligence, term sheet negotiation, closing and post-investment support.",
+      "explanation": "Each stage filters out companies; only a small fraction reaches closing.",
+      "status": "active",
+      "tags": ["fundraising", "process"]
+    },
+    {
+      "kind": "card",
+      "id": "VC10-C002",
+      "topic_id": "VC10",
+      "question": "What is due diligence in VC?",
+      "answer": "The investigation of a startup's business, financials, technology, market, team and legal position before investing.",
+      "explanation": "It reduces information asymmetry and validates the investment thesis.",
+      "status": "active",
+      "tags": ["due diligence", "risk"]
+    },
+    {
+      "kind": "card",
+      "id": "VC10-C003",
+      "topic_id": "VC10",
+      "question": "What is a pitch deck?",
+      "answer": "A short presentation summarizing the problem, solution, market, traction, team and funding ask, used to attract investors.",
+      "explanation": "It is the entry point for most VC relationships.",
+      "status": "active",
+      "tags": ["pitch deck", "fundraising"]
+    },
+    {
+      "kind": "card",
+      "id": "VC10-C004",
+      "topic_id": "VC10",
+      "question": "What is an investment memo?",
+      "answer": "An internal document presenting the investment thesis, risks, valuation and recommendation, used for the investment committee decision.",
+      "explanation": "It documents the reasoning for later review.",
+      "status": "active",
+      "tags": ["investment memo", "decision"]
+    },
+    {
+      "kind": "card",
+      "id": "VC10-C005",
+      "topic_id": "VC10",
+      "question": "What is an investment committee?",
+      "answer": "The body of senior partners that approves or rejects investments above a certain threshold.",
+      "explanation": "It is the final gate in the VC decision process.",
+      "status": "active",
+      "tags": ["investment committee", "governance"]
+    },
+    {
+      "kind": "card",
+      "id": "VC10-C006",
+      "topic_id": "VC10",
+      "question": "What is sourcing in VC?",
+      "answer": "The activity of finding and attracting potential investment opportunities through networks, events, inbound leads and proactive outreach.",
+      "explanation": "Good sourcing is critical to fund performance.",
+      "status": "active",
+      "tags": ["sourcing", "deal flow"]
+    },
+    {
+      "kind": "card",
+      "id": "VC10-C007",
+      "topic_id": "VC10",
+      "question": "What is a term sheet negotiation timeline?",
+      "answer": "Typically a few weeks from initial interest to signed term sheet, followed by several more weeks of due diligence and documentation before closing.",
+      "explanation": "Speed can be a competitive advantage for a VC.",
+      "status": "active",
+      "tags": ["timeline", "negotiation"]
+    },
+    {
+      "kind": "card",
+      "id": "VC10-C008",
+      "topic_id": "VC10",
+      "question": "What is a no-shop clause?",
+      "answer": "A clause in a term sheet preventing the founder from soliciting other investors for a defined period while the deal closes.",
+      "explanation": "It protects the VC's investment in the process.",
+      "status": "active",
+      "tags": ["no-shop", "term sheet"]
+    }
+  ]
+}

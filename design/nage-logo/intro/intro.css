@@ -1,0 +1,110 @@
+/* =========================================================
+   NAGe — intro d'ouverture (overlay)
+   Feuille autonome : ne cible QUE les éléments qu'elle crée
+   (.nage-intro *) plus la classe d'état .nage-intro-ui-hold
+   posée sur l'interface hôte pendant l'intro.
+   ========================================================= */
+
+:root{
+  --nage-intro-bg:#050705;
+  --emerald:#00d47a;
+  --emerald-hi:#5cffbe;
+  --emerald-deep:#00b066;
+  --nage-ink:#e8f5ee;
+}
+
+/* ---------- Overlay plein écran ---------- */
+.nage-intro{
+  position:fixed;
+  inset:0;
+  z-index:9999;
+  display:grid;
+  place-items:center;
+  background:var(--nage-intro-bg);
+  /* jamais de scroll-bounce pendant l'intro */
+  overscroll-behavior:contain;
+  contain:strict;
+}
+.nage-intro[hidden]{ display:none }
+
+/* ---------- Conteneur du logo ---------- */
+.nage-intro-logo{
+  width:clamp(min(46vh,430px),88vw,1100px);
+  aspect-ratio:1/1;
+  display:grid;
+  place-items:center;
+  transform-origin:50% 50%;
+  will-change:transform,opacity;
+  pointer-events:none; /* décor : ne capte jamais un clic */
+}
+.nage-intro-logo svg{
+  display:block;
+  width:100%;
+  height:100%;
+  overflow:visible;
+}
+/* Éclat lumineux bref le long des courbes (Phase A) :
+   un voile émeraude en blend screen, opacité pilotée par JS. */
+.nage-intro-logo::after{
+  content:"";
+  position:absolute;
+  inset:-8%;
+  border-radius:50%;
+  background:radial-gradient(closest-side, rgba(92,255,190,.22), rgba(0,212,122,.06) 55%, transparent 72%);
+  mix-blend-mode:screen;
+  opacity:0;
+  will-change:opacity;
+  pointer-events:none;
+}
+.nage-intro--played .nage-intro-logo::after{ display:none }
+
+/* ---------- les <g> animés ---------- */
+.nage-intro [data-half],.nage-intro #halfL,.nage-intro #halfR{ will-change:transform,opacity }
+.nage-intro [data-word],.nage-intro #wordmark{ will-change:opacity }
+
+/* ---------- Interface de dessous (Phase C) ----------
+   L'élément hôte (input "root" / wrapSelector) reçoit
+   .nage-intro-ui-hold : invisible tant que l'intro joue.
+   hint = choix par défaut, .nage-intro-ui = classe du host
+   si l'utilisateur préfère styler lui-même.               */
+.nage-intro-ui-hold,.nage-intro-ui{
+  opacity:0;
+  transform:scale(.98);
+  transform-origin:50% 50%;
+  will-change:transform,opacity;
+  /* l'UI reste responsive : on autorise le flux normal */
+  pointer-events:none; /* pendant l'intro, pas d'interaction */
+}
+.nage-intro-ui-hold--in,.nage-intro-ui--in{
+  opacity:1;
+  transform:scale(1);
+  will-change:auto;
+  pointer-events:auto;
+  transition:opacity .5s cubic-bezier(.22,1,.36,1), transform .5s cubic-bezier(.22,1,.36,1);
+}
+.nage-intro--played .nage-intro-ui-hold{ will-change:auto; pointer-events:auto }
+
+/* ---------- Fin : nettoyage sans layout thrash ---------- */
+.nage-intro--fade{
+  opacity:0;
+  transition:opacity .28s ease .02s;
+  pointer-events:none;
+}
+
+/* ---------- Mobile : logo plus haut pour respirer ---------- */
+@media (max-width:640px){
+  .nage-intro-logo{
+    width:min(84vw,60vh);
+  }
+}
+
+/* ---------- Reduced motion : tout est désactivé par construction.
+   Sécurité en CSS si jamais l'overlay est malgré tout monté : ------- */
+@media (prefers-reduced-motion: reduce){
+  .nage-intro{ display:none !important }
+  .nage-intro-ui-hold{ opacity:1 !important; transform:none !important; pointer-events:auto !important }
+}
+
+/* Charge utile en utilitaire : accessible si besoin ailleurs
+   (aucun style imposé sur l'app elle-même). */
+.nage-intro *{ box-sizing:border-box }

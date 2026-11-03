@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "pack_id": "cards-vc16",
+  "topic_id": "VC16",
+  "language": "en",
+  "source_type": "original",
+  "license": "Original NAGE content",
+  "items": [
+    {
+      "kind": "card",
+      "id": "VC16-C001",
+      "topic_id": "VC16",
+      "question": "What is a convertible note?",
+      "answer": "A short-term debt instrument that converts into equity (usually preferred shares) at a future priced round, typically with a discount and/or a valuation cap.",
+      "explanation": "It avoids pricing an immature startup and is fast and cheap to issue.",
+      "status": "active",
+      "tags": ["convertible note", "seed"]
+    },
+    {
+      "kind": "card",
+      "id": "VC16-C002",
+      "topic_id": "VC16",
+      "question": "What is a valuation cap on a convertible note?",
+      "answer": "A maximum valuation at which the note converts, protecting the investor if the company's valuation rises sharply before conversion.",
+      "explanation": "The cap sets a floor on the investor's ownership.",
+      "status": "active",
+      "tags": ["valuation cap", "convertible"]
+    },
+    {
+      "kind": "card",
+      "id": "VC16-C003",
+      "topic_id": "VC16",
+      "question": "What is a conversion discount?",
+      "answer": "A percentage reduction (often 10-20%) applied to the price per share in the next round, rewarding the early investor for taking more risk.",
+      "explanation": "Discount and cap are alternative protections; the investor gets the better of the two.",
+      "status": "active",
+      "tags": ["discount", "convertible"]
+    },
+    {
+      "kind": "card",
+      "id": "VC16-C004",
+      "topic_id": "VC16",
+      "question": "What is a SAFE?",
+      "answer": "A Simple Agreement for Future Equity: an agreement to receive equity in a future priced round, without interest or maturity, simpler than a convertible note.",
+      "explanation": "SAFEs are popular in seed financing, especially in the US.",
+      "status": "active",
+      "tags": ["SAFE", "seed"]
+    },
+    {
+      "kind": "card",
+      "id": "VC16-C005",
+      "topic_id": "VC16",
+      "question": "What is the difference between a convertible note and a SAFE?",
+      "answer": "A convertible note is debt with interest and a maturity date; a SAFE is not debt, has no interest or maturity, and converts only if a priced round occurs.",
+      "explanation": "SAFEs are simpler but give the investor less downside protection.",
+      "status": "active",
+      "tags": ["SAFE", "convertible note"]
+    },
+    {
+      "kind": "card",
+      "id": "VC16-C006",
+      "topic_id": "VC16",
+      "question": "What is preferred stock in VC?",
+      "answer": "Equity with priority over common stock on dividends and liquidation, and often with conversion rights into common shares.",
+      "explanation": "VCs usually receive preferred shares, founders and employees common shares.",
+      "status": "active",
+      "tags": ["preferred stock", "equity"]
+    },
+    {
+      "kind": "card",
+      "id": "VC16-C007",
+      "topic_id": "VC16",
+      "question": "What is a participation right in preferred shares?",
+      "answer": "The right of preferred shareholders to receive their liquidation preference and then participate pro rata in the remaining proceeds.",
+      "explanation": "Participating preferred gives a 'double dip' in moderate exits.",
+      "status": "active",
+      "tags": ["participation", "preferred"]
+    },
+    {
+      "kind": "card",
+      "id": "VC16-C008",
+      "topic_id": "VC16",
+      "question": "What is a redemption right?",
+      "answer": "The right of an investor to force the company to repurchase its shares after a certain period, often at cost plus accrued dividends.",
+      "explanation": "It provides an exit if an IPO or sale does not occur.",
+      "status": "active",
+      "tags": ["redemption", "exit"]
+    }
+  ]
+}

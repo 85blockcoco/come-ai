@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "pack_id": "cards-vc13",
+  "topic_id": "VC13",
+  "language": "en",
+  "source_type": "original",
+  "license": "Original NAGE content",
+  "items": [
+    {
+      "kind": "card",
+      "id": "VC13-C001",
+      "topic_id": "VC13",
+      "question": "What are the main VC exit routes?",
+      "answer": "Trade sale (M&A), IPO, secondary sale to another investor, and continuation vehicles (GP-led secondaries).",
+      "explanation": "The choice depends on market conditions, company readiness and fund life.",
+      "status": "active",
+      "tags": ["exit", "routes"]
+    },
+    {
+      "kind": "card",
+      "id": "VC13-C002",
+      "topic_id": "VC13",
+      "question": "What is a trade sale?",
+      "answer": "An acquisition of the company by a strategic or financial buyer, providing liquidity to shareholders.",
+      "explanation": "It is the most common VC exit and is usually faster than an IPO.",
+      "status": "active",
+      "tags": ["trade sale", "M&A"]
+    },
+    {
+      "kind": "card",
+      "id": "VC13-C003",
+      "topic_id": "VC13",
+      "question": "What is an IPO exit?",
+      "answer": "Listing the company's shares on a public stock exchange, allowing gradual sale of shares by investors.",
+      "explanation": "IPOs offer high valuations and prestige but involve lock-ups and market risk.",
+      "status": "active",
+      "tags": ["IPO", "exit"]
+    },
+    {
+      "kind": "card",
+      "id": "VC13-C004",
+      "topic_id": "VC13",
+      "question": "What is a continuation vehicle (GP-led secondary)?",
+      "answer": "A new fund or vehicle created by the GP to buy assets from an older fund, extending the holding period and giving LPs a choice to cash out or roll over.",
+      "explanation": "It addresses fund-life constraints when assets need more time.",
+      "status": "active",
+      "tags": ["continuation vehicle", "secondary"]
+    },
+    {
+      "kind": "card",
+      "id": "VC13-C005",
+      "topic_id": "VC13",
+      "question": "What is enterprise value (EV)?",
+      "answer": "The total value of a company's operations, equal to equity value plus net debt (debt minus cash).",
+      "explanation": "EV is used in valuation multiples and is independent of capital structure.",
+      "status": "active",
+      "tags": ["EV", "valuation"]
+    },
+    {
+      "kind": "card",
+      "id": "VC13-C006",
+      "topic_id": "VC13",
+      "question": "How is enterprise value computed from an equity value?",
+      "answer": "EV = equity value + total debt - cash (and cash equivalents).",
+      "explanation": "Debt adds to the value of operations; cash reduces it.",
+      "status": "active",
+      "tags": ["EV", "formula"]
+    },
+    {
+      "kind": "card",
+      "id": "VC13-C007",
+      "topic_id": "VC13",
+      "question": "What is free cash flow (FCF) in an LBO context?",
+      "answer": "Cash available after operating expenses, taxes, capital expenditures and changes in working capital, used to repay debt.",
+      "explanation": "FCF determines how quickly leverage can be reduced.",
+      "status": "active",
+      "tags": ["FCF", "LBO"]
+    },
+    {
+      "kind": "card",
+      "id": "VC13-C008",
+      "topic_id": "VC13",
+      "question": "Why do VC funds have a limited life?",
+      "answer": "VC funds are typically 10 years (with extensions) to ensure LPs receive liquidity and to align the GP's incentives with timely exits.",
+      "explanation": "Fund life drives exit timing and the pressure to return capital.",
+      "status": "active",
+      "tags": ["fund life", "exit timing"]
+    }
+  ]
+}

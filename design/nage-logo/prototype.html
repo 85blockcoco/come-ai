@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NAGe — Logo &amp; prototype d'ouverture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --emerald:#00d47a; --emerald-hi:#5cffbe; --bg:#050705; --ink:#e8f5ee; --dim:#7d8f86;
+  }
+  *{box-sizing:border-box; margin:0}
+  html,body{background:var(--bg); color:var(--ink); font-family:"Space Grotesk",system-ui,sans-serif}
+  body{min-height:100vh}
+
+  /* ---------- Zone d'animation ---------- */
+  #stage{
+    position:relative; height:58vh; min-height:400px; border-bottom:1px solid #103024;
+    overflow:hidden; background:radial-gradient(120% 90% at 50% 40%, #0a140d 0%, #050705 65%);
+    cursor:pointer;
+  }
+  .stagelabel{
+    position:absolute; top:14px; left:50%; transform:translateX(-50%);
+    font-size:11px; letter-spacing:.28em; text-transform:uppercase; color:var(--dim); z-index:5;
+    pointer-events:none;
+  }
+  #controls{ position:absolute; bottom:16px; left:50%; transform:translateX(-50%); display:flex; gap:10px; z-index:6; }
+  #controls button{ pointer-events:auto }
+  button{
+    background:#0d1a13; border:1px solid #1e4a33; color:var(--ink);
+    font:500 13px/1 "Space Grotesk",sans-serif; letter-spacing:.08em;
+    padding:10px 18px; border-radius:99px; cursor:pointer; transition:.2s;
+  }
+  button:hover{ border-color:var(--emerald); color:var(--emerald-hi) }
+
+  .logo-scene,.ui-reveal{ position:absolute; inset:0; display:grid; place-items:center; }
+  .svg-wrap{ width:min(46vh,430px); max-width:88vw }
+  svg{ display:block; width:100%; height:auto }
+  #halfL,#halfR{ will-change:transform }
+  #wordmark{ will-change:opacity }
+
+  .fake-ui{
+    width:min(560px,86vw); height:min(400px,62vh);
+    border-radius:18px; border:1px solid #14261d;
+    background:linear-gradient(180deg,#08120c,#060a08);
+    box-shadow:0 24px 90px rgba(0,0,0,.75);
+    padding:20px; opacity:0;
+  }
+  .fake-ui .bar{ height:12px; border-radius:6px; background:#0f261b; margin-bottom:10px }
+  .fake-ui .row{ display:flex; gap:10px; margin-top:16px }
+  .fake-ui .cell{ flex:1; height:88px; border-radius:12px; background:#0b1a12; border:1px solid #123022 }
+
+  header{ padding:34px 8vw 8px }
+  header h1{ font-weight:400; font-size:22px; letter-spacing:.06em }
+  header p{ color:var(--dim); font-size:13px; margin-top:6px; max-width:72ch; line-height:1.7 }
+
+  #panel{
+    display:grid; grid-template-columns:1fr 1fr 1fr; gap:0 30px;
+    padding:24px 8vw; border-bottom:1px solid #103024; font-size:13px;
+  }
+  #panel legend{ color:var(--emerald); letter-spacing:.12em; text-transform:uppercase; font-size:11px; margin-bottom:6px }
+  #panel label{ display:flex; align-items:center; gap:10px; margin:9px 0; color:var(--dim) }
+  #panel input[type=range]{ accent-color:var(--emerald); flex:1; min-width:90px }
+  #panel input[type=radio]{ accent-color:var(--emerald) }
+  #panel input[type=number]{ background:#0d150f; color:var(--ink); border:1px solid #1e4a33; padding:6px; border-radius:8px; width:74px }
+  #gallery{
+    padding:26px 8vw 70px;
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:20px;
+  }
+  .card{ background:#070c09; border:1px solid #122c1f; border-radius:14px; overflow:hidden }
+  .card .cap{ padding:12px 16px; font-size:11px; color:var(--dim); letter-spacing:.14em; text-transform:uppercase }
+  @media (max-width:760px){ #panel{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <div class="stagelabel">Séquence d'ouverture — cliquer pour rejouer</div>
+
+  <div class="ui-reveal"><div class="fake-ui" id="fakeui">
+    <div class="bar" style="width:26%"></div>
+    <div class="bar" style="width:58%"></div>
+    <div class="row"><div class="cell"></div><div class="cell"></div><div class="cell"></div></div>
+    <div class="row"><div class="cell" style="height:128px"></div><div class="cell" style="height:128px"></div></div>
+  </div></div>
+
+  <div class="logo-scene">
+    <div class="svg-wrap">
+      <svg id="logoSvg" viewBox="-256 -256 512 512" aria-label="NAGe">
+        <defs id="defsHost"></defs>
+        <g id="halfL"></g>
+        <g id="halfR" transform="scale(-1,1)"></g>
+        <g id="wordmark"></g>
+      </svg>
+    </div>
+  </div>
+
+  <div id="controls">
+    <button id="btnReplay">Rejouer</button>
+    <button id="btnSlow">÷2 vitesse</button>
+    <button id="btnDownload">Exporter SVG</button>
+  </div>
+</div>
+
+<header>
+  <h1>NAGe — logo vectoriel animé</h1>
+  <p>Moitié unique échantillonnée (Catmull-Rom + profil d'épaisseur), moitié droite en miroir
+  <code>scale(-1,1)</code> : symétrie parfaite par construction. Réglez la géométrie pour épouser le croquis.</p>
+</header>
+
+<div id="panel">
+  <fieldset>
+    <legend>Finition</legend>
+    <label><input type="radio" name="finish" value="gradient" checked> Dégradé émeraude + éclat</label>
+    <label><input type="radio" name="finish" value="mono"> Monochrome</label>
+    <label><input type="radio" name="finish" value="stencil"> Contour gravé</label>
+    <legend style="margin-top:14px">Épaisseur</legend>
+    <label>Extrémités <input type="range" id="wEnd" min="4" max="12" step="0.5" value="7"></label>
+    <label>Lobes <input type="range" id="wLobe" min="10" max="34" step="1" value="20"></label>
+    <label>Tressaut <input type="range" id="wKink" min="12" max="44" step="1" value="30"></label>
+  </fieldset>
+  <fieldset>
+    <legend>Tressaut central</legend>
+    <label>Amplitude <input type="range" id="kx" min="20" max="90" step="1" value="52"></label>
+    <label>Hauteur <input type="range" id="ky" min="20" max="110" step="1" value="64"></label>
+    <label>Tension <input type="range" id="kt" min="0" max="1.6" step="0.05" value="0.55"></label>
+    <p style="color:var(--dim); line-height:1.6; margin-top:10px">Le tressaut est le double-S serré près de
+    l'axe : c'est la signature du croquis, on la garde dans toutes les variantes.</p>
+  </fieldset>
+  <fieldset>
+    <legend>Ouverture</legend>
+    <label>Durée (s) <input type="number" id="dur" min="1.5" max="2.5" step="0.1" value="2.2"></label>
+    <label>Écartement <input type="range" id="travel" min="0.7" max="1.6" step="0.05" value="1.3"></label>
+    <label>Texte <button type="button" id="btnText">masq. / aff.</button></label>
+  </fieldset>
+</div>
+
+<div id="gallery"></div>
+
+<script>
+/* =========================================================
+   GÉOMÉTRIE
+   Moitié gauche dans un carré centré : x∈[-256,256], y∈[-256,256].
+   t=0 en haut, t=1 en bas. La moitié droite = miroir exact.
+   ========================================================= */
+
+function controlPoints(p){
+  const kx=p.kx, ky=p.ky, kt=Number(p.kt);
+  // Amplitude/tension du tressaut modulée par kt
+  const a = kx*(0.4+0.6*kt), b = ky*(0.4+0.6*kt);
+  return [
+    [-100,-256], [-100,-198],
+    [-118,-164],          // amorce douce
+    [-260,-112],          // entrée lobe haut
+    [-392,-6],            // extrême gauche
+    [-330,84],            // ressortie de lobe
+    [-170,118],           // canal vers le centre
+    [-74,84],             // entrée tressaut
+    [-30,-6],             // creux contre l'axe
+    [-66,-b],             // contre-courbe
+    [-30,-b-14],          // pointe vers l'axe
+    [-a-18,b-46],         // redescend hors du tressaut
+    [-a-30,b+30],         // amorçage lobe bas
+    [-352,172],           // extrême lobe bas
+    [-300,212],           // sortie
+    [-128,222],           // coude retour
+    [-100,244], [-100,256],
+  ].map(v=>[v[0],v[1]]);
+}
+
+/* Catmull-Rom → points denses */
+function sampleChain(pts, per){
+  const out=[];
+  for(let i=0;i<pts.length-1;i++){
+    const p0=pts[Math.max(0,i-1)], p1=pts[i], p2=pts[i+1], p3=pts[Math.min(pts.length-1,i+2)];
+    for(let j=0;j<per;j++){
+      const u=j/per, u2=u*u, u3=u2*u;
+      out.push([
+        0.5*((2*p1[0])+(-p0[0]+p2[0])*u+(2*p0[0]-5*p1[0]+4*p2[0]-p3[0])*u2+(-p0[0]+3*p1[0]-3*p2[0]+p3[0])*u3),
+        0.5*((2*p1[1])+(-p0[1]+p2[1])*u+(2*p0[1]-5*p1[1]+4*p2[1]-p3[1])*u2+(-p0[1]+3*p1[1]-3*p2[1]+p3[1])*u3),
+      ]);
+    }
+  }
+  out.push(pts[pts.length-1].slice());
+  return out;
+}
+
+/* Profil d'épaisseur le long de t */
+function widthAt(t, n){
+  const {wEnd,wLobe,wKink}=n;
+  // pics calés sur la ligne centrale échantillonnée (per=10, 18 ancres, N=171) :
+  // entrée lobe haut t≈0.235 (extrême gauche), tressaut t≈0.56, lobe bas t≈0.755
+  const kink = Math.exp(-Math.pow((t-0.56)/0.075,2))* (wKink-wLobe);
+  const lobeU= Math.exp(-Math.pow((t-0.245)/0.105,2))* (wLobe-wEnd);
+  const lobeL= Math.exp(-Math.pow((t-0.755)/0.13,2))* (wLobe-wEnd);
+  const taper= Math.min(1, Math.min(t,1-t)*10);   // arrondi des bouts
+  return (wEnd/2 + lobeU + lobeL + kink) * (0.55+0.45*taper);
+}
+
+/* Construit le contour fermé d'un ruban variable d'après la ligne centrale */
+function ribbonPath(center, n){
+  const left=[], right=[];
+  for(let i=0;i<center.length;i++){
+    const t=i/(center.length-1);
+    const p=center[i];
+    const q=center[Math.min(i+1,center.length-1)];
+    const r=center[Math.max(i-1,0)];
+    let dx=q[0]-r[0], dy=q[1]-r[1];
+    const len=Math.hypot(dx,dy)||1; dx/=len; dy/=len;
+    const w=widthAt(t,n);
+    left.push([p[0]-dy*w, p[1]+dx*w]);
+    right.push([p[0]+dy*w, p[1]-dx*w]);
+  }
+  // Assemble : bord gauche aller, arc bas, bord droit retour, arc haut
+  const c=center[center.length-1], c0=center[0];
+  let d=`M ${left[0][0].toFixed(1)} ${left[0][1].toFixed(1)}`;
+  for(const v of left) d+=` L ${v[0].toFixed(1)} ${v[1].toFixed(1)}`;
+  // demi-cercle bas
+  const ex=left[left.length-1], endR=right[right.length-1];
+  const mx=(ex[0]+endR[0])/2, my=(ex[1]+endR[1])/2;
+  d+=` Q ${c[0].toFixed(1)} ${c[1].toFixed(1)} ${endR[0].toFixed(1)} ${endR[1].toFixed(1)}`;
+  for(let i=right.length-1;i>=0;i--){
+    if(i===right.length-1) continue;
+    d+=` L ${right[i][0].toFixed(1)} ${right[i][1].toFixed(1)}`;
+  }
+  d+=` Q ${c0[0].toFixed(1)} ${c0[1].toFixed(1)} ${left[0][0].toFixed(1)} ${left[0][1].toFixed(1)} Z`;
+  return d;
+}
+
+/* =========================================================
+   FINITIONS
+   ========================================================= */
+const FINISHES={
+  gradient:{
+    fill:(mid)=>`url(#gEm)`,
+    defs:`
+      <linearGradient id="gEm" x1="-256" y1="-256" x2="256" y2="256" gradientUnits="userSpaceOnUse">
+        <stop offset="0"    stop-color="#00e58a"/>
+        <stop offset="0.45" stop-color="#00d47a"/>
+        <stop offset="0.75" stop-color="#00b066"/>
+        <stop offset="1"    stop-color="#00e08c"/>
+      </linearGradient>
+      <linearGradient id="gSheen" x1="0" y1="-256" x2="0" y2="256" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#fff" stop-opacity="0"/>
+        <stop offset="0.42" stop-color="#c8ffe8" stop-opacity="0.3"/>
+        <stop offset="0.5"  stop-color="#fff" stop-opacity="0.45"/>
+        <stop offset="0.58" stop-color="#c8ffe8" stop-opacity="0.28"/>
+        <stop offset="1" stop-color="#fff" stop-opacity="0"/>
+      </linearGradient>
+      <filter id="fGlow" x="-30%" y="-30%" width="160%" height="160%">
+        <feGaussianBlur stdDeviation="5" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <filter id="fSoft" x="-20%" y="-20%" width="140%" height="140%">
+        <feGaussianBlur stdDeviation="2.2"/>
+      </filter>`
+  },
+  mono:{ fill:()=>'#00d47a', defs:'' },
+  stencil:{
+    fill:(mid)=> mid?'none':'none',
+    defs:`<linearGradient id="gEm2" x1="-256" y1="-256" x2="256" y2="256" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#00e58a"/><stop offset="1" stop-color="#00a860"/>
+      </linearGradient>`
+  },
+};
+
+/* =========================================================
+   RENDU
+   ========================================================= */
+const P={ finish:'gradient', wEnd:7, wLobe:20, wKink:30, kx:52, ky:64, kt:0.55 };
+const $=s=>document.querySelector(s);
+
+function build(defsHost, opts={}, suffix=''){
+  const f=FINISHES[P.finish];
+  const center=sampleChain(controlPoints(P), 10);
+  const d=ribbonPath(center,P);
+  if(!opts.onlyBody){
+    const raw=(f.defs||'');
+    defsHost.innerHTML=raw
+      .replaceAll('id="gEm2"','id="gEm2'+suffix+'"').replaceAll('url(#gEm2)','url(#gEm2'+suffix+')')
+      .replaceAll('id="gEm"','id="gEm'+suffix+'"').replaceAll('url(#gEm)','url(#gEm'+suffix+')')
+      .replaceAll('id="gSheen"','id="gSheen'+suffix+'"').replaceAll('url(#gSheen)','url(#gSheen'+suffix+')')
+      .replaceAll('id="fGlow"','id="fGlow'+suffix+'"').replaceAll('url(#fGlow)','url(#fGlow'+suffix+')')
+      + `<path id="ribbonGeo" d="${d}"/>`;
+  }
+  const paint = P.finish==='gradient'
+    ? `<use href="#ribbonGeo" fill="url(#gEm${suffix})" filter="url(#fGlow)"/>
+       <use href="#ribbonGeo" fill="url(#gEm${suffix})"/>
+       <use href="#ribbonGeo" fill="url(#gSheen${suffix})" style="mix-blend-mode:screen"/>`
+    : P.finish==='mono'
+    ? `<use href="#ribbonGeo" fill="#00d47a"/>`
+    : `<use href="#ribbonGeo" fill="none" stroke="url(#gEm2${suffix})" stroke-width="3.5"/>`;
+  return paint;
+}
+
+function buildWord(defsHost){
+  // Couleur du texte
+  const fill = P.finish==='mono' ? '#00d47a' : '#eafff4';
+  return `<text x="9" y="14" text-anchor="middle"
+    font-family="Space Grotesk, system-ui, sans-serif"
+    font-size="64" font-weight="400" letter-spacing="18"
+    fill="${fill}">NAG<tspan style="font-size:58">e</tspan></text>`;
+}
+
+function render(){
+  const defsHost=$('#defsHost');
+  P.finish=$('input[name=finish]:checked').value;
+  defsHost.innerHTML='';
+  $('#halfL').innerHTML=build(defsHost,{},'s0');              // écrit ribbonGeo dans defs
+  $('#halfR').innerHTML=build(defsHost,{onlyBody:true},'s0');
+  $('#wordmark').innerHTML=buildWord(defsHost);
+
+  // Galerie : 3 cartes autonomes (ids uniques par index — pas de collision de domaine).
+  $('#gallery').innerHTML=['gradient','mono','stencil'].map((k,idx)=>{
+    const save=P.finish;
+    P.finish=k;
+    const center=sampleChain(controlPoints(P),10);
+    const d=ribbonPath(center,P);
+    const raw=FINISHES[k].defs||'';
+    const defs=`<defs>`+raw
+      .replaceAll('id="gEm2"','id="gEm2w'+idx+'"').replaceAll('url(#gEm2)','url(#gEm2w'+idx+')')
+      .replaceAll('id="gEm"','id="gEmw'+idx+'"').replaceAll('url(#gEm)','url(#gEmw'+idx+')')
+      .replaceAll('id="gSheen"','id="gSheenw'+idx+'"').replaceAll('url(#gSheen)','url(#gSheenw'+idx+')')
+      .replaceAll('id="fGlow"','id="fGloww'+idx+'"').replaceAll('url(#fGlow)','url(#fGloww'+idx+')')
+      +`<path id="ribbonGeo" d="${d}"/></defs>`;
+    const body=k==='gradient'
+      ? `<use href="#ribbonGeo" fill="url(#gEmw${idx})" filter="url(#fGloww${idx})"/><use href="#ribbonGeo" fill="url(#gEmw${idx})"/><use href="#ribbonGeo" fill="url(#gSheenw${idx})" style="mix-blend-mode:screen"/>`
+      : k==='mono'
+      ? `<use href="#ribbonGeo" fill="#00d47a"/>`
+      : `<use href="#ribbonGeo" fill="none" stroke="url(#gEm2w${idx})" stroke-width="3.5"/>`;
+    const cap=k==='gradient'?'Variante A · dégradé + éclat':k==='mono'?'Variante B · monochrome':'Variante C · contour gravé';
+    P.finish=save;
+    return `<div class="card"><div class="cap">${cap}</div>
+      <svg viewBox="-256 -256 512 512">${defs}${body}<g transform="scale(-1,1)">${body}</g>${buildWord(defs)}</svg></div>`;
+  }).join('');
+}
+
+/* =========================================================
+   SÉQUENCE D'OUVERTURE — Phases A/B/C
+   Transformations compositables uniquement (transform/opacity) : GPU.
+   ========================================================= */
+let reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+let slowmo=false;
+let currentAnims=[];
+
+function easeInOutDeck(u){ // accélération / décélération maîtrisées
+  return u<0.5 ? 4*u*u*u : 1-Math.pow(-2*u+2,3)/2;
+}
+
+function playIntro(){
+  // purge toutes les animations persistées (fill both) sur les éléments animés
+  [$('#halfL'),$('#halfR'),$('#logoSvg'),$('#fakeui'),$('#wordmark')]
+    .filter(Boolean)
+    .forEach(el=>el.getAnimations().forEach(a=>a.cancel()));
+  [$('#halfL'),$('#halfR'),$('#fakeui')].forEach(el=>{el.style.opacity='';el.style.transform='';});
+  $('#wordmark').style.opacity='';
+  const D=parseFloat($('#dur').value)||2.2;
+  const mul=slowmo?2:1;
+  const K=D*1000*mul;       // durée totale en ms (API Web Animations = ms)
+  const A0=0.06*K, A1=0.50*K,          // apparition
+        B0=0.50*K, Bris=Math.min(0.62*K,A0+Math.max(0.12,A1-A0)),  // début séparation
+        C0=0.55*K, C1=K;             // révélation
+  const travel=parseFloat($('#travel').value)||1.3;
+  const reducedSkip = reduced;
+
+  const l=$('#halfL'), r=$('#halfR'), w=$('#wordmark'), ui=$('#fakeui');
+  const showBase = {half:[l,r], word:w};
+  if(reducedSkip){
+    // Pas d'intro : interface visible immédiatement
+    w.style.opacity=0; ui.style.opacity=1;
+    l.style.transform='translateX(-110px)'; r.style.transform='translateX(110px)';
+    l.style.opacity=r.style.opacity=0;
+    return;
+  }
+
+  const p = (el,kf,opts)=>{ const a=el.animate(kf,opts); a.onfinish=()=>a.cancel(); currentAnims.push(a); return a; };
+  const E = { duration:K, fill:'both', easing:'ease-in-out' };
+
+  const kfEnd=(kf)=>{ const arr=[...kf]; const last={...kf[kf.length-1]}; arr.push(Object.assign(last,{offset:1})); return arr; };
+
+  // helper : toutes les animations passent par ici, avec scellement de l'état final
+  // (inline styles + cancel) → pas de fill:both tenu à l'infini, replay propre.
+  const anim2=(el, kf, o={}, endStyles=null)=>{
+    const a=el.animate(Object.assign([...kf], {[kf.length-1]:{...kf[kf.length-1], offset:1}}), {duration:K, fill:'both', easing:'ease-in-out', ...o});
+    if(window.__dbg) console.log("anim2", el.id||el.tagName, "dur", a.effect.getTiming().duration, "K", K, "kf", kf.length, "off", kf.map(x=>x.offset));
+    a.onfinish=()=>{ if(endStyles) for(const k in endStyles) el.style[k]=endStyles[k]; a.cancel(); };
+    currentAnims.push(a); return a;
+  };
+
+  // Phase A — apparition de l'ensemble logo
+  anim2($('#logoSvg'),
+    [{opacity:0, transform:'scale(0.955)'},
+     {opacity:1, transform:'scale(1)', offset:0.28},
+     {opacity:1, transform:'scale(1)', offset:0.62},
+     {opacity:1, transform:'scale(1)'}], {}, {opacity:1, transform:'none'});
+
+  // Pulsation lumineuse discrète des moitiés pendant l'apparition
+  [l,r].forEach(el=>anim2(el,
+    [{opacity:0.35},{opacity:1, offset:0.22},{opacity:0.86, offset:0.35},{opacity:1}],
+    {duration:K*0.5}, {opacity:1}));
+
+  // Phase B — séparation : glissade horizontale symétrique
+  const T=travel*520;
+  anim2(l,[{transform:'translateX(0)'},
+     {transform:`translateX(${-T*0.45}px)`, offset:0.42},
+     {transform:`translateX(${-T}px)`}], {}, {transform:`translateX(${-T}px)`});
+  anim2(r,[{transform:'translateX(0)'},
+     {transform:`translateX(${T*0.45}px)`, offset:0.42},
+     {transform:`translateX(${T}px)`}], {}, {transform:`translateX(${T}px)`});
+
+  // Estompe du mot NAGe pendant la séparation
+  anim2(w,[{opacity:1},{opacity:1, offset:0.30},{opacity:0, offset:0.62},{opacity:0}], {}, {opacity:0});
+
+  // Phase C — révélation interface entre les formes
+  anim2(ui,
+    [{opacity:0, transform:'scale(0.98)'},
+     {opacity:1, transform:'scale(1)', offset:0.55},
+     {opacity:1, transform:'scale(1)'}], {}, {opacity:1, transform:'none'});
+
+  // Fondu final des moitiés (fin hors champ)
+  anim2(l,[{opacity:1},{opacity:0, offset:0.94},{opacity:0}], {duration:K+40}, {opacity:0});
+  anim2(r,[{opacity:1},{opacity:0, offset:0.94},{opacity:0}], {duration:K+40}, {opacity:0});
+}
+
+function bindUI(){
+  $('#stage').addEventListener('click', e=>{ if(e.target.tagName!=='BUTTON') playIntro(); });
+  $('#btnReplay').onclick=playIntro;
+  $('#btnSlow').onclick=()=>{ slowmo=!slowmo; $('#btnSlow').style.borderColor=slowmo?'var(--emerald)':''; playIntro(); };
+  document.querySelectorAll('input[name=finish]').forEach(i=>i.onchange=playRender);
+function playRender(){ render(); playIntro(); }
+  ['wEnd','wLobe','wKink','kx','ky','kt'].forEach(id=>{
+    $('#'+id).oninput=e=>{ P[id]=+e.target.value; window.__geo=ribbonPath(sampleChain(controlPoints(P),10),P); render(); };
+  });
+  $('#dur').onchange=playIntro;
+  $('#travel').onchange=playIntro;
+  $('#btnText').onclick=()=>{ const w=$('#wordmark'); const o=w.style.opacity==='0'; w.style.opacity=o?1:0; };
+  $('#btnDownload').onclick=exportCurrent;
+}
+
+function exportCurrent(){
+  P.finish=$('input[name=finish]:checked').value;
+  const center=sampleChain(controlPoints(P),10);
+  const d=ribbonPath(center,P);
+  const f=FINISHES[P.finish];
+  const defs=f.defs||'';
+  const body=P.finish==='gradient'
+    ? `<use href="#ribbonGeo" fill="url(#gEm)"/>`
+    : P.finish==='mono'
+    ? `<use href="#ribbonGeo" fill="#00d47a"/>`
+    : `<use href="#ribbonGeo" fill="none" stroke="url(#gEm2)" stroke-width="3.5"/>`;
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="-256 -256 512 512">
+  <defs>${defs}<path id="ribbonGeo" d="${d}"/></defs>
+  ${body}
+  <g transform="scale(-1,1)">${body}</g>
+  ${buildWord(defs)}
+</svg>`;
+  const blob=new Blob([svg],{type:'image/svg+xml'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`nage-logo-${P.finish}.svg`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/* go */
+document.addEventListener('DOMContentLoaded',()=>{ render(); bindUI();
+  // Lancement doux, et relance auto au retour sur l'onglet seulement si l'intro n'a pas encore été jouée.
+  let seen=sessionStorage.getItem('nage_intro_played');
+  if(!seen){ playIntro(); sessionStorage.setItem('nage_intro_played','1'); }
+});
+</script>
+</body>
+</html>

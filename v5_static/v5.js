@@ -48,8 +48,8 @@ function formatSize(value) { const kb = Number(value || 0); return kb >= 1024 ? 
 function formatBytes(value) { const bytes = Number(value || 0); if (!Number.isFinite(bytes) || bytes <= 0) return "0 o"; const units = ["o", "Ko", "Mo", "Go", "To"]; const step = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1); const amount = bytes / (1024 ** step); return `${amount >= 10 || step === 0 ? amount.toFixed(0) : amount.toFixed(1)} ${units[step]}`; }
 function text(node, value) { node.textContent = value == null ? "" : String(value); }
 
-const viewTargets = new Set(["assistantView", "documentsView", "memoryView", "settingsView", "developerView"]);
-const viewLabels = { assistantView: "Assistant", documentsView: "Documents & Finance", memoryView: "Mémoire & stockage", settingsView: "Réglages", developerView: "Atelier Développeur" };
+const viewTargets = new Set(["assistantView", "documentsView", "memoryView", "revisionsView", "settingsView", "developerView"]);
+const viewLabels = { assistantView: "Assistant", documentsView: "Documents & Finance", memoryView: "Mémoire & stockage", revisionsView: "Révisions", settingsView: "Réglages", developerView: "Atelier Développeur" };
 let internalHashChange = false;
 
 function requestedHashView() {
@@ -61,6 +61,7 @@ function activateView(id, updateHash = true) {
   document.querySelectorAll(".view").forEach((view) => { view.hidden = view.id !== id; view.classList.toggle("active", view.id === id); });
   document.querySelectorAll(".nav-item[data-view-target]").forEach((button) => { const active = button.dataset.viewTarget === id; button.classList.toggle("active", active); if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current"); });
   if (id === "memoryView") { refreshMemory(); refreshStorage(); }
+  if (id === "revisionsView" && typeof window.initRevisions === "function") { window.initRevisions(); }
   document.title = `${viewLabels[id] || id} — Côme AI V5`;
   if (updateHash && window.location.hash !== `#v5/${id}`) {
     internalHashChange = true;

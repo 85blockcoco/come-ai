@@ -87,7 +87,7 @@ def _kind(filename: str) -> str:
     suffix = Path(filename).suffix.lower()
     kind = SUPPORTED_KINDS.get(suffix)
     if kind is None:
-        raise InputError("Format de notes non supporté : utilisez .txt, .md ou .pdf.")
+        raise InputError("Unsupported notes format: use .txt, .md or .pdf.")
     return kind
 
 
@@ -193,7 +193,7 @@ def _extract_candidates(text: str, *, pdf: bool = False) -> list[_Candidate]:
                 blanked = f"{body[: bold.start()]}_____{body[bold.end() :]}"
                 _add(
                     candidates,
-                    question=f"Compléter : {blanked}",
+                    question=f"Complete: {blanked}",
                     answer=term if heading else None,
                     locator=_locator(index + 1, page, pdf=pdf),
                     quote=line,
@@ -227,7 +227,7 @@ def _extract_candidates(text: str, *, pdf: bool = False) -> list[_Candidate]:
                 blanked = f"{body[: found.start()]}_____{body[found.end() :]}"
                 _add(
                     candidates,
-                    question=f"Compléter : {blanked}",
+                    question=f"Complete: {blanked}",
                     answer=found.group(0),
                     locator=_locator(index + 1, page, pdf=pdf),
                     quote=line,
@@ -240,7 +240,7 @@ def _read_text_file(path: Path) -> str:
     try:
         return path.read_text(encoding="utf-8")
     except UnicodeDecodeError as error:
-        raise InputError("Les notes doivent être un fichier texte UTF-8.") from error
+        raise InputError("Notes must be a UTF-8 text file.") from error
     except OSError as error:
         raise InputError(f"Lecture impossible : {path.name}") from error
 
@@ -249,7 +249,7 @@ def _read_pdf_file(path: Path) -> str:
     try:
         from pypdf import PdfReader
     except ImportError as error:  # pragma: no cover - dependency is pinned
-        raise InputError("La lecture PDF nécessite pypdf.") from error
+        raise InputError("Reading PDF requires pypdf.") from error
     try:
         reader = PdfReader(str(path))
         pages = [page.extract_text() or "" for page in reader.pages]
@@ -269,7 +269,7 @@ def read_note_file(path: Path) -> tuple[str, str]:
     try:
         size = path.stat().st_size
     except FileNotFoundError as error:
-        raise InputError(f"Fichier introuvable : {path}") from error
+        raise InputError(f"File not found: {path}") from error
     except OSError as error:
         raise InputError(f"Lecture impossible : {path.name}") from error
     if size > MAX_NOTE_BYTES:
@@ -297,7 +297,7 @@ def _load_index(
         try:
             sources[str(key)] = NoteSource.from_dict(item)
         except (TypeError, ValueError):
-            store.warnings.append("Source de notes illisible ignorée.")
+            store.warnings.append("Unreadable notes source ignored.")
     proposals: dict[str, ProposedCard] = {}
     for key, item in raw["proposals"].items():
         if not isinstance(item, dict):
@@ -305,7 +305,7 @@ def _load_index(
         try:
             proposals[str(key)] = ProposedCard.from_dict(item)
         except (TypeError, ValueError):
-            store.warnings.append("Proposition locale illisible ignorée.")
+            store.warnings.append("Unreadable local proposal ignored.")
     return sources, proposals, set(raw["rejected_signatures"])
 
 
@@ -379,8 +379,8 @@ def ingest_notes(
     if existing is not None and existing.sha256 != digest:
         if not replace:
             raise InputError(
-                f"La source « {name} » a changé depuis le dernier import ; "
-                "relancez avec --replace pour la réimporter."
+                f'The source "{name}" has changed since the last import; '
+                "rerun with --replace to re-import it."
             )
         existing.status = "superseded"
         for proposal_id, proposal in list(proposals.items()):
@@ -514,9 +514,9 @@ def approve_proposal(
     sources, proposals, rejected = _load_index(store)
     proposal = proposals.get(proposal_id)
     if proposal is None:
-        raise InputError(f"Proposition introuvable : {proposal_id}")
+        raise InputError(f"Proposal not found: {proposal_id}")
     if proposal.status == "rejected":
-        raise InputError("Cette proposition a été rejetée ; elle ne peut pas être approuvée.")
+        raise InputError("This proposal was rejected; it cannot be approved.")
     card_id = stable_id("vcnote", proposal.proposal_id)
     deck = {card.id: card for card in store.load_deck()}
     if proposal.status == "approved" and card_id in deck:
@@ -524,15 +524,15 @@ def approve_proposal(
     final_answer = _clean(answer if answer is not None else proposal.answer or "")
     if not final_answer:
         raise InputError(
-            "Réponse manquante : cette proposition est « à compléter ». "
-            "Relancez avec --answer pour la compléter."
+            'Missing answer: this proposal is "to be completed". '
+            "Rerun with --answer to complete it."
         )
     citation = {
         key: str(proposal.citation.get(key, ""))
         for key in ("source_id", "locator", "quote")
     }
     if not all(citation.values()):
-        raise InputError("Citation source incomplète ; proposition non approuvable.")
+        raise InputError("Incomplete source citation; proposal cannot be approved.")
     card = Flashcard(
         id=card_id,
         topic_id=proposal.topic_id,
@@ -557,10 +557,10 @@ def reject_proposal(store: VcStore, proposal_id: str) -> None:
     sources, proposals, rejected = _load_index(store)
     proposal = proposals.get(proposal_id)
     if proposal is None:
-        raise InputError(f"Proposition introuvable : {proposal_id}")
+        raise InputError(f"Proposal not found: {proposal_id}")
     if proposal.status == "approved":
         raise InputError(
-            "Proposition déjà approuvée ; la carte active ne peut pas être rejetée ici."
+            "Proposal already approved; the active card cannot be rejected here."
         )
     proposal.status = "rejected"
     rejected.add(_signature(proposal.topic_id, proposal.question))

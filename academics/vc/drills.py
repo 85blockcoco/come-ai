@@ -27,9 +27,9 @@ def _number(value: Any, label: str) -> float:
     try:
         number = float(value)
     except (TypeError, ValueError) as error:
-        raise InputError(f"{label} doit être un nombre.") from error
+        raise InputError(f"{label} must be a number.") from error
     if not math.isfinite(number):
-        raise InputError(f"{label} doit être fini.")
+        raise InputError(f"{label} must be finite.")
     return number
 
 
@@ -44,7 +44,7 @@ def parse_number(raw: str, default_unit: str = "eur") -> tuple[float, str]:
         raw = str(raw)
     text = raw.strip().replace("\u00a0", " ").replace("\u202f", " ").lower()
     if not text:
-        raise ValueError("Réponse vide : indiquez un nombre.")
+        raise ValueError("Empty answer: provide a number.")
 
     unit = default_unit
     if "%" in text:
@@ -74,7 +74,7 @@ def parse_number(raw: str, default_unit: str = "eur") -> tuple[float, str]:
             text = before + "." + after
     text = text.replace("+", "")
     if not re.fullmatch(r"-?\d+(?:\.\d+)?", text):
-        raise ValueError(f"Réponse non numérique : {raw!r}.")
+        raise ValueError(f"Non-numeric answer: {raw!r}.")
     return float(text), unit
 
 
@@ -85,13 +85,13 @@ def normalize_to_unit(value: float, unit: str, target: str) -> float:
         return value * MONEY_FACTORS[unit] / MONEY_FACTORS[target]
     if {unit, target} == {"percent", "ratio"}:
         return value / 100.0 if unit == "percent" else value * 100.0
-    raise ValueError(f"Unité incompatible : {unit} vers {target}.")
+    raise ValueError(f"Incompatible unit: {unit} to {target}.")
 
 
 def _non_negative(value: Any, label: str) -> float:
     number = _number(value, label)
     if number < 0:
-        raise InputError(f"{label} ne peut pas être négatif.")
+        raise InputError(f"{label} cannot be negative.")
     return number
 
 
@@ -104,14 +104,14 @@ def pre_money(post_money_value: float, investment: float) -> float:
         investment, "investissement"
     )
     if result < 0:
-        raise InputError("Le post-money ne peut pas être inférieur à l'investissement.")
+        raise InputError("Post-money cannot be lower than the investment.")
     return result
 
 
 def ownership_after(investment: float, post_money_value: float) -> float:
     post = _non_negative(post_money_value, "post-money")
     if post == 0:
-        raise InputError("Le post-money doit être positif.")
+        raise InputError("Post-money must be positive.")
     return _non_negative(investment, "investissement") / post
 
 
@@ -120,7 +120,7 @@ def dilution(existing_shares: float, new_shares: float) -> float:
     new = _non_negative(new_shares, "nouvelles actions")
     total = existing + new
     if total == 0:
-        raise InputError("Le total d'actions doit être positif.")
+        raise InputError("Total shares must be positive.")
     return new / total
 
 
@@ -137,7 +137,7 @@ def option_pool(pre_money_value: float, investment: float, pool_percent: float) 
     if pool > 1:
         pool = pool / 100.0
     if not 0 <= pool < 1:
-        raise InputError("L'option pool doit être entre 0 et 100 %.")
+        raise InputError("Option pool must be between 0 and 100%.")
     post = pre + inv
     pool_value = post * pool
     investor = inv / post if post else 0.0
@@ -160,7 +160,7 @@ def cap_table(
         total += shares
         rows.append({"name": str(holder.get("name", "actionnaire")), "shares": shares})
     if total == 0:
-        raise InputError("Le total d'actions doit être positif.")
+        raise InputError("Total shares must be positive.")
     if new_shares:
         rows.append({"name": "Nouveaux investisseurs", "shares": float(new_shares)})
     return [
@@ -188,14 +188,14 @@ def liquidation_waterfall(
     """
     remaining = _non_negative(proceeds, "produit de sortie")
     if cap_multiple is not None and cap_multiple <= 0:
-        raise InputError("Le cap multiple doit être positif.")
+        raise InputError("Cap multiple must be positive.")
     prepared: list[dict[str, Any]] = []
     for holder in holders:
         shares = _non_negative(holder.get("shares", 0), "actions")
         invested = _non_negative(holder.get("invested", 0), "investissement")
-        multiple = _number(holder.get("preference_multiple", 1.0), "multiple de préférence")
+        multiple = _number(holder.get("preference_multiple", 1.0), "preference multiple")
         if multiple < 0:
-            raise InputError("Le multiple de préférence ne peut pas être négatif.")
+            raise InputError("Le preference multiple cannot be negative.")
         prepared.append(
             {
                 "name": str(holder.get("name", "actionnaire")),
@@ -274,39 +274,39 @@ def liquidation_waterfall(
 def moic(invested: float, exit_value: float) -> float:
     base = _non_negative(invested, "investissement")
     if base == 0:
-        raise InputError("L'investissement doit être positif.")
+        raise InputError("Investment must be positive.")
     return _non_negative(exit_value, "valeur de sortie") / base
 
 
 def irr(cashflows: Sequence[float]) -> float | None:
     values = [_number(value, "flux") for value in cashflows]
     if len(values) < 2:
-        raise InputError("Il faut au moins deux flux de trésorerie.")
+        raise InputError("At least two cash flows are required.")
     return _finance_irr(values)
 
 
 def tvpi(contributions: float, distributions: float, residual: float) -> float:
     base = _non_negative(contributions, "contributions")
     if base == 0:
-        raise InputError("Les contributions doivent être positives.")
+        raise InputError("Contributions must be positive.")
     return (
         _non_negative(distributions, "distributions")
-        + _non_negative(residual, "valeur résiduelle")
+        + _non_negative(residual, "residual value")
     ) / base
 
 
 def dpi(contributions: float, distributions: float) -> float:
     base = _non_negative(contributions, "contributions")
     if base == 0:
-        raise InputError("Les contributions doivent être positives.")
+        raise InputError("Contributions must be positive.")
     return _non_negative(distributions, "distributions") / base
 
 
 def rvpi(contributions: float, residual: float) -> float:
     base = _non_negative(contributions, "contributions")
     if base == 0:
-        raise InputError("Les contributions doivent être positives.")
-    return _non_negative(residual, "valeur résiduelle") / base
+        raise InputError("Contributions must be positive.")
+    return _non_negative(residual, "residual value") / base
 
 
 def grade_drill(drill: FormulaDrill, raw_answer: str) -> dict[str, Any]:
@@ -322,7 +322,7 @@ def grade_drill(drill: FormulaDrill, raw_answer: str) -> dict[str, Any]:
             "given": None,
             "steps": steps,
             "diagnostic": "missing_data",
-            "message": "Variables incomplètes : l'énoncé ne permet pas de calculer.",
+            "message": "Incomplete variables: the statement does not allow a calculation.",
             "alternative": None,
         }
     try:
@@ -350,7 +350,7 @@ def grade_drill(drill: FormulaDrill, raw_answer: str) -> dict[str, Any]:
             "given": {"value": round(given, 6), "unit": drill.answer_unit},
             "steps": steps,
             "diagnostic": None,
-            "message": "Réponse correcte.",
+            "message": "Correct answer.",
             "alternative": None,
         }
 
@@ -365,7 +365,7 @@ def grade_drill(drill: FormulaDrill, raw_answer: str) -> dict[str, Any]:
                 "given": {"value": round(given, 6), "unit": drill.answer_unit},
                 "steps": steps,
                 "diagnostic": None,
-                "message": "Convention alternative acceptée.",
+                "message": "Alternative convention accepted.",
                 "alternative": dict(alternative),
             }
 
@@ -380,7 +380,7 @@ def grade_drill(drill: FormulaDrill, raw_answer: str) -> dict[str, Any]:
                 "given": {"value": round(given, 6), "unit": drill.answer_unit},
                 "steps": steps,
                 "diagnostic": path.get("category", "formula"),
-                "message": path.get("message", "Réponse incorrecte."),
+                "message": path.get("message", "Incorrect answer."),
                 "alternative": None,
             }
 
@@ -392,7 +392,7 @@ def grade_drill(drill: FormulaDrill, raw_answer: str) -> dict[str, Any]:
         "given": {"value": round(given, 6), "unit": drill.answer_unit},
         "steps": steps,
         "diagnostic": "formula",
-        "message": "La réponse ne correspond pas à la formule attendue.",
+        "message": "The answer does not match the expected formula.",
         "alternative": None,
     }
 

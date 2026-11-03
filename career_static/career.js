@@ -3150,7 +3150,7 @@ function renderStageExploration(payload) {
   details.hidden = outcomes.length === 0;
   const number = (key) => typeof summary[key] === "number" && Number.isFinite(summary[key]) ? summary[key] : "non communiqué";
   if (!outcomes.length) {
-    status.textContent = "Aucune entreprise à configurer. Enregistre tes critères et clique sur Explorer les stages ; seules les sources vérifiées du registre seront lues.";
+    status.textContent = "Aucune source n'a été consultée pour cette exploration. Astuces : enregistre tes critères (étape A), lance « Explorer les stages » (stages uniquement), ou passe par « Mes entreprises » si tu as déjà configuré des boards Greenhouse.";
   } else {
     status.textContent = `${number("sources_attempted")} sources consultées sur le réseau · ${number("sources_cached")} en cache · ${number("sources_failed")} en erreur · ${number("raw_count")} annonces dans les flux (cache compris) · ${number("retained_count")} offres retenues lors de la recherche · ${number("displayed_count")} affichées avec tes critères actuels. ${summary.partial ? "Recherche partielle : consulte les limites et les sources ci-dessous." : "Couverture limitée au registre, pas à tout Internet."}`;
     if (payload.criteria_changed) status.textContent += " Critères modifiés depuis cette recherche : relance Explorer pour sélectionner à nouveau les stages.";
@@ -3180,7 +3180,11 @@ function renderExplorationMatches(payload) {
   renderStageMatches({configured: payload.configured, matches: payload.matches || []});
   $("#stagehunter-result-mode").textContent = "Explorer les stages — résultats de cette exploration uniquement. Les autres offres et candidatures restent conservées dans Mes entreprises / Découvrir.";
   const empty = $("#stagehunter-matches-empty");
-  empty.textContent = "Aucune offre retenue par cette exploration. Vérifie les sources et tes critères : aucun résultat fictif n’est ajouté pour remplir la liste.";
+  if ((payload.matches || []).length === 0) {
+    empty.textContent = "Aucune offre retenue par cette exploration avec tes critères actuels (stages uniquement). Astuces : élargis les mois de début, baisse la durée minimale, ajoute des pays ou relance depuis « Mes entreprises » avec tes propres boards. L’alternance/apprentissage/VIE est exclu. France/Paris exclus par défaut et « pays inconnu → à vérifier » restent appliqués.";
+  } else {
+    empty.textContent = "Aucune offre enregistrée pour l’instant. Passe à l’étape B pour en importer.";
+  }
   (payload.matches || []).forEach((match, index) => {
     const wrapper = $("#stagehunter-matches").children[index];
     if (wrapper && match.qualification) {
@@ -3781,16 +3785,16 @@ async function loadStageHunter() {
   } else if (stageHunterResultMode === "auto") {
     stageHunterResultMode = (exploration.outcomes || []).length ? "explore" : "saved";
   }
-  if (stageHunterResultMode === "explore") {
-    renderExplorationMatches({...exploration, configured:payload.configured});
-  } else {
-    const matches = await api("/api/career/stage-search/matches");
-    renderStageMatches(matches);
-    $("#stagehunter-result-mode").textContent = exploration.criteria_changed
-      ? "Tes critères ont changé : l’ancienne exploration est périmée et doit être relancée. Voici tes offres enregistrées; aucune offre suivie n’a été supprimée."
-      : "Mes offres enregistrées — tous les types de contrats, avec classement et avertissements. Aucune offre suivie n’a été supprimée.";
-    $("#stagehunter-matches-empty").textContent = "Aucune offre enregistrée. Clique sur Explorer les stages pour chercher sans configurer d’entreprise.";
-  }
+    if (stageHunterResultMode === "explore") {
+      renderExplorationMatches({...exploration, configured:payload.configured});
+    } else {
+      const matches = await api("/api/career/stage-search/matches");
+      renderStageMatches(matches);
+      $("#stagehunter-result-mode").textContent = exploration.criteria_changed
+        ? "Tes critères ont changé : l’ancienne exploration est périmée et doit être relancée. Voici tes offres enregistrées (stages uniquement pour Explorer les stages); aucune offre suivie n’a été supprimée."
+        : "Mes offres enregistrées — tous les types de contrats, avec classement et avertissements. Aucune offre suivie n’a été supprimée.";
+      $("#stagehunter-matches-empty").textContent = "Aucune offre enregistrée. Clique sur Explorer les stages pour chercher sans configurer d’entreprise (stages uniquement).";
+    }
   renderStagePrepSelect();
   const applications = await api("/api/career/applications");
   state.applications = applications.applications || [];
@@ -3921,6 +3925,17 @@ $("#stagehunter-my-companies")?.addEventListener("click", () => {
 
 $("#stagehunter-refresh")?.addEventListener("click", () => {
   loadStageHunter().catch((error) => setMessage(error.message, true));
+});
+
+$("#stagehunter-relance-explore")?.addEventListener("click", () => {
+  const exploreBtn = $("#stagehunter-explore");
+  if (exploreBtn) {
+    exploreBtn.scrollIntoView({ behavior: "smooth", block: "center" });
+    exploreBtn.focus({ preventScroll: true });
+    setMessage("Lance « Explorer les stages » ci-dessous pour relancer l’exploration avec tes critères actuels (stages uniquement).", false);
+  } else {
+    setMessage("Va à l’étape B pour lancer l’exploration « Explorer les stages ».", false);
+  }
 });
 
 $("#stagehunter-prep-submit")?.addEventListener("click", () => {

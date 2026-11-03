@@ -371,13 +371,14 @@
         <section id="view-stagehunter" class="career-view" tabindex="-1" hidden aria-labelledby="stagehunter-title">
           <header class="view-intro">
             <p class="eyebrow">Parcours de candidature</p>
-            <h2 id="stagehunter-title">Stage Hunter</h2>
-            <p>Choisis tes contrats et périodes, retrouve les offres réelles venues des sources officielles, compare-les avec des explications, prépare chaque candidature uniquement avec des faits, puis suis les statuts. Rien n’est envoyé automatiquement.</p>
+            <h2 id="stagehunter-title">Stage Hunter — Recherche de stage</h2>
+            <p>Choisis tes contrats et périodes, retrouve les offres réelles venues des sources officielles, compare-les avec des explications, prépare chaque candidature uniquement avec des faits, puis suis les statuts. Rien n’est envoyé automatiquement. <strong>Orienté stages uniquement.</strong></p>
           </header>
 
           <section class="panel">
             <p class="eyebrow">Étape A</p>
             <h3>Définir les contrats et dates recherchés</h3>
+            <p class="fixed-period-note">L’exploration « Explorer les stages » vise <strong>exclusivement les stages</strong>. L’alternance, l’apprentissage, le VIE et les contrats en professionnalisation sont systématiquement exclus. Seuls les stages correspondant à tes critères (mois, durée minimale, lieu) seront retenus.</p>
             <form id="stagehunter-brief-form" class="form-stack">
               <fieldset>
                 <legend>Types de contrat</legend>
@@ -449,7 +450,7 @@
           <section class="panel">
             <p class="eyebrow">Étape B</p>
             <h3>Trouver des offres réelles</h3>
-            <p class="fixed-period-note">Explore les sources publiques vérifiées sans ajouter d’entreprise. Les offres sont qualifiées selon les types de contrat et les mois que tu as sélectionnés ; les stages doivent respecter la durée minimale connue. Les informations manquantes restent « à vérifier ». Tes critères et ton profil restent sur ton Mac.</p>
+            <p class="fixed-period-note">Deux modes : <strong>Explorer les stages</strong> interroge un petit registre de sources publiques vérifiées (sans ajouter d’entreprise) et <strong>ne retient que des stages</strong>. <strong>Mes entreprises</strong> interroge uniquement les boards Greenhouse que tu as configurés toi-même. Dans les deux cas, les offres sont qualifiées selon tes critères (contrats/mois/durée/lieu), les stages doivent respecter la durée minimale, et les informations manquantes restent « à vérifier ». L’alternance/apprentissage/VIE est exclu de l’exploration « Explorer les stages ». Tes critères et ton profil restent sur ton Mac.</p>
             <div class="job-actions" role="group" aria-label="Mode de recherche de stages">
               <button id="stagehunter-explore" class="primary-button" type="button">Explorer les stages</button>
               <button id="stagehunter-explore-cancel" class="secondary-button" type="button" hidden>Arrêter la recherche</button>
@@ -465,9 +466,10 @@
               </div>
               <p id="stagehunter-progress-detail">La progression affichée vient du serveur : chaque étape annoncée est une étape réellement terminée.</p>
             </div>
-            <p id="stagehunter-explore-status" class="fixed-period-note" aria-live="polite">Aucune entreprise à configurer pour explorer. Enregistre tes critères, puis lance la recherche.</p>
+            <p id="stagehunter-explore-status" class="fixed-period-note" aria-live="polite">Aucune entreprise à configurer pour explorer. Enregistre tes critères (étape A), puis lance « Explorer les stages » pour interroger le registre de sources publiques vérifiées — <strong>stages uniquement</strong>.</p>
             <details id="stagehunter-explore-report" hidden>
               <summary>Sources, résultats et limites de cette exploration</summary>
+              <p class="fixed-period-note">Filtre appliqué : <strong>stages uniquement</strong> (alternance/apprentissage/VIE et programmes graduate/early career sans mention explicite de stage exclus).</p>
               <div id="stagehunter-explore-sources" class="form-stack"></div>
               <p id="stagehunter-explore-coverage" class="fixed-period-note"></p>
               <div id="stagehunter-source-coverage" class="stagehunter-source-coverage" aria-live="polite" hidden></div>
@@ -491,10 +493,11 @@
 
           <section class="panel">
             <p class="eyebrow">Étape C</p>
-            <h3>Classement expliqué de mes offres</h3>
+            <h3>Classement expliqué de mes offres (stages uniquement)</h3>
             <p id="stagehunter-result-mode" class="fixed-period-note">Mes offres enregistrées. Lance une exploration pour afficher uniquement ses résultats de stages.</p>
             <div class="job-actions">
               <button id="stagehunter-refresh" class="secondary-button" type="button">Recalculer le classement</button>
+              <button id="stagehunter-relance-explore" class="secondary-button" type="button">Relancer l’exploration (stages uniquement)</button>
             </div>
             <div class="job-actions">
               <label for="stagehunter-sort">Tri par correspondance</label>
@@ -535,8 +538,8 @@
 
           <section class="panel">
             <p class="eyebrow">Étape D</p>
-            <h3>Préparer une candidature sans rien inventer</h3>
-            <p class="fixed-period-note">L’analyse compare les exigences de l’offre à ton profil local. Elle ne crée aucune expérience, aucune compétence et aucun diplôme : chaque élément pertinent cite un extrait réel de ton profil.</p>
+            <h3>Préparer une candidature sans rien inventer (stages uniquement)</h3>
+            <p class="fixed-period-note">L’analyse compare les exigences de l’offre à ton profil local. Elle ne crée aucune expérience, aucune compétence et aucun diplôme : chaque élément pertinent cite un extrait réel de ton profil. L’objectif est de préparer une candidature pour un <strong>stage</strong>.</p>
             <div class="form-row two-columns">
               <label>Offre à préparer
                 <select id="stagehunter-prep-job"><option value="">Choisir une offre…</option></select>

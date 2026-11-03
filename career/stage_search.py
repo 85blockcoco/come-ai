@@ -9,6 +9,7 @@ the reason that produced it so the ranking stays auditable.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from .countries import DEFAULT_COUNTRIES_EXCLUDE, canonical_country_codes
@@ -42,6 +43,12 @@ STAGE_DOMAINS: dict[str, tuple[str, ...]] = {
         "investment banking",
         "banque d affaires",
         "corporate finance advisory",
+        "debt capital markets",
+        "dcm",
+        "equity capital markets",
+        "ecm",
+        "m&a",
+        "mergers and acquisitions",
     ),
     "Corporate Finance": (
         "corporate finance",
@@ -62,6 +69,8 @@ STAGE_DOMAINS: dict[str, tuple[str, ...]] = {
         "buyout",
         "growth equity",
         "lbo",
+        "venture debt",
+        "co-investment",
     ),
     "Transaction Services": (
         "transaction services",
@@ -88,6 +97,7 @@ STAGE_DOMAINS: dict[str, tuple[str, ...]] = {
         "investment research",
         "equity research",
         "fixed income",
+        "credit research",
     ),
     "FP&A": (
         "fp a",
@@ -96,6 +106,7 @@ STAGE_DOMAINS: dict[str, tuple[str, ...]] = {
         "controle de gestion",
         "business partner",
         "business partnering",
+        "strategic planning",
     ),
     # A catch-all the person selects explicitly; it is resolved after the
     # specific domains so a precise match is always reported first.
@@ -163,6 +174,17 @@ _STUDY_LEVEL_RANKS: tuple[tuple[int, tuple[str, ...]], ...] = (
 # Unambiguous permanent-contract markers only: "temps plein" alone is
 # deliberately excluded because a full-time internship is still an internship.
 _PERMANENT_CONTRACT_PATTERNS: tuple[str, ...] = ("cdi", "permanent")
+_ALTERNANCE_PATTERNS: tuple[str, ...] = (
+    "alternance",
+    "apprentissage",
+    "alternant",
+    "apprenti",
+    "contrat de professionnalisation",
+    "professionnalisation",
+)
+_VIE_PATTERNS: tuple[str, ...] = ("vie", "volontariat international en entreprise")
+_TITLE_STAGE_RE = re.compile(r"\b(?:intern(?:ship)?s?|stagiaires?|stages?)\b", re.I)
+_GRADUATE_SCHEME_RE = re.compile(r"\b(?:graduate\s+(?:programme|scheme|rotational|development\s+programme)|talent\s+programme|early\s+career\s+programme|rotation\s+programme)\b", re.I)
 
 MAX_COMPONENTS = 8
 CONTRACT_TYPES: dict[str, str] = {"stage": "Stage", "cdd": "CDD", "cdi": "CDI", "vie": "VIE"}
@@ -478,6 +500,8 @@ def _matched_domains(text: str, job_family: str, brief: dict[str, Any]) -> list[
     if not matched and "Autres métiers financiers" in brief.get("domains", []):
         if job_family in JOB_FAMILIES:
             matched.append(("Autres métiers financiers", job_family))
+        elif re.search(r"\b(?:finance|financier|financi[eè]re|treasury|tr[eé]sorerie|risk|risque|compliance|investor\s+relations)\b", text):
+            matched.append(("Autres métiers financiers", "finance"))
     for custom in brief.get("other_domains", []):
         pattern = normalized_text(custom)
         if pattern and _contains(text, pattern):
@@ -806,6 +830,22 @@ def score_brief_match(brief: dict[str, Any], job: dict[str, Any]) -> dict[str, A
             f"Contrat permanent annoncé (« {clean_text(job.get('employment_type'), limit=120)} ») : "
             "cette offre n’est probablement pas un stage."
         )
+    # Reinforce « stages uniquement »: flag alternance/apprentissage/VIE explicitly.
+    if employment and any(_contains(employment, pattern) for pattern in _ALTERNANCE_PATTERNS):
+        warnings.append(
+            f"Alternance/apprentissage annoncé (« {clean_text(job.get('employment_type'), limit=120)} ») : "
+            "hors périmètre « stage »."
+        )
+    if employment and any(_contains(employment, pattern) for pattern in _VIE_PATTERNS):
+        warnings.append(
+            f"VIE annoncé (« {clean_text(job.get('employment_type'), limit=120)} ») : "
+            "hors périmètre « stage »."
+        )
+    title_employment_text = normalized_text(
+        f"{clean_text(job.get('title'), limit=300)} {clean_text(job.get('employment_type'), limit=120)}"
+    )
+    if _GRADUATE_SCHEME_RE.search(title_employment_text) and not _TITLE_STAGE_RE.search(title_employment_text):
+        warnings.append("Programme graduate/early career sans mention explicite de stage : à vérifier attentivement.")
     if not clean_text(job.get("official_url"), limit=2_000):
         warnings.append("Aucune URL officielle n’est conservée pour cette offre : vérifie la source avant toute action.")
 

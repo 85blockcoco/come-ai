@@ -53,16 +53,16 @@ def _markdown(report: ProgressReport) -> str:
     lines = [
         "# Rapport de progression — Venture Capital",
         "",
-        f"Période : {report.period_start} → {report.period_end}",
-        f"Généré le : {report.generated_at}",
+        f"Period: {report.period_start} → {report.period_end}",
+        f"Generated on: {report.generated_at}",
         "",
         "## Couverture",
         "",
         f"- Topics couverts : {report.coverage['covered_topics']} / {report.coverage['total_topics']} "
         f"({report.coverage['ratio']:.0%})",
-        f"- Non testés : {', '.join(report.coverage['untested']) or 'aucun'}",
+        f"- Untested: {', '.join(report.coverage['untested']) or 'none'}",
         "",
-        "## Rétention",
+        "## Retention",
         "",
     ]
     for window, data in report.retention.items():
@@ -85,17 +85,17 @@ def _markdown(report: ProgressReport) -> str:
         for item in report.weak_topics:
             lines.append(
                 f"- {item['topic_id']} — {item['title']} : {item['status']}, "
-                f"réussite {item['accuracy']:.0%}" if item["accuracy"] is not None else
+                f"success {item['accuracy']:.0%}" if item["accuracy"] is not None else
                 f"- {item['topic_id']} — {item['title']} : {item['status']}"
             )
     else:
-        lines.append("- Aucun topic fragile sur la période.")
-    lines.extend(["", "## Erreurs récentes", ""])
+        lines.append("- No fragile topic over the period.")
+    lines.extend(["", "## Recent errors", ""])
     if report.recent_errors:
         for item in report.recent_errors:
             lines.append(f"- {item['category']} : {item['count']}")
     else:
-        lines.append("- Aucune erreur enregistrée.")
+        lines.append("- No error recorded.")
     lines.extend(["", "## Prochaines actions", ""])
     if report.next_actions:
         for action in report.next_actions:
@@ -104,11 +104,11 @@ def _markdown(report: ProgressReport) -> str:
                 f"{action['reason']}"
             )
     else:
-        lines.append("- Aucune action nécessaire : continuez la révision régulière.")
+        lines.append("- No action needed: continue regular revision.")
     lines.extend(
         [
             "",
-            "> Rapport local. Il ne contient ni notes brutes ni réponses détaillées.",
+            "> Local report. It contains no raw notes or detailed answers.",
             "",
         ]
     )
@@ -124,11 +124,13 @@ def build_progress_report(
     output_dir: Path | None = None,
     case_attempts: Sequence[CaseAttempt] = (),
     exam_results: Sequence[dict[str, Any]] = (),
+    drill_attempts: Sequence[Any] = (),
+    paper_attempts: Sequence[Any] = (),
     progress: Mapping[str, CardProgress] | None = None,
 ) -> ProgressReport:
     parse_date(today)
     if days < 1:
-        raise ValueError("La période doit être d'au moins un jour.")
+        raise ValueError("The period must be at least one day.")
     start = date.fromisoformat(today).toordinal() - days + 1
     period_start = date.fromordinal(start).isoformat()
     filtered = [
@@ -139,6 +141,16 @@ def build_progress_report(
     period_cases = [
         attempt
         for attempt in case_attempts
+        if period_start <= attempt.submitted_at[:10] <= today
+    ]
+    period_drills = [
+        attempt
+        for attempt in drill_attempts
+        if period_start <= attempt.submitted_at[:10] <= today
+    ]
+    period_papers = [
+        attempt
+        for attempt in paper_attempts
         if period_start <= attempt.submitted_at[:10] <= today
     ]
     period_exams = [
@@ -152,6 +164,8 @@ def build_progress_report(
         today=today,
         case_attempts=period_cases,
         exam_results=period_exams,
+        drill_attempts=period_drills,
+        paper_attempts=period_papers,
         progress=progress,
     )
     coverage = coverage_summary(radar)
@@ -168,17 +182,17 @@ def build_progress_report(
     errors: Counter[str] = Counter()
     for event in filtered:
         if not event.correct:
-            errors["rappel"] += 1
+            errors["recall"] += 1
     for attempt in case_attempts:
         if attempt.score < 0.6:
-            errors["cas"] += 1
+            errors["case"] += 1
     for result in period_exams:
         per_topic = result.get("per_topic")
         if not isinstance(per_topic, dict):
             continue
         for bucket in per_topic.values():
             if isinstance(bucket, dict) and float(bucket.get("score", 0.0)) < 0.6:
-                errors["examen"] += 1
+                errors["exam"] += 1
     plan = build_study_plan(content, radar, minutes=60, today=today)
     due = 0
     if progress:

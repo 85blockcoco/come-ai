@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "pack_id": "cards-vc19",
+  "topic_id": "VC19",
+  "language": "en",
+  "source_type": "original",
+  "license": "Original NAGE content",
+  "items": [
+    {
+      "kind": "card",
+      "id": "VC19-C001",
+      "topic_id": "VC19",
+      "question": "What is venture debt?",
+      "answer": "A type of debt financing for VC-backed startups, typically provided alongside or after an equity round.",
+      "explanation": "It extends runway without diluting ownership as much as equity.",
+      "status": "active",
+      "tags": ["venture debt", "financing"]
+    },
+    {
+      "kind": "card",
+      "id": "VC19-C002",
+      "topic_id": "VC19",
+      "question": "What are the main features of venture debt?",
+      "answer": "Term loans with warrants, interest-only periods, and covenants tailored to startups.",
+      "explanation": "Warrants give lenders upside participation.",
+      "status": "active",
+      "tags": ["venture debt", "terms"]
+    },
+    {
+      "kind": "card",
+      "id": "VC19-C003",
+      "topic_id": "VC19",
+      "question": "Why do startups use venture debt?",
+      "answer": "To extend runway, finance working capital or equipment, and reduce dilution compared to an equity round.",
+      "explanation": "It is cheaper than equity but adds repayment obligations.",
+      "status": "active",
+      "tags": ["venture debt", "runway"]
+    },
+    {
+      "kind": "card",
+      "id": "VC19-C004",
+      "topic_id": "VC19",
+      "question": "What is a warrant in venture debt?",
+      "answer": "A right to purchase equity at a fixed price, given to the lender as additional compensation.",
+      "explanation": "Warrants align the lender with the company's growth.",
+      "status": "active",
+      "tags": ["warrant", "venture debt"]
+    },
+    {
+      "kind": "card",
+      "id": "VC19-C005",
+      "topic_id": "VC19",
+      "question": "What is an interest-only period?",
+      "answer": "A phase during which the borrower pays only interest, not principal, easing cash flow early on.",
+      "explanation": "It helps startups manage cash during growth.",
+      "status": "active",
+      "tags": ["interest-only", "cash flow"]
+    },
+    {
+      "kind": "card",
+      "id": "VC19-C006",
+      "topic_id": "VC19",
+      "question": "What is the risk of venture debt?",
+      "answer": "If the company fails to grow, debt repayment can strain cash and lead to default or loss of control.",
+      "explanation": "Debt is risky for pre-profit startups.",
+      "status": "active",
+      "tags": ["risk", "default"]
+    },
+    {
+      "kind": "card",
+      "id": "VC19-C007",
+      "topic_id": "VC19",
+      "question": "What is revenue-based financing?",
+      "answer": "A financing model where repayments are a percentage of revenue, aligning payments with performance.",
+      "explanation": "It is an alternative to traditional debt for startups.",
+      "status": "active",
+      "tags": ["revenue-based", "financing"]
+    },
+    {
+      "kind": "card",
+      "id": "VC19-C008",
+      "topic_id": "VC19",
+      "question": "When is venture debt most appropriate?",
+      "answer": "After an equity round, when the company has predictable revenue and needs capital to extend runway without heavy dilution.",
+      "explanation": "It complements equity rather than replacing it.",
+      "status": "active",
+      "tags": ["timing", "venture debt"]
+    }
+  ]
+}

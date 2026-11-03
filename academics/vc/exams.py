@@ -14,36 +14,36 @@ from .errors import ContentError, InputError
 from .models import ExamQuestion, ExamSession
 from .storage import VcStore
 
-NOTICE = "Correction déterministe, pas une note humaine."
+NOTICE = "Deterministic grading, not a human grade."
 PASS_THRESHOLD = 0.6
 
 _TOPIC_FOLLOW_UPS: dict[str, tuple[str, ...]] = {
     "VC04": (
-        "Refaites le calcul en distinguant explicitement pre-money et post-money.",
-        "Que devient la part de l'investisseur si le montant levé double à pre-money constant ?",
-        "Quelle erreur d'unité ou de base de calcul faut-il éviter ?",
+        "Redo the calculation, explicitly distinguishing pre-money and post-money.",
+        "What happens to the investor's share if the amount raised doubles at constant pre-money?",
+        "Which unit or base-of-calculation error must be avoided?",
     ),
     "VC05": (
-        "Décrivez la cap table avant et après le tour, ligne par ligne.",
-        "Pourquoi l'option pool est-il souvent créé avant l'entrée de l'investisseur ?",
-        "Quelle différence faites-vous entre actions émises et fully diluted ?",
+        "Describe the cap table before and after the round, line by line.",
+        "Why is the option pool often created before the investor enters?",
+        "What is the difference between issued shares and fully diluted?",
     ),
     "VC07": (
-        "Déroulez le waterfall rang par rang et justifiez l'ordre.",
-        "Quand l'investisseur préfère-t-il convertir en actions ordinaires ?",
-        "Quel est l'effet d'un cap sur une préférence participating ?",
+        "Walk through the waterfall rank by rank and justify the order.",
+        "When does the investor prefer to convert into ordinary shares?",
+        "What is the effect of a cap on a participating preference?",
     ),
     "VC09": (
-        "Distinguez le multiple brut du rendement annualisé.",
-        "Quel flux faut-il actualiser pour calculer l'IRR ?",
-        "Pourquoi un même MOIC peut-il cacher des IRR très différents ?",
+        "Distinguish the gross multiple from the annualised return.",
+        "Which cash flow must be discounted to compute the IRR?",
+        "Why can the same MOIC hide very different IRRs?",
     ),
 }
 _GENERIC_FOLLOW_UPS = (
-    "Définissez les termes clés sans regarder vos notes.",
-    "Donnez un exemple chiffré et explicitez chaque étape.",
-    "Quelle erreur fréquente faut-il éviter sur cette notion ?",
-    "Reliez cette notion à un term sheet ou à une décision d'investissement.",
+    "Define the key terms without looking at your notes.",
+    "Give a worked example and explain each step.",
+    "Which frequent mistake must be avoided on this notion?",
+    "Relate this notion to a term sheet or an investment decision.",
 )
 
 
@@ -75,7 +75,7 @@ def _allocate_points(questions: Sequence[ExamQuestion]) -> list[int]:
     """Give every question at least one point and make the total exactly 100."""
     count = len(questions)
     if count > 100:
-        raise InputError("Un examen ne peut pas dépasser 100 questions.")
+        raise InputError("An exam cannot exceed 100 questions.")
     remaining = 100 - count
     total_weight = sum(max(1, question.points) for question in questions)
     raw = [max(1, question.points) / total_weight * remaining for question in questions]
@@ -102,17 +102,17 @@ def build_exam(
 ) -> ExamSession:
     """Compose a deterministic exam from the original question bank."""
     if isinstance(questions, bool) or not isinstance(questions, int):
-        raise InputError("Le nombre de questions doit être un entier.")
+        raise InputError("The number of questions must be an integer.")
     if not 1 <= questions <= 100:
-        raise InputError("Le nombre de questions doit être compris entre 1 et 100.")
+        raise InputError("The number of questions must be between 1 and 100.")
     if isinstance(minutes, bool) or not isinstance(minutes, int) or minutes <= 0:
-        raise InputError("La durée doit être un nombre de minutes positif.")
+        raise InputError("Duration must be a positive number of minutes.")
     selected_topics = sorted({str(topic_id) for topic_id in topic_ids})
     for topic_id in selected_topics:
         try:
             content.topic(topic_id)
         except ContentError as error:
-            raise InputError(f"Topic inconnu : {topic_id}") from error
+            raise InputError(f"Unknown topic: {topic_id}") from error
     suspended = {str(card_id) for card_id in suspended_card_ids}
     eligible = [
         question
@@ -122,7 +122,7 @@ def build_exam(
     ]
     if len(eligible) < questions:
         raise InputError(
-            f"Pas assez de questions disponibles : {len(eligible)} pour {questions} demandées."
+            f"Not enough questions available: {len(eligible)} for {questions} requested."
         )
     eligible.sort(key=lambda question: question.id)
     random.Random(seed).shuffle(eligible)
@@ -388,9 +388,9 @@ def oral_questions(
     try:
         content.topic(topic_id)
     except ContentError as error:
-        raise InputError(f"Topic inconnu : {topic_id}") from error
+        raise InputError(f"Unknown topic: {topic_id}") from error
     if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= 20:
-        raise InputError("Le nombre de questions orales doit être compris entre 1 et 20.")
+        raise InputError("The number of oral questions must be between 1 and 20.")
     excluded = {str(card_id) for card_id in excluded_card_ids}
     cards = [
         card

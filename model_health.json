@@ -1,0 +1,772 @@
+{
+ "models": {
+  "opencode-go/gemini-4-argon-contributor": {
+   "verdict": "UNAVAIL",
+   "score": 0,
+   "cooldown_until": 0,
+   "fails": 3,
+   "last_reset_wait": null,
+   "ok_count": 0,
+   "last_probe": "2026-10-25 19:36:27"
+  },
+  "opencode-go/minimax-m3.1-flash": {
+   "verdict": "OK",
+   "score": 2.67,
+   "cooldown_until": 0,
+   "fails": 0,
+   "last_reset_wait": null,
+   "ok_count": 4,
+   "last_probe": "2026-10-26 14:31:32",
+   "cooldown_set_at": 0,
+   "last_limit_reason": "quota (runtime)",
+   "cooldown_next_min": 115.3,
+   "observed_resets": [
+    [
+     "limit",
+     135.0
+    ],
+    [
+     "limit",
+     180.0
+    ],
+    [
+     "quota (runtime)",
+     180.0
+    ]
+   ]
+  },
+  "opencode-go/claude-haiku-5-5": {
+   "verdict": "LIMIT",
+   "score": 0,
+   "cooldown_until": 1793415085.193995,
+   "fails": 46,
+   "last_reset_wait": null,
+   "ok_count": 4,
+   "last_probe": "2026-10-31 01:21:25",
+   "cooldown_set_at": 1793406085.193995,
+   "last_limit_reason": "limit",
+   "cooldown_next_min": 150.0,
+   "observed_resets": [
+    [
+     "limit",
+     135.0
+    ],
+    [
+     "limit",
+     180.0
+    ],
+    [
+     "unavailable (runtime)",
+     180.0
+    ]
+   ]
+  },
+  "opencode-go/mimo-v2.6-flash": {
+   "verdict": "LIMIT",
+   "score": 0,
+   "cooldown_until": 1793415085.193995,
+   "fails": 54,
+   "last_reset_wait": null,
+   "ok_count": 4,
+   "last_probe": "2026-10-31 01:21:25",
+   "cooldown_set_at": 1793406085.193995,
+   "last_limit_reason": "limit",
+   "cooldown_next_min": 150.0,
+   "observed_resets": [
+    [
+     "limit",
+     135.0
+    ],
+    [
+     "limit",
+     180.0
+    ],
+    [
+     "limit",
+     180.0
+    ]
+   ]
+  },
+  "opencode-go/grok-4.7": {
+   "verdict": "LIMIT",
+   "score": 0,
+   "cooldown_until": 1793415085.193995,
+   "fails": 81,
+   "last_reset_wait": null,
+   "ok_count": 19,
+   "last_probe": "2026-10-31 01:21:25",
+   "cooldown_set_at": 1793406085.193995,
+   "last_limit_reason": "limit",
+   "cooldown_next_min": 150.0,
+   "observed_resets": [
+    [
+     "unavailable (runtime)",
+     133.0
+    ],
+    [
+     "unavailable (runtime)",
+     134.0
+    ],
+    [
+     "unavailable (runtime)",
+     134.0
+    ],
+    [
+     "unavailable (runtime)",
+     17.0
+    ],
+    [
+     "unavailable (runtime)",
+     13.0
+    ],
+    [
+     "limit",
+     180.0
+    ]
+   ]
+  },
+  "opencode-go/step-5-preview": {
+   "verdict": "LIMIT",
+   "score": 0,
+   "cooldown_until": 1793415085.193995,
+   "fails": 50,
+   "last_reset_wait": null,
+   "ok_count": 4,
+   "last_probe": "2026-10-31 01:21:25",
+   "cooldown_set_at": 1793406085.193995,
+   "last_limit_reason": "limit",
+   "cooldown_next_min": 150.0,
+   "observed_resets": [
+    [
+     "limit",
+     135.0
+    ],
+    [
+     "limit",
+     180.0
+    ],
+    [
+     "limit",
+     180.0
+    ]
+   ]
+  },
+  "opencode-go/deepseek-v4.1-flash": {
+   "verdict": "UNAVAIL",
+   "score": 0,
+   "cooldown_until": 0,
+   "fails": 3,
+   "last_reset_wait": null,
+   "ok_count": 0,
+   "last_probe": "2026-10-25 19:36:27"
+  },
+  "opencode-go/muse-spark-1.3-contributor": {
+   "verdict": "UNAVAIL",
+   "score": 0,
+   "cooldown_until": 0,
+   "fails": 3,
+   "last_reset_wait": null,
+   "ok_count": 0,
+   "last_probe": "2026-10-25 19:36:27"
+  },
+  "opencode-go/glm-5.3-flash": {
+   "verdict": "LIMIT",
+   "score": 0,
+   "cooldown_until": 1793415085.193995,
+   "fails": 65,
+   "last_reset_wait": null,
+   "ok_count": 5,
+   "last_probe": "2026-10-31 01:21:25",
+   "cooldown_set_at": 1793406085.193995,
+   "last_limit_reason": "limit",
+   "cooldown_next_min": 150.0,
+   "observed_resets": [
+    [
+     "limit",
+     135.0
+    ],
+    [
+     "limit",
+     180.0
+    ],
+    [
+     "limit",
+     180.0
+    ]
+   ]
+  },
+  "opencode-go/qwen3.8-flash": {
+   "verdict": "LIMIT",
+   "score": 0,
+   "cooldown_until": 1793415085.193995,
+   "fails": 34,
+   "last_reset_wait": null,
+   "ok_count": 4,
+   "last_probe": "2026-10-31 01:21:25",
+   "cooldown_set_at": 1793406085.193995,
+   "last_limit_reason": "limit",
+   "cooldown_next_min": 150.0,
+   "observed_resets": [
+    [
+     "limit",
+     135.0
+    ],
+    [
+     "limit",
+     180.0
+    ],
+    [
+     "limit",
+     180.0
+    ]
+   ]
+  },
+  "opencode-go/gpt-6-luna": {
+   "verdict": "OK",
+   "score": 2.87,
+   "cooldown_until": 0,
+   "fails": 0,
+   "last_reset_wait": null,
+   "ok_count": 4,
+   "last_probe": "2026-10-26 14:31:32",
+   "cooldown_set_at": 0,
+   "last_limit_reason": "unavailable (runtime)",
+   "cooldown_next_min": 57.5,
+   "observed_resets": [
+    [
+     "limit",
+     135.0
+    ],
+    [
+     "limit",
+     180.0
+    ],
+    [
+     "unavailable (runtime)",
+     180.0
+    ]
+   ]
+  },
+  "opencode-go/glm-5.3": {
+   "verdict": "OK",
+   "score": 2.82,
+   "cooldown_until": 0,
+   "fails": 0,
+   "last_reset_wait": null,
+   "ok_count": 4,
+   "last_probe": "2026-10-26 14:31:32",
+   "cooldown_set_at": 0,
+   "last_limit_reason": "limit",
+   "cooldown_next_min": 150.0,
+   "observed_resets": [
+    [
+     "limit",
+     135.0
+    ],
+    [
+     "limit",
+     180.0
+    ],
+    [
+     "limit",
+     180.0
+    ]
+   ]
+  },
+  "opencode-go/kimi-k3": {
+   "verdict": "OK",
+   "score": 2.59,
+   "cooldown_until": 0,
+   "fails": 0,
+   "last_reset_wait": null,
+   "ok_count": 4,
+   "last_probe": "2026-10-26 14:31:32",
+   "cooldown_set_at": 0,
+   "last_limit_reason": "limit",
+   "cooldown_next_min": 150.0,
+   "observed_resets": [
+    [
+     "limit",
+     135.0
+    ],
+    [
+     "limit",
+     180.0
+    ],
+    [
+     "limit",
+     180.0
+    ]
+   ]
+  },
+  "opencode-go/qwen3.8-max": {
+   "verdict": "LIMIT",
+   "score": 0,
+   "cooldown_until": 1793415085.193995,
+   "fails": 37,
+   "last_reset_wait": null,
+   "ok_count": 4,
+   "last_probe": "2026-10-31 01:21:25",
+   "cooldown_set_at": 1793406085.193995,
+   "last_limit_reason": "limit",
+   "cooldown_next_min": 150.0,
+   "observed_resets": [
+    [
+     "limit",
+     135.0
+    ],
+    [
+     "limit",
+     180.0
+    ],
+    [
+     "limit",
+     180.0
+    ]
+   ]
+  },
+  "google/gemini-3.1-flash-lite": {
+   "verdict": "OK",
+   "score": 3.37,
+   "cooldown_until": 0,
+   "fails": 0,
+   "last_reset_wait": null,
+   "ok_count": 7,
+   "last_probe": "2026-10-26 19:09:54",
+   "cooldown_set_at": 0,
+   "last_limit_reason": "quota (runtime)",
+   "cooldown_next_min": 150.0,
+   "observed_resets": [
+    [
+     "quota (runtime)",
+     111.0
+    ],
+    [
+     "quota (runtime)",
+     95.0
+    ],
+    [
+     "quota",
+     20.0
+    ],
+    [
+     "quota",
+     81.0
+    ],
+    [
+     "quota (runtime)",
+     131.0
+    ],
+    [
+     "quota",
+     180.0
+    ]
+   ]
+  },
+  "opencode-go/longcat-2.0": {
+   "verdict": "OK",
+   "score": 2.73,
+   "cooldown_until": 0,
+   "fails": 0,
+   "last_reset_wait": null,
+   "ok_count": 4,
+   "last_probe": "2026-10-26 14:31:32",
+   "cooldown_set_at": 0,
+   "last_limit_reason": "limit",
+   "cooldown_next_min": 150.0,
+   "observed_resets": [
+    [
+     "limit",
+     135.0
+    ],
+    [
+     "limit",
+     180.0
+    ],
+    [
+     "limit",
+     180.0
+    ]
+   ]
+  },
+  "opencode-go/kimi-k2.7-code": {
+   "verdict": "OK",
+   "score": 2.76,
+   "cooldown_until": 0,
+   "fails": 0,
+   "last_reset_wait": null,
+   "ok_count": 4,
+   "last_probe": "2026-10-26 14:31:32",
+   "cooldown_set_at": 0,
+   "last_limit_reason": "limit",
+   "cooldown_next_min": 150.0,
+   "observed_resets": [
+    [
+     "limit",
+     135.0
+    ],
+    [
+     "limit",
+     180.0
+    ],
+    [
+     "limit",
+     180.0
+    ]
+   ]
+  },
+  "opencode-go/deepseek-v4-pro": {
+   "verdict": "UNAVAIL",
+   "score": 0,
+   "cooldown_until": 0,
+   "fails": 3,
+   "last_reset_wait": null,
+   "ok_count": 0,
+   "last_probe": "2026-10-25 19:36:27"
+  },
+  "opencode-go/qwen3.7-plus": {
+   "verdict": "OK",
+   "score": 2.56,
+   "cooldown_until": 0,
+   "fails": 0,
+   "last_reset_wait": null,
+   "ok_count": 4,
+   "last_probe": "2026-10-26 14:31:32",
+   "cooldown_set_at": 0,
+   "last_limit_reason": "limit",
+   "cooldown_next_min": 150.0,
+   "observed_resets": [
+    [
+     "limit",
+     135.0
+    ],
+    [
+     "limit",
+     180.0
+    ],
+    [
+     "limit",
+     180.0
+    ]
+   ]
+  },
+  "opencode-go/mimo-v2.5-pro": {
+   "verdict": "UNAVAIL",
+   "score": 0,
+   "cooldown_until": 1792971361.3655412,
+   "fails": 5,
+   "last_reset_wait": null,
+   "ok_count": 0,
+   "last_probe": "2026-10-26 01:06:35",
+   "last_limit_reason": "limit",
+   "cooldown_set_at": 1792962361.3655412,
+   "cooldown_next_min": 150.0
+  },
+  "opencode-go/minimax-m3": {
+   "verdict": "LIMIT",
+   "score": 0,
+   "cooldown_until": 1793415085.193995,
+   "fails": 49,
+   "last_reset_wait": null,
+   "ok_count": 4,
+   "last_probe": "2026-10-31 01:21:25",
+   "cooldown_set_at": 1793406085.193995,
+   "last_limit_reason": "limit",
+   "cooldown_next_min": 150.0,
+   "observed_resets": [
+    [
+     "limit",
+     135.0
+    ],
+    [
+     "limit",
+     180.0
+    ],
+    [
+     "unavailable (runtime)",
+     180.0
+    ]
+   ]
+  },
+  "opencode-go/mimo-v2.5": {
+   "verdict": "OK",
+   "score": 2.26,
+   "cooldown_until": 0,
+   "fails": 0,
+   "last_reset_wait": null,
+   "ok_count": 4,
+   "last_probe": "2026-10-26 14:31:32",
+   "cooldown_set_at": 0,
+   "last_limit_reason": "limit",
+   "cooldown_next_min": 150.0,
+   "observed_resets": [
+    [
+     "limit",
+     135.0
+    ],
+    [
+     "limit",
+     180.0
+    ],
+    [
+     "limit",
+     180.0
+    ]
+   ]
+  },
+  "opencode-go/beam-free": {
+   "verdict": "OK",
+   "score": 22.22,
+   "cooldown_until": 0,
+   "fails": 0,
+   "last_reset_wait": null,
+   "ok_count": 4,
+   "last_probe": "2026-10-31 01:34:14",
+   "cooldown_set_at": 0,
+   "last_limit_reason": "quota (runtime)",
+   "cooldown_next_min": 78.0,
+   "observed_resets": [
+    [
+     "quota (runtime)",
+     117.0
+    ],
+    [
+     "quota (runtime)",
+     61.0
+    ],
+    [
+     "quota (runtime)",
+     180.0
+    ],
+    [
+     "quota (runtime)",
+     17.0
+    ]
+   ]
+  },
+  "opencode-go/hy4-preview": {
+   "verdict": "OK",
+   "score": 2.99,
+   "cooldown_until": 0,
+   "fails": 0,
+   "last_reset_wait": null,
+   "ok_count": 2,
+   "last_probe": "2026-10-26 14:31:32",
+   "cooldown_set_at": 0,
+   "last_limit_reason": "limit",
+   "cooldown_next_min": 150.0,
+   "observed_resets": [
+    [
+     "limit",
+     180.0
+    ],
+    [
+     "limit",
+     180.0
+    ]
+   ]
+  },
+  "opencode/deepseek-v4.1-flash-free": {
+   "verdict": "LIMIT",
+   "score": 0,
+   "cooldown_until": 1793415085.193995,
+   "fails": 7,
+   "last_reset_wait": null,
+   "ok_count": 8,
+   "last_probe": "2026-10-31 01:21:25",
+   "cooldown_set_at": 1793406085.193995,
+   "last_limit_reason": "limit",
+   "cooldown_next_min": 150.0,
+   "observed_resets": [
+    [
+     "quota (runtime)",
+     180.0
+    ],
+    [
+     "limit",
+     147.0
+    ],
+    [
+     "quota (runtime)",
+     20.0
+    ],
+    [
+     "unavailable (runtime)",
+     180.0
+    ],
+    [
+     "quota (runtime)",
+     123.0
+    ],
+    [
+     "unavailable (runtime)",
+     146.0
+    ]
+   ]
+  },
+  "opencode/big-pickle": {
+   "verdict": "OK",
+   "score": 15.0,
+   "cooldown_until": 0,
+   "fails": 0,
+   "last_reset_wait": null,
+   "ok_count": 8,
+   "last_probe": "2026-10-29 23:19:31",
+   "cooldown_set_at": 0,
+   "last_limit_reason": "limit",
+   "cooldown_next_min": 150.0,
+   "observed_resets": [
+    [
+     "quota (runtime)",
+     132.0
+    ],
+    [
+     "quota (runtime)",
+     180.0
+    ],
+    [
+     "limit",
+     150.0
+    ],
+    [
+     "unavailable (runtime)",
+     165.0
+    ],
+    [
+     "limit",
+     180.0
+    ],
+    [
+     "limit",
+     148.0
+    ]
+   ]
+  },
+  "opencode/nemotron-3.5-super-vl-free": {
+   "verdict": "OK",
+   "score": 4.96,
+   "cooldown_until": 0,
+   "fails": 0,
+   "last_reset_wait": null,
+   "ok_count": 4,
+   "last_probe": "2026-10-26 18:31:13",
+   "cooldown_set_at": 0,
+   "last_limit_reason": "quota (runtime)",
+   "cooldown_next_min": 129.25,
+   "observed_resets": [
+    [
+     "quota (runtime)",
+     180.0
+    ],
+    [
+     "quota (runtime)",
+     112.0
+    ]
+   ],
+   "last_error": "free limit reached (workers 2026-10-26)"
+  },
+  "google/gemma-4-26b-a4b-it": {
+   "verdict": "OK",
+   "score": 3.7,
+   "cooldown_until": 0,
+   "fails": 0,
+   "last_reset_wait": null,
+   "ok_count": 7,
+   "last_probe": "2026-10-26 20:08:30",
+   "cooldown_set_at": 0,
+   "last_limit_reason": "quota",
+   "cooldown_next_min": 142.25,
+   "observed_resets": [
+    [
+     "quota (runtime)",
+     105.0
+    ],
+    [
+     "quota (runtime)",
+     101.0
+    ],
+    [
+     "quota (runtime)",
+     17.0
+    ],
+    [
+     "quota (runtime)",
+     72.0
+    ],
+    [
+     "quota",
+     142.0
+    ]
+   ]
+  },
+  "opencode/mimo-v2.6-flash-free": {
+   "verdict": "OK",
+   "score": 5.71,
+   "cooldown_until": 0,
+   "fails": 0,
+   "last_reset_wait": null,
+   "ok_count": 8,
+   "last_probe": "2026-10-30 14:15:28",
+   "cooldown_set_at": 0,
+   "last_limit_reason": "quota (runtime)",
+   "cooldown_next_min": 93.8,
+   "observed_resets": [
+    [
+     "quota (runtime)",
+     180.0
+    ],
+    [
+     "limit",
+     147.0
+    ],
+    [
+     "quota (runtime)",
+     20.0
+    ],
+    [
+     "quota (runtime)",
+     86.0
+    ],
+    [
+     "limit",
+     149.0
+    ],
+    [
+     "quota (runtime)",
+     91.0
+    ]
+   ]
+  },
+  "opencode/glm-5.3-flash": {
+   "verdict": "LIMIT",
+   "score": 0,
+   "cooldown_until": 1793410587.527008,
+   "fails": 50,
+   "last_reset_wait": null,
+   "ok_count": 0,
+   "last_probe": "2026-10-31 00:43:57",
+   "last_limit_reason": "insufficient",
+   "cooldown_set_at": 1793403837.527008,
+   "cooldown_next_min": 112.5
+  }
+ },
+ "observations": {
+  "unavailable (runtime)": {
+   "wait_min": 158.5,
+   "n": 23
+  },
+  "limit": {
+   "wait_min": 154.4,
+   "n": 50
+  },
+  "quota (runtime)": {
+   "wait_min": 62.4,
+   "n": 23
+  },
+  "quota": {
+   "wait_min": 125.1,
+   "n": 4
+  }
+ },
+ "updated_at": 1793409555.517811
+}
