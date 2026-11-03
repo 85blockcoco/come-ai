@@ -58,7 +58,7 @@ La matrice ci-dessous décrit l’état de couverture audité au SHA `9ae3927`; 
 
 ## Lot 2 — couverture de quiz alignée au sujet passé
 
-Implémenté sur la branche candidate; les validations ont été rejouées après le dernier changement de code. Le SHA de publication sera ajouté après le commit/push :
+Livré sur `codex/vc-mastery-20261103`, commit `7dde24008049887183650e0299e0ce789294232f`; `git ls-remote --heads origin codex/vc-mastery-20261103` a retourné le même SHA.
 
 - La banque passe à **34 questions** réparties Topic 1–5 : 4/2/15/9/4.
 - **27 identifiants d’objectifs** relient les notions du sujet 2025 et les sous-étapes d’exercices aux questions d’entraînement. Chaque question taguée garde une explication et une recherche de citation locale.

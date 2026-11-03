@@ -46,3 +46,7 @@ Une réindexation de contrôle isolée a détecté 29 fichiers locaux (26 PDF et
 ## Publication
 
 Cette livraison est destinée à la branche candidate uniquement. `main` et `/Users/comedelavenne/NAGE-release` ne sont pas modifiés. Commit publié : `689115099fd16f01e0c49847d3b0d7eb05de1895`; la référence distante `origin/codex/vc-mastery-20261103` a été vérifiée sur le même SHA.
+
+## Livraison du lot 2 — couverture du sujet historique
+
+Le lot 2 est publié dans `7dde24008049887183650e0299e0ce789294232f`; la branche distante a été vérifiée sur le même SHA. Les tests ciblés rejoués après le dernier changement : `tests/test_nage_learning.py` et `tests/test_nage_learning_ui.py`, **17 passed en 2,85 s**. Ruff ciblé, `node --check desktop_static/app.js` et `git diff --check` sont verts. Le détail des changements et les limites figure dans `NAGE-VC-EXAM-ALIGNMENT.md`.
