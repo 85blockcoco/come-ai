@@ -9,7 +9,7 @@ def test_desktop_learning_surface_is_wired_to_local_learning_routes() -> None:
     javascript = (ROOT / "desktop_static" / "app.js").read_text(encoding="utf-8")
     service_worker = (ROOT / "desktop_static" / "sw.js").read_text(encoding="utf-8")
     css = (ROOT / "desktop_static" / "app.css").read_text(encoding="utf-8")
-    for marker in ('data-view="learning"', 'id="view-learning"', 'id="themeSelect"', 'id="styleSelect"', 'Style général', 'Réviser VC'):
+    for marker in ('data-view="learning"', 'id="view-learning"', 'id="themeSelect"', 'id="styleSelect"', 'Style général', 'Révision', 'id="workModeToggle"', 'Work Mode'):
         assert marker in html
     for marker in (
         '"/career/manifest"', '"/career/chapters"', '"/career/tutor/ask"',
@@ -28,10 +28,16 @@ def test_desktop_learning_surface_is_wired_to_local_learning_routes() -> None:
         'Voir l’extrait', 'cite.excerpt', 'const citationLocation', 'onglet ${cite.section}', 'citationLocation(cite)',
         'section: l.selectedChapter', 'Ton parcours jusqu’à l’examen', 'learningProgress',
         'nage-style', 'study-revision', 'study-exercises', 'study-exam',
+        'Matière active : Venture Capital', 'learning-subject-nav', 'Venture Capital', 'setWorkMode', 'aria-pressed',
+        'practiceError', 'Les cas guidés Q16–Q21 ne sont pas disponibles sur cette instance',
     ):
         assert marker in javascript
     assert "url.pathname.startsWith('/career/summary/')" in service_worker
+    assert "app.css?v=20261103-vc-review-4" in html and "app.js?v=20261103-vc-review-4" in html
+    assert "app.css?v=20261103-vc-review-4" in service_worker and "app.js?v=20261103-vc-review-4" in service_worker
     assert ':root[data-style="study"]' in css
     assert ".learning-step-grid" in css
     assert ".case-practice" in css
     assert ".practice-control" in css
+    assert ".work-mode-toggle:focus-visible" in css
+    assert ".learning-subject-tab[aria-current=\"page\"]" in css

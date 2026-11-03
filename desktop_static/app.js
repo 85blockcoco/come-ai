@@ -21,7 +21,7 @@
       selectedChapter: "TOPIC 3", summary: null, summaryLoading: false, quiz: null, tutor: null,
       quizFeedback: null, srsRevealed: false, srsBusy: false, exam: null, examResult: null,
       examBusy: false, examSubmitting: false, tutorMode: "explanation",
-      practiceCases: [], practiceCaseId: "VC25-Q16", practiceAnswers: {}, practiceResult: null, practiceBusy: false,
+      practiceCases: [], practiceError: "", practiceCaseId: "VC25-Q16", practiceAnswers: {}, practiceResult: null, practiceBusy: false,
       search: [], searchQuery: "", busy: false,
     },
     filter: "",
@@ -68,7 +68,7 @@
         if (body?.detail) detail = typeof body.detail === "string" ? body.detail : detail;
         if (body?.error_id) detail += ` (réf. ${body.error_id})`;
       } catch { /* corps non JSON */ }
-      throw new Error(detail);
+      throw new Error(`${detail} (HTTP ${response.status} · ${path})`);
     }
     return response.json();
   }
@@ -81,7 +81,7 @@
     tracking: { title: "Suivi", subtitle: "envois confirmés · relances à copier" },
     offers: { title: "Offres", subtitle: "offres suivies · filtre instantané" },
     assistant: { title: "Terminal", subtitle: "assistant local · aucun cloud par défaut" },
-    learning: { title: "Réviser VC", subtitle: "cours sourcé · progression · entraînement jusqu’à l’examen" },
+    learning: { title: "Révision", subtitle: "matière Venture Capital · cours sourcé · entraînement jusqu’à l’examen" },
     missions: { title: "Missions", subtitle: "flotte de construction · preuves vérifiées" },
     memory: { title: "Mémoire", subtitle: "sources locales indexées · citables · supprimables" },
   };
@@ -122,11 +122,17 @@
           const ingestion = await learningIngestPromise;
           manifest = ingestion.manifest || await api("/career/manifest");
         }
-        const [coverage, chapters, dashboard, plan, due, practice] = await Promise.all([
+        const [coverage, chapters, dashboard, plan, due] = await Promise.all([
           api("/career/coverage"), api("/career/chapters"), api("/career/learning/dashboard"),
           api("/career/plan"), api(`/career/srs/due?limit=8&chapter=${encodeURIComponent(learning.selectedChapter)}`),
-          api("/career/practice/cases"),
         ]);
+        let practice = { cases: [] };
+        try {
+          practice = await api("/career/practice/cases");
+          learning.practiceError = "";
+        } catch (error) {
+          learning.practiceError = error.message;
+        }
         learning.manifest = manifest;
         learning.coverage = coverage;
         learning.chapters = chapters.chapters || [];
@@ -682,7 +688,7 @@
       : "";
     const guidedPractice = el("section", { class: "case-practice", "aria-label": "Exercices chiffrés de l’examen passé" },
       el("div", { class: "case-practice-head" }, el("div", {}, el("h3", {}, "Calculs au format de l’épreuve"), el("p", {}, "Entraîne-toi sur les questions 16 à 21. Les points par sous-partie de Q20/Q21 sont indicatifs : le corrigé ne donne qu’un total de 15 points par question.")), practiceSelect),
-      practiceCase ? el("div", { class: "case-practice-prompt" }, el("strong", {}, `${practiceCase.exam_question} · ${practiceScoreCaption}`), el("p", {}, practiceCase.prompt), el("small", {}, `Tentatives : ${practiceCase.stats.attempts} · meilleur score : ${practiceCase.stats.best_score == null ? "—" : `${practiceCase.stats.best_score}/${practiceCase.stats.max_score}`}`), ...(practiceCase.citations || []).map(citationDetails)) : el("p", { class: "note" }, "Aucun exercice disponible."),
+      practiceCase ? el("div", { class: "case-practice-prompt" }, el("strong", {}, `${practiceCase.exam_question} · ${practiceScoreCaption}`), el("p", {}, practiceCase.prompt), el("small", {}, `Tentatives : ${practiceCase.stats.attempts} · meilleur score : ${practiceCase.stats.best_score == null ? "—" : `${practiceCase.stats.best_score}/${practiceCase.stats.max_score}`}`), ...(practiceCase.citations || []).map(citationDetails)) : el("p", { class: l.practiceError ? "error-note" : "note", role: l.practiceError ? "status" : null }, l.practiceError ? `Les cas guidés Q16–Q21 ne sont pas disponibles sur cette instance (${l.practiceError}). Le quiz et les cartes restent accessibles.` : "Aucun exercice disponible."),
       practiceForm,
       practiceResult);
     const card = l.due[0];
@@ -719,6 +725,12 @@
         el("button", { class: "primary-btn", type: "button", disabled: l.examBusy, onclick: startLearningExam }, l.examBusy ? "Préparation…" : "Lancer l’examen blanc"));
     }
     exam.id = "study-exam";
+    const learningSubjectNav = el("nav", { class: "learning-subject-nav", "aria-label": "Matière en révision" },
+      el("span", { class: "learning-subject-label" }, "Matière"),
+      el("button", { class: "learning-subject-tab", type: "button", "aria-current": "page", "aria-label": "Matière active : Venture Capital", onclick: () => scrollToStudyStep("study-revision") },
+        el("svg", { viewBox: "0 0 24 24", "aria-hidden": "true" }, el("path", { d: "M5 4.5A2.5 2.5 0 017.5 2H20v16H7.5A2.5 2.5 0 005 20.5v-16zm2.5-.9a.9.9 0 00-.9.9v12.2c.3-.1.6-.2.9-.2h10.9V3.6H7.5zM5 20.5A2.5 2.5 0 017.5 18H20v2H7.5a.5.5 0 00-.5.5H5z" })),
+        el("strong", {}, "Venture Capital"), el("span", { class: "learning-subject-active" }, "Actif")),
+      el("span", { class: "learning-subject-meta" }, `${learningTopics.length} chapitres · ${num(l.manifest.documents?.length || 0)} supports locaux`));
     const revisionPanel = el("div", { class: "card padded srs-panel", id: "study-revision" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Étape 1 · Révision active"), el("span", { class: "hint" }, `${l.due.length} cartes dues · ${l.selectedChapter}`)), srs, el("button", { class: "ghost-btn", type: "button", disabled: l.srsBusy, onclick: generateLearningCards }, l.srsBusy ? "Génération locale…" : `Générer / compléter les cartes de ${l.selectedChapter}`));
     const learningPanel = el("div", { class: "learning-grid", id: "study-learning" },
       el("div", { class: "card padded" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Étape 2 · Apprendre avec le cours"), el("span", { class: "hint" }, l.selectedChapter)), summary, el("button", { class: "ghost-btn", type: "button", onclick: loadLearningSummary }, "Actualiser la fiche")),
@@ -727,6 +739,7 @@
     const exercisePanel = el("div", { class: "card padded learning-exercise", id: "study-exercises" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Étape 3 · Exercices progressifs"), el("span", { class: "hint" }, l.quiz?.difficulty || "correction sourcée")), quiz, guidedPractice);
     host.replaceChildren(
       el("div", { class: "card learning-hero" }, el("div", {}, el("h2", {}, "Objectif : arriver prêt à l’examen."), el("p", {}, `${l.manifest.documents?.length || 0} sources locales indexées · ${num(l.manifest.pages || 0)} pages / feuilles · aucune réponse hors corpus.`)), el("div", { class: "learning-score" }, el("b", {}, `${score}%`), el("small", {}, "justesse moyenne observée"))),
+      learningSubjectNav,
       learningPath,
       el("div", { class: "card coverage-panel" }, el("div", { class: "coverage-head" }, el("strong", {}, "Couverture des supports"), el("span", { class: coveragePct === 100 ? "status-good" : "status-low" }, coverage.inventory_available ? `${coverage.indexed_sources}/${coverage.expected_sources} fichiers · ${coveragePct}%` : "Inventaire source indisponible")), el("progress", { max: "100", value: String(coveragePct), "aria-label": "Couverture des fichiers de cours" }), el("small", {}, `${num(coverage.covered_content_units || 0)}/${num(coverage.expected_content_units || 0)} pages ou feuilles indexées · local uniquement`), el("details", { class: "coverage-details" }, el("summary", {}, "Voir les fichiers du corpus"), el("ul", {}, ...(coverage.sources || []).map((source) => el("li", { class: source.text_available ? "coverage-ok" : "coverage-missing" }, `${source.text_available ? "✓" : "!"} ${source.name} · ${num(source.indexed_units)}/${num(source.expected_content_units)} unités`))))),
       el("div", { class: "learning-toolbar card" }, select, el("span", { class: "chip green" }, `${d.mastered_count || 0}/${d.total_count || 5} chapitres maîtrisés`), el("span", { class: "chip amber" }, `${d.cards_due ?? l.due.length} cartes dues`), el("a", { class: "ghost-btn", href: "/career/plan", target: "_blank", rel: "noopener" }, "Plan détaillé ↗"), el("a", { class: "ghost-btn", href: "/career/plan/pdf", target: "_blank", rel: "noopener" }, "Plan PDF ↗")),
@@ -1126,11 +1139,24 @@
   $("#refreshBtn").addEventListener("click", refresh);
   $("#themeSelect").value = savedTheme === "light" ? "light" : "dark";
   $("#styleSelect").value = savedStyle === "study" ? "study" : "nage";
-  $("#styleSelect").addEventListener("change", (event) => {
-    const style = event.target.value === "study" ? "study" : "nage";
-    document.documentElement.dataset.style = style === "study" ? "study" : "";
+  const setWorkMode = (active) => {
+    const studyMode = Boolean(active);
+    const style = studyMode ? "study" : "nage";
+    const root = document.documentElement;
+    const toggle = $("#workModeToggle");
+    $("#styleSelect").value = style;
+    root.dataset.style = studyMode ? "study" : "";
     localStorage.setItem("nage-style", style);
+    toggle.setAttribute("aria-pressed", String(studyMode));
+    toggle.setAttribute("aria-label", studyMode ? "Désactiver le Work Mode, revenir au style NAGe" : "Activer le Work Mode, style d’étude sobre");
+    toggle.classList.toggle("is-active", studyMode);
+    $("#workModeStatus").textContent = studyMode ? "Activé" : "Désactivé";
+  };
+  $("#styleSelect").addEventListener("change", (event) => {
+    setWorkMode(event.target.value === "study");
   });
+  $("#workModeToggle").addEventListener("click", () => setWorkMode($("#styleSelect").value !== "study"));
+  setWorkMode(savedStyle === "study");
   $("#themeSelect").addEventListener("change", (event) => {
     const theme = event.target.value === "light" ? "light" : "dark";
     document.documentElement.dataset.theme = theme === "light" ? "light" : "";
