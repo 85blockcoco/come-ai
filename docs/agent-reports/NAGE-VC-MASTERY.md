@@ -39,7 +39,7 @@ Une réindexation de contrôle isolée a détecté 29 fichiers locaux (26 PDF et
 
 - La banque a été étendue à 34 questions et 27 objectifs du sujet historique, mais cela ne prouve pas une couverture de chaque notion du cours ni de tous les examens futurs. Les pages du PDF trop volumineux et l’examen scanné restent hors de cette réindexation isolée.
 - Les documents scannés ou formules présentes uniquement sous forme d’image nécessitent une vérification OCR/visuelle dédiée. Les deux unités sans texte sont signalées par le comptage mais ne sont pas interprétées.
-- Le simulateur reste un entraînement chronométré de six questions à choix multiples, pas une reproduction complète de l’épreuve avec cas longs et calculs libres. Aucun score d’examen n’est revendiqué; le verrou a été vérifié sur le bac de test isolé du commit de base.
+- Le simulateur chronométré reste un entraînement de six QCM; le panneau Q16–Q19 est une pratique séparée avec saisie numérique et barème indicatif, pas une reproduction complète de l’épreuve. Aucun score d’examen réel n’est revendiqué.
 - La vérification navigateur porte sur le serveur de candidate local. Elle ne valide ni le lancement par l’icône de bureau ni un déploiement dans `main`.
 - Les données SRS et les réponses locales du navigateur restent propres à leur base locale. Les progrès du bac de test doivent être distingués de la progression durable de l’utilisateur.
 
@@ -50,3 +50,7 @@ Cette livraison est destinée à la branche candidate uniquement. `main` et `/Us
 ## Livraison du lot 2 — couverture du sujet historique
 
 Le lot 2 est publié dans `7dde24008049887183650e0299e0ce789294232f`; la branche distante a été vérifiée sur le même SHA. Les tests ciblés rejoués après le dernier changement : `tests/test_nage_learning.py` et `tests/test_nage_learning_ui.py`, **17 passed en 2,85 s**. Ruff ciblé, `node --check desktop_static/app.js` et `git diff --check` sont verts. Le détail des changements et les limites figure dans `NAGE-VC-EXAM-ALIGNMENT.md`.
+
+## Livraison du lot 3 — calculs Q16–Q19
+
+Le code et l’interface sont publiés dans `8a4c1aae5477878c8cb18db6d18a7d4d242c3633`, complétés par `25e071c` pour restaurer le dernier résultat après rechargement. Les deux SHA ont été poussés sur la branche candidate. Les validations finales de ce lot : **22 passed en 3,89 s** sur les trois suites ciblées; Ruff, `node --check desktop_static/app.js` et `git diff --check` réussis. Le parcours Q16 et la persistance après redémarrage ont été vérifiés sur des données synthétiques et un profil temporaire isolé. Le rapport d’alignement détaille le périmètre et les limites.

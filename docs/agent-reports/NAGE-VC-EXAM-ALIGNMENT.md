@@ -55,6 +55,7 @@ La matrice ci-dessous décrit l’état de couverture audité au SHA `9ae3927`; 
 - Avant le lot 2, `career/quiz.py` contenait 15 questions de départ réparties 2/2/7/2/2 sur Topic 1–5, sans identifiant d’objectif d’examen.
 - `career/exam.py` crée un examen à choix multiples depuis la banque de quiz, calcule `bonnes réponses / total` et produit des corrections avec explications/citations. Il n’accepte pas de réponse libre, n’attribue pas de points partiels et ne représente pas le barème 15/15/30 de 2025.
 - L’interface envoie actuellement six questions pour 30 minutes (`desktop_static/app.js`). Le sujet de référence faisait 90 minutes pour 60 points. Cette différence doit être visible pour l’étudiant afin qu’un petit quiz ne soit pas présenté comme une simulation fidèle.
+- Le lot 3 ajoute à côté de l’examen QCM un panneau d’exercices chiffrés guidés Q16–Q19 avec barème pédagogique à étapes.
 
 ## Lot 2 — couverture de quiz alignée au sujet passé
 
@@ -68,12 +69,22 @@ Livré sur `codex/vc-mastery-20261103`, commit `7dde24008049887183650e0299e0ce78
 - Un index temporaire du corpus autorisé a servi **34/34 questions avec une citation contenant source et page**. Cette mesure prouve la disponibilité d’une citation, pas encore la pertinence de chaque extrait ni l’exhaustivité des pages non indexées.
 - Tests ciblés rejoués : **17 passed en 2,85 s** (`tests/test_nage_learning.py`, `tests/test_nage_learning_ui.py`); Ruff ciblé : `All checks passed`; `node --check desktop_static/app.js` et `git diff --check` : réussite.
 
+## Lot 3 — calculs libres guidés Q16–Q19
+
+Livré sur `codex/vc-mastery-20261103` par `8a4c1aae5477878c8cb18db6d18a7d4d242c3633`; retour des corrections après rechargement ajouté par `25e071c`. La branche distante a été vérifiée sur `25e071c`.
+
+- Quatre cas couvrent le CCM/ownership Q16, la cap table fully diluted Q17, la conversion/dilution/IRR Q18 et le calcul multi-tours Q19. Les champs acceptent la virgule décimale et un ownership en fraction ou pourcentage.
+- Chaque résultat est noté séparément avec un barème **pédagogique NAGe**; la formule, le résultat et les points attribués sont expliqués. Le corrigé officiel ne donne pas de grille de crédit partiel.
+- Avant soumission, l’API ne renvoie pas les extraits du corrigé; après soumission, ils apparaissent dans la correction. Les champs inconnus sont refusés et les valeurs illisibles ne gagnent aucun point.
+- Les tentatives, le meilleur score et la dernière correction se conservent dans `practice.sqlite3` local. Sur `http://127.0.0.1:18766/app#learning`, un parcours Q16 a été soumis avec un corpus et une base temporaires : 3/3, citations aux pages 4 et 17 définies dans le corpus synthétique, puis dernière correction visible après redémarrage du serveur. Ce score browser est un test technique, pas un résultat d’examen.
+- Après le dernier changement, tests ciblés : **22 passed en 3,89 s** (`tests/test_nage_learning.py`, `tests/test_nage_learning_ui.py`, `tests/test_nage_case_practice.py`); Ruff ciblé, `node --check desktop_static/app.js` et `git diff --check` : réussite. Aucune suite complète.
+
 ## Prochaines missions, dans l’ordre
 
-1. **Réponses libres et barème pédagogique** : mettre en pratique Q16–Q19 par étapes, avec unités/formules et validation des calculs intermédiaires. Ne parler de points partiels que pour une grille clairement identifiée comme pédagogique, car le corrigé officiel ne donne pas de barème détaillé.
-2. **Cas de la partie C** : transformer Q20 et Q21 en cas guidés avec scénarios séparés, tableau de payoffs et comparaison justifiée. Garder distincte la grille officielle de la grille d’entraînement NAGe.
-3. **Audit des unités non extraites** : déterminer si le rapport de 56 MiB contient des notions utiles, définir une prise en charge bornée sans retirer la limite de taille, et examiner les pages scannées sans traiter l’identifiant de couverture comme contenu pédagogique. Tester les OCR sur une copie temporaire locale, jamais dans le dépôt.
-4. **Recette d’apprentissage réelle** : vérifier citations pertinentes, points faibles, ordre des étapes, minuterie, correction et persistance après redémarrage sur un profil de test vierge; puis vérifier l’instance lancée par l’icône du bureau.
+1. **Cas de la partie C Q20/Q21** : intégrer les payoffs par scénario et les richesses espérées dans des exercices guidés; distinguer le barème officiel du crédit partiel NAGe.
+2. **Audit des unités non extraites** : déterminer si le rapport de 56 MiB contient des notions utiles et définir une prise en charge bornée sans retirer la limite de taille. Examiner l’examen scanné sans copier ni OCRiser son identifiant étudiant.
+3. **Recette sur le corpus autorisé** : valider les citations réelles et les calculs Q16–Q19 avec une base d’apprentissage temporaire, puis les parcours Q20/Q21 et la persistance.
+4. **Vérification du lanceur bureau** : confirmer le parcours sur l’instance ouverte par le lanceur, une fois la candidate validée, sans toucher à `main`.
 
 ## Limites établies
 
