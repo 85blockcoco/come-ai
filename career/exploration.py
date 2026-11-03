@@ -206,15 +206,19 @@ def admit_offer(job: dict[str, Any], brief: dict[str, Any], *,
     if source_verified is not None:
         offer["source_verified"] = source_verified
     classification = classify_internship(offer)
-    qualification = qualify_offer(
+    qualification_result = qualify_offer(
         offer,
         allowed_contract_types=brief.get("contract_types"),
         allowed_start_months=brief.get("start_months"),
+        required_start_date=brief.get("start_date"),
         minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
         excluded_countries=brief.get("excluded_countries"),
         excluded_cities=brief.get("excluded_cities"),
         require_known_location=brief.get("require_known_location", False),
-    ).to_dict()
+        preferred_countries=brief.get("preferred_countries"),
+        geo_excluded_countries=brief.get("geo_excluded_countries"),
+    )
+    qualification = qualification_result.to_dict()
     offer["qualification"] = qualification
     target = qualification["target_status"]
     verdict: dict[str, Any] = {
@@ -230,8 +234,17 @@ def admit_offer(job: dict[str, Any], brief: dict[str, Any], *,
     if (not offer.get("official_url")
             or (qualification["contract_type"] == "unknown" and not classification.get("evidence"))):
         return verdict
-    match = score_brief_match(brief, offer)
-    if not criteria_admit(match, offer, brief):
+    matching_offer = dict(offer)
+    if not matching_offer.get("languages_required") and qualification_result.language_requirements:
+        matching_offer["languages_required"] = qualification_result.language_requirements
+    if not matching_offer.get("duration_months") and (
+        qualification_result.duration_min_months == qualification_result.duration_max_months
+    ):
+        matching_offer["duration_months"] = qualification_result.duration_min_months
+    if not matching_offer.get("end_date") and qualification_result.end_date:
+        matching_offer["end_date"] = qualification_result.end_date
+    match = score_brief_match(brief, matching_offer)
+    if not criteria_admit(match, matching_offer, brief):
         return verdict
     offer["internship_classification"] = classification
     verdict.update(status=ADMITTED, match=match)
@@ -242,7 +255,8 @@ def ranking_key(job: dict[str, Any], match: dict[str, Any]) -> tuple[Any, ...]:
     digest = hashlib.sha256(json.dumps(job, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
     status = (job.get("qualification") or {}).get("target_status")
     eligibility_order = {"conforming": 0, "to_verify": 1, "non_conforming": 2}.get(status, 0)
-    return (eligibility_order, -(int(match["score"]) if match.get("score") is not None else 0),
+    return (eligibility_order,
             (match.get("education_access") or {}).get("priority_rank", 2),
+            -(int(match["score"]) if match.get("score") is not None else 0),
             str(job.get("company") or "").casefold(), str(job.get("source_name") or ""),
             str(job.get("source_id") or ""), canonical_url(job.get("official_url")), digest)

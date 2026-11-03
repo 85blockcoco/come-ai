@@ -694,4 +694,5 @@ def analyze_cv(document: DocumentInput) -> CVAnalysisResult:
         experiences=experiences,
         readability=readability,
         provenance=provenance,
+        text=text,
     )

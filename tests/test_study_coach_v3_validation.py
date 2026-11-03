@@ -192,6 +192,27 @@ def test_sentence_split_by_the_store_is_rejoined_and_fully_cited() -> None:
         assert reference.matches_text(document.text)
 
 
+def test_assignment_instructions_never_become_revision_notions() -> None:
+    """Imperative exercise prompts belong to the outline, not the quiz bank."""
+
+    document = document_from_text(
+        """Part 1 - Concepts
+Delta measures the change in option value when the underlying moves.
+Part 2 - Exercise
+Use the decomposition seen in the slide show (session 6 and 7).
+You are a junior analyst asked to complete the following table.
+""",
+        title="Convertible case",
+        source_id="src_assignment",
+    )
+
+    syllabus = build_syllabus(document)
+
+    assert any(notion.title == "Delta" for notion in syllabus.notions)
+    assert all(not notion.title.lower().startswith(("use ", "you")) for notion in syllabus.notions)
+    assert all(not notion.statement.lower().startswith(("use ", "you")) for notion in syllabus.notions)
+
+
 # --------------------------------------------------------------------------- #
 # 5. Resume after a complete shutdown
 # --------------------------------------------------------------------------- #

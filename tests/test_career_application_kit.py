@@ -16,7 +16,8 @@ import re
 import shutil
 import subprocess
 import zipfile
-from datetime import date, timedelta
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -25,6 +26,8 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 from career.router import create_career_router
+from career.application_studio import scan_kit_placeholders
+from career.send_confirmation import SendEvidence
 from career.service import CareerService
 from workspace_core import UserFacingError
 
@@ -115,6 +118,149 @@ def test_double_click_produces_one_tracking_one_draft_one_event(tmp_path: Path) 
     events = service.get_application(rapid[0]["application"]["id"])["events"]
     assert [event["event_type"] for event in events].count("kit_prepared") == 1
     assert [event["event_type"] for event in events].count("application_created") == 1
+
+
+@pytest.mark.parametrize("changed_input", ["profile", "offer", "intake"])
+def test_reopened_kit_refreshes_changed_facts_and_preserves_old_draft(
+    tmp_path: Path, monkeypatch, changed_input: str
+) -> None:
+    service = CareerService(tmp_path)
+    monkeypatch.setattr(service, "_generate_targeted_kit_files", lambda *_args: {})
+    service.update_profile(synthetic_profile())
+    job = service.import_job(synthetic_job())
+    first = service.create_application_kit(job["id"], "fr")
+    original_draft = service.get_application_draft(first["draft"]["id"])
+
+    if changed_input == "profile":
+        service.update_profile({**synthetic_profile(), "experience": "Nouveau projet synthétique de valorisation."})
+    elif changed_input == "offer":
+        service.import_job(synthetic_job(requirements="Python et analyse de données (démo)."))
+    else:
+        service.answer_intake("Je recherche des missions synthétiques en financement.")
+
+    second = service.create_application_kit(job["id"], "fr")
+
+    assert second["application"]["id"] == first["application"]["id"]
+    assert second["draft"]["id"] != first["draft"]["id"]
+    assert second["created_draft"] is True
+    assert service.get_application_draft(first["draft"]["id"]) == original_draft
+    assert len(service.list_application_drafts()) == 2
+    third = service.create_application_kit(job["id"], "fr")
+    assert third["draft"]["id"] == second["draft"]["id"]
+    assert third["created_draft"] is False
+
+
+def test_editing_approved_draft_requires_new_manual_review(tmp_path: Path, monkeypatch) -> None:
+    service = CareerService(tmp_path)
+    monkeypatch.setattr(service, "_generate_targeted_kit_files", lambda *_args: {})
+    service.update_profile(synthetic_profile())
+    job = service.import_job(synthetic_job())
+    kit = service.create_application_kit(job["id"], "fr")
+    application_id = kit["application"]["id"]
+    service.approve_for_manual_submission(application_id, True)
+
+    service.update_application_draft(kit["draft"]["id"], "CV synthétique corrigé", "Lettre synthétique corrigée")
+
+    application = service.get_application(application_id)
+    assert application["approval_granted"] is False
+    assert application["stage"] == "to_review"
+    assert any(event["event_type"] == "manual_review_invalidated" for event in application["events"])
+
+
+def test_concurrent_kit_open_creates_one_draft(tmp_path: Path, monkeypatch) -> None:
+    service = CareerService(tmp_path)
+    monkeypatch.setattr(service, "_generate_targeted_kit_files", lambda *_args: {})
+    service.update_profile(synthetic_profile())
+    job = service.import_job(synthetic_job())
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        kits = list(pool.map(lambda _: service.create_application_kit(job["id"], "fr"), range(4)))
+
+    assert len({kit["draft"]["id"] for kit in kits}) == 1
+    assert len({kit["application"]["id"] for kit in kits}) == 1
+    assert sum(kit["created_draft"] for kit in kits) == 1
+    assert len(service.list_application_drafts()) == 1
+
+
+def test_document_placeholder_scan_preserves_valid_markdown_links() -> None:
+    content = {"cv_markdown": "[Portfolio](https://portfolio.example.test)\n[Compétences à compléter]"}
+
+    assert scan_kit_placeholders(content, fields=("cv_markdown",)) == ["[Compétences à compléter]"]
+
+
+@pytest.mark.parametrize("changed_input", ["profile", "offer", "intake", "document"])
+def test_manual_approval_rejects_a_stale_reviewed_kit(tmp_path: Path, monkeypatch, changed_input: str) -> None:
+    service = CareerService(tmp_path)
+    monkeypatch.setattr(service, "_generate_targeted_kit_files", lambda *_args: {})
+    service.update_profile(synthetic_profile())
+    job = service.import_job(synthetic_job())
+    kit = service.create_application_kit(job["id"], "fr")
+
+    if changed_input == "profile":
+        service.update_profile({**synthetic_profile(), "experience": "Nouvelle expérience synthétique."})
+    elif changed_input == "offer":
+        service.import_job(synthetic_job(requirements="Nouvelle exigence synthétique."))
+    elif changed_input == "intake":
+        service.answer_intake("Nouvel objectif de candidature synthétique.")
+    else:
+        service.update_application_draft(kit["draft"]["id"], "CV synthétique changé", "Lettre synthétique changée")
+
+    with pytest.raises(UserFacingError, match="dossier"):
+        service.approve_for_manual_submission(
+            kit["application"]["id"], True, draft_id=kit["draft"]["id"], review_token=kit["review_token"]
+        )
+    assert service.get_application(kit["application"]["id"])["approval_granted"] is False
+
+
+def test_manual_approval_accepts_current_reviewed_kit_and_unchanged_save(tmp_path: Path, monkeypatch) -> None:
+    service = CareerService(tmp_path)
+    monkeypatch.setattr(service, "_generate_targeted_kit_files", lambda *_args: {})
+    service.update_profile(synthetic_profile())
+    job = service.import_job(synthetic_job())
+    kit = service.create_application_kit(job["id"], "fr")
+
+    application = service.approve_for_manual_submission(
+        kit["application"]["id"], True, draft_id=kit["draft"]["id"], review_token=kit["review_token"]
+    )
+    assert application["approval_granted"] is True
+    service.update_application_draft(kit["draft"]["id"], kit["draft"]["cv_markdown"], kit["draft"]["letter_markdown"])
+    assert service.get_application(application["id"])["approval_granted"] is True
+
+
+def test_reviewed_kit_identity_survives_service_restart(tmp_path: Path, monkeypatch) -> None:
+    service = CareerService(tmp_path)
+    monkeypatch.setattr(service, "_generate_targeted_kit_files", lambda *_args: {})
+    service.update_profile(synthetic_profile())
+    job = service.import_job(synthetic_job())
+    first = service.create_application_kit(job["id"], "fr")
+
+    restarted = CareerService(tmp_path)
+    monkeypatch.setattr(restarted, "_generate_targeted_kit_files", lambda *_args: {})
+    reopened = restarted.create_application_kit(job["id"], "fr")
+
+    assert reopened["draft"]["id"] == first["draft"]["id"]
+    assert reopened["review_token"] == first["review_token"]
+    application = restarted.approve_for_manual_submission(
+        reopened["application"]["id"], True, draft_id=reopened["draft"]["id"], review_token=reopened["review_token"]
+    )
+    assert application["approval_granted"] is True
+
+
+def test_editing_documents_does_not_rewrite_a_declared_send(tmp_path: Path, monkeypatch) -> None:
+    service = CareerService(tmp_path)
+    monkeypatch.setattr(service, "_generate_targeted_kit_files", lambda *_args: {})
+    service.update_profile(synthetic_profile())
+    job = service.import_job(synthetic_job())
+    kit = service.create_application_kit(job["id"], "fr")
+    service.approve_for_manual_submission(kit["application"]["id"], True)
+    service.record_send(job["id"], SendEvidence(channel="website", sent_at=datetime.now(timezone.utc)))
+
+    service.update_application_draft(kit["draft"]["id"], "Nouvelle copie synthétique", "Nouvelle lettre synthétique")
+
+    application = service.get_application(kit["application"]["id"])
+    assert application["stage"] == "submitted"
+    assert application["approval_granted"] is True
+    assert service.get_send_record(job["id"])["record"]["channel"] == "website"
 
 
 # --- 2. Offre préselectionnée : champs préremplis exacts ----------------------

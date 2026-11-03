@@ -18,6 +18,99 @@ STATUS_UNKNOWN = "UNKNOWN"
 FindingStatus = Literal[STATUS_OK, STATUS_INFO, STATUS_RISK, STATUS_UNKNOWN]
 
 
+# Salary extraction vocabulary
+SALARY_TYPE_BASE = "base"
+SALARY_TYPE_VARIABLE = "variable"
+SALARY_TYPE_BONUS = "bonus"
+SALARY_TYPE_STOCK = "stock"
+SALARY_TYPE_EQUITY = "equity"
+SALARY_TYPE_RSU = "rsu"
+SALARY_TYPE_PACKAGE = "package"
+SALARY_TYPE_TOTAL = "total"
+SALARY_TYPE_UNKNOWN = "unknown"
+
+SalaryType = Literal[
+    "base",
+    "variable",
+    "bonus",
+    "stock",
+    "equity",
+    "rsu",
+    "package",
+    "total",
+    "unknown",
+]
+
+SALARY_PERIOD_ANNUAL = "annual"
+SALARY_PERIOD_MONTHLY = "monthly"
+SALARY_PERIOD_HOURLY = "hourly"
+SALARY_PERIOD_UNKNOWN = "unknown"
+
+SalaryPeriodicity = Literal["annual", "monthly", "hourly", "unknown"]
+
+# ISO 4217 codes recognised by the salary extractor. The empty string means
+# "no currency written in the source" — the amount is then left as it is
+# written, without any invented conversion.
+Currency = Literal[
+    "EUR",
+    "USD",
+    "GBP",
+    "JPY",
+    "CHF",
+    "CAD",
+    "AUD",
+    "NOK",
+    "SEK",
+    "DKK",
+    "PLN",
+    "INR",
+    "BRL",
+    "ZAR",
+    "SGD",
+    "",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class SalaryEvidence:
+    """A single salary/compensation mention extracted from a job offer.
+
+    Attributes:
+        raw_text: Exact excerpt of the source text covered by this evidence
+            (e.g. "45 000 € brut annuel").
+        source_offset: Character index in the raw source text where the mention starts.
+        source_excerpt: ~50 characters of context around source_offset for verification.
+        min_annual_eur: Lower bound of the amount, annualised (monthly x12, hourly x2080).
+            The value stays expressed in `currency` — no FX rate is ever applied, so the
+            field never invents a converted figure. None when the mention is not a monetary
+            amount (percentage, share/unit count) or when no amount could be read.
+        max_annual_eur: Upper bound of the amount (equal to min_annual_eur for a fixed amount,
+            strictly greater for a range).
+        currency: ISO 4217 code of the source currency ("EUR", "USD", "GBP", "JPY", ...).
+            Empty string when the text carries no currency token.
+        salary_type: Nature of the compensation (base, variable, bonus, stock, equity, rsu,
+            package, total) or "unknown".
+        periodicity: Periodicity of the amount (annual, monthly, hourly) or "unknown".
+        raw_amount_text: The amount as written in the source (e.g. "45 000 €", "55k€", "$80,000").
+        raw_period_text: The period/qualifier as written (e.g. "brut annuel", "par an",
+            "mensuel"). Empty string when absent.
+        confidence: Heuristic score in [0.0, 1.0] — high when currency, type and periodicity
+            are all explicit, low when the mention is ambiguous.
+    """
+
+    raw_text: str
+    source_offset: int
+    source_excerpt: str
+    min_annual_eur: float | None
+    max_annual_eur: float | None
+    currency: str
+    salary_type: SalaryType
+    periodicity: SalaryPeriodicity
+    raw_amount_text: str
+    raw_period_text: str
+    confidence: float
+
+
 @dataclass(frozen=True, slots=True)
 class Finding:
     """A single structural issue detected in the CV.
@@ -99,16 +192,12 @@ class Provenance:
         filetype: One of "txt", "pdf", "docx".
         text_length: Total number of characters in the extracted text.
         page_count: Estimated page count (None if unknown).
-        source_text: Exact text that was analyzed, kept so that downstream
-            modules can quote it verbatim (CVBOOST-21 needs exact substring
-            provenance to prove that a CV really contains a skill).
-            ``None`` when the result was built without its source text.
     """
     filename: str | None
     filetype: str
     text_length: int
     page_count: int | None
-    source_text: str | None = None
+    source_text: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,6 +216,7 @@ class CVAnalysisResult:
     experiences: list[ExperienceEntry]
     readability: ReadabilityScore
     provenance: Provenance
+    text: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,78 +296,34 @@ class ATSCheckResult:
     risk_interpretation: str = ""
 
 
-# ──────────────────────────────────────────────────────────────────────
-# CV ↔ Offer matching (CVBOOST-21)
-# ──────────────────────────────────────────────────────────────────────
-
-#: The exhaustive set of actions a matching can recommend.
-MatchActionCode = Literal[
-    "HIGHLIGHT",
-    "REPHRASE",
-    "DO_NOT_ADD",
-    "QUANTIFY",
-    "CONFIRM_LANGUAGE",
-]
+# Matching models (Mission 08)
+MatchActionCode = Literal["HIGHLIGHT", "REPHRASE", "DO_NOT_ADD", "QUANTIFY", "CONFIRM_LANGUAGE"]
 
 
 @dataclass(frozen=True, slots=True)
 class MatchEvidence:
-    """A verbatim excerpt of the CV backing one offer requirement.
-
-    Attributes:
-        text: Verbatim excerpt — always an exact substring of the CV source.
-        offset: Character index of ``text`` inside the CV source text.
-        field: CV field the excerpt comes from ("skills", "experience",
-            "education", "languages", "projects", "certifications" or
-            "document" when the proof sits outside any detected section).
-        confidence: Deterministic 0.0-1.0 score of the match quality.
-        coverage: Share of the requirement the excerpt proves (1.0 when
-            every significant term of the requirement was found).
-    """
     text: str
     offset: int
-    field: str
-    confidence: float
+    kind: str = "document"
+    field: str | None = None
+    confidence: float = 1.0
     coverage: float = 1.0
 
 
 @dataclass(frozen=True, slots=True)
 class MatchAction:
-    """One concrete action for exactly one offer requirement.
-
-    Attributes:
-        code: Action code (see :data:`MatchActionCode`).
-        requirement_text: Verbatim requirement text taken from the offer.
-        cv_evidence_text: Verbatim CV excerpt proving the requirement
-            (``None`` when nothing in the CV proves it).
-        cv_evidence_offset: Character index of ``cv_evidence_text`` in the CV.
-        cv_evidence_field: CV field the excerpt comes from (``None`` without
-            evidence).
-        reason: Human readable explanation of the action.
-        confidence: Deterministic 0.0-1.0 score of the recommendation.
-    """
     code: MatchActionCode
     requirement_text: str
     cv_evidence_text: str | None
     cv_evidence_offset: int | None
-    cv_evidence_field: str | None
     reason: str
     confidence: float
+    evidence: MatchEvidence | None = None
+    cv_evidence_field: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class MatchResult:
-    """Result of matching one CV against one offer.
-
-    Attributes:
-        overall_score: Match ratio between 0.0 and 1.0
-            (``matched_requirements / total_requirements``).
-        matched_requirements: Number of requirements backed by CV evidence.
-        total_requirements: Number of requirements taken into account.
-        actions: One action per requirement, in requirement order.
-        missing_critical: Mandatory requirements without any evidence.
-        warnings: Cross-cutting warnings (contract, education, languages).
-    """
     overall_score: float
     matched_requirements: int
     total_requirements: int

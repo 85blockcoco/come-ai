@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+import career.offer_qualification as offer_qualification
 from career.offer_qualification import qualify_offer
 
 
@@ -70,6 +71,28 @@ def test_valid_six_month_date_range_can_prove_duration():
     assert result.provenance["duration_min_months"].source == "source_date_range"
 
 
+def test_geo_criteria_cache_is_reused_only_inside_scoped_operation(monkeypatch):
+    calls = 0
+    original = offer_qualification._country_codes
+
+    def count_country_codes(values):
+        nonlocal calls
+        calls += 1
+        return original(values)
+
+    monkeypatch.setattr(offer_qualification, "_country_codes", count_country_codes)
+    criteria = {"preferred_countries": ["United Kingdom"], "excluded_countries": ["France"]}
+
+    with offer_qualification.scoped_geo_criteria_cache():
+        first = offer_qualification.geo_score_for("France", **criteria)
+        second = offer_qualification.geo_score_for("France", **criteria)
+        assert first == second
+        assert calls == 2
+
+    offer_qualification.geo_score_for("France", **criteria)
+    assert calls == 4
+
+
 def test_ambiguous_date_range_does_not_round_up_to_six_months():
     result = qualify_offer({"title": "Finance Intern", "official_url": "https://careers.example.test/ambiguous-range",
                             "source_name": "greenhouse", "source_id": "synthetic-range-2", "source_verified": True,
@@ -107,6 +130,58 @@ def test_explicit_month_and_year_in_title_are_start_evidence() -> None:
     assert result.provenance["start_month"].quote == "March 2027"
 
 
+def test_internship_language_and_end_period_are_derived_from_explicit_offer_facts() -> None:
+    result = qualify_offer({
+        "title": "Corporate Finance Internship",
+        "description_original": (
+            "This internship starts in May 2027 and lasts four months.\n"
+            "Requirements:\nFluent English is required.\nFrench would be a plus."
+        ),
+        "official_url": "https://careers.example.test/corporate-finance-internship",
+        "source_name": "greenhouse",
+        "source_id": "finance-internship-may-2027",
+        "source_verified": True,
+    }, as_of=date(2026, 10, 18))
+
+    assert result.contract_type == "internship"
+    assert result.duration_min_months == result.duration_max_months == 4
+    assert result.start_month == 5
+    assert result.end_date is None  # month-only source: never invent a day
+    assert (result.end_month, result.end_year) == (8, 2027)
+    assert result.end_date_estimated is True
+    assert result.language_requirements == "Anglais requis · Français souhaité"
+    assert result.provenance["end_month"].source == "calculated_from_start_and_duration"
+    assert result.provenance["language_requirements"].quote == (
+        "Fluent English is required. | French would be a plus."
+    )
+
+
+def test_exact_start_and_duration_calculate_an_explicitly_labelled_end_date() -> None:
+    result = qualify_offer({
+        "title": "Finance Internship",
+        "employment_type": "Internship",
+        "start_date": "2027-05-01",
+        "duration_months": 4,
+    }, as_of=date(2026, 10, 18))
+
+    assert result.end_date == "2027-08-31"
+    assert (result.end_month, result.end_year) == (8, 2027)
+    assert result.end_date_estimated is True
+    assert result.provenance["end_date"].source == "calculated_from_start_and_duration"
+
+
+@pytest.mark.parametrize("title", [
+    "Praktikum Risikoanalyse",
+    "Tirocinante contabilità",
+    "Prácticas de análisis",
+])
+def test_international_internship_titles_are_explicit_contract_evidence(title: str) -> None:
+    result = qualify_offer({"title": title}, as_of=date(2026, 10, 18))
+
+    assert result.contract_type == "internship"
+    assert result.provenance["contract_type"].source == "title_passage"
+
+
 def test_month_range_in_title_uses_first_month_but_does_not_invent_duration() -> None:
     result = qualify_offer({
         "title": "Stockholm - M&A Internship Jan-June 2027",
@@ -139,3 +214,48 @@ def test_title_seasons_deadlines_and_quarters_do_not_invent_start_month(title: s
     }, as_of=date(2026, 10, 18))
     assert result.start_month is None
     assert result.target_status == "to_verify"
+
+
+def test_education_requirement_is_exposed_with_exact_quote() -> None:
+    """SK-19 : le niveau d'études requis apparaît dans la provenance, cité verbatim."""
+    description = "Nous recherchons un stagiaire. Bac+5 minimum (Finance) requis pour ce poste."
+    result = qualify_offer({
+        "title": "Finance Intern",
+        "description_original": description,
+        "employment_type": "Internship",
+        "official_url": "https://careers.example.test/education",
+        "source_name": "greenhouse",
+        "source_id": "education-1",
+        "source_verified": True,
+    }, as_of=date(2026, 10, 18))
+    fact = result.provenance["education_required"]
+    assert fact.value == 5
+    assert fact.source == "description_passage"
+    assert fact.quote == "Bac+5"
+    assert description[description.index(fact.quote):description.index(fact.quote) + len(fact.quote)] == fact.quote
+
+
+def test_offer_without_education_requirement_has_no_education_evidence() -> None:
+    result = qualify_offer({
+        "title": "Finance Intern",
+        "description_original": "Six month internship in a friendly team; start date to be confirmed.",
+        "employment_type": "Internship",
+        "official_url": "https://careers.example.test/no-education",
+        "source_name": "greenhouse",
+        "source_id": "education-2",
+        "source_verified": True,
+    }, as_of=date(2026, 10, 18))
+    assert "education_required" not in result.provenance
+
+
+def test_negated_education_mention_never_becomes_evidence() -> None:
+    result = qualify_offer({
+        "title": "Finance Intern",
+        "description_original": "Poste ouvert sans diplôme d'ingénieur requis.",
+        "employment_type": "Internship",
+        "official_url": "https://careers.example.test/negated-education",
+        "source_name": "greenhouse",
+        "source_id": "education-3",
+        "source_verified": True,
+    }, as_of=date(2026, 10, 18))
+    assert "education_required" not in result.provenance

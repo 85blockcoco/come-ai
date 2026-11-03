@@ -49,7 +49,11 @@ def test_public_connectors_are_registered_but_disabled_by_default():
 
 def test_career_service_enables_public_ats_only_for_explicit_curated_exploration(tmp_path):
     service = CareerService(tmp_path)
-    assert set(service._exploration_connectors) == {"greenhouse", "lever", "ashby", "smartrecruiters", "welcome_jungle", "jobteaser", "talent_com", "apec"}
+    assert set(service._exploration_connectors) == {
+        "greenhouse", "lever", "ashby", "smartrecruiters", "welcome_jungle",
+        "jobteaser", "talent_com", "apec",
+        "linkedin_europe", "eures", "jobteaser_intl", "glassdoor_intl",
+    }
     assert service._exploration_connectors["lever"].enabled is True
     assert service._exploration_connectors["ashby"].enabled is True
     assert service._exploration_connectors["smartrecruiters"].enabled is True
@@ -57,6 +61,10 @@ def test_career_service_enables_public_ats_only_for_explicit_curated_exploration
     assert service._exploration_connectors["jobteaser"].enabled is True
     assert service._exploration_connectors["talent_com"].enabled is True
     assert service._exploration_connectors["apec"].enabled is True
+    # The international sources are enabled in the map as well, and only
+    # there: with no curated source of their provider, they read nothing.
+    for provider in ("linkedin_europe", "eures", "jobteaser_intl", "glassdoor_intl"):
+        assert service._exploration_connectors[provider].enabled is True
     # Direct construction remains opt-in: no source or import activates I/O.
     assert LeverConnector().enabled is False
     assert AshbyConnector().enabled is False
@@ -65,10 +73,18 @@ def test_career_service_enables_public_ats_only_for_explicit_curated_exploration
     from career.connectors.jobteaser import JobTeaserConnector
     from career.connectors.talent_com import TalentComConnector
     from career.connectors.apec import ApecConnector
+    from career.connectors.linkedin_europe import LinkedInEuropeConnector
+    from career.connectors.eures import EuresConnector
+    from career.connectors.jobteaser_intl import JobTeaserIntlConnector
+    from career.connectors.glassdoor_intl import GlassdoorIntlConnector
     assert WelcomeJungleConnector().enabled is False
     assert JobTeaserConnector().enabled is False
     assert TalentComConnector().enabled is False
     assert ApecConnector().enabled is False
+    assert LinkedInEuropeConnector().enabled is False
+    assert EuresConnector().enabled is False
+    assert JobTeaserIntlConnector().enabled is False
+    assert GlassdoorIntlConnector().enabled is False
 
 
 @pytest.mark.parametrize("connector_type,provider,fixture_key", [

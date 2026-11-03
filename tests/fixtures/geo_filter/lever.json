@@ -1,0 +1,39 @@
+{
+  "connector": "public_ats",
+  "provider": "lever",
+  "note": "Lever publishes the country in `country` and the location in `categories.location`.",
+  "cases": [
+    {
+      "case_id": "lever_frankfurt_germany",
+      "description": "Une offre Lever publiée à Frankfurt, Germany est gardée.",
+      "countries_exclude": ["FR"],
+      "feed": [
+        {
+          "id": "lv-de-1",
+          "text": "Corporate Finance Intern",
+          "hostedUrl": "https://jobs.lever.co/synthetic/lv-de-1",
+          "descriptionPlain": "Financial analysis and valuation. This synthetic internship lasts six months.",
+          "country": "Germany",
+          "categories": {"location": "Frankfurt, Germany", "commitment": "Internship"}
+        }
+      ],
+      "expect": {"kept_source_ids": ["lv-de-1"], "excluded_by_country": {}}
+    },
+    {
+      "case_id": "lever_paris_france",
+      "description": "Une offre Lever publiée à Paris, France est filtrée à la source.",
+      "countries_exclude": ["FR"],
+      "feed": [
+        {
+          "id": "lv-fr-1",
+          "text": "Corporate Finance Intern",
+          "hostedUrl": "https://jobs.lever.co/synthetic/lv-fr-1",
+          "descriptionPlain": "Financial analysis and valuation. This synthetic internship lasts six months.",
+          "country": "France",
+          "categories": {"location": "Paris, France", "commitment": "Internship"}
+        }
+      ],
+      "expect": {"kept_source_ids": [], "excluded_by_country": {"FR": 1}}
+    }
+  ]
+}

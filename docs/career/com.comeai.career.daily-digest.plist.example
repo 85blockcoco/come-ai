@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Modèle launchd pour l'actualisation quotidienne de la recherche Career.
+
+  Ce fichier est un EXEMPLE : il n'est jamais installé automatiquement.
+  Copiez-le dans ~/Library/LaunchAgents et chargez-le à la main avec
+  `launchctl load`. Voir docs/career/daily-digest-launchd.md.
+-->
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>com.comeai.career.daily-digest</string>
+
+    <key>ProgramArguments</key>
+    <array>
+      <string>/usr/bin/curl</string>
+      <string>--silent</string>
+      <string>--show-error</string>
+      <string>--max-time</string>
+      <string>300</string>
+      <string>--request</string>
+      <string>POST</string>
+      <string>http://127.0.0.1:8000/api/career/daily/refresh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/comedelavenne/AI-Excel-Agent</string>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+      <key>Hour</key>
+      <integer>7</integer>
+      <key>Minute</key>
+      <integer>12</integer>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/comedelavenne/AI-Excel-Agent/logs/career-daily-digest.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/comedelavenne/AI-Excel-Agent/logs/career-daily-digest.error.log</string>
+  </dict>
+</plist>

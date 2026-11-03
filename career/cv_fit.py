@@ -138,7 +138,14 @@ def classify_variant(
         family_match = variant.id in family_variants
         keyword_hits = sum(keyword.casefold() in requirements for keyword in variant.mandatory_keywords)
         theme_hits = sum(keyword.casefold() in experience for keyword in variant.mandatory_keywords)
-        provenance_match = any(variant.id in _text(value).casefold() for value in provenance.values())
+        # Seuls les faits scalaires cités participent à ce signal : une
+        # preuve textuelle volumineuse (liste de missions, SK-18) ne doit
+        # pas décaler le choix de variante par une simple mention de mot.
+        provenance_match = any(
+            variant.id in _text(value).casefold()
+            for value in provenance.values()
+            if isinstance(value, str)
+        )
         score = (
             (0.5 if family_match else 0.0)
             + min(0.4, keyword_hits * 0.1)
@@ -341,10 +348,19 @@ def generate_diff(
     return unique[: max(0, int(max_gaps))]
 
 
-def serialize_gap(gap: FitGap) -> dict[str, Any]:
-    """Convert a gap and either provenance representation to JSON-safe data."""
+def serialize_gap(gap: FitGap, *, include_source_text: bool = False) -> dict[str, Any]:
+    """Convert a gap to the public JSON contract.
 
-    return asdict(gap)
+    The complete CV source is private working data.  Callers must opt in
+    explicitly when a trusted local workflow needs it; regular API payloads
+    expose only the document metadata.
+    """
+
+    payload = asdict(gap)
+    provenance = payload.get("provenance")
+    if isinstance(provenance, dict) and not include_source_text:
+        provenance.pop("source_text", None)
+    return payload
 
 
 def derive_pipeline_stage(job_id: str, context: Any) -> PipelineStage:
@@ -357,8 +373,28 @@ def derive_pipeline_stage(job_id: str, context: Any) -> PipelineStage:
     selected = context.get("selected_variant") or {}
     sprint = context.get("sprint_queue") or []
     jobs = context.get("jobs") or {}
-    has_application = any(_text(item.get("job_id")) == job_id for item in applications)
-    has_draft = any(_text(item.get("job_id")) == job_id for item in drafts)
+def derive_pipeline_stage(job_id: str, context: Any) -> PipelineStage:
+    """Derive the furthest evidenced stage without writing pipeline state."""
+
+    context = context if isinstance(context, dict) else {}
+    applications = context.get("applications") or []
+    drafts = context.get("application_drafts") or []
+    prep_cache = context.get("prep_cache") or set()
+    selected = context.get("selected_variant") or {}
+    sprint = context.get("sprint_queue") or []
+    jobs = context.get("jobs") or {}
+    application_job_ids = context.get("application_job_ids")
+    has_application = (
+        job_id in application_job_ids
+        if isinstance(application_job_ids, (set, frozenset))
+        else any(_text(item.get("job_id")) == job_id for item in applications)
+    )
+    draft_job_ids = context.get("draft_job_ids")
+    has_draft = (
+        job_id in draft_job_ids
+        if isinstance(draft_job_ids, (set, frozenset))
+        else any(_text(item.get("job_id")) == job_id for item in drafts)
+    )
     # A tracker can be created before any document exists.  It is useful state,
     # but it must not claim that the preparation cycle is complete.  The final
     # stage therefore requires both persisted pieces of evidence.
@@ -370,7 +406,28 @@ def derive_pipeline_stage(job_id: str, context: Any) -> PipelineStage:
         return PipelineStage.VARIANT_SELECTED
     if job_id in prep_cache:
         return PipelineStage.PREP_ANALYZED
-    if any(_text(item.get("job_id")) == job_id for item in sprint):
+    sprint_job_ids = context.get("sprint_job_ids")
+    if (
+        job_id in sprint_job_ids
+        if isinstance(sprint_job_ids, (set, frozenset))
+        else any(_text(item.get("job_id")) == job_id for item in sprint)
+    ):
+        return PipelineStage.SPRINT_QUEUED
+    job = jobs.get(job_id) if isinstance(jobs, dict) else None
+    if isinstance(job, dict) and job.get("qualification_facts_json"):
+        return PipelineStage.QUALIFIED
+    return PipelineStage.DISCOVERED
+        return PipelineStage.KIT_GENERATED
+    if job_id in prep_cache and selected.get(job_id):
+        return PipelineStage.VARIANT_SELECTED
+    if job_id in prep_cache:
+        return PipelineStage.PREP_ANALYZED
+    sprint_job_ids = context.get("sprint_job_ids")
+    if (
+        job_id in sprint_job_ids
+        if isinstance(sprint_job_ids, (set, frozenset))
+        else any(_text(item.get("job_id")) == job_id for item in sprint)
+    ):
         return PipelineStage.SPRINT_QUEUED
     job = jobs.get(job_id) if isinstance(jobs, dict) else None
     if isinstance(job, dict) and job.get("qualification_facts_json"):

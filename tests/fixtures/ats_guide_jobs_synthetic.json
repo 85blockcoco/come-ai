@@ -5,7 +5,12 @@
     "title": "Stagiaire M&A",
     "source_name": "greenhouse",
     "source_id": "synthetic-1001",
-    "official_url": "https://job-boards.greenhouse.io/banque-synthetique/jobs/4001001"
+    "official_url": "https://job-boards.greenhouse.io/banque-synthetique/jobs/4001001",
+    "source_verified": true,
+    "official_source_trust": {
+      "status": "verified",
+      "note": "Synthetic unit proof only; HTTP imports cannot set this state."
+    }
   },
   "lever": {
     "id": "job-synthetic-lever",
@@ -13,7 +18,21 @@
     "title": "Stage Private Equity",
     "source_name": "lever",
     "source_id": "synthetic-1002",
-    "official_url": "https://jobs.lever.co/fonds-synthetique/abcd1234-synthetic"
+    "official_url": "https://jobs.lever.co/fonds-synthetique/abcd1234-synthetic",
+    "source_verified": true,
+    "official_source_trust": {
+      "status": "verified",
+      "note": "Synthetic unit proof only; HTTP imports cannot set this state."
+    },
+    "source_material": {
+      "material": {
+        "source_fields": {
+          "lever": {
+            "applyUrl": "https://jobs.lever.co/fonds-synthetique/abcd1234-synthetic/apply"
+          }
+        }
+      }
+    }
   },
   "workday": {
     "id": "job-synthetic-workday",
@@ -21,7 +40,12 @@
     "title": "Stage Finance",
     "source_name": "workday",
     "source_id": "synthetic-1003",
-    "official_url": "https://groupe-synthetique.wd3.myworkdayjobs.com/en-US/Careers/job/Paris/Stage-Finance_R1003"
+    "official_url": "https://groupe-synthetique.wd3.myworkdayjobs.com/en-US/Careers/job/Paris/Stage-Finance_R1003",
+    "source_verified": true,
+    "official_source_trust": {
+      "status": "verified",
+      "note": "Synthetic unit proof only; HTTP imports cannot set this state."
+    }
   },
   "smartrecruiters": {
     "id": "job-synthetic-smartrecruiters",
@@ -29,7 +53,12 @@
     "title": "Stage Conseil",
     "source_name": "smartrecruiters",
     "source_id": "synthetic-1004",
-    "official_url": "https://jobs.smartrecruiters.com/CabinetSynthetique/74400001004-stage-conseil"
+    "official_url": "https://jobs.smartrecruiters.com/CabinetSynthetique/74400001004-stage-conseil",
+    "source_verified": true,
+    "official_source_trust": {
+      "status": "verified",
+      "note": "Synthetic unit proof only; HTTP imports cannot set this state."
+    }
   },
   "recruitcrm": {
     "id": "job-synthetic-recruitcrm",
@@ -37,7 +66,12 @@
     "title": "Stage Analyse",
     "source_name": "recruitcrm",
     "source_id": "synthetic-1005",
-    "official_url": "https://chasseur-synthetique.recruitcrm.io/jobs/synthetic-1005-stage-analyse"
+    "official_url": "https://chasseur-synthetique.recruitcrm.io/jobs/synthetic-1005-stage-analyse",
+    "source_verified": true,
+    "official_source_trust": {
+      "status": "verified",
+      "note": "Synthetic unit proof only; HTTP imports cannot set this state."
+    }
   },
   "breezy": {
     "id": "job-synthetic-breezy",
@@ -45,7 +79,12 @@
     "title": "Stage Data",
     "source_name": "breezy",
     "source_id": "synthetic-1006",
-    "official_url": "https://startup-synthetique.breezy.hr/p/synthetic-1006-stage-data"
+    "official_url": "https://startup-synthetique.breezy.hr/p/synthetic-1006-stage-data",
+    "source_verified": true,
+    "official_source_trust": {
+      "status": "verified",
+      "note": "Synthetic unit proof only; HTTP imports cannot set this state."
+    }
   },
   "jobvite": {
     "id": "job-synthetic-jobvite",
@@ -53,7 +92,12 @@
     "title": "Stage Contrôle de gestion",
     "source_name": "jobvite",
     "source_id": "synthetic-1007",
-    "official_url": "https://jobs.jobvite.com/industrie-synthetique/job/o1007"
+    "official_url": "https://jobs.jobvite.com/industrie-synthetique/job/o1007",
+    "source_verified": true,
+    "official_source_trust": {
+      "status": "verified",
+      "note": "Synthetic unit proof only; HTTP imports cannot set this state."
+    }
   },
   "ashby": {
     "id": "job-synthetic-ashby",
@@ -61,7 +105,21 @@
     "title": "Stage Stratégie",
     "source_name": "ashby",
     "source_id": "synthetic-1008",
-    "official_url": "https://jobs.ashbyhq.com/scale-up-synthetique/00000000-1008-4000-8000-000000001008"
+    "official_url": "https://jobs.ashbyhq.com/scale-up-synthetique/00000000-1008-4000-8000-000000001008",
+    "source_verified": true,
+    "official_source_trust": {
+      "status": "verified",
+      "note": "Synthetic unit proof only; HTTP imports cannot set this state."
+    },
+    "source_material": {
+      "material": {
+        "source_fields": {
+          "ashby": {
+            "applyUrl": "https://jobs.ashbyhq.com/scale-up-synthetique/00000000-1008-4000-8000-000000001008/application"
+          }
+        }
+      }
+    }
   },
   "ripplematch": {
     "id": "job-synthetic-ripplematch",
@@ -69,7 +127,12 @@
     "title": "Stage Marketing",
     "source_name": "ripplematch",
     "source_id": "synthetic-1009",
-    "official_url": "https://ripplematch.com/jobs/synthetic-1009-stage-marketing"
+    "official_url": "https://ripplematch.com/jobs/synthetic-1009-stage-marketing",
+    "source_verified": true,
+    "official_source_trust": {
+      "status": "verified",
+      "note": "Synthetic unit proof only; HTTP imports cannot set this state."
+    }
   },
   "custom": {
     "id": "job-synthetic-custom",
@@ -77,7 +140,12 @@
     "title": "Stage Généraliste",
     "source_name": "custom",
     "source_id": "synthetic-1010",
-    "official_url": "https://careers.employeur-synthetique.test/jobs/synthetic-1010"
+    "official_url": "https://careers.employeur-synthetique.test/jobs/synthetic-1010",
+    "source_verified": true,
+    "official_source_trust": {
+      "status": "verified",
+      "note": "Synthetic unit proof only; HTTP imports cannot set this state."
+    }
   },
   "unknown": {
     "id": "job-synthetic-unknown",

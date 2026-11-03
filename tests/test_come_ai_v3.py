@@ -130,6 +130,49 @@ def test_docx_text_and_document_search_work_offline(tmp_path: Path) -> None:
     assert "30 juin" in found["hits"][0]["excerpt"]
 
 
+def test_pptx_slide_text_is_read_locally_without_an_extra_dependency(tmp_path: Path) -> None:
+    config, workspace, tools = make_workspace(tmp_path)
+    presentation = config.data_dir / "cours-finance.pptx"
+    slide_xml = """<?xml version="1.0" encoding="UTF-8"?>
+    <p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+           xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>Delta et gamma</a:t></a:r></a:p>
+      <a:p><a:r><a:t>Le delta mesure la sensibilité au sous-jacent.</a:t></a:r></a:p>
+      </p:txBody></p:sp></p:spTree></p:cSld>
+    </p:sld>"""
+    with zipfile.ZipFile(presentation, "w") as archive:
+        archive.writestr("ppt/slides/slide1.xml", slide_xml)
+    workspace.refresh()
+    file_id = workspace.file_id_by_name(presentation.name)
+    assert file_id
+
+    inspection = tools.inspect_file(file_id)
+
+    assert inspection["kind"] == "document"
+    assert "[Diapositive 1]" in inspection["excerpt"]
+    assert "Delta et gamma" in inspection["excerpt"]
+
+
+def test_assignment_outline_surfaces_sections_and_questions_without_a_model(tmp_path: Path) -> None:
+    config, workspace, tools = make_workspace(tmp_path)
+    source = config.data_dir / "devoir.txt"
+    source.write_text(
+        "TD Convertible Bond\nPart 1 - Greeks\nQ1.1 Compute delta and compare it with the pricer.\n"
+        "Q1.2 Why is gamma highest near the money?\nPart 2 - Hedging\n",
+        encoding="utf-8",
+    )
+    workspace.refresh()
+    file_id = workspace.file_id_by_name(source.name)
+    assert file_id
+
+    outline = tools.inspect_file(file_id)["outline"]
+
+    assert outline["title"] == "TD Convertible Bond"
+    assert outline["sections"] == ["Part 1 - Greeks", "Part 2 - Hedging"]
+    assert outline["task_count"] == 2
+    assert outline["tasks"][1].startswith("Q1.2")
+
+
 def test_ollama_fallback_uses_the_same_controlled_tools(tmp_path: Path) -> None:
     config, workspace, _ = make_workspace(tmp_path)
     config = replace(config, ollama_model="fake-local-model", retry_attempts=1)

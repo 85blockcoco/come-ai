@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from datetime import date, timedelta
 
 import pytest
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
+from career.apply_kit import build_apply_kit
 from career.router import create_career_router
 from career.service import CareerService
 from workspace_core import UserFacingError
@@ -39,12 +41,31 @@ def synthetic_job(**changes):
 def synthetic_profile():
     return {
         "display_name": "Personne Démo",
+        "contact_email": "demo@example.test",
         "education": "Master Finance (démo)",
         "experience": "Projet étudiant de modélisation (démo)",
         "skills": "Excel, analyse financière",
         "languages": "Français, anglais C1",
         "eligibility": "compatible",
     }
+
+
+def verified_conforming_job(**changes):
+    payload = synthetic_job(
+        official_url="https://careers.example.test/jobs/demo-42",
+        duration_months=6,
+        end_date="2027-07-31",
+        source_status="open",
+        deadline_status="upcoming",
+        requirements="",
+        description_original="",
+        source_verified=True,
+        qualification_snapshot_current=True,
+        official_source_trust={"status": "verified"},
+        apply_qualification={"target_status": "conforming", "reasons": []},
+    )
+    payload.update(changes)
+    return payload
 
 
 def kit_client(service):
@@ -58,21 +79,46 @@ def kit_client(service):
     return TestClient(app)
 
 
-def test_apply_kit_complete(tmp_path: Path):
-    service = CareerService(tmp_path)
-    service.update_profile(synthetic_profile())
-    job = service.import_job(synthetic_job())
-    kit = service.build_apply_kit(job["id"])
-    assert kit["job_id"] == job["id"]
-    assert kit["readiness"] == 100
-    assert kit["block_reasons"] == []
-    assert kit["variant"] is not None
-    assert kit["variant"]["id"] in {"m_a", "markets", "corporate_finance"}
-    assert kit["letter"] is not None
-    assert isinstance(kit["answers"], dict)
-    assert isinstance(kit["checklist"], list) and kit["checklist"]
-    assert kit["deep_link"] == "https://careers.example.test/jobs/demo-42"
-    assert isinstance(kit["export_urls"], dict)
+def test_apply_kit_complete():
+    job = verified_conforming_job(requirements="Excel")
+    kit = build_apply_kit(
+        job["source_id"], synthetic_profile(), job=job,
+        intake={"answers": {"target_roles": "Analyste finance (démo)", "missions": "Analyse financière (démo)"}},
+    )
+    assert kit.job_id == job["source_id"]
+    assert kit.readiness == 100
+    assert kit.block_reasons == []
+    assert kit.variant is not None
+    assert kit.variant["id"] in {"m_a", "markets", "corporate_finance"}
+    assert kit.letter is not None
+    assert isinstance(kit.answers, dict)
+    assert isinstance(kit.checklist, list) and kit.checklist
+    assert kit.deep_link == "https://careers.example.test/jobs/demo-42"
+    assert isinstance(kit.export_urls, dict)
+
+
+def test_apply_kit_blocks_unfinished_document_placeholders():
+    kit = build_apply_kit("synthetic", synthetic_profile(), job=verified_conforming_job())
+
+    assert kit.readiness < 100
+    assert kit.fact_checks["document_placeholders"]
+    assert any("document" in reason.lower() for reason in kit.block_reasons)
+
+
+@pytest.mark.parametrize("days_left,expected_done", [(20, True), (-1, False)])
+def test_apply_kit_deadline_uses_the_canonical_job_status(days_left, expected_done):
+    job = verified_conforming_job(
+        requirements="Excel",
+        deadline_date=(date.today() + timedelta(days=days_left)).isoformat(),
+        deadline_status="open" if days_left >= 0 else "closed",
+    )
+    kit = build_apply_kit(
+        "synthetic-deadline", synthetic_profile(), job=job,
+        intake={"answers": {"target_roles": "Finance", "missions": "Analyse financière"}},
+    )
+    deadline = next(item for item in kit.checklist if item["id"] == "deadline")
+    assert deadline["done"] is expected_done
+    assert (kit.readiness == 100) is expected_done
 
 
 def test_apply_kit_incomplete(tmp_path: Path):
@@ -99,17 +145,59 @@ def test_apply_kit_endpoint_smoke(tmp_path: Path):
     resp = client.post(f"/api/career/apply-kit/{job_id}")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["readiness"] == 100
-    assert data["variant"]["id"] == "m_a"
+    assert data["readiness"] < 100
+    assert data["block_reasons"]
+    assert data["deep_link"] is None
+    first_exports = data["export_urls"]
+    assert set(first_exports) == {"cv_pdf", "letter_pdf", "cv_docx", "letter_docx"}
+    application = service.list_applications()[0]
+    assert data["application"]["id"] == application["id"]
+    assert data["draft_id"] == service.list_application_drafts()[0]["id"]
+    assert data["language"] == "fr"
+    assert data["fact_checks"]["document_placeholders"]
+    assert len(data["review_token"]) == 64
+    approval_url = f"/api/career/applications/{application['id']}/approve"
+    reviewed = {"approved": True, "draft_id": data["draft_id"], "review_token": data["review_token"]}
+    assert client.post(approval_url, json={**reviewed, "review_token": "0" * 64}).status_code == 400
+    assert application["stage"] == "to_review"
+    assert application["approval_granted"] is False
+    repeat = client.post(f"/api/career/apply-kit/{job_id}")
+    assert repeat.status_code == 200
+    assert repeat.json()["export_urls"] == first_exports
+    applications = service.list_applications()
+    assert len(applications) == 1
+    assert applications[0]["approval_granted"] is False
+    assert client.post(f"/api/career/apply-kit/{job_id}", json={"language": "es"}).status_code == 422
+    assert client.post(f"/api/career/apply-kit/{job_id}", json={"variant": "unknown"}).status_code == 422
     # unknown job
     bad = client.post("/api/career/apply-kit/job_unknown_12345678")
     assert bad.status_code == 400
 
 
 def test_apply_kit_module_dataclass():
-    from career.apply_kit import ApplyKit, build_apply_kit
+    from career.apply_kit import ApplyKit
 
     kit = build_apply_kit("x", {}, job=None)
     assert isinstance(kit, ApplyKit)
     assert kit.readiness == 0
     assert kit.block_reasons
+
+
+def test_apply_kit_does_not_follow_unvalidated_apply_url():
+    job = verified_conforming_job(apply_url="https://attacker.example.test/collect")
+    kit = build_apply_kit(job["source_id"], synthetic_profile(), job=job)
+    assert kit.deep_link == job["official_url"]
+
+
+def test_apply_kit_does_not_mark_unverified_qualification_ready():
+    job = verified_conforming_job(
+        apply_qualification={
+            "target_status": "to_verify",
+            "reasons": ["Durée ou début non vérifiable."],
+        }
+    )
+    kit = build_apply_kit(job["source_id"], synthetic_profile(), job=job)
+    assert kit.readiness < 100
+    assert any("qualification" in item["id"] for item in kit.checklist)
+    qualification = next(item for item in kit.checklist if item["id"] == "qualification")
+    assert qualification["done"] is False

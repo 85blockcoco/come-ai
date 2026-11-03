@@ -12,6 +12,7 @@ from __future__ import annotations
 import html
 import hashlib
 import heapq
+import inspect
 import json
 import re
 import socket
@@ -30,14 +31,12 @@ from workspace_core import UserFacingError
 from .models import canonical_url, clean_text, normalized_text
 from .countries import (
     DEFAULT_COUNTRIES_EXCLUDE,
-    canonical_country_codes,
-    canonicalize_country,
-    country_from_source,
+    geo_filter,
+    resolve_published_country,
 )
 from .scoring import classify_job_family
 from .stage_search import default_brief, score_brief_match, validate_brief
-from .exploration import classify_internship, criteria_admit
-from .offer_qualification import qualify_offer
+from .exploration import admit_offer
 from .source_fields import attach_source_material
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -101,6 +100,17 @@ class DiscoveryPayload:
     # non-conforming offer, not a malformed one.
     country_excluded_count: int = 0
     excluded_by_country: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def offers_filtered_geo(self) -> int:
+        """Number of offers the source-side country filter dropped.
+
+        This is the audit metric of the geographic filter: every offer the
+        connector refused to return because of its country.  It is a
+        property of ``country_excluded_count``, never a second counter that
+        could drift from it.
+        """
+        return self.country_excluded_count
 
 
 def parse_greenhouse_board_token(value: Any) -> str:
@@ -311,6 +321,21 @@ def _location_parts(value: Any, *, preserve_multi_locations: bool = False) -> tu
     return clean_text(location, limit=160), ""
 
 
+def _iso_date(value: Any) -> str:
+    """Return the date of an ISO 8601 timestamp published by the source.
+
+    A timestamp the source did not label as a date, or a malformed one, is
+    not a date: the calendar stays unknown instead of being invented.
+    """
+    text = clean_text(value, limit=80)
+    if not text:
+        return ""
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).date().isoformat()
+    except ValueError:
+        return ""
+
+
 def _explicit_employment_type(raw: dict[str, Any]) -> str:
     """Read only named ATS contract metadata and explicitly recognized values.
 
@@ -363,6 +388,7 @@ class GreenhouseJobBoardConnector:
         self, board: GreenhouseBoard, *, selection_brief: dict[str, Any] | None = None,
         internships_only: bool = False, deadline: float | None = None,
         countries_exclude: list[str] | tuple[str, ...] | None = None,
+        countries_include: list[str] | tuple[str, ...] | None = None,
     ) -> DiscoveryPayload:
         """Score the whole admissible feed before keeping its best 150 jobs.
 
@@ -379,7 +405,7 @@ class GreenhouseJobBoardConnector:
                 payload = self.transport.get_json(board.endpoint, min(GREENHOUSE_TIMEOUT_SECONDS, remaining))
                 result = self._normalise(
                     board, payload, selection_brief=brief, internships_only=internships_only,
-                    countries_exclude=countries_exclude,
+                    countries_exclude=countries_exclude, countries_include=countries_include,
                 )
                 self._last_metrics = {
                     "raw_count": result.raw_count,
@@ -404,11 +430,13 @@ class GreenhouseJobBoardConnector:
     def discover_internships(
         self, board: GreenhouseBoard, *, selection_brief: dict[str, Any], deadline: float | None = None,
         countries_exclude: list[str] | tuple[str, ...] | None = None,
+        countries_include: list[str] | tuple[str, ...] | None = None,
     ) -> DiscoveryPayload:
         """Explorer entry point: classify and admit before the per-source cap."""
         return self.discover_ranked(board, selection_brief=selection_brief,
                                     internships_only=True, deadline=deadline,
-                                    countries_exclude=countries_exclude)
+                                    countries_exclude=countries_exclude,
+                                    countries_include=countries_include)
 
     def health_check(self) -> dict[str, Any]:
         """Factual counters of the last read; no offer is ever invented here."""
@@ -428,6 +456,7 @@ class GreenhouseJobBoardConnector:
         board: GreenhouseBoard, payload: Any, *, selection_brief: dict[str, Any] | None = None,
         internships_only: bool = False,
         countries_exclude: list[str] | tuple[str, ...] | None = None,
+        countries_include: list[str] | tuple[str, ...] | None = None,
     ) -> DiscoveryPayload:
         if not isinstance(payload, dict) or not isinstance(payload.get("jobs"), list):
             raise PublicSourceError("Greenhouse a renvoyé un format d’offres inattendu.", code="invalid_payload")
@@ -439,9 +468,7 @@ class GreenhouseJobBoardConnector:
                 code="too_many_rows",
             )
         brief = validate_brief(selection_brief) if selection_brief is not None else default_brief()
-        excluded_codes = set(canonical_country_codes(
-            countries_exclude if countries_exclude is not None else brief.get("countries_exclude")
-        ))
+        geo = geo_filter(countries_exclude, countries_include, brief)
         excluded_by_country: dict[str, int] = {}
         evaluated_count = invalid_count = 0
         confirmed_count = uncertain_count = excluded_count = relevant_count = filtered_criteria_count = 0
@@ -473,13 +500,24 @@ class GreenhouseJobBoardConnector:
                 # instead of inside the location wording.  The structural code wins:
                 # it is a published fact, while the location string is prose.
                 office = location.get("office") if isinstance(location.get("office"), dict) else {}
-                country_canonical = canonicalize_country(
-                    office.get("country_code") or location.get("country_code")
+                explicit_country = office.get("country_code") or location.get("country_code")
+                country_canonical, excluded_code = resolve_published_country(
+                    explicit_country, location.get("name"), geo
                 )
-                if not country_canonical:
-                    country_canonical = country_from_source(country)
+                evaluated_count += 1
+                if excluded_code:
+                    # The country is excluded on the source side: the offer is
+                    # dropped before its description is even parsed, before it
+                    # can enter the local database or consume one of the
+                    # retained places.
+                    country_excluded_count += 1
+                    excluded_count += 1
+                    excluded_by_country[excluded_code] = (
+                        excluded_by_country.get(excluded_code, 0) + 1
+                    )
+                    continue
                 description = source_html_to_text(raw.get("content"))
-                job = {
+                job = attach_source_material({
                     "company": board.company,
                     "title": title,
                     "source_name": "greenhouse",
@@ -489,14 +527,16 @@ class GreenhouseJobBoardConnector:
                     "country": country,
                     "country_canonical": country_canonical,
                     # ``updated_at`` is source maintenance metadata, not a
-                    # posting or internship date.  We deliberately leave the
-                    # calendar unknown unless the ATS exposes it structurally.
-                    "posted_date": "",
-                    "deadline_date": "",
+                    # posting date.  ``first_published`` is the date the
+                    # board itself published the posting, so it is the only
+                    # field used for the publication date.
+                    "posted_date": _iso_date(raw.get("first_published")),
+                    "deadline_date": _iso_date(raw.get("application_deadline")),
                     "start_date": "",
                     "end_date": "",
                     "duration_months": None,
                     "source_status": "open",
+                    "source_verified": True,
                     "employment_type": _explicit_employment_type(raw) if internships_only else "",
                     "role_level": "",
                     "requirements": "",
@@ -504,71 +544,62 @@ class GreenhouseJobBoardConnector:
                     "eligibility_requirement": "",
                     "description_original": description,
                     "job_family": classify_job_family(title, description),
-                }
-                job = attach_source_material(job, "greenhouse", raw, description=description)
-                evaluated_count += 1
-                if country_canonical and country_canonical in excluded_codes:
-                    # The country is excluded on the source side: the offer is
-                    # dropped before it can enter the local database or
-                    # consume one of the retained places.
-                    country_excluded_count += 1
-                    excluded_count += 1
-                    excluded_by_country[country_canonical] = (
-                        excluded_by_country.get(country_canonical, 0) + 1
-                    )
-                    continue
-                match = score_brief_match(brief, job)
+                }, "greenhouse", {
+                    "id": raw.get("id"),
+                    "requisition_id": raw.get("requisition_id"),
+                    "internal_job_id": raw.get("internal_job_id"),
+                    "first_published": raw.get("first_published"),
+                    "updated_at": raw.get("updated_at"),
+                    "application_deadline": raw.get("application_deadline"),
+                    "company_name": raw.get("company_name"),
+                    "language": raw.get("language"),
+                    "location": location.get("name"),
+                    "offices": raw.get("offices"),
+                    "departments": raw.get("departments"),
+                    "education": raw.get("education"),
+                    "metadata": raw.get("metadata"),
+                })
+                total_score = None
+                geo_score = 0
+                status_rank = 0
+                education_rank = 2
                 if internships_only:
-                    classification = classify_internship(job)
-                    qualification = qualify_offer(
-                        {**job, "source_verified": True},
-                        allowed_contract_types=brief.get("contract_types"),
-                        allowed_start_months=brief.get("start_months"),
-                        required_start_date=brief.get("start_date"),
-                        minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
-                        excluded_countries=brief.get("excluded_countries"),
-                        excluded_cities=brief.get("excluded_cities"),
-                        require_known_location=brief.get("require_known_location", False),
-                        preferred_countries=brief.get("preferred_countries"),
-                        geo_excluded_countries=brief.get("geo_excluded_countries"),
-                    ).to_dict()
-                    job["qualification"] = qualification
-                    target = qualification["target_status"]
+                    # The admission layer decides; the connector transmits.
+                    verdict = admit_offer(job, brief, source_verified=True)
+                    target = verdict["target_status"]
                     confirmed_count += int(target == "conforming")
                     uncertain_count += int(target == "to_verify")
                     excluded_count += int(target == "non_conforming")
-                    if target == "non_conforming":
+                    if verdict["status"] == "excluded":
                         continue
-                    if qualification["contract_type"] == "unknown" and not classification.get("evidence"):
+                    if verdict["status"] != "admitted":
                         filtered_criteria_count += 1
                         continue
-                    if not criteria_admit(match, job, brief):
-                        filtered_criteria_count += 1
-                        continue
-                    job["internship_classification"] = classification
-                    relevant_count += 1
+                    job = verdict["job"]
+                    match = verdict["match"]
+                    total_score = match.get("total_score")
+                    geo_score = int(match.get("geo_score") or 0)
+                    education_rank = (match.get("education_access") or {}).get("priority_rank", 2)
+                    status_rank = {"conforming": 0, "to_verify": 1}.get(target, 0)
                 else:
-                    relevant_count += 1
-                # The ranking uses the total score (relevance plus the
-                # geographic signal).  An offer published in a penalized
-                # country never leads the list, whatever its relevance.
-                total_score = match.get("total_score")
-                geo_score = int(match.get("geo_score") or 0)
+                    match = score_brief_match(brief, job)
+                    total_score = match.get("total_score")
+                    geo_score = int(match.get("geo_score") or 0)
+                    education_rank = (match.get("education_access") or {}).get("priority_rank", 2)
+                relevant_count += 1
                 # Source identities, not arrival order or generated database
                 # IDs, break ties. The content digest resolves conflicting
                 # duplicate identities without depending on feed ordering.
                 digest = hashlib.sha256(
                     json.dumps(job, sort_keys=True, ensure_ascii=False).encode("utf-8")
                 ).hexdigest()
-                status_rank = {"conforming": 0, "to_verify": 1}.get(
-                    (job.get("qualification") or {}).get("target_status"), 0
-                )
-                education_rank = (match.get("education_access") or {}).get("priority_rank", 2)
+                # The ranking uses the total score (relevance plus the
+                # geographic signal).  An offer published in a penalized
+                # country never leads the list, whatever its relevance.
                 geo_rank = 1 if geo_score < 0 else 0
-                key = (geo_rank, status_rank,
+                key = (geo_rank, status_rank, education_rank,
                        -(int(total_score) if total_score is not None else 0),
-                       -geo_score,
-                       education_rank, job_id, canonical, digest)
+                       -geo_score, job_id, canonical, digest)
                 yield key, job
 
         # nsmallest retains only a 150-item heap (O(N log 150)), not a second
@@ -591,12 +622,56 @@ class GreenhouseJobBoardConnector:
         )
 
 
+def _deduplicate_stage_offers(jobs: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], "DedupReport"]:
+    """Merge the offers collected from every public source.
+
+    The multi-source collection happens upstream: each registered board is
+    read once and every connector returns its own offer records.  This entry
+    point is the deterministic, local merge step that runs right after that
+    collection: the same offer published on several boards becomes a single
+    offer, and each merged offer keeps the trace of its sources.
+
+    Args:
+        jobs: Offer records collected from every source (Greenhouse, Ashby,
+            Lever, Welcome to the Jungle, JobTeaser, Talent.com, APEC).
+
+    Returns:
+        A tuple with the deduplicated offers and the merge report.
+    """
+    # Imported lazily: the deduplication module is only needed when several
+    # sources are merged, and it must not slow down the import of discovery.
+    from .cv_quality.job_deduplication import deduplicate_jobs
+
+    return deduplicate_jobs(jobs)
+def callable_geo_kwargs(method: Any, **kwargs: Any) -> dict[str, Any]:
+    """The geographic arguments a connector method actually accepts.
+
+    A connector is free to ignore the geographic filter, but it must never
+    crash because the caller offered it a keyword it does not know.  Only
+    the declared parameters are forwarded, so a third-party connector keeps
+    working exactly as before.
+    """
+    try:
+        parameters = inspect.signature(method).parameters
+    except (TypeError, ValueError):
+        return {}
+    if any(parameter.kind is inspect.Parameter.VAR_KEYWORD for parameter in parameters.values()):
+        return dict(kwargs)
+    return {key: value for key, value in kwargs.items() if key in parameters}
+
+
+def connector_geo_kwargs(connector: Any, **kwargs: Any) -> dict[str, Any]:
+    """The geographic arguments a connector's exploration entry point accepts."""
+    return callable_geo_kwargs(connector.discover_internships, **kwargs)
+
+
 def discover_stage_offers(
-    connectors: dict[str, Any],
-    sources: list[dict[str, Any]],
+    connectors: dict[str, Any] | list[dict[str, Any]],
+    sources: list[dict[str, Any]] | None = None,
     *,
     selection_brief: dict[str, Any] | None = None,
     countries_exclude: list[str] | tuple[str, ...] | None = None,
+    countries_include: list[str] | tuple[str, ...] | None = None,
     deadline: float | None = None,
 ) -> tuple[list[dict[str, Any]], "DedupReport"]:
     """Read every configured source, deduplicate, and return merged offers.
@@ -611,7 +686,14 @@ def discover_stage_offers(
     several boards becomes a single merged offer, keeping the trace of its
     sources.
     """
+    if sources is None:
+        if not isinstance(connectors, list):
+            raise TypeError("sources is required when connectors is a mapping")
+        return _deduplicate_stage_offers(connectors)
+    if not isinstance(connectors, dict):
+        raise TypeError("connectors must be a mapping when sources are provided")
     excluded = list(DEFAULT_COUNTRIES_EXCLUDE) if countries_exclude is None else list(countries_exclude)
+    included = list(countries_include) if countries_include is not None else []
     brief = validate_brief(selection_brief) if selection_brief is not None else default_brief()
     offers: list[dict[str, Any]] = []
     for source in sources:
@@ -627,8 +709,11 @@ def discover_stage_offers(
             )
         else:
             descriptor = source
+        geo_kwargs = connector_geo_kwargs(
+            connector, countries_exclude=excluded, countries_include=included
+        )
         payload = connector.discover_internships(
-            descriptor, selection_brief=brief, deadline=deadline, countries_exclude=excluded
+            descriptor, selection_brief=brief, deadline=deadline, **geo_kwargs
         )
         for job in getattr(payload, "jobs", ()):  # a connector returns a bounded tuple
             offers.append(job)

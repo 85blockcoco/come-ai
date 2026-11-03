@@ -92,7 +92,7 @@
         "requirements": [
           { "text": "Excel-Kenntnisse erforderlich", "modality": "required", "category": "technical_skill" }
         ],
-        "missing_fields": ["posted_date", "requirements", "languages_required", "contract_type"],
+        "missing_fields": ["posted_date", "requirements", "languages_required"],
         "contradictions": 0
       }
     },
@@ -119,7 +119,7 @@
         "requirements": [
           { "text": "Excel avanzato", "modality": "required", "category": "technical_skill" }
         ],
-        "missing_fields": ["duration_months", "posted_date", "requirements", "languages_required", "contract_type"],
+        "missing_fields": ["duration_months", "posted_date", "requirements", "languages_required"],
         "contradictions": 0
       }
     },
@@ -146,7 +146,7 @@
         "requirements": [
           { "text": "Excel avanzado", "modality": "required", "category": "technical_skill" }
         ],
-        "missing_fields": ["duration_months", "posted_date", "requirements", "languages_required", "contract_type"],
+        "missing_fields": ["duration_months", "posted_date", "requirements", "languages_required"],
         "contradictions": 0
       }
     },

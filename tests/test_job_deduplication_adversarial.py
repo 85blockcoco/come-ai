@@ -16,11 +16,13 @@ import itertools
 import pytest
 
 from career.job_deduplication import (
+    MERGED_PROVENANCES_FIELD,
     USER_SCORE_FIELDS,
     USER_SIDE_FIELDS,
     USER_STATE_FIELDS,
     canonical_city,
     deduplicate_jobs,
+    deduplicate_offers,
     location_canonical,
     match_records,
     title_role_level,
@@ -304,3 +306,219 @@ def test_every_provenance_and_every_contradiction_stays_visible():
     assert "posted_date" in group["conflicts"]
     assert "city" in group["conflicts"]
     assert {view["source_name"] for view in group["provenances"]} == {"greenhouse", "employer"}
+
+
+# ---------------------------------------------------------------------------
+# Guardrail: a shared link is not a proof when the roles are different
+# ---------------------------------------------------------------------------
+
+LANDING_PAGE = "https://careers.acme.com/careers"
+
+
+def test_a_shared_landing_page_never_merges_two_different_roles():
+    """A careers landing page hosts several postings: they must stay apart.
+
+    Before the fix, five roles published under the same link were merged into
+    a single offer, which destroyed four real postings.
+    """
+    records = [
+        offer("greenhouse", id=str(index), url=LANDING_PAGE, title=title)
+        for index, title in enumerate([
+            "Software Engineer", "Product Manager", "Data Scientist",
+            "Sales Intern", "HR Manager",
+        ])
+    ]
+    groups = deduplicate_jobs(records)
+    assert len(groups) == 5
+    assert all(not group["merged"] for group in groups)
+    assert len({group["best"]["title"] for group in groups}) == 5
+
+
+def test_a_shared_link_never_overrides_a_known_role_conflict():
+    """Two known business concepts that differ are two different jobs."""
+    left = offer("greenhouse", id="1", url=LANDING_PAGE, title="Data Analyst")
+    right = offer("greenhouse", id="2", url=LANDING_PAGE, title="Financial Analyst")
+    decision = match_records(left, right)
+    assert decision["matches"] is False
+    assert decision["reasons"] == ["different_role_same_employer"]
+
+
+def test_a_shared_link_without_a_title_is_still_a_duplicate():
+    """A board may publish a posting without its title: the link then decides."""
+    left = offer("greenhouse", id="1", url=LANDING_PAGE, title="")
+    right = offer("greenhouse", id="2", url=LANDING_PAGE, title="Data Analyst")
+    decision = match_records(left, right)
+    assert decision["matches"] is True
+    assert decision["reasons"] == ["canonical_url_match"]
+
+
+def test_a_shared_link_still_merges_the_same_role_written_twice():
+    left = offer("greenhouse", id="1", url=LANDING_PAGE, title="Data Analyst")
+    right = offer("greenhouse", id="2", url=LANDING_PAGE, title="Analyste de donnees")
+    decision = match_records(left, right)
+    assert decision["matches"] is True
+    assert decision["reasons"] == ["canonical_url_match"]
+
+
+# ---------------------------------------------------------------------------
+# Guardrail: the trace of a merged offer opens with the official source
+# ---------------------------------------------------------------------------
+
+def test_the_official_source_opens_the_trace_of_a_merged_group():
+    """The elected representative is the first provenance of the group."""
+    records = [
+        offer("greenhouse", id="1", url="https://boards.greenhouse.io/acme/jobs/1",
+              title="Data Analyst Intern", extra={"source_trust": "unverified"}),
+        offer("employer", id="2", url="https://careers.acme.com/jobs/1",
+              title="Data Analyst Internship", extra={"source_trust": "verified"}),
+        offer("lever", id="3", url="https://jobs.lever.co/acme/3",
+              title="Data Analyst Internship", extra={"source_trust": "unverified"}),
+    ]
+    group = deduplicate_jobs(records)[0]
+    assert group["best"]["source_name"] == "employer"
+    assert group["provenances"][0]["is_representative"] is True
+    assert group["provenances"][0]["source_name"] == "employer"
+
+
+def test_the_merged_offer_carries_every_provenance():
+    """A merged offer stays traceable: every source keeps its link."""
+    offers, report = deduplicate_offers([
+        offer("greenhouse", id="1", url="https://boards.greenhouse.io/acme/jobs/1",
+              title="Data Analyst Intern"),
+        offer("lever", id="2", url="https://jobs.lever.co/acme/2",
+              title="Data Analyst Internship"),
+    ])
+    assert len(offers) == 1
+    merged = offers[0]
+    assert merged["merged_from"] == ["lever"]
+    assert merged["merge_count"] == 1
+    provenances = merged[MERGED_PROVENANCES_FIELD]
+    assert [view["source_name"] for view in provenances] == ["greenhouse", "lever"]
+    assert {view["official_url"] for view in provenances} == {
+        "https://boards.greenhouse.io/acme/jobs/1",
+        "https://jobs.lever.co/acme/2",
+    }
+    assert sum(1 for view in provenances if view["is_representative"]) == 1
+    assert report.clusters[0]["size"] == 2
+
+# Guardrail: the role level is a dimension of its own, on both sides
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("plain_title,marked_title", [
+    ("Software Engineer", "Intern Software Engineer"),
+    ("Data Engineer", "Senior Data Engineer"),
+    ("Data Engineer", "Junior Data Engineer"),
+    ("Data Engineer", "Data Engineer CDD"),
+    ("Consultant", "Consultant Freelance"),
+    ("Analyste financier", "Analyste financier Alternance"),
+])
+def test_a_level_that_is_the_only_difference_is_never_merged(plain_title, marked_title):
+    """A title that only adds a level word describes another job.
+
+    "Software Engineer" and "Intern Software Engineer" are not the same
+    posting: the second one only adds the word that says the role is an
+    internship.  The level is a dimension of its own, and it is read on both
+    sides of the comparison.
+    """
+    left = offer("greenhouse", id="1", title=plain_title)
+    right = offer("lever", id="2", title=marked_title)
+    decision = match_records(left, right)
+    assert decision["matches"] is False
+    assert decision["reasons"] == ["role_level_conflict"]
+
+
+def test_a_level_that_is_not_the_only_difference_does_not_refuse():
+    """Two titles that differ by more than the level are judged on their merits."""
+    left = offer("greenhouse", id="1", title="Investment Banking Program")
+    right = offer("lever", id="2", title="Investment Banking Intern")
+    decision = match_records(left, right)
+    assert decision["matches"] is True
+
+
+def test_a_level_declared_by_the_connector_never_fires_the_only_difference_rule():
+    """A board may declare the level in a field and omit the word in the title."""
+    left = offer("greenhouse", id="1", title="Software Engineer", role_level="intern")
+    right = offer("lever", id="2", title="Software Engineer")
+    decision = match_records(left, right)
+    assert decision["matches"] is True
+
+
+# ---------------------------------------------------------------------------
+# Guardrail: two contracts are two jobs
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("left_type,right_type", [
+    ("CDI", "CDD"),
+    ("CDI", "Freelance"),
+    ("CDD", "Freelance"),
+    ("Permanent", "Fixed term"),
+])
+def test_two_different_contracts_are_never_merged(left_type, right_type):
+    """A permanent contract and a fixed-term one are two different jobs."""
+    # The title states no contract: only the declared field does.
+    left = offer("greenhouse", id="1", title="Corporate Finance",
+                 extra={"employment_type": left_type})
+    right = offer("lever", id="2", title="Corporate Finance",
+                  extra={"employment_type": right_type})
+    decision = match_records(left, right)
+    assert decision["matches"] is False
+    assert decision["reasons"] == ["contract_conflict"]
+
+
+def test_the_same_contract_declared_twice_is_merged():
+    left = offer("greenhouse", id="1", title="Corporate Finance",
+                 extra={"employment_type": "CDI"})
+    right = offer("lever", id="2", title="Corporate Finance",
+                  extra={"employment_type": "CDI"})
+    assert match_records(left, right)["matches"] is True
+
+
+def test_a_full_time_position_never_contradicts_another_contract():
+    """An internship is very often published as a full-time position."""
+    left = offer("greenhouse", id="1", title="Data Analyst Intern",
+                 extra={"employment_type": "Full-time"})
+    right = offer("lever", id="2", title="Data Analyst Intern",
+                  extra={"employment_type": "CDI"})
+    assert match_records(left, right)["matches"] is True
+
+
+def test_a_declared_contract_against_a_missing_one_is_merged():
+    """A missing contract is not a contradiction."""
+    left = offer("greenhouse", id="1", title="Corporate Finance",
+                 extra={"employment_type": "CDI"})
+    right = offer("lever", id="2", title="Corporate Finance")
+    assert match_records(left, right)["matches"] is True
+
+
+def test_the_contract_written_in_the_title_wins_over_the_declared_one():
+    """A record whose title says "Intern" is an internship, whatever the field says."""
+    left = offer("greenhouse", id="1", title="Data Analyst Intern",
+                 extra={"employment_type": "CDI"})
+    right = offer("lever", id="2", title="Data Analyst Intern",
+                  extra={"employment_type": "CDD"})
+    assert match_records(left, right)["matches"] is True
+
+
+# ---------------------------------------------------------------------------
+# Guardrail: the result never depends on the order of the records
+# ---------------------------------------------------------------------------
+
+def test_the_representative_never_depends_on_the_order_of_the_records():
+    """Two records of the same weight are separated by their identity, not by
+    the position they were received in."""
+    left = offer("greenhouse", id="1", title="Data Analyst")
+    right = offer("greenhouse", id="2", title="Data Analyst")
+    forward = deduplicate_jobs([left, right])[0]
+    backward = deduplicate_jobs([right, left])[0]
+    assert forward["best"] == backward["best"]
+    assert forward["dedup_id"] == backward["dedup_id"]
+    assert forward["merged_from"] == backward["merged_from"]
+
+
+def test_the_absorbed_sources_are_listed_in_a_stable_order():
+    left = offer("lever", id="1", title="Data Analyst")
+    middle = offer("manual", id="", title="Data Analyst")
+    right = offer("greenhouse", id="2", title="Data Analyst")
+    forward = deduplicate_jobs([left, middle, right])[0]
+    backward = deduplicate_jobs([right, middle, left])[0]
+    assert forward["merged_from"] == backward["merged_from"] == sorted(forward["merged_from"])

@@ -1,0 +1,43 @@
+{
+  "connector": "public_ats",
+  "provider": "ashby",
+  "note": "Ashby publishes the country in address.postalAddress.addressCountry and the city in addressLocality.",
+  "cases": [
+    {
+      "case_id": "ashby_unknown_country",
+      "description": "Une offre Ashby sans pays publié est gardée : un pays inconnu n'est jamais une France devinée.",
+      "countries_exclude": ["FR"],
+      "feed": {
+        "jobs": [
+          {
+            "id": "ashby-unknown-1",
+            "title": "Corporate Finance Intern",
+            "jobUrl": "https://jobs.ashbyhq.com/synthetic/ashby-unknown-1",
+            "descriptionPlain": "Financial analysis and valuation. This synthetic internship lasts six months.",
+            "employmentType": "Internship",
+            "address": {"postalAddress": {"addressLocality": "Zurich"}}
+          }
+        ]
+      },
+      "expect": {"kept_source_ids": ["ashby-unknown-1"], "excluded_by_country": {}}
+    },
+    {
+      "case_id": "ashby_paris_france",
+      "description": "Une offre Ashby publiée à Paris, France est filtrée à la source.",
+      "countries_exclude": ["FR"],
+      "feed": {
+        "jobs": [
+          {
+            "id": "ashby-fr-1",
+            "title": "Corporate Finance Intern",
+            "jobUrl": "https://jobs.ashbyhq.com/synthetic/ashby-fr-1",
+            "descriptionPlain": "Financial analysis and valuation. This synthetic internship lasts six months.",
+            "employmentType": "Internship",
+            "address": {"postalAddress": {"addressLocality": "Paris", "addressCountry": "FR"}}
+          }
+        ]
+      },
+      "expect": {"kept_source_ids": [], "excluded_by_country": {"FR": 1}}
+    }
+  ]
+}

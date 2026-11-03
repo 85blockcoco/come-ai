@@ -9,7 +9,7 @@ personnelle, aucun appel réseau. Il sert de vérité terrain au module
 
 | Fichier | Contenu |
 |---------|---------|
-| `pairs.json` | 112 paires étiquetées à la main (71 fusions, 41 refus) |
+| `pairs.json` | 118 paires étiquetées à la main (74 fusions, 44 refus) |
 | `groups.json` | 14 cas de groupe (provenance, contradictions, élection, collision d'identifiant) |
 | `truth_corpus.json` | 59 enregistrements étiquetés dans 36 groupes (précision / rappel) |
 
@@ -49,7 +49,7 @@ un motif de refus (`recycled_identifier_conflict`, `company_conflict`,
 | `incompatible_dates` | 6 | Débuts janvier 2025 / juin 2025, cohortes 2027 / 2028 |
 | `recycled_identifier` | 6 | Identifiant recyclé par le board |
 | `role_level` | 8 | Niveaux : intern, apprentice, junior, analyst, experienced, permanent |
-| `guard` | 11 | Garde-fous non négociables (voir ci-dessous) |
+| `guard` | 17 | Garde-fous non négociables (voir ci-dessous) |
 
 ## Garde-fous non négociables et cas associés
 
@@ -61,4 +61,5 @@ un motif de refus (`recycled_identifier_conflict`, `company_conflict`,
 | La source officielle reste principale | `group_official_verified_source_stays_primary`, `guard_official_verified_source_wins` |
 | Les sources secondaires restent consultables | `group_unknown_feed_is_ranked_between_boards_and_manual` |
 | La traduction ne fusionne pas sur quelques mots | `translated_generic_words_only_refused`, `translated_intern_word_only_refused` |
-| Les rôles différents ne sont jamais fusionnés | `different_role_*`, `level_junior_vs_senior`, `guard_same_link_different_role_is_refused` |
+| Les rôles différents ne sont jamais fusionnés | `different_role_*`, `level_junior_vs_senior`, `guard_same_link_different_role_is_refused`, `guard_shared_landing_page_two_roles`, `guard_shared_landing_page_two_concepts` |
+| Une page carrières partagée ne fusionne pas deux rôles | `guard_shared_landing_page_two_roles`, `guard_shared_landing_page_two_concepts`, `guard_shared_link_without_a_title`, `guard_shared_link_translated_role`, `guard_shared_link_same_role_two_writings`, `guard_shared_link_two_employers` |

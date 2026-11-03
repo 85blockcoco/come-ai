@@ -1,0 +1,35 @@
+{
+  "connector": "html",
+  "provider": "welcome_jungle",
+  "href": "/fr/companies/synthetic/jobs/{identifier}",
+  "note": "Welcome to the Jungle publishes a location string inside the result card.",
+  "cases": [
+    {
+      "case_id": "welcome_jungle_paris",
+      "description": "Le scraping de Welcome to the Jungle renvoie une offre à Paris : elle est filtrée côté client.",
+      "countries_exclude": ["FR"],
+      "cards": [
+        {"identifier": "wtj-fr-1", "title": "Corporate Finance Intern", "company": "Synthetic Finance", "location": "Paris, France"}
+      ],
+      "expect": {"kept_source_ids": [], "excluded_by_country": {"FR": 1}}
+    },
+    {
+      "case_id": "welcome_jungle_berlin",
+      "description": "Le scraping de Welcome to the Jungle renvoie une offre à Berlin : elle est gardée.",
+      "countries_exclude": ["FR"],
+      "cards": [
+        {"identifier": "wtj-de-1", "title": "Corporate Finance Intern", "company": "Synthetic Finance", "location": "Berlin, Germany"}
+      ],
+      "expect": {"kept_source_ids": ["wtj-de-1"], "excluded_by_country": {}}
+    },
+    {
+      "case_id": "welcome_jungle_paris_city_only",
+      "description": "Le scraping renvoie une offre à Paris sans pays : l'indice de ville peut écarter l'offre, jamais inventer un pays.",
+      "countries_exclude": ["FR"],
+      "cards": [
+        {"identifier": "wtj-city-fr", "title": "Corporate Finance Intern", "company": "Synthetic Finance", "location": "Paris"}
+      ],
+      "expect": {"kept_source_ids": [], "excluded_by_country": {"FR": 1}}
+    }
+  ]
+}

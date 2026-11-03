@@ -304,6 +304,93 @@
       "absent": [
         "deadline"
       ]
+    },
+    {
+      "id": "es-start-comienza",
+      "text": "Comienza en enero",
+      "expected": [
+        {
+          "fact_type": "start",
+          "value": {
+            "day": null,
+            "month": 1,
+            "year": null
+          },
+          "precision": "month",
+          "confidence": "inferred",
+          "quote": "Comienza en enero"
+        }
+      ],
+      "absent": [
+        "deadline",
+        "published",
+        "end"
+      ]
+    },
+    {
+      "id": "es-end-termina-en",
+      "text": "El contrato termina en diciembre de 2027",
+      "expected": [
+        {
+          "fact_type": "end",
+          "value": {
+            "day": null,
+            "month": 12,
+            "year": 2027
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "termina en diciembre de 2027"
+        }
+      ],
+      "absent": [
+        "start",
+        "deadline",
+        "published"
+      ]
+    },
+    {
+      "id": "es-deadline-postular-hasta",
+      "text": "Postular hasta el 15 de noviembre de 2025",
+      "expected": [
+        {
+          "fact_type": "deadline",
+          "value": {
+            "day": 15,
+            "month": 11,
+            "year": 2025
+          },
+          "precision": "day",
+          "confidence": "confirmed",
+          "quote": "Postular hasta el 15 de noviembre de 2025"
+        }
+      ],
+      "absent": [
+        "start",
+        "end",
+        "published"
+      ]
+    },
+    {
+      "id": "es-duration-dura",
+      "text": "La práctica dura seis meses",
+      "expected": [
+        {
+          "fact_type": "duration_exact",
+          "value": {
+            "months_min": 6,
+            "months_max": 6
+          },
+          "precision": "month",
+          "confidence": "confirmed",
+          "quote": "dura seis meses"
+        }
+      ],
+      "absent": [
+        "duration_min",
+        "duration_max",
+        "duration_range"
+      ]
     }
   ]
 }

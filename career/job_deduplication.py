@@ -9,7 +9,9 @@ fusing two different roles**, and it keeps every proof of the merge:
 * every contradiction between the merged records stays visible (``conflicts``);
 * the official source stays the primary one (``source_trust`` drives the
   election of the representative);
-* the user relevance score never takes part in the decision.
+* the user relevance score never takes part in the decision;
+* a shared link never merges two different roles (a careers landing page
+  hosts several postings).
 
 Everything here is pure, local and deterministic: no network call, no model,
 no external dependency, no hidden state, no clock.  The same input always
@@ -37,6 +39,7 @@ conflict detection and the precision/recall evaluation of the second.
 
 from __future__ import annotations
 
+import hashlib
 import re
 import unicodedata
 import urllib.parse
@@ -65,6 +68,12 @@ MIN_LENGTH_RATIO = 0.76
 
 #: Key of the traceability field carried by a deduplicated offer.
 MERGED_FROM_FIELD = "merged_from"
+
+#: Key of the detailed traceability field carried by a deduplicated offer:
+#: one entry per source of the offer, so that a secondary source stays
+#: consultable (its link, its identifier and its trust) from the offer
+#: itself.
+MERGED_PROVENANCES_FIELD = "merged_provenances"
 
 #: Trust statuses published by SPEC-SK-01 (``career.source_trust``).
 TRUST_STATUSES: tuple[str, ...] = ("verified", "unverified", "contradictory", "missing")
@@ -105,9 +114,17 @@ USER_SIDE_FIELDS: frozenset[str] = USER_SCORE_FIELDS | USER_STATE_FIELDS
 # Text helpers
 # ---------------------------------------------------------------------------
 
-@lru_cache(maxsize=2_048)
 def _strip_accents(text: str) -> str:
-    """Remove diacritics without changing the rest of the string."""
+    """Remove diacritics without changing the rest of the string.
+
+    The result is memoised: the same title, company or city is normalised
+    again and again when a collection of offers is deduplicated.
+    """
+    return _strip_accents_cached(text)
+
+
+@lru_cache(maxsize=8192)
+def _strip_accents_cached(text: str) -> str:
     return "".join(
         character
         for character in unicodedata.normalize("NFKD", text)
@@ -172,27 +189,14 @@ def canonicalize_url(url: str) -> str:
     A value that is not an http(s) URL is returned unchanged (trimmed): it is
     not a canonicalisable job link and must never create a false duplicate.
     """
-    raw = _clean_text(url, 2_000)
+    return _canonicalize_url_cached(_clean_text(url, 2_000))
+
+
+@lru_cache(maxsize=8192)
+def _canonicalize_url_cached(raw: str) -> str:
+    """Canonicalise an already cleaned URL (memoised)."""
     if not raw:
         return ""
-    # ATS connectors usually provide already-canonical HTTPS URLs. Return
-    # those directly without the comparatively expensive URL parser; unusual
-    # schemes, ports, query strings and fragments still use the full path.
-    if raw.startswith("https://") and "?" not in raw and "#" not in raw:
-        remainder = raw[8:]
-        slash = remainder.find("/")
-        hostname = remainder if slash < 0 else remainder[:slash]
-        path = "/" if slash < 0 else remainder[slash:]
-        if (
-            hostname
-            and hostname.isascii()
-            and hostname == hostname.lower()
-            and not hostname.startswith("www.")
-            and all(character.isalnum() or character in ".-" for character in hostname)
-            and (path == "/" or (not path.endswith("/") and "//" not in path))
-            and all(character.isalnum() or character in "/-._~%:@!$&'()*+,;=" for character in path)
-        ):
-            return raw if slash >= 0 else raw + "/"
     parsed = urllib.parse.urlsplit(raw)
     if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
         return raw
@@ -293,12 +297,13 @@ def company_canonical(name: Any) -> str:
     ``GmbH``, ``AG``, ``SRL``, ``SpA``, ``BV``, ``NV``, ``PLC``, ``Group``,
     ``Groupe``…) removed as whole words.
     """
-    return _company_canonical_from_text(_company_text(name))
+    return _company_canonical_cached(_company_text(name))
 
 
 @lru_cache(maxsize=8192)
-def _company_canonical_from_text(company_text: str) -> str:
-    text = _strip_accents(company_text).lower()
+def _company_canonical_cached(text: str) -> str:
+    """Canonicalise an already extracted company name (memoised)."""
+    text = _strip_accents(text).lower()
     text = _squash(re.sub(r"[^\w\s]", " ", text))
     if not text:
         return ""
@@ -454,24 +459,28 @@ def _raw_title_text(title: Any) -> str:
     """Return the lower-cased, accent-free title, punctuation preserved."""
     if isinstance(title, Mapping):
         title = title.get("title", "")
-    return _raw_title_text_from_value(_clean_text(title, 300))
+    return _raw_title_text_cached(_clean_text(title, 300))
 
 
 @lru_cache(maxsize=8192)
-def _raw_title_text_from_value(value: str) -> str:
-    return _strip_accents(value).lower().replace("’", "'")
+def _raw_title_text_cached(text: str) -> str:
+    """Normalise an already cleaned title (memoised)."""
+    return _strip_accents(text).lower().replace("’", "'")
 
 
 def _title_base(title: Any) -> str:
     """Return the lower-cased, accent-free title, punctuation turned into spaces."""
-    return _title_base_from_raw(_raw_title_text(title))
+    if isinstance(title, Mapping):
+        title = title.get("title", "")
+    return _title_base_cached(_clean_text(title, 300))
 
 
 @lru_cache(maxsize=8192)
-def _title_base_from_raw(raw: str) -> str:
-    text = _strip_title_noise(raw)
-    text = re.sub(r"[^\w\s]", " ", text)
-    return _squash(text)
+def _title_base_cached(text: str) -> str:
+    """Normalise an already cleaned title into its comparable form."""
+    normalised = _strip_title_noise(_raw_title_text_cached(text))
+    normalised = re.sub(r"[^\w\s]", " ", normalised)
+    return _squash(normalised)
 
 
 @lru_cache(maxsize=8192)
@@ -587,6 +596,122 @@ ROLE_LEVEL_PATTERNS = (
 )
 
 
+#: The words that express each role level in a title.  They tell whether the
+#: level is the **only** difference between two titles: "Software Engineer"
+#: and "Intern Software Engineer" describe two different jobs, because the
+#: second title only adds the word that says the role is an internship.
+ROLE_LEVEL_MARKER_WORDS: dict[str, tuple[str, ...]] = {
+    "intern": (
+        "stage", "stages", "stagi", "stagiaire", "stagiaires", "intern",
+        "interns", "internship", "trainee", "traineeship", "praktikum",
+        "tirocinio",
+    ),
+    "apprentice": (
+        "alternance", "apprentissage", "apprentice", "apprenticeship",
+        "apprenti", "apprentis", "working student", "werkstudent",
+    ),
+    "fixed_term": (
+        "cdd", "fixed term", "contractuel", "contractuelle", "temporaire",
+        "temporary",
+    ),
+    "freelance": ("freelance", "independant"),
+    "junior": ("junior", "jr"),
+    "experienced": (
+        "senior", "sr", "lead", "head", "director", "directeur", "directrice",
+        "manager", "partner", "principal", "vp", "md", "managing director",
+        "expert", "confirmed",
+    ),
+    "analyst": ("analyst", "analyste", "analystes", "off cycle", "off-cycle"),
+    "permanent": ("cdi", "permanent", "full time", "temps plein"),
+}
+
+
+def _compile_marker_pattern(words: tuple[str, ...]) -> re.Pattern[str]:
+    """Compile the pattern of a set of marker words.
+
+    The longest words come first so that "internship" is never read as
+    "intern" followed by a stray "ship".
+    """
+    alternatives = "|".join(
+        re.escape(word) for word in sorted(words, key=len, reverse=True)
+    )
+    return re.compile(rf"\b(?:{alternatives})\b")
+
+
+#: Compiled patterns of the words that express each role level.
+ROLE_LEVEL_MARKER_PATTERNS: dict[str, re.Pattern[str]] = {
+    level: _compile_marker_pattern(words)
+    for level, words in ROLE_LEVEL_MARKER_WORDS.items()
+}
+
+
+#: Fields that carry the contract of the offer, as declared by the connector.
+CONTRACT_FIELDS = ("employment_type", "contract_type", "contract")
+
+#: Contract types and the role level they map to.
+CONTRACT_TYPE_ALIASES = {
+    "cdi": "permanent",
+    "permanent": "permanent",
+    "indefinite": "permanent",
+    "cdd": "fixed_term",
+    "fixed term": "fixed_term",
+    "contractuel": "fixed_term",
+    "contractuelle": "fixed_term",
+    "temporaire": "fixed_term",
+    "temporary": "fixed_term",
+    "freelance": "freelance",
+    "independant": "freelance",
+    "independent": "freelance",
+    "internship": "intern",
+    "intern": "intern",
+    "stage": "intern",
+    "stagiaire": "intern",
+    "student": "intern",
+    "apprenticeship": "apprentice",
+    "alternance": "apprentice",
+    "apprentissage": "apprentice",
+    "apprentice": "apprentice",
+    # "Full time" is deliberately kept apart from "permanent": an internship
+    # is very often advertised as a full-time position.
+    "full time": "full_time",
+    "temps plein": "full_time",
+}
+
+#: Words of a title that state its contract, and the level they map to.
+CONTRACT_TITLE_MARKERS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (ROLE_LEVEL_MARKER_PATTERNS["intern"], "intern"),
+    (ROLE_LEVEL_MARKER_PATTERNS["apprentice"], "apprentice"),
+    (ROLE_LEVEL_MARKER_PATTERNS["fixed_term"], "fixed_term"),
+    (ROLE_LEVEL_MARKER_PATTERNS["freelance"], "freelance"),
+    (re.compile(r"\b(?:cdi|permanent)\b"), "permanent"),
+    (re.compile(r"\b(?:full time|temps plein)\b"), "full_time"),
+)
+
+
+def _contract_kind(job: Mapping[str, Any], raw_title: str) -> str:
+    """Return the kind of contract of a record (``""`` when unknown).
+
+    The contract written in the title wins: it says what the job *is*.  The
+    contract declared by the connector is used when the title says nothing
+    about it.  ``"full time"`` is kept apart from ``"permanent"``: it never
+    contradicts another contract, because an internship is often published
+    as a full-time position.
+    """
+    base = _title_base(raw_title)
+    for pattern, kind in CONTRACT_TITLE_MARKERS:
+        if pattern.search(base):
+            return kind
+    for field_name in CONTRACT_FIELDS:
+        declared = _clean_text(job.get(field_name), 60).lower()
+        if not declared:
+            continue
+        normalized = _squash(re.sub(r"[^\w\s]", " ", declared))
+        kind = CONTRACT_TYPE_ALIASES.get(normalized)
+        if kind:
+            return kind
+    return ""
+
+
 def _declared_role_level(job: Mapping[str, Any]) -> str:
     """Return the role level stated by the connector (``""`` when unknown)."""
     stated = _clean_text(job.get("role_level"), 40).lower()
@@ -630,6 +755,20 @@ def title_contract(title: Any) -> str:
     return ""
 
 
+def _title_without_level_marker(title: Any, level: str) -> str:
+    """Return the canonical title without the words that express its level.
+
+    ``"Intern Software Engineer"`` becomes ``"software engineer"``: the
+    title that says what the job *is*, without the word that says who it is
+    for.
+    """
+    base = _title_base(title)
+    pattern = ROLE_LEVEL_MARKER_PATTERNS.get(level)
+    if pattern is not None:
+        base = _squash(pattern.sub(" ", base))
+    return _title_canonical_from_base(base)
+
+
 def title_seniority(title: Any) -> str:
     """Return the seniority of a title (``""`` when unknown).
 
@@ -668,7 +807,6 @@ def _specific_tokens(canonical_title: str) -> set[str]:
     }
 
 
-@lru_cache(maxsize=8192)
 def _digit_signature(title: str) -> str:
     """Return the digits carried by a title ("2027", "h1 2027"…).
 
@@ -683,6 +821,7 @@ def _digit_signature(title: str) -> str:
     return "|".join(tokens)
 
 
+@lru_cache(maxsize=16384)
 def _title_similarity_from_parts(
     canonical_a: str,
     canonical_b: str,
@@ -892,12 +1031,13 @@ def _canonical_city(city: Any) -> str:
     Only the city itself identifies the place: the rest never contradicts
     another source, so it is dropped instead of becoming a false conflict.
     """
-    return _canonical_city_text(_clean_text(city, 120))
+    return _canonical_city_cached(_clean_text(city, 120))
 
 
 @lru_cache(maxsize=8192)
-def _canonical_city_text(city_text: str) -> str:
-    raw = _strip_accents(city_text).lower()
+def _canonical_city_cached(raw: str) -> str:
+    """Normalise an already cleaned city (memoised)."""
+    raw = _strip_accents(raw).lower()
     raw = re.sub(r"\([^)]*\)", " ", raw)
     raw = re.sub(r"[|/]+", " ", raw)
     candidates: list[str] = []
@@ -927,12 +1067,13 @@ def _canonical_country(country: Any) -> str:
     prefix, because a prefix never equals the real code of another country
     (``"Nederland"`` is not ``"ne"``).
     """
-    return _canonical_country_text(_clean_text(country, 120))
+    return _canonical_country_cached(_clean_text(country, 120))
 
 
 @lru_cache(maxsize=8192)
-def _canonical_country_text(country_text: str) -> str:
-    text = _strip_accents(country_text).lower()
+def _canonical_country_cached(text: str) -> str:
+    """Normalise an already cleaned country (memoised)."""
+    text = _strip_accents(text).lower()
     text = re.sub(r"\([^)]*\)", " ", text)
     text = re.sub(r"[^\w\s]", " ", text)
     text = _squash(text)
@@ -992,6 +1133,7 @@ def _same_location(city_a: str, country_a: str, city_b: str, country_b: str) -> 
 # 5. Jaro-Winkler similarity (pure Python, no external dependency)
 # ---------------------------------------------------------------------------
 
+@lru_cache(maxsize=16384)
 def jaro_winkler(s1: str, s2: str, *, prefix_scale: float = 0.1, max_prefix: int = 4) -> float:
     """Return the Jaro-Winkler similarity of two strings (0.0 to 1.0).
 
@@ -1072,7 +1214,6 @@ MANUAL_SOURCES = frozenset({"", "manual", "import manuel", "import", "unknown"})
 EMPLOYER_SOURCES = frozenset({"employer_sites", "employer_official", "employer", "careers_page"})
 
 
-@lru_cache(maxsize=256)
 def _source_key(source_name: str) -> str:
     """Return the comparable key of a source name."""
     lowered = _clean_text(source_name, 80).lower()
@@ -1146,7 +1287,12 @@ FRESHNESS_FIELDS = (
 
 def _parse_timestamp(raw: Any) -> float | None:
     """Parse a connector date into a UTC timestamp (None when unreadable)."""
-    text = _clean_text(raw, 64)
+    return _parse_timestamp_cached(_clean_text(raw, 64))
+
+
+@lru_cache(maxsize=8192)
+def _parse_timestamp_cached(text: str) -> float | None:
+    """Parse an already cleaned date (memoised)."""
     if not text:
         return None
     if text.endswith("Z"):
@@ -1171,10 +1317,7 @@ def _parse_timestamp(raw: Any) -> float | None:
 def _freshness(job: Mapping[str, Any]) -> float:
     """Return the freshness of a record (0.0 when no date is known)."""
     for field_name in FRESHNESS_FIELDS:
-        value = job.get(field_name, "")
-        if value is None or (isinstance(value, str) and not value):
-            continue
-        parsed = _parse_timestamp(value)
+        parsed = _parse_timestamp(job.get(field_name, ""))
         if parsed is not None:
             return parsed
     return 0.0
@@ -1197,11 +1340,14 @@ class _Record:
     title: str
     concept: str
     level: str
+    level_from_title: bool
+    contract: str
     city: str
     country: str
     digits: str
     freshness: float
     trust: str
+    identity: str
 
     @property
     def priority(self) -> int:
@@ -1227,6 +1373,41 @@ def _external_identity(job: Mapping[str, Any], source_name: str, source_id: str)
     return "", ""
 
 
+def _record_identity(record: _Record) -> str:
+    """Return a stable identity of a record (used in the audit report)."""
+    return _identity_from_values(
+        record.external_id,
+        record.source_id,
+        record.source_name,
+        record.canonical_url,
+        record.company,
+        record.title,
+        record.city,
+    )
+
+
+def _identity_from_values(
+    external_id: str,
+    source_id: str,
+    source_name: str,
+    canonical_url: str,
+    company: str,
+    title: str,
+    city: str,
+) -> str:
+    """Return the stable identity of a record from its normalised values."""
+    if external_id:
+        return f"ext:{external_id}"
+    if source_id:
+        return f"source:{source_name}:{source_id}"
+    if canonical_url:
+        return f"url:{canonical_url}"
+    digest = hashlib.sha1(
+        f"{company}|{title}|{city}".encode("utf-8")
+    ).hexdigest()[:16]
+    return f"hash:{digest}"
+
+
 def _build_record(index: int, job: Mapping[str, Any]) -> _Record:
     """Build the deduplication record of a job dictionary."""
     source_name = _clean_text(job.get("source_name"), 80)
@@ -1235,7 +1416,14 @@ def _build_record(index: int, job: Mapping[str, Any]) -> _Record:
     raw_title = _clean_text(job.get("title"), 300)
     base = _title_base(raw_title)
     declared_level = _declared_role_level(job)
+    title_level = _role_level_from_base(base)
     canonical_title = _title_canonical_from_base(base)
+    canonical_url = canonicalize_url(job.get("official_url") or job.get("url") or "")
+    company = company_canonical(job.get("company"))
+    city = _canonical_city(job.get("city"))
+    identity = _identity_from_values(
+        external_id, source_id, source_name, canonical_url, company, canonical_title, city,
+    )
     return _Record(
         index=index,
         job=job,
@@ -1243,18 +1431,21 @@ def _build_record(index: int, job: Mapping[str, Any]) -> _Record:
         source_id=source_id,
         external_id=external_id,
         external_key=external_key,
-        canonical_url=canonicalize_url(job.get("official_url") or job.get("url") or ""),
+        canonical_url=canonical_url,
         apply_url=canonicalize_url(job.get("apply_url") or ""),
-        company=company_canonical(job.get("company")),
+        company=company,
         raw_title=raw_title,
         title=canonical_title,
         concept=_title_concept_from_raw(_raw_title_text(raw_title)),
-        level=declared_level or _role_level_from_base(base),
-        city=_canonical_city(job.get("city")),
+        level=declared_level or title_level,
+        level_from_title=not declared_level and bool(title_level),
+        contract=_contract_kind(job, raw_title),
+        city=city,
         country=_canonical_country(job.get("country")),
         digits=_digit_signature(canonical_title),
         freshness=_freshness(job),
         trust=_record_trust(job),
+        identity=identity,
     )
 
 
@@ -1274,6 +1465,7 @@ REASON_CLUSTER = "company_title_location_cluster"
 REASON_RECYCLED_ID = "recycled_identifier_conflict"
 REASON_COMPANY = "company_conflict"
 REASON_ROLE_LEVEL = "role_level_conflict"
+REASON_CONTRACT = "contract_conflict"
 REASON_COHORT = "cohort_conflict"
 REASON_START_DATE = "start_date_conflict"
 REASON_CITY = "city_conflict"
@@ -1353,6 +1545,77 @@ def _shared_specific_token(left: _Record, right: _Record) -> bool:
     return bool(_specific_tokens(left.title) & _specific_tokens(right.title))
 
 
+def _titles_are_compatible(left: _Record, right: _Record) -> bool:
+    """Tell whether two titles can describe the same posting.
+
+    Two known business concepts that differ describe two different jobs
+    (``"Software Engineer"`` and ``"Product Manager"``).  When the concept
+    of one of the titles is unknown, the lexical similarity decides.
+
+    A missing title is **not** a contradiction: a board may publish a
+    posting without its title, and the other evidence then carries the
+    decision.
+    """
+    if not left.title or not right.title:
+        return True
+    if left.concept and right.concept:
+        return left.concept == right.concept
+    similarity = _title_similarity_from_parts(
+        left.title, right.title, left.concept, right.concept, left.level, right.level,
+    )
+    return similarity >= TITLE_SIMILARITY_THRESHOLD
+
+
+def _level_is_the_only_difference(left: _Record, right: _Record) -> bool:
+    """Tell whether the role level is the only difference between two titles.
+
+    "Software Engineer" and "Intern Software Engineer" describe two
+    different jobs: the second title only adds the word that says the role
+    is an internship.  The rule only fires when the titles are otherwise
+    identical, so that two titles that merely share a level word are never
+    refused.
+
+    A level **declared** by the connector never fires the rule: a board may
+    declare "intern" on a record whose title simply does not repeat the
+    word.
+    """
+    if left.level and not right.level:
+        marked, plain = left, right
+    elif right.level and not left.level:
+        marked, plain = right, left
+    else:
+        return False
+    if not marked.level_from_title:
+        return False
+    marked_tokens = _content_tokens(
+        _title_without_level_marker(marked.raw_title, marked.level)
+    )
+    plain_tokens = _content_tokens(
+        _title_without_level_marker(plain.raw_title, plain.level)
+    )
+    if not marked_tokens or not plain_tokens:
+        return False
+    return marked_tokens == plain_tokens
+
+
+def _contracts_conflict(left: _Record, right: _Record) -> bool:
+    """Tell whether two records state two different contracts.
+
+    "CDI" and "CDD" are two different jobs, even when the titles are
+    identical.  ``"full time"`` never conflicts: an internship is often
+    published as a full-time position.
+    """
+    kind_left = left.contract
+    kind_right = right.contract
+    if not kind_left or not kind_right:
+        return False
+    if kind_left == kind_right:
+        return False
+    if "full_time" in {kind_left, kind_right}:
+        return False
+    return True
+
+
 def match_records(a: Mapping[str, Any], b: Mapping[str, Any]) -> dict[str, Any]:
     """Determine if two records represent the same job posting.
 
@@ -1412,6 +1675,17 @@ def _match_records(
     # 3. Role level.  A stage and a permanent analyst role are two jobs.
     if left.level and right.level and left.level != right.level:
         return refuse(REASON_ROLE_LEVEL)
+    if _level_is_the_only_difference(left, right):
+        # One title says what the job is, the other one adds the word that
+        # says who the job is for ("Software Engineer" / "Intern Software
+        # Engineer"): two different jobs.
+        return refuse(REASON_ROLE_LEVEL)
+
+    # 3b. Contract.  Two records that state two different contracts describe
+    #     two different jobs ("CDI" against "CDD"), even when their titles
+    #     are identical.
+    if _contracts_conflict(left, right):
+        return refuse(REASON_CONTRACT)
 
     # 4. Cohort.  Two titles carrying different digits describe two
     #    different editions of the same programme.
@@ -1427,18 +1701,22 @@ def _match_records(
 
     # 6. Identifiers and links: they prove the two records describe the
     #    same posting.  A contradiction on the city or on the dates stays
-    #    visible in the group, it does not refuse the merge.  The clustering
-    #    pre-pass separately avoids collapsing two different IDs on one board.
-    # Distinct identifiers from the same board are distinct postings.  A
-    # board often publishes several editions of the same internship title;
-    # title/company/location similarity alone must not collapse them.
+    #    visible in the group, it does not refuse the merge.
     proofs: list[str] = []
     if shared_external_id or shared_source_id:
         proofs.append(REASON_EXTERNAL_ID)
+    link_proofs: list[str] = []
     if left.canonical_url and left.canonical_url == right.canonical_url:
-        proofs.append(REASON_CANONICAL_URL)
+        link_proofs.append(REASON_CANONICAL_URL)
     if left.apply_url and left.apply_url == right.apply_url:
-        proofs.append(REASON_APPLY_URL)
+        link_proofs.append(REASON_APPLY_URL)
+    if link_proofs and not _titles_are_compatible(left, right):
+        # The two records share a link but name two different roles.  One
+        # link can host several postings (a careers landing page), so the
+        # link is not a proof on its own: the decision continues with the
+        # location and the title, which refuse the merge when they must.
+        link_proofs = []
+    proofs.extend(link_proofs)
     if proofs:
         return accept(proofs)
 
@@ -1646,35 +1924,24 @@ def _cluster_records(
                     records[right].city, records[right].country,
                 ):
                     continue
-                if (
-                    records[left].source_name
-                    and _source_key(records[left].source_name) == _source_key(records[right].source_name)
-                    and records[left].source_id and records[right].source_id
-                    and records[left].source_id != records[right].source_id
-                ):
-                    continue
                 merge(left, right, "identical_title")
-        # The exact-title pre-pass above has already resolved every pair when
-        # this bucket contains only one canonical title. Building blocking
-        # postings in that case repeats work without adding any candidates.
-        if len(by_title) > 1:
-            for left, right in _candidate_pairs(indexes, records):
-                if union.find(left) == union.find(right):
-                    continue
-                if records[left].title == records[right].title:
-                    # Already handled by the pre-pass above.
-                    continue
-                if not _same_location(
-                    records[left].city, records[left].country,
-                    records[right].city, records[right].country,
-                ):
-                    continue
-                if not _titles_can_match(records[left], records[right]):
-                    continue
-                decision = _match_records(records[left], records[right], text_similarity)
-                if not decision["matches"]:
-                    continue
-                merge(left, right, decision["reasons"][0])
+        for left, right in _candidate_pairs(indexes, records):
+            if union.find(left) == union.find(right):
+                continue
+            if records[left].title == records[right].title:
+                # Already handled by the pre-pass above.
+                continue
+            if not _same_location(
+                records[left].city, records[left].country,
+                records[right].city, records[right].country,
+            ):
+                continue
+            if not _titles_can_match(records[left], records[right]):
+                continue
+            decision = _match_records(records[left], records[right], text_similarity)
+            if not decision["matches"]:
+                continue
+            merge(left, right, decision["reasons"][0])
 
     clusters: dict[int, list[int]] = {}
     for record in records:
@@ -1731,18 +1998,32 @@ def _record_weight(record: Mapping[str, Any]) -> tuple[int, int, float, int, int
     return (trust, tier, freshness, priority, verified, completeness)
 
 
-def _built_record_weight(record: _Record) -> tuple[int, int, float, int, int, int]:
-    """Elect a built record using facts already computed during normalization."""
-    tier = _source_tier(record.source_name, record.job)
-    verified = 1 if record.job.get("source_verified") else 0
-    completeness = _record_completeness(record.job)
+def _election_tiebreak(record: Mapping[str, Any]) -> tuple[str, str, str, str]:
+    """Return the deterministic tie-break of an election.
+
+    Two records of the same source can weigh exactly the same.  The tie is
+    then broken on the identity of the record, never on the order in which
+    the records were received: the same collection always elects the same
+    representative.
+    """
+    source_name = _clean_text(record.get("source_name"), 80)
+    source_id = _clean_text(record.get("source_id"), 240)
+    external_id = _clean_text(record.get("external_id") or record.get("externalId"), 240)
+    official_url = _clean_text(record.get("official_url") or record.get("url"), 2_000)
+    return (source_name, source_id, external_id, official_url)
+
+
+def _election_key(record: Mapping[str, Any]) -> tuple[Any, ...]:
+    """Return the sort key of an election: the weight, then the tie-break."""
+    trust, tier, freshness, priority, verified, completeness = _record_weight(record)
     return (
-        TRUST_RANK.get(record.trust, TRUST_RANK["missing"]),
-        tier,
-        record.freshness,
-        record.priority,
-        verified,
-        completeness,
+        -trust,
+        -tier,
+        -freshness,
+        -priority,
+        -verified,
+        -completeness,
+        _election_tiebreak(record),
     )
 
 
@@ -1755,10 +2036,13 @@ def choose_best(records: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
 
     The user relevance score is never read: it cannot decide which view of
     the offer survives.
+
+    The election never depends on the order in which the records are given:
+    a tie is broken on the identity of the record.
     """
     if not records:
         raise ValueError("choose_best() needs at least one record.")
-    return max(records, key=_record_weight)
+    return min(records, key=_election_key)
 
 
 def _detect_conflicts(records: Sequence[Mapping[str, Any]]) -> dict[str, dict[str, str]]:
@@ -1832,13 +2116,22 @@ def _build_groups(
     groups: list[dict[str, Any]] = []
     for indexes in clusters:
         members = [records[index] for index in indexes]
-        best_record = max(members, key=_built_record_weight)
-        best = best_record.job
+        best = choose_best([member.job for member in members])
+        best_record = next(member for member in members if member.job is best)
         provenances = [
             _provenance(member.job, member.priority, member.index == best_record.index)
             for member in members
         ]
-        provenances.sort(key=lambda view: (-view["weight"], view["source_name"], view["source_id"]))
+        # The trace starts with the elected representative (the official
+        # source stays the primary one), then the trusted sources, then the
+        # source priority.
+        provenances.sort(key=lambda view: (
+            not view["is_representative"],
+            -TRUST_RANK.get(view["trust"], TRUST_RANK["missing"]),
+            -view["weight"],
+            view["source_name"],
+            view["source_id"],
+        ))
         merged_from: list[str] = []
         for member in members:
             if member.index == best_record.index:
@@ -1846,14 +2139,23 @@ def _build_groups(
             name = member.source_name
             if name and name not in merged_from:
                 merged_from.append(name)
+        # The list of the absorbed sources is sorted: it describes the same
+        # thing whatever the order in which the records were received.
+        merged_from.sort()
         cluster_reasons: list[str] = []
-        # ``merge`` records the reason at the moment a pair joins the union.
-        # Re-evaluating every pair here was quadratic inside each cluster and
-        # could produce a different audit under expensive similarity hooks.
         for index in indexes:
             for reason in reasons.get(index, []):
                 if reason not in cluster_reasons:
                     cluster_reasons.append(reason)
+        for left_index in indexes:
+            for right_index in indexes:
+                if left_index >= right_index:
+                    continue
+                decision = _match_records(records[left_index], records[right_index], text_similarity)
+                if decision["matches"]:
+                    for reason in decision["reasons"]:
+                        if reason not in cluster_reasons:
+                            cluster_reasons.append(reason)
         groups.append({
             "dedup_id": _dedup_id(best),
             "merged": len(members) > 1,
@@ -1969,7 +2271,9 @@ def deduplicate_offers(
 
     Every returned offer is a new dictionary: the records received are never
     modified.  A merged offer carries the trace of its sources in
-    ``merged_from``.
+    ``merged_from`` (the name of every absorbed source) and in
+    ``merged_provenances`` (one entry per source, with its link, its
+    identifier and its trust, so that a secondary source stays consultable).
 
     Args:
         jobs: Offer records collected from every source.
@@ -1992,6 +2296,17 @@ def deduplicate_offers(
         best = group["best"]
         merged_job: Job = dict(best)
         merged_job[MERGED_FROM_FIELD] = list(group["merged_from"])
+        merged_job[MERGED_PROVENANCES_FIELD] = [
+            {
+                "source_name": view["source_name"],
+                "source_id": view["source_id"],
+                "official_url": view["official_url"],
+                "apply_url": view["apply_url"],
+                "trust": view["trust"],
+                "is_representative": view["is_representative"],
+            }
+            for view in group["provenances"]
+        ]
         if group["merged"]:
             merged_job["merge_count"] = len(group["provenances"]) - 1
             merged_job["dedup_id"] = group["dedup_id"]
@@ -2074,6 +2389,7 @@ __all__ = [
     "DedupReport",
     "Job",
     "MERGED_FROM_FIELD",
+    "MERGED_PROVENANCES_FIELD",
     "ROLE_CONFLICT_SIMILARITY",
     "SOURCE_PRIORITY",
     "TITLE_SIMILARITY_THRESHOLD",

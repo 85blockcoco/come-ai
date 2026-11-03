@@ -4,6 +4,7 @@ data/
 output/
 logs/
 career_data/
+study_data/
 memory_data/
 state/
 .nage/
@@ -20,3 +21,6 @@ __pycache__/
 
 # Environnement virtuel local
 .venv/
+messages/
+messages/result.json
+artifacts/

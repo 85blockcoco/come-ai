@@ -1,69 +1,809 @@
-"""Matching CV ↔ offer requirements into concrete, provable actions (CVBOOST-21).
+"""Adversarial CV/offer matching (mission CVBOOST-08).
 
-Pure, deterministic, offline: the same CV and the same offer always produce
-the same actions.  No network, no LLM, no clock, no randomness.
+``match_cv_to_offer(cv_result, offer)`` is a **pure, deterministic, offline**
+function: same inputs, same outputs, no clock, no randomness, no network, no
+model.  It compares the requirements of one offer with the factual content of
+one CV and returns an auditable plan:
 
-THE QUESTION
-One question per offer requirement: *what concrete edit should I make to my
-CV for this requirement?*  Every answer is backed by a verbatim excerpt of
-the CV (exact substring + offset + field) or by the explicit statement that
-nothing in the CV proves the requirement.  Nothing is ever invented.
+* every action quotes a **verbatim substring** of the CV — never a paraphrase,
+  never an invented sentence;
+* a requirement with no proof in the CV yields ``DO_NOT_ADD``: what is absent
+  is never added;
+* the known lexical traps (Excel ≠ financial analysis, Java ≠ JavaScript, a
+  programme taught in English ≠ an English level, a stage ≠ a permanent
+  contract, M1 ≠ M2, a negated word, a sector homonym, an acronym, a
+  multilingual profile) are detected instead of being matched by accident.
 
-ACTION CODES
-``HIGHLIGHT``        the fact is already there — make it more visible.
-``REPHRASE``         the fact is there but worded differently — reuse the
-                     offer's vocabulary.
-``DO_NOT_ADD``       nothing in the CV proves it — do not add it without proof.
-``QUANTIFY``         the fact is there but without a figure — add a provable
-                     number.
-``CONFIRM_LANGUAGE`` the language is mentioned but its level is not proven —
-                     confirm it.
-
-INPUT
-``cv_result`` is a :class:`~career.cv_quality.models.CVAnalysisResult`
-(Mission 01) and ``offer`` is a dict holding the requirements extracted by
-Mission 02 (``analyze_offer`` output, or a raw offer dict — in which case
-the requirements are extracted on the fly with the very same contract).
-
-PROVENANCE
-``cv_evidence_text`` is always an exact substring of the CV source text, and
-``cv_evidence_offset`` is its character index in that source.  When the CV
-result does not carry its source text, no evidence can be quoted and every
-requirement is reported as ``DO_NOT_ADD`` with an explicit warning: guessing
-is never an option.
+The engine never rewrites the product's business rules: it reads the
+requirements through the CVBOOST-02 contract (``analyze_offer``) and only
+produces a decision surface for the CV plan.
 """
 
 from __future__ import annotations
 
+import itertools
 import re
-from dataclasses import dataclass
-from typing import Any
+import unicodedata
+from dataclasses import dataclass, replace
+from typing import Any, Iterable, Sequence
 
-from .models import (
-    CVAnalysisResult,
-    MatchAction,
-    MatchActionCode,
-    MatchEvidence,
-    MatchResult,
-)
+from .models import CVAnalysisResult, MatchAction, MatchEvidence, MatchResult
+from ..models import normalized_text
+from ..offer_requirements.extract import analyze_offer
 from .structure import SECTION_KEYWORDS
 
-__all__ = [
-    "match_cv_to_offer",
-    "find_evidence_in_cv",
-    "extract_keywords",
-    "MatchAction",
-    "MatchEvidence",
-    "MatchResult",
-]
+# ──────────────────────────────────────────────────────────────────────
+# Normalisation — keeps a 1:1 map back to the original characters
+# ──────────────────────────────────────────────────────────────────────
+
+def _strip_accents(text: str) -> str:
+    """Lowercase and drop the accents, one output character per input character."""
+    out: list[str] = []
+    for char in text:
+        if char.isalpha() and ord(char) > 127:
+            decomposed = unicodedata.normalize("NFKD", char)
+            stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
+            out.append(stripped.lower() if stripped else char)
+        else:
+            out.append(char.lower())
+    return "".join(out)
+
+
+def _normalize_with_map(text: str) -> tuple[str, list[int]]:
+    """Return ``(normalized_text, index_map)``.
+
+    ``index_map[i]`` is the offset of ``normalized_text[i]`` in ``text``.
+    The normalization is length preserving (one normalized character per
+    original character, except ``&`` which becomes ``" and "``), so a match
+    found in the normalized text can be mapped back to an exact slice of the
+    original text.
+    """
+    chars: list[str] = []
+    index_map: list[int] = []
+    for offset, char in enumerate(text):
+        if char == "&":
+            for expanded in " and ":
+                chars.append(expanded)
+                index_map.append(offset)
+            continue
+        lowered = _strip_accents(char)
+        if len(lowered) != 1:
+            lowered = " "
+        chars.append(lowered if lowered.isalnum() else " ")
+        index_map.append(offset)
+    return "".join(chars), index_map
+
+
+def _tokens(text: str) -> list[tuple[str, int, int]]:
+    """Tokenize into ``(token, start_offset, end_offset)`` over the original text."""
+    normalized, index_map = _normalize_with_map(text)
+    tokens: list[tuple[str, int, int]] = []
+    start = None
+    for position, char in enumerate(normalized):
+        if char.isalnum():
+            if start is None:
+                start = position
+        elif start is not None:
+            tokens.append((normalized[start:position], index_map[start], index_map[position - 1] + 1))
+            start = None
+    if start is not None:
+        tokens.append((normalized[start:len(normalized)], index_map[start], index_map[len(normalized) - 1] + 1))
+    return tokens
+
+
+#: Words that carry no discriminating meaning when comparing an offer and a CV.
+STOP_WORDS = frozenset(
+    {
+        "avec", "ans", "and", "au", "aux", "aout", "ce", "ces", "cette", "dans",
+        "de", "des", "du", "elle", "en", "est", "et", "ils", "la", "le", "les",
+        "leur", "plus", "ne", "nos", "notre", "ou", "par", "pas", "pour", "qui",
+        "sa", "ses", "son", "sur", "the", "to", "tous", "toute", "toutes", "un",
+        "une", "vos", "votre", "is", "are", "in", "of", "on", "for", "with",
+        "will", "have", "has", "des", "candidat", "candidature", "profil",
+        "maitrise", "experience", "experiences", "technologies", "technology",
+        "techno", "stack", "outils", "tools", "outillage", "environnement",
+        "environment", "contexte", "context", "taches", "tasks", "missions",
+        "mission", "secteur", "domaine",
+    }
+)
+
+
+def _content_tokens(text: str) -> list[str]:
+    """Significant tokens of a text, in order of appearance, without duplicates."""
+    seen: set[str] = set()
+    result: list[str] = []
+    for token, _, _ in _tokens(text):
+        if token in STOP_WORDS or len(token) < 3:
+            continue
+        if token in seen:
+            continue
+        seen.add(token)
+        result.append(token)
+    return result
+
+
+def extract_keywords(text: str) -> list[str]:
+    """Return deterministic significant terms used by the public matcher API."""
+    return _content_tokens(text)
+
+
+def find_evidence_in_cv(
+    cv_result: CVAnalysisResult, requirement: str, category: str = ""
+) -> MatchEvidence | None:
+    """Return a verbatim CV line containing a significant requirement term."""
+    source = cv_result.provenance.source_text or cv_result.text
+    if not source:
+        return None
+    normalized, mapping = _normalize_with_map(source)
+    for keyword in extract_keywords(requirement):
+        position = normalized.find(keyword)
+        if position < 0:
+            continue
+        original = mapping[position]
+        start, end = _line_bounds(source, original)
+        text = source[start:end].strip()
+        offset = source.find(text, start, end)
+        return MatchEvidence(text=text, offset=offset, field="document", confidence=0.9)
+    return None
+
+
+def _token_matches(word: str, token: str) -> bool:
+    """True when a token satisfies a keyword.
+
+    A crude singular/plural tolerance is accepted for the long words only
+    (``projet`` matches ``projets``) — it keeps the English and the French
+    CVs comparable without letting a two-letter word match anything.
+    """
+    if token == word:
+        return True
+    return len(word) >= 4 and token == word + "s"
+
+
+def _has_phrase(words: Sequence[str], tokens: Sequence[tuple[str, int, int]]) -> bool:
+    """True when the words appear consecutively in the token stream."""
+    if not words:
+        return False
+    count = len(words)
+    for index in range(len(tokens) - count + 1):
+        if all(_token_matches(words[offset], tokens[index + offset][0]) for offset in range(count)):
+            return True
+    return False
+
+
+def _keyword_present(keyword: str, tokens: Sequence[tuple[str, int, int]]) -> bool:
+    """True when a keyword (possibly several words) is present in the tokens."""
+    words = keyword.split()
+    if len(words) == 1:
+        return any(token[0] == words[0] for token in tokens)
+    return _has_phrase(words, tokens)
+
+
+def _marker_present(marker: Sequence[str], tokens: Sequence[tuple[str, int, int]]) -> bool:
+    """True when a marker sequence is present in the token stream."""
+    return _has_phrase(marker, tokens)
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Vocabulary
+# Concepts — synonyms, families (rephrasing) and homonym groups
 # ──────────────────────────────────────────────────────────────────────
 
-#: Mission 01 section title → evidence field name.
-SECTION_FIELDS: dict[str, str] = {
+@dataclass(frozen=True, slots=True)
+class _Concept:
+    """One skill concept and the token tuples that prove it.
+
+    Attributes:
+        id: Stable identifier of the concept.
+        surfaces: Alternative token tuples.  A concept is proved when *one*
+            tuple is fully present in the text (order free).
+        family: Concepts of the same family describe the same domain with a
+            different wording: finding one of them in the CV when another one
+            is required is a *rephrasing*, never a proof.
+        homonym: Group of concepts that share a word but not a meaning
+            (``audit_financier`` vs ``audit_it``).
+        strict_case: When true the token must appear uppercase in the source
+            (protects the short acronyms ``PE``, ``IB``, ``R``).
+        excluded_by: Phrases that cancel the proof when they follow the
+            match (``tableaux de bord`` is not the ``Tableau`` tool).
+    """
+
+    id: str
+    surfaces: tuple[tuple[str, ...], ...]
+    family: str | None = None
+    homonym: str | None = None
+    strict_case: bool = False
+    excluded_by: tuple[tuple[str, ...], ...] = ()
+
+
+def _concept(
+    id: str,
+    surfaces: Iterable[Iterable[str]],
+    family: str | None = None,
+    homonym: str | None = None,
+    strict_case: bool = False,
+    excluded_by: Iterable[Iterable[str]] = (),
+) -> _Concept:
+    return _Concept(
+        id=id,
+        surfaces=tuple(tuple(surface) for surface in surfaces),
+        family=family,
+        homonym=homonym,
+        strict_case=strict_case,
+        excluded_by=tuple(tuple(phrase) for phrase in excluded_by),
+    )
+
+
+CONCEPTS: tuple[_Concept, ...] = (
+    # Office and analysis
+    _concept("excel", (("excel",), ("tableur",), ("spreadsheet",))),
+    _concept("power_bi", (("power", "bi"),), homonym="bi"),
+    _concept("tableau", (("tableau",),), homonym="bi", excluded_by=(("de", "bord"),)),
+    _concept("analyse_financiere", (("analyse", "financiere"), ("analyse", "comptable"), ("financial", "analysis")), family="finance"),
+    _concept("modelisation_financiere", (("modelisation", "financiere"), ("financial", "modeling")), family="finance"),
+    _concept("finance_entreprise", (("finance", "entreprise"),), family="finance"),
+    _concept("m&a", (("m", "and", "a"), ("fusion", "acquisition")), family="finance"),
+    _concept("pe", (("pe",), ("private", "equity")), family="finance", strict_case=True),
+    _concept("ib", (("ib",), ("investment", "banking")), family="finance", strict_case=True),
+    # Programming languages
+    _concept("java", (("java",),), homonym="java"),
+    _concept("javascript", (("javascript",), ("node", "js")), homonym="java"),
+    _concept("python", (("python",),)),
+    _concept("r_stat", (("r",),), strict_case=True),
+    _concept("sql", (("sql",),), homonym="bd"),
+    _concept("nosql", (("nosql",), ("mongodb",), ("dynamodb",)), homonym="bd"),
+    # Cloud and tools
+    _concept("aws", (("aws",), ("amazon", "web", "services")), homonym="cloud"),
+    _concept("azure", (("azure",),), homonym="cloud"),
+    _concept("gcp", (("gcp",), ("google", "cloud")), homonym="cloud"),
+    _concept("erp", (("erp",),), homonym="logiciel"),
+    _concept("sap", (("sap",),), homonym="logiciel"),
+    _concept("crm", (("crm",),), homonym="logiciel"),
+    _concept("kpi", (("kpi",), ("indicateur", "cle", "performance"))),
+    # Management
+    _concept("gestion_equipe", (("gestion", "equipe"), ("management", "equipe"), ("encadrement", "equipe"), ("team", "management"), ("experience", "management"), ("gere", "equipe")), homonym="gestion"),
+    _concept("gestion_projet", (("gestion", "projet"), ("chef", "projet"), ("pilotage", "projet")), homonym="gestion"),
+    _concept("gestion_risque", (("gestion", "risques"), ("risk", "management")), homonym="risque"),
+    _concept("risque_it", (("risque", "informatique"), ("cybersecurite"), ("ssi")), homonym="risque"),
+    # Audit homonyms
+    _concept("audit_financier", (("audit", "financier"), ("audit", "comptable"), ("audit", "comptes"), ("financial", "audit")), homonym="audit"),
+    _concept("audit_it", (("audit", "it"), ("audit", "si"), ("audit", "informatique"), ("it", "audit"), ("audit", "systeme")), homonym="audit"),
+    # Data
+    _concept("data_analysis", (("data", "analysis"), ("analyse", "donnees"), ("data", "analyst")), homonym="data"),
+    _concept("data_engineering", (("data", "engineering"), ("ingenieur", "data")), homonym="data"),
+    _concept("machine_learning", (("machine", "learning"), ("deep", "learning"), ("apprentissage", "automatique")), homonym="data"),
+)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Languages, education levels, contract types
+# ──────────────────────────────────────────────────────────────────────
+
+LANGUAGES: dict[str, tuple[str, ...]] = {
+    "anglais": ("anglais", "english"),
+    "francais": ("francais", "french"),
+    "allemand": ("allemand", "german", "deutsch"),
+    "espagnol": ("espagnol", "spanish"),
+    "italien": ("italien", "italian"),
+    "portugais": ("portugais", "portuguese"),
+    "neerlandais": ("neerlandais", "dutch"),
+    "mandarin": ("mandarin", "chinois"),
+}
+
+#: Level -> (keywords, rank), most specific first.  Higher rank is stronger.
+LANGUAGE_LEVELS: tuple[tuple[str, tuple[str, ...], int], ...] = (
+    ("natif", ("natif", "native", "maternelle"), 5),
+    ("courant", ("courant", "fluent", "c1", "c2", "bilingue", "bilingual", "maitrise"), 4),
+    ("professionnel", ("professionnel", "professional", "b2", "avance"), 3),
+    ("intermediaire", ("intermediaire", "b1", "intermediate"), 2),
+    ("debutant", ("debutant", "a1", "a2", "beginner", "notions"), 1),
+    ("lu", ("lu", "lecture", "read", "schriftlich"), 0),
+)
+
+#: Contexts where a language is mentioned without declaring a level.
+LANGUAGE_PROGRAM_CONTEXTS: tuple[str, ...] = (
+    "programme", "program", "cours", "formation", "enseignement", "taught",
+    "soutenance", "intervention", "diplome", "etudes", "istudy", "universite",
+    "master", "msc", "licence", "bachelor",
+)
+
+#: Same idea, applied to the *requirement* side: a programme taught in a
+#: language is not a language requirement.
+LANGUAGE_PROGRAM_CUES: tuple[str, ...] = (
+    "programme", "program", "cours", "enseignement", "taught", "soutenance",
+    "intervention", "formation",
+)
+
+#: Education level -> (keywords, rank), most specific first.
+EDUCATION_LEVELS: tuple[tuple[str, tuple[str, ...], int], ...] = (
+    ("doctorat", ("doctorat", "phd", "these"), 5),
+    ("bac+5", ("master 2", "m2", "msc", "mba", "grande ecole", "bac+5", "bac 5"), 4),
+    ("bac+4", ("master 1", "m1", "maitrise", "licence professionnelle", "bac+4", "bac 4"), 3),
+    ("bac+3", ("bachelor", "licence", "bac+3", "bac 3"), 2),
+    ("bac+2", ("bts", "dut", "deust", "bac+2", "bac 2"), 1),
+    # Generic fallback: a bare "master" is a Bac+5 unless a more precise
+    # level has already been recognised above.
+    ("bac+5", ("master",), 4),
+)
+
+#: Contract type -> keywords.
+CONTRACT_TYPES: dict[str, tuple[str, ...]] = {
+    "stage": ("stage", "stagiaire", "internship"),
+    "alternance": ("alternance", "apprentissage", "apprenti"),
+    "cdd": ("cdd", "contrat a duree determinee", "fixed term"),
+    "cdi": ("cdi", "contrat a duree indeterminee", "permanent"),
+    "vie": ("vie", "volontariat international"),
+    "freelance": ("freelance", "independant", "auto entrepreneur"),
+}
+
+#: Words that introduce a declaration of intent in the CV.
+DECLARATION_CUES: tuple[str, ...] = (
+    "recherche", "objectif", "souhaite", "souhait", "contract", "disponibilite",
+    "disponible", "cible", "veut", "pret", "looking", "searching", "target",
+    "seeking", "statut", "poste",
+)
+
+#: Negation markers, expressed as token sequences.
+NEGATION_MARKERS: tuple[tuple[str, ...], ...] = (
+    ("pas", "de"),
+    ("pas", "d"),
+    ("sans",),
+    ("aucun",),
+    ("aucune",),
+    ("exclu",),
+    ("exclut",),
+    ("ne", "pas"),
+    ("n", "est", "pas"),
+    ("not", "required"),
+    ("not", "mandatory"),
+    ("no", "need"),
+    ("no", "experience"),
+    ("interdit",),
+)
+
+#: Negation words that may precede the term they negate.
+NEGATION_WORDS = frozenset({"pas", "sans", "aucun", "aucune", "exclu", "exclut", "non", "no", "interdit"})
+
+#: Words that close a clause: the proof never goes past them.
+CLAUSE_SEPARATORS = frozenset(
+    {
+        "et", "ou", "mais", "avec", "ainsi", "puis", "donc", "en", "pour",
+        "dans", "sur", "par", "aussi", "dont", "selon", "car", "ni", "ni",
+        "chez", "vers", "depuis", "pendant", "malgre", "hormis",
+        # English conjunctions: a proof never crosses them either, so an
+        # English CV yields the same tight evidence as a French one.
+        "and", "or", "but", "with", "then", "also", "while", "whereas",
+    }
+)
+
+#: How far a proof may be extended around the matched phrase.
+MAX_EXTENSION = 40
+
+#: Characters that close a clause.
+CLAUSE_DELIMITERS = ",;:|!?("
+
+#: Canonical reason carried by every ``DO_NOT_ADD`` action: what is absent
+#: from the CV is never added to it.  The specific cause of the absence is
+#: appended to this sentence, never replaces it.
+NO_EVIDENCE_REASON = "Aucune preuve dans le CV, ne pas ajouter sans preuve"
+
+#: Words of a requirement that ask for a quantified result.
+QUANTIFICATION_CUES: tuple[str, ...] = (
+    "equipe", "budget", "chiffre", "effectif", "encadrer", "diriger",
+    "manager", "gestion d equipe", "chef d equipe",
+)
+
+#: Offer fields the CVBOOST-02 contract reads as structured requirements.
+STRUCTURED_REQUIREMENT_FIELDS: tuple[str, ...] = (
+    "requirements",
+    "languages_required",
+    "eligibility_requirement",
+    "role_level",
+)
+
+#: A quantified result: a number with a unit or a counted noun.
+QUANTIFIED_EVIDENCE = re.compile(
+    r"(\d+\s*[%€$£])|(\d+\s*[kKmM]\s*[€$£])|(\d+\s*(?:ans?|mois|years?|months?))"
+    r"|(x\d+)|(\d+\s*[a-z]{3,})"
+    r"|((?:budget|chiffre|revenue|ca|effectif)\D{0,3}\d+)",
+    re.IGNORECASE,
+)
+
+#: Two tokens further apart than this do not belong to the same phrase.
+MAX_PHRASE_SPAN = 60
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Helpers
+# ──────────────────────────────────────────────────────────────────────
+
+def _detect_language(text: str) -> tuple[str | None, str | None]:
+    """Return ``(language, level)`` mentioned in a text."""
+    tokens = _tokens(text)
+    language: str | None = None
+    for name, keywords in LANGUAGES.items():
+        if any(_keyword_present(keyword, tokens) for keyword in keywords):
+            language = name
+            break
+    level: str | None = None
+    for name, keywords, _rank in LANGUAGE_LEVELS:
+        if any(_keyword_present(keyword, tokens) for keyword in keywords):
+            level = name
+            break
+    return language, level
+
+
+def _languages_in(text: str) -> list[str]:
+    """Return every language explicitly named in textual order."""
+    tokens = _tokens(text)
+    found: list[tuple[int, str]] = []
+    for name, keywords in LANGUAGES.items():
+        positions = [token[1] for token in tokens if token[0] in keywords]
+        if positions:
+            found.append((min(positions), name))
+    return [name for _, name in sorted(found)]
+
+
+def _detect_education_level(text: str) -> tuple[str | None, int]:
+    """Return ``(level, rank)`` of the education level mentioned in a text."""
+    tokens = _tokens(text)
+    for name, keywords, rank in EDUCATION_LEVELS:
+        if any(_keyword_present(keyword, tokens) for keyword in keywords):
+            return name, rank
+    return None, 0
+
+
+def _highest_education_level(text: str) -> tuple[str | None, int]:
+    """Return the highest education level explicitly present in a text."""
+    tokens = _tokens(text)
+    matches = [
+        (name, rank)
+        for name, keywords, rank in EDUCATION_LEVELS
+        if any(_keyword_present(keyword, tokens) for keyword in keywords)
+    ]
+    return max(matches, key=lambda item: item[1]) if matches else (None, 0)
+
+
+def _detect_contract_type(text: str) -> str | None:
+    """Return the contract type mentioned in a text."""
+    tokens = _tokens(text)
+    for name, keywords in CONTRACT_TYPES.items():
+        if any(_keyword_present(keyword, tokens) for keyword in keywords):
+            return name
+    return None
+
+
+def _is_negated(text: str) -> bool:
+    """True when the requirement is a negated statement, not a requirement."""
+    tokens = _tokens(text)
+    return any(_marker_present(marker, tokens) for marker in NEGATION_MARKERS)
+
+
+def _is_quantified(text: str) -> bool:
+    """True when the text carries a number with a unit."""
+    without_dates = re.sub(
+        r"\d{1,2}[/.]\d{1,2}[/.]\d{2,4}|\d{4}\s*[-–—/]\s*\d{2,4}|"
+        r"\d{1,2}\s*[-–—/]\s*\d{4}|\+\d[\d\s().-]{7,}\d|\b(?:19|20)\d{2}\b",
+        " ",
+        text,
+    )
+    return bool(QUANTIFIED_EVIDENCE.search(without_dates))
+
+
+def _asks_for_numbers(text: str) -> bool:
+    """True when the requirement asks for a quantified result.
+
+    The cues are matched on whole words: ``manager`` does not answer to
+    ``management``.  The mission's example — « expérience management » in the
+    offer, « gère une équipe de 10 personnes » in the CV — must produce a
+    QUANTIFY action, not a plain HIGHLIGHT.
+    """
+    tokens = _tokens(text)
+    return any(_keyword_present(cue, tokens) for cue in QUANTIFICATION_CUES)
+
+
+def _structured_lines(value: Any) -> list[str]:
+    """Return the non-empty lines of a structured offer field."""
+    if isinstance(value, str):
+        raw_lines: list[Any] = value.splitlines()
+    elif isinstance(value, (list, tuple)):
+        raw_lines = list(value)
+    else:
+        return []
+    lines: list[str] = []
+    for raw in raw_lines:
+        line = str(raw).strip().strip("•-–*▪●➤·‣◦ ").strip()
+        if line:
+            lines.append(line)
+    return lines
+
+
+def _unextracted_requirements(offer: Any, extracted: Sequence[str]) -> list[str]:
+    """Return the structured requirement lines the contract did not extract.
+
+    The contract (CVBOOST-02) ignores any statement shorter than four
+    characters — ``SQL``, ``VBA``, ``M&A`` — and a requirement that never
+    reaches the matcher cannot be covered.  The engine says so instead of
+    letting the offer look fully handled.
+    """
+    if not isinstance(offer, dict):
+        return []
+    extracted_keys = [normalized_text(text) for text in extracted]
+    missing: list[str] = []
+    for field in STRUCTURED_REQUIREMENT_FIELDS:
+        for line in _structured_lines(offer.get(field)):
+            key = normalized_text(line)
+            if not key:
+                continue
+            if any(
+                key == other or key.startswith(other) or other.startswith(key)
+                for other in extracted_keys
+            ):
+                continue
+            missing.append(line)
+    return missing
+
+
+def _line_bounds(source: str, offset: int) -> tuple[int, int]:
+    """Return the ``(start, end)`` offsets of the line holding ``offset``."""
+    start = source.rfind("\n", 0, offset) + 1
+    end = source.find("\n", offset)
+    if end == -1:
+        end = len(source)
+    return start, end
+
+
+def _line_tokens(
+    tokens: Sequence[tuple[str, int, int]], source: str, offset: int
+) -> list[tuple[str, int, int]]:
+    """Return the tokens of the line holding ``offset``."""
+    start, end = _line_bounds(source, offset)
+    return [token for token in tokens if start <= token[1] and token[2] <= end]
+
+
+def _span(positions: Sequence[tuple[str, int, int]]) -> tuple[int, int]:
+    """Return the ``(start, end)`` offsets covering a set of tokens."""
+    return min(position[1] for position in positions), max(position[2] for position in positions)
+
+
+def _phrase_candidates(
+    words: Sequence[str],
+    tokens: Sequence[tuple[str, int, int]],
+    source: str,
+    strict_case: bool = False,
+) -> list[list[tuple[str, int, int]]]:
+    """Return every set of tokens that can prove ``words``.
+
+    The tokens must belong to the same phrase: two occurrences of the same
+    word in different parts of the CV never prove the same phrase.
+    """
+    candidates: list[list[tuple[str, int, int]]] = []
+    for word in words:
+        found = [
+            token
+            for token in tokens
+            if _token_matches(word, token[0])
+            and (not strict_case or source[token[1]:token[2]].isupper())
+        ]
+        if not found:
+            return []
+        candidates.append(found[:12])
+
+    found_phrases: list[tuple[int, list[tuple[str, int, int]]]] = []
+    for combination in itertools.product(*candidates):
+        starts = [position[1] for position in combination]
+        if starts != sorted(starts):
+            continue
+        length = combination[-1][2] - combination[0][1]
+        if length > MAX_PHRASE_SPAN:
+            continue
+        found_phrases.append((length, list(combination)))
+    found_phrases.sort(key=lambda item: item[0])
+    return [phrase for _length, phrase in found_phrases]
+
+
+def _phrase_positions(
+    words: Sequence[str],
+    tokens: Sequence[tuple[str, int, int]],
+    source: str,
+    strict_case: bool = False,
+) -> list[tuple[str, int, int]] | None:
+    """Return the tightest set of tokens proving ``words``, or ``None``."""
+    phrases = _phrase_candidates(words, tokens, source, strict_case)
+    return phrases[0] if phrases else None
+
+
+def _resolve_concept(text: str) -> tuple[_Concept | None, tuple[str, ...] | None]:
+    """Resolve the concept a requirement refers to.
+
+    The biggest surface wins, so ``Analyse financière`` resolves to the
+    financial-analysis concept and not to a bare ``finance`` concept.  Every
+    token is considered, including the short ones (``R``, ``PE``, ``M&A``).
+    """
+    tokens = [token for token, _, _ in _tokens(text)]
+    if not tokens:
+        return None, None
+    token_set = set(tokens)
+    best: tuple[_Concept | None, tuple[str, ...] | None, int] = (None, None, 0)
+    for concept in CONCEPTS:
+        for surface in concept.surfaces:
+            if len(surface) <= best[2]:
+                continue
+            if all(any(_token_matches(word, token) for token in token_set) for word in surface):
+                best = (concept, surface, len(surface))
+    return best[0], best[1]
+
+
+def _is_excluded(
+    concept: _Concept,
+    positions: Sequence[tuple[str, int, int]],
+    tokens: Sequence[tuple[str, int, int]],
+    source: str,
+) -> bool:
+    """True when a phrase following the match cancels the proof."""
+    if not concept.excluded_by:
+        return False
+    line = _line_tokens(tokens, source, positions[0][1])
+    line_words = [word for word, _, _ in line]
+    matched = {position[1] for position in positions}
+    for index, (word, token_start, _token_end) in enumerate(line):
+        if token_start not in matched:
+            continue
+        following = line_words[index + 1: index + 1 + 2]
+        for phrase in concept.excluded_by:
+            if len(following) >= len(phrase) and all(
+                _token_matches(phrase[position], following[position])
+                for position in range(len(phrase))
+            ):
+                return True
+    return False
+
+
+def _find_concept_evidence(
+    concept: _Concept,
+    tokens: Sequence[tuple[str, int, int]],
+    source: str,
+    prefer: set[str] | None = None,
+) -> list[tuple[str, int, int]] | None:
+    """Find the CV tokens proving a concept.
+
+    When the concept appears several times, the occurrence that shares its
+    line with the other words of the requirement wins: the proof must be the
+    one that answers the offer, not the first one in the document.
+    """
+    best: list[tuple[str, int, int]] | None = None
+    best_key: tuple[int, int] | None = None
+    for surface in concept.surfaces:
+        # Only the short acronyms insist on the uppercase ("PE"), never their
+        # written form ("Private Equity").
+        strict = concept.strict_case and len(surface) == 1 and len(surface[0]) <= 2
+        for combination in _phrase_candidates(surface, tokens, source, strict):
+            if _is_excluded(concept, combination, tokens, source):
+                continue
+            line = _line_tokens(tokens, source, combination[0][1])
+            line_words = {word for word, _, _ in line}
+            overlap = (
+                sum(
+                    1
+                    for word in prefer
+                    if any(_token_matches(word, line_word) for line_word in line_words)
+                )
+                if prefer
+                else 0
+            )
+            length = combination[-1][2] - combination[0][1]
+            key = (overlap, -length)
+            if best_key is None or key > best_key:
+                best_key = key
+                best = combination
+    return best
+
+
+def _clause_bounds(source: str, start: int, end: int) -> tuple[int, int]:
+    """Return the bounds of the clause holding a span.
+
+    A clause ends on a punctuation mark or on the ``|`` that separates the
+    fields of a job title: the proof never leaves it.
+    """
+    line_start, line_end = _line_bounds(source, start)
+    clause_start = line_start
+    for index in range(start - 1, line_start - 1, -1):
+        if source[index] in CLAUSE_DELIMITERS:
+            clause_start = index + 1
+            break
+    clause_end = line_end
+    for index in range(end, line_end):
+        if source[index] in CLAUSE_DELIMITERS:
+            clause_end = index
+            break
+    return clause_start, clause_end
+
+
+def _extend_span(
+    span: tuple[int, int],
+    tokens: Sequence[tuple[str, int, int]],
+    allowed: set[str],
+    source: str,
+) -> tuple[int, int]:
+    """Extend a proof over the phrase that surrounds it.
+
+    The extension never crosses a clause separator (``et``, ``ou``, ``en``…)
+    and never leaves the clause: the proof stays one excerpt of the CV, not a
+    paragraph and not a whole job title.
+    """
+    start, end = span
+    clause_start, clause_end = _clause_bounds(source, start, end)
+    clause_tokens = sorted(
+        (token for token in tokens if clause_start <= token[1] and token[2] <= clause_end),
+        key=lambda token: token[1],
+    )
+    for token, token_start, token_end in clause_tokens:
+        if token_start >= end:
+            if token in CLAUSE_SEPARATORS or token_start - end > MAX_EXTENSION:
+                break
+            end = token_end
+    for token, token_start, token_end in reversed(clause_tokens):
+        if token_end <= start:
+            if token in CLAUSE_SEPARATORS or start - token_end > MAX_EXTENSION:
+                break
+            start = token_start
+    return start, end
+
+
+def _tightest_cluster(
+    matched: Sequence[tuple[str, int, int]], source: str
+) -> list[tuple[str, int, int]]:
+    """Keep the matched tokens that are close to each other.
+
+    Two words separated by a line break do not prove each other: the proof
+    stays local to the CV.
+    """
+    if not matched:
+        return []
+    clusters: list[list[tuple[str, int, int]]] = [[matched[0]]]
+    for token in matched[1:]:
+        previous = clusters[-1][-1]
+        same_line = _line_bounds(source, previous[1]) == _line_bounds(source, token[1])
+        if same_line and token[1] - previous[2] <= 40:
+            clusters[-1].append(token)
+        else:
+            clusters.append([token])
+    return max(clusters, key=lambda cluster: (len(cluster), -(cluster[-1][2] - cluster[0][1])))
+
+
+def _declared_contract(cv_text: str) -> tuple[str | None, set[str], tuple[int, int] | None]:
+    """Return the contract type declared by the CV, the excluded ones and the proof.
+
+    ``je recherche un CDI, pas d'alternance`` declares ``cdi`` and excludes
+    ``alternance``: the two are kept apart, an excluded type never shadows a
+    declared one.  The proof is the verbatim span of the declaration.
+    """
+    tokens = _tokens(cv_text)
+    declared: str | None = None
+    excluded: set[str] = set()
+    proof: tuple[int, int] | None = None
+    for token in tokens:
+        contract = _detect_contract_type(token[0])
+        if contract is None:
+            continue
+        line = _line_tokens(tokens, cv_text, token[1])
+        line_words = [word for word, _, _ in line]
+        if token[0] not in line_words:
+            continue
+        position = line_words.index(token[0])
+        preceding = line_words[:position][-4:]
+        if any(word in NEGATION_WORDS for word in preceding):
+            excluded.add(contract)
+            continue
+        if any(cue in line_words for cue in DECLARATION_CUES):
+            declared = contract
+            proof = (token[1], token[2])
+    return declared, excluded, proof
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Public API
+# ──────────────────────────────────────────────────────────────────────
+
+_SECTION_FIELDS = {
     "Expérience": "experience",
     "Formation": "education",
     "Compétences": "skills",
@@ -71,326 +811,30 @@ SECTION_FIELDS: dict[str, str] = {
     "Projets": "projects",
     "Certifications": "certifications",
 }
-
-#: Field used when a proof sits outside every detected section.
-DOCUMENT_FIELD = "document"
-
-#: Maximum size of the quoted excerpt, in characters.
-MAX_EVIDENCE_CHARS = 160
-
-#: Accent folding used for every comparison (no external dependency).
-_ACCENTS = str.maketrans(
-    {
-        "à": "a", "â": "a", "ä": "a", "é": "e", "è": "e", "ê": "e", "ë": "e",
-        "î": "i", "ï": "i", "ô": "o", "ö": "o", "ù": "u", "û": "u", "ü": "u",
-        "ç": "c", "ñ": "n", "œ": "oe", "æ": "ae",
+_TITLE_WORDS = {
+    title: {
+        word
+        for alias in aliases
+        for word in _strip_accents(alias).split()
     }
-)
-
-#: Tokens are split on everything but letters, digits, "+" and "#" so that
-#: "C++" and "C#" survive as single tokens.
-_TOKEN_SPLIT = re.compile(r"[^a-z0-9+#]+")
-
-#: Function words — they never carry the meaning of a requirement.
-_STOPWORDS = frozenset(
-    {
-        # English
-        "the", "and", "for", "with", "you", "your", "our", "will", "have",
-        "this", "that", "from", "are", "not", "plus", "must", "should", "can",
-        "may", "using", "use", "who", "which", "what", "all", "any", "they",
-        "has", "had", "was", "were", "good", "strong", "solid", "profile",
-        # French
-        "de", "du", "des", "la", "le", "les", "et", "ou", "un", "une", "en",
-        "au", "aux", "d", "l", "n", "s", "c", "y", "a", "par", "pour", "avec",
-        "sur", "dans", "est", "sont", "etre", "son", "sa", "ses", "ce", "cet",
-        "cette", "qui", "que", "quoi", "dont", "ainsi", "aussi", "tres", "bien",
-        "solide", "bonne", "excellent", "profil", "recherche", "postes",
-    }
-)
-
-#: Requirement boilerplate — the way an offer asks never identifies a skill.
-_REQUIREMENT_NOISE = frozenset(
-    {
-        "mandatory", "required", "require", "requires", "requiring",
-        "obligatoire", "obligatoirement", "requis", "requise", "requisites",
-        "exige", "exigee", "exigees", "indispensable", "indispensables",
-        "must", "least", "minimum", "at", "souhaite", "souhaitable",
-        "apprecie", "appreciee", "atout", "plus", "profil", "candidat",
-        "candidature", "poste", "notre", "votre",
-        # Section-label-like prefixes: they introduce a list of skills, they
-        # never are one.  Left in, they dilute the proof and turn a fully
-        # proven requirement into a partial one.
-        "technologies", "technology", "techno", "stack",
-        "outils", "tools", "outillage",
-        "environnement", "environment", "env",
-        "contexte", "context", "taches", "tasks",
-        "missions", "mission", "secteur", "domaine",
-    }
-)
-
-#: Capability and level words — they qualify a skill, they never identify it.
-_WEAK_TOKENS = frozenset(
-    {
-        "experience", "experiences", "expertise", "maitrise", "maitrisant",
-        "maitrisante", "connaissance", "connaissances", "pratique", "pratiques",
-        "utilisation", "utiliser", "niveau", "competence", "competences",
-        "skill", "skills", "ability", "abilities", "knowledge", "atleast",
-        "annee", "annees", "an", "ans", "year", "years", "mois", "month",
-        "months", "jour", "jours", "journee", "journees", "temps",
-        "tempsplein", "tempspartiel", "pleintemps", "kenntnis", "kenntnisse",
-        "savoirfaire", "masterise", "maitrisable", "langue", "langues",
-        "courant", "courante", "fluent", "natif", "native", "professionnel",
-        "professional", "avance", "avancee", "excellent", "parfait",
-        "c1", "c2", "b2", "b1", "a2", "a1",
-    }
-)
-
-#: Equivalent terms — a match through one of them is a match, but a weaker
-#: one: the wording of the CV differs from the wording of the offer.
-_SYNONYM_GROUPS: tuple[frozenset[str], ...] = (
-    frozenset({"gestion", "management", "pilotage"}),
-    frozenset({"projet", "project"}),
-    frozenset({"equipe", "team", "equipes"}),
-    frozenset({"developpement", "development"}),
-    frozenset({"automatisation", "automation"}),
-    frozenset({"donnees", "data"}),
-    frozenset({"vba", "macro", "macros"}),
-    frozenset({"stage", "stagiaire", "internship", "intern"}),
-    frozenset({"alternance", "apprentissage", "apprenticeship"}),
-    frozenset({"client", "clients", "clientele"}),
-    frozenset({"vente", "commercial", "sales"}),
-    frozenset({"anglais", "english"}),
-    frozenset({"francais", "french"}),
-    frozenset({"allemand", "german"}),
-    frozenset({"espagnol", "spanish"}),
-    frozenset({"italien", "italian"}),
-    frozenset({"portugais", "portuguese"}),
-    frozenset({"chinois", "chinese", "mandarin"}),
-    frozenset({"japonais", "japanese"}),
-    frozenset({"neerlandais", "dutch"}),
-    frozenset({"licence", "bachelor"}),
-    frozenset({"master", "mastere"}),
-    frozenset({"doctorat", "phd"}),
-)
-
-#: Language name → aliases that prove it.
-_LANGUAGES: dict[str, tuple[str, ...]] = {
-    "anglais": ("anglais", "english"),
-    "francais": ("francais", "french"),
-    "allemand": ("allemand", "german"),
-    "espagnol": ("espagnol", "spanish"),
-    "italien": ("italien", "italian"),
-    "portugais": ("portugais", "portuguese"),
-    "neerlandais": ("neerlandais", "dutch"),
-    "chinois": ("chinois", "chinese", "mandarin"),
-    "japonais": ("japonais", "japanese"),
-    "coreen": ("coreen", "korean"),
-    "russe": ("russe", "russian"),
-    "arabe": ("arabe", "arabic"),
+    for title, aliases in SECTION_KEYWORDS.items()
 }
-
-#: Display name of each language, used in the warnings.
-_LANGUAGE_LABELS: dict[str, str] = {
-    "anglais": "Anglais",
-    "francais": "Français",
-    "allemand": "Allemand",
-    "espagnol": "Espagnol",
-    "italien": "Italien",
-    "portugais": "Portugais",
-    "neerlandais": "Néerlandais",
-    "chinois": "Chinois",
-    "japonais": "Japonais",
-    "coreen": "Coréen",
-    "russe": "Russe",
-    "arabe": "Arabe",
+_SINGLE_WORD_TITLES = {
+    _strip_accents(alias): title
+    for title, aliases in SECTION_KEYWORDS.items()
+    for alias in aliases
+    if " " not in alias
 }
-
-#: Level markers proving that a language level is stated, not only the language.
-_LANGUAGE_LEVEL_MARKERS = (
-    "courant", "courante", "fluent", "natif", "native", "professionnel",
-    "professional", "avance", "avancee", "excellent", "parfait", "maitrise",
-    "c1", "c2", "b2", "b1", "a2", "a1",
-)
-
-#: Separators that close the "language window" of a line.
-_LANGUAGE_SEPARATORS = ",;|/"
-
-#: A requirement carrying one of those is asking for a volume.
-_QUANTITY_PATTERN = re.compile(
-    r"""
-    \d+\s*\+                                   # 10+
-    | \d+\s*(?:à|a|-|–|to)\s*\d+               # 3 à 5
-    | \d+\s*%                                   # 30%
-    | \d+\s*(?:€|eur|euros?|k€|m€)              # 15k€/an
-    | \d+\s*(?:ans?|annees?|years?|mois|months?|jours?|semaines?|weeks?)
-    | \d+\s*(?:personnes?|people|collaborateurs?|clients?|projets?|postes?)
-    | \d+\s*(?:heures?|hours?)
-    """,
-    re.IGNORECASE | re.VERBOSE,
-)
-
-#: A figure anywhere in the excerpt.
-_DIGIT_PATTERN = re.compile(r"\d")
-
-#: Dates and phone numbers say *when* (or *who*), never *how much*: they are
-#: not provable figures.  A CV line such as "2020-2023 | Chef de projet"
-#: must not be read as a quantified achievement.
-_DATE_LIKE_PATTERN = re.compile(
-    r"""
-      \d{1,2}[/.]\d{1,2}[/.]\d{2,4}       # 01/2023, 1/2/2020
-    | \d{4}\s*[-–—/]\s*\d{2,4}           # 2020-2023
-    | \d{1,2}\s*[-–—/]\s*\d{4}           # 01-2023
-    | \+\d[\d\s().-]{7,}\d                # +33 6 12 34 56 78
-    """,
-    re.VERBOSE,
-)
-
-#: A bare year is a date too ("2018 | Stage | X"), not a figure.
-_YEAR_PATTERN = re.compile(r"\b(?:19|20)\d{2}\b")
-
-
-def _has_figure(text: str) -> bool:
-    """Whether a text holds a provable figure.
-
-    Dates and phone numbers are stripped first: they describe *when*, not
-    *how much*.  "Géré équipe" on a line dated "2020-2023" carries no figure.
-    """
-    stripped = _DATE_LIKE_PATTERN.sub(" ", text)
-    stripped = _YEAR_PATTERN.sub(" ", stripped)
-    return bool(_DIGIT_PATTERN.search(stripped))
-
-#: Education levels, expressed on the "Bac+X" scale.
-#: The specific markers come first (so "Licence professionnelle" is not read
-#: as a "Licence", and "Master 1" is not read as a "Master"), then the
-#: general ones, from the highest level to the lowest.
-_EDUCATION_MARKERS: tuple[tuple[str, int], ...] = (
-    ("licence professionnelle", 2),
-    ("licence pro", 2),
-    ("master 1", 4),
-    ("master1", 4),
-    ("master 2", 5),
-    ("master2", 5),
-    ("bac+5", 5),
-    ("bac 5", 5),
-    ("bac+4", 4),
-    ("bac 4", 4),
-    ("bac+3", 3),
-    ("bac 3", 3),
-    ("bac+2", 2),
-    ("bac 2", 2),
-    ("doctorat", 6),
-    ("phd", 6),
-    ("master", 5),
-    ("mastere", 5),
-    ("mba", 5),
-    ("m2", 5),
-    ("ingenieur", 5),
-    ("m1", 4),
-    ("licence", 3),
-    ("bachelor", 3),
-    ("bachelier", 3),
-    ("l3", 3),
-    ("bts", 2),
-    ("dut", 2),
-    ("deug", 2),
-    ("baccalaureat", 1),
-    ("bac", 1),
-    ("cap", 1),
-    ("bep", 1),
-)
-
-#: Label of each education level, used in the warnings.
-_EDUCATION_LABELS: dict[int, str] = {
-    1: "Bac",
-    2: "Bac+2 (BTS/DUT)",
-    3: "Bac+3 (Licence)",
-    4: "Bac+4 (M1)",
-    5: "Bac+5 (Master/M2)",
-    6: "Doctorat",
-}
-
-#: The reason used whenever the CV proves nothing.
-DO_NOT_ADD_REASON = "Aucune preuve dans le CV, ne pas ajouter sans preuve."
-
-#: The reason used when the fact is there but not visible enough.
-HIGHLIGHT_REASON = (
-    "Le fait existe. Le rendre plus visible (mots-clés, en haut de section, en gras)."
-)
-
-#: The reason used when a figure is missing.
-QUANTIFY_REASON = (
-    "Le fait existe mais sans chiffre. Ajouter un chiffre prouvable "
-    "(ex : « géré une équipe de 10 » au lieu de « géré une équipe »)."
-)
-
-
-# ──────────────────────────────────────────────────────────────────────
-# Synonym index
-# ──────────────────────────────────────────────────────────────────────
-
-_SYNONYM_INDEX: dict[str, frozenset[str]] = {}
-for _group in _SYNONYM_GROUPS:
-    for _member in _group:
-        _SYNONYM_INDEX[_member] = frozenset(_group - {_member})
-
-
-# ──────────────────────────────────────────────────────────────────────
-# Text helpers
-# ──────────────────────────────────────────────────────────────────────
-
-def _fold(text: str) -> str:
-    """Lowercase + strip accents (comparison only, never displayed)."""
-    return text.lower().translate(_ACCENTS)
-
-
-#: Words of every title a section may carry, per canonical section title.
-#: They are used to tell the *label* of a header ("EXPÉRIENCE PROFESSIONNELLE")
-#: from the *content* that may follow it on the same line.
-_TITLE_VOCABULARY: dict[str, frozenset[str]] = {}
-for _title, _title_keywords in SECTION_KEYWORDS.items():
-    _words: set[str] = set()
-    for _title_keyword in _title_keywords:
-        _words.update(_fold(_title_keyword).split())
-    _TITLE_VOCABULARY[_title] = frozenset(_words)
-
-#: Single-word titles, used to recognize a section label at the start of a
-#: line even when Mission 01 did not detect the section (a header line
-#: carrying its content is too long to be detected as a header).
-_SINGLE_WORD_TITLES: dict[str, str] = {}
-for _title, _title_keywords in SECTION_KEYWORDS.items():
-    for _title_keyword in _title_keywords:
-        if " " not in _title_keyword:
-            _SINGLE_WORD_TITLES.setdefault(_fold(_title_keyword), _title)
-
-#: Characters that close a section label ("COMPETENCES : Python" -> the
-#: label is "COMPETENCES").
 _LABEL_SEPARATORS = ":;|-–—·,("
-
-#: A word is a run of letters (accents included), digits excluded.
 _WORD_PATTERN = re.compile(r"[^\W\d_]+", re.UNICODE)
 
 
-def _first_separator(source: str, start: int, end: int) -> int | None:
-    """Position of the first label separator in a range, if any."""
-    for position in range(start, end):
-        if source[position] in _LABEL_SEPARATORS:
-            return position
-    return None
-
-
 def _label_span(source: str, start: int, title: str) -> tuple[int, int]:
-    """Span of the section label starting at ``start``.
-
-    The label is the leading run of words belonging to the section title
-    ("EXPERIENCE PROFESSIONNELLE"); it stops at the first separator or at
-    the first word that does not belong to it ("COMPETENCES : Python" keeps
-    "Python" out of the label).
-    """
+    """Return only the section-label span, preserving inline content."""
     line_end = source.find("\n", start)
     if line_end == -1:
         line_end = len(source)
-
-    vocabulary = _TITLE_VOCABULARY.get(title, frozenset())
+    vocabulary = _TITLE_WORDS.get(title, set())
     label_end = start
     position = start
     first = True
@@ -398,16 +842,13 @@ def _label_span(source: str, start: int, title: str) -> tuple[int, int]:
         match = _WORD_PATTERN.search(source, position, line_end)
         if match is None:
             break
-        if not first:
-            gap = source[label_end:match.start()]
-            if any(separator in gap for separator in _LABEL_SEPARATORS):
-                break
-        if _fold(match.group()) not in vocabulary:
+        if not first and any(char in _LABEL_SEPARATORS for char in source[label_end:match.start()]):
+            break
+        if _strip_accents(match.group()) not in vocabulary:
             if first:
-                # Unrecognized label: everything up to the first separator
-                # belongs to it, so that a title is never read as a proof.
-                separator = _first_separator(source, start, line_end)
-                return start, separator if separator is not None else line_end
+                separators = [source.find(char, start, line_end) for char in _LABEL_SEPARATORS]
+                separators = [found for found in separators if found >= 0]
+                return start, min(separators) if separators else line_end
             break
         label_end = match.end()
         position = match.end()
@@ -415,720 +856,851 @@ def _label_span(source: str, start: int, title: str) -> tuple[int, int]:
     return start, max(start, label_end)
 
 
-def _tokenize(text: str) -> list[str]:
-    """Split a text into comparable tokens."""
-    return [token for token in _TOKEN_SPLIT.split(_fold(text)) if token]
+def _section_header_spans(source: str, cv_result: CVAnalysisResult) -> list[tuple[int, int]]:
+    """Return the spans of the CV section headers.
 
-
-def _word_positions(haystack: str, needle: str) -> list[int]:
-    """Every start position of ``needle`` inside ``haystack``, word-bounded."""
-    if not needle:
-        return []
-    pattern = re.compile(r"(?<![a-z0-9+#])" + re.escape(needle) + r"(?![a-z0-9+#])")
-    return [match.start() for match in pattern.finditer(haystack)]
-
-
-def extract_keywords(text: str) -> list[str]:
-    """Significant terms of a requirement, in order of appearance.
-
-    Function words and pure capability words ("maitrise", "experience", …)
-    are dropped: they qualify a skill, they never identify it.  When nothing
-    significant is left, the remaining words are returned so that a generic
-    requirement ("3 ans d'expérience") is still matchable.
-    """
-    tokens = _tokenize(text)
-    significant = [
-        token
-        for token in tokens
-        if len(token) >= 3
-        and token not in _STOPWORDS
-        and token not in _WEAK_TOKENS
-        and token not in _REQUIREMENT_NOISE
-    ]
-    if significant:
-        return list(dict.fromkeys(significant))
-    return list(
-        dict.fromkeys(
-            token
-            for token in tokens
-            if len(token) >= 2
-            and token not in _STOPWORDS
-            and token not in _REQUIREMENT_NOISE
-        )
-    )
-
-
-# ──────────────────────────────────────────────────────────────────────
-# Regions of the CV
-# ──────────────────────────────────────────────────────────────────────
-
-@dataclass(frozen=True, slots=True)
-class _Region:
-    """A part of the CV source that can be searched for a proof."""
-
-    field: str
-    start: int
-    end: int
-
-
-def _section_regions(cv_result: CVAnalysisResult, source_length: int) -> list[_Region]:
-    """Detected sections, as searchable regions of the source text."""
-    regions: list[_Region] = []
-    for section in cv_result.sections:
-        start = max(0, min(section.start_offset, source_length))
-        end = max(start, min(section.end_offset, source_length))
-        if end <= start:
-            continue
-        regions.append(
-            _Region(
-                field=SECTION_FIELDS.get(section.title, DOCUMENT_FIELD),
-                start=start,
-                end=end,
-            )
-        )
-    regions.sort(key=lambda region: region.start)
-    return regions
-
-
-def _header_spans(cv_result: CVAnalysisResult, source: str) -> list[tuple[int, int]]:
-    """Character ranges of the section titles.
-
-    A section title is a label, not a proof: a "Projets" header never
-    proves that the candidate has done projects.  Only the **label** is
-    blocked: a header line often carries its content right after the label
-    ("COMPETENCES : Python, SQL"), and that content *is* a proof.
+    ``EXPERIENCE``, ``FORMATION``, ``LANGUES``… are the structure of the
+    document, not a competence: they never prove a requirement.
     """
     spans: list[tuple[int, int]] = []
-    for section in cv_result.sections:
-        start = max(0, min(section.start_offset, len(source)))
+    for section in getattr(cv_result, "sections", []) or []:
+        start = getattr(section, "start_offset", -1)
+        if start < 0 or start >= len(source):
+            continue
         spans.append(_label_span(source, start, section.title))
     return spans
 
 
-def _is_blocked(position: int, spans: list[tuple[int, int]]) -> bool:
-    """True when the position sits inside a section title."""
-    return any(start <= position < end for start, end in spans)
-
-
-def _field_for_position(
-    position: int, regions: list[_Region], scopes: list[tuple[int, int, str]]
-) -> str:
-    """Name of the CV field holding the given offset.
-
-    A line that opens with a section label wins over the enclosing region:
-    the "LANGUES : Français, Anglais" line holds languages, even when the
-    section detection did not isolate it.
-    """
-    for start, end, field in scopes:
-        if start <= position < end:
-            return field
-    for region in regions:
-        if region.start <= position < region.end:
-            return region.field
-    return DOCUMENT_FIELD
-
-
-def _label_scopes(source: str) -> list[tuple[int, int, str]]:
-    """Lines opening with a section label, with the field they announce."""
-    scopes: list[tuple[int, int, str]] = []
-    length = len(source)
-    position = 0
-    while position < length:
-        line_end = source.find("\n", position)
-        if line_end == -1:
-            line_end = length
-        first_word = _WORD_PATTERN.search(source, position, line_end)
-        if first_word is not None:
-            title = _SINGLE_WORD_TITLES.get(_fold(first_word.group()))
-            if title is not None:
-                scopes.append(
-                    (position, line_end, SECTION_FIELDS.get(title, DOCUMENT_FIELD))
-                )
-        position = line_end + 1
-    return scopes
-
-
-def _snippet_span(source: str, position: int) -> tuple[int, int]:
-    """Span of the line holding ``position``, clipped to a readable window."""
+def _field_at(position: int, source: str, cv_result: CVAnalysisResult) -> str:
+    """Return the CV field containing an exact evidence offset."""
     line_start = source.rfind("\n", 0, position) + 1
-    line_end = source.find("\n", position)
+    line_end = source.find("\n", line_start)
     if line_end == -1:
         line_end = len(source)
-    end = min(line_end, position + MAX_EVIDENCE_CHARS)
-    start = max(line_start, end - MAX_EVIDENCE_CHARS)
-    return start, end
+    first_word = _WORD_PATTERN.search(source, line_start, line_end)
+    if first_word is not None:
+        title = _SINGLE_WORD_TITLES.get(_strip_accents(first_word.group()))
+        if title is not None:
+            return _SECTION_FIELDS.get(title, "document")
+    sections = list(getattr(cv_result, "sections", []) or [])
+    for index, section in enumerate(sections):
+        start = max(0, section.start_offset)
+        end = sections[index + 1].start_offset if index + 1 < len(sections) else len(source)
+        if start <= position < end:
+            return _SECTION_FIELDS.get(section.title, "document")
+    return "document"
 
 
-# ──────────────────────────────────────────────────────────────────────
-# Languages
-# ──────────────────────────────────────────────────────────────────────
+def match_cv_to_offer(
+    cv_result: CVAnalysisResult,
+    offer: dict[str, Any],
+    *,
+    cv_text: str | None = None,
+) -> MatchResult:
+    """Match one CV against the requirements of one offer.
 
-def _language_mentions(text: str) -> list[tuple[int, int, str]]:
-    """Every language mention of a text: ``(start, end, language)``."""
-    folded = _fold(text)
-    mentions: set[tuple[int, int, str]] = set()
-    for name, aliases in _LANGUAGES.items():
-        for alias in aliases:
-            for position in _word_positions(folded, alias):
-                mentions.add((position, position + len(alias), name))
-    return sorted(mentions)
+    Pure, deterministic and offline: no network, no model, no clock.
 
+    Args:
+        cv_result: Result of :func:`career.cv_quality.analyze_cv`.  The
+            analysed text is used to quote verbatim evidence; when the result
+            carries no text the engine says so instead of inventing a proof.
+        offer: Offer mapping.  The requirements are read through the
+            CVBOOST-02 contract (``analyze_offer``).
+        cv_text: Optional explicit override of the analysed text.
 
-def _languages_in(text: str) -> list[str]:
-    """Every language mentioned by a text, in order of appearance."""
-    names: list[str] = []
-    for _start, _end, name in _language_mentions(text):
-        if name not in names:
-            names.append(name)
-    return names
-
-
-def _language_level_proven(text: str, language: str) -> bool:
-    """Whether a language level is stated next to that language.
-
-    The level must belong to the language: in "Français (natif), Anglais",
-    the level "natif" qualifies the French, not the English.
+    Returns:
+        A :class:`MatchResult` with one action per requirement, the weighted
+        score, the mandatory requirements without proof and the warnings.
     """
-    folded = _fold(text)
-    mentions = _language_mentions(folded)
-    target = next((mention for mention in mentions if mention[2] == language), None)
-    if target is None:
-        return False
-    start, end, _name = target
+    source = cv_text if cv_text is not None else getattr(cv_result, "text", "")
+    warnings: list[str] = []
+    actions: list[MatchAction] = []
 
-    previous = 0
-    for mention_start, mention_end, _other in mentions:
-        if mention_end <= start and (mention_start, mention_end) != (start, end):
-            previous = max(previous, mention_end)
-    for position, character in enumerate(folded[:start]):
-        if character in _LANGUAGE_SEPARATORS:
-            previous = max(previous, position + 1)
+    structured_records = [
+        item for item in offer.get("requirements", []) if isinstance(item, dict)
+    ] if isinstance(offer.get("requirements"), list) else []
+    offer_for_analysis = offer
+    if structured_records:
+        requirements = []
+        for record in structured_records:
+            text = str(record.get("text", "")).strip()
+            if not text:
+                continue
+            modality = record.get("modality")
+            if not modality:
+                modality = "required" if record.get("mandatory") is True else "preferred"
+            requirements.append(
+                {
+                    "text": text,
+                    "category": record.get("category", "other"),
+                    "modality": modality,
+                    "negated": bool(record.get("negated", False)),
+                }
+            )
+    else:
+        analysis = analyze_offer(offer_for_analysis)
+        requirements = list(analysis.get("requirements", []))
 
-    following = len(folded)
-    for mention_start, mention_end, _other in mentions:
-        if mention_start >= end and (mention_start, mention_end) != (start, end):
-            following = min(following, mention_start)
-    for position in range(end, len(folded)):
-        if folded[position] in _LANGUAGE_SEPARATORS:
-            following = min(following, position)
-            break
+    for missing in _unextracted_requirements(offer, [r["text"] for r in requirements]):
+        warnings.append(
+            f"Exigence non extraite par le contrat d'exigences : « {missing} » — "
+            "elle ne peut pas être couverte (texte trop court pour le contrat ?)."
+        )
 
-    window = folded[previous:following]
-    return any(_word_positions(window, marker) for marker in _LANGUAGE_LEVEL_MARKERS)
+    if not source.strip():
+        warnings.append("Texte source du CV indisponible : aucune preuve ne peut être citée.")
+        for requirement in requirements:
+            actions.append(
+                MatchAction(
+                    code="DO_NOT_ADD",
+                    requirement_text=requirement["text"],
+                    cv_evidence_text=None,
+                    cv_evidence_offset=None,
+                    reason=NO_EVIDENCE_REASON,
+                    confidence=0.0,
+                )
+            )
+        return MatchResult(
+            overall_score=0.0,
+            matched_requirements=0,
+            total_requirements=len(requirements),
+            actions=actions,
+            missing_critical=[
+                requirement["text"]
+                for requirement in requirements
+                if requirement.get("modality") == "required"
+            ],
+            warnings=warnings,
+        )
 
+    tokens = _tokens(source)
+    header_spans = _section_header_spans(source, cv_result)
+    if header_spans:
+        tokens = [
+            token
+            for token in tokens
+            if not any(start <= token[1] and token[2] <= end for start, end in header_spans)
+        ]
+    answered: list[tuple[MatchAction, dict[str, Any]]] = []
 
-def _requirement_language(text: str, category: str) -> str | None:
-    """Language of a requirement, when the requirement is about a language.
+    for requirement in requirements:
+        requirement_text = requirement["text"]
+        modality = requirement.get("modality", "unknown")
+        category = requirement.get("category", "other")
 
-    A requirement naming several languages ("Français et espagnol") is not
-    handled here: it goes through the generic path, which reports honestly
-    that the CV only proves part of it.
-    """
-    names = _languages_in(text)
-    if len(names) != 1:
-        return None
-    language = names[0]
-    if category == "language":
-        return language
-    keywords = extract_keywords(text)
-    aliases = set(_LANGUAGES.get(language, ()))
-    if keywords and all(keyword in aliases for keyword in keywords):
-        return language
-    return None
-
-
-def _missing_languages(cv_result: CVAnalysisResult, text: str) -> list[str]:
-    """Languages a requirement asks for that the CV never mentions."""
-    source = cv_result.provenance.source_text
-    if not source:
-        return []
-    folded_source = _fold(source)
-    blocked = _header_spans(cv_result, source)
-    missing: list[str] = []
-    for language in _languages_in(text):
-        if language in missing:
+        # ── A negated statement is not a requirement ──────────────────
+        if requirement.get("negated") or _is_negated(requirement_text):
+            warnings.append(
+                f"Exigence niée dans l'offre : « {requirement_text} » — elle n'est pas une exigence à couvrir."
+            )
             continue
-        position, _literal = _language_position(folded_source, language, blocked)
-        if position is None:
-            missing.append(language)
-    return missing
+
+        action = _match_requirement(
+            requirement_text=requirement_text,
+            modality=modality,
+            category=category,
+            source=source,
+            tokens=tokens,
+            warnings=warnings,
+        )
+        if action.cv_evidence_offset is not None:
+            field = _field_at(action.cv_evidence_offset, source, cv_result)
+            line_start, line_end = _line_bounds(source, action.cv_evidence_offset)
+            first_word = _WORD_PATTERN.search(source, line_start, line_end)
+            inline_title = (
+                _SINGLE_WORD_TITLES.get(_strip_accents(first_word.group()))
+                if first_word is not None
+                else None
+            )
+            if inline_title is not None:
+                text_start = line_start
+                while text_start < line_end and source[text_start].isspace():
+                    text_start += 1
+                text_end = line_end
+                while text_end > text_start and source[text_end - 1].isspace():
+                    text_end -= 1
+                evidence_text = source[text_start:text_end]
+                evidence = action.evidence
+                if evidence is not None:
+                    evidence = replace(evidence, text=evidence_text, offset=text_start)
+                action = replace(
+                    action,
+                    cv_evidence_text=evidence_text,
+                    cv_evidence_offset=text_start,
+                    evidence=evidence,
+                )
+            evidence = action.evidence
+            if evidence is not None:
+                evidence = replace(evidence, field=field)
+            action = replace(action, cv_evidence_field=field, evidence=evidence)
+        elif structured_records and action.code == "DO_NOT_ADD":
+            action = replace(action, confidence=1.0)
+        actions.append(action)
+        answered.append((action, requirement))
+
+    weights = {"required": 1.0, "preferred": 0.5, "contextual": 0.3, "unknown": 0.3}
+    weighted_total = 0.0
+    weighted_matched = 0.0
+    for action, requirement in answered:
+        weight = weights.get(requirement.get("modality", "unknown"), 0.3)
+        weighted_total += weight
+        if action.code != "DO_NOT_ADD":
+            weighted_matched += weight
+    if structured_records:
+        overall_score = round(
+            sum(1 for action in actions if action.code != "DO_NOT_ADD") / len(actions), 4
+        ) if actions else 0.0
+    else:
+        overall_score = round(min(1.0, weighted_matched / weighted_total), 3) if weighted_total else 0.0
+
+    missing_critical = [
+        action.requirement_text
+        for action, requirement in answered
+        if action.code == "DO_NOT_ADD" and requirement.get("modality") == "required"
+    ]
+
+    if structured_records:
+        if missing_critical:
+            warnings.append(
+                f"{len(missing_critical)} exigence(s) obligatoire(s) sans preuve dans le CV."
+            )
+        contract_text = " ".join(
+            str(offer.get(key, ""))
+            for key in ("contract_type", "employment_type", "description_original")
+        )
+        if _detect_contract_type(contract_text) == "alternance":
+            warnings.append("Alternance détectée — vérifie que ton brief exclut l'alternance.")
+        requested_education = str(offer.get("education_level") or "")
+        if requested_education:
+            required_name, required_rank = _detect_education_level(requested_education)
+            cv_name, cv_rank = _highest_education_level(source)
+            if required_name and cv_name and cv_rank < required_rank:
+                warnings.append(
+                    f"Niveau d'études requis ({required_name}) > CV ({cv_name})."
+                )
+
+    return MatchResult(
+        overall_score=overall_score,
+        matched_requirements=sum(1 for action in actions if action.code != "DO_NOT_ADD"),
+        total_requirements=len(actions),
+        actions=actions,
+        missing_critical=missing_critical,
+        warnings=_dedupe(warnings),
+    )
 
 
-# ──────────────────────────────────────────────────────────────────────
-# Evidence search
-# ──────────────────────────────────────────────────────────────────────
-
-def _first_position(
-    positions: list[int], blocked: list[tuple[int, int]]
-) -> int | None:
-    """First position that is not inside a section title."""
-    for position in positions:
-        if not _is_blocked(position, blocked):
-            return position
-    return None
+def _dedupe(items: list[str]) -> list[str]:
+    """Remove the duplicates while keeping the order."""
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        result.append(item)
+    return result
 
 
-def _literal_position(
-    folded_source: str, token: str, blocked: list[tuple[int, int]]
-) -> int | None:
-    """First occurrence of the token itself in the CV."""
-    return _first_position(_word_positions(folded_source, token), blocked)
+def _is_program_requirement(text: str) -> bool:
+    """True when the requirement talks about a programme, not about a level.
 
-
-def _synonym_position(
-    folded_source: str, token: str, blocked: list[tuple[int, int]]
-) -> int | None:
-    """First occurrence of an equivalent term in the CV."""
-    best: int | None = None
-    for equivalent in sorted(_SYNONYM_INDEX.get(token, ())):
-        position = _literal_position(folded_source, equivalent, blocked)
-        if position is not None and (best is None or position < best):
-            best = position
-    return best
-
-
-def _language_position(
-    folded_source: str, language: str, blocked: list[tuple[int, int]]
-) -> tuple[int | None, bool]:
-    """Where a language is mentioned, and whether it is the exact wording.
-
-    Returns ``(position, is_literal)``.
+    ``Programme en anglais`` describes a course taught in English; it is not
+    a requirement on the candidate's English level.
     """
-    aliases = _LANGUAGES.get(language, ())
-    literal = _first_position(_word_positions(folded_source, aliases[0]), blocked)
-    if literal is not None:
-        return literal, True
-    best: int | None = None
-    for alias in sorted(aliases[1:]):
-        position = _first_position(_word_positions(folded_source, alias), blocked)
-        if position is not None and (best is None or position < best):
-            best = position
-    return best, False
+    tokens = _tokens(text)
+    words = [word for word, _, _ in tokens]
+    for index, word in enumerate(words):
+        if word not in LANGUAGES.get("anglais", ()) and not any(
+            word in keywords for keywords in LANGUAGES.values()
+        ):
+            continue
+        preceding = words[max(0, index - 3): index]
+        if any(cue in preceding for cue in LANGUAGE_PROGRAM_CUES):
+            return True
+    return False
 
 
-def find_evidence_in_cv(
-    cv_result: CVAnalysisResult, requirement: str, category: str = ""
-) -> MatchEvidence | None:
-    """Find the CV excerpt proving a requirement, if there is one.
+def _match_requirement(
+    *,
+    requirement_text: str,
+    modality: str,
+    category: str,
+    source: str,
+    tokens: list[tuple[str, int, int]],
+    warnings: list[str],
+) -> MatchAction:
+    """Match one requirement against the CV and build its action."""
+    # ── Language requirement ─────────────────────────────────────────
+    requested_languages = _languages_in(requirement_text)
+    if len(requested_languages) > 1:
+        present: list[tuple[str, tuple[str, int, int]]] = []
+        for language_name in requested_languages:
+            aliases = LANGUAGES[language_name]
+            occurrence = next((token for token in tokens if token[0] in aliases), None)
+            if occurrence is not None:
+                present.append((language_name, occurrence))
+        missing = [name for name in requested_languages if name not in {item[0] for item in present}]
+        if present:
+            evidence_token = present[0][1]
+            evidence_text = source[evidence_token[1]:evidence_token[2]]
+            if missing:
+                warnings.append(
+                    "Langue requise non prouvée dans le CV : « "
+                    + ", ".join(name.capitalize() for name in missing)
+                    + " »."
+                )
+                return MatchAction(
+                    code="REPHRASE",
+                    requirement_text=requirement_text,
+                    cv_evidence_text=evidence_text,
+                    cv_evidence_offset=evidence_token[1],
+                    reason="Le CV ne prouve qu'une partie des langues demandées.",
+                    confidence=0.7,
+                    evidence=MatchEvidence(text=evidence_text, offset=evidence_token[1], kind="language"),
+                )
+    language, required_level = _detect_language(requirement_text)
+    if language is not None and (category == "language" or required_level is not None):
+        if not _is_program_requirement(requirement_text):
+            return _match_language(
+                requirement_text=requirement_text,
+                language=language,
+                required_level=required_level,
+                source=source,
+                tokens=tokens,
+                warnings=warnings,
+            )
 
-    The returned excerpt is an exact substring of the CV source text and
-    carries its offset and its field.  ``None`` means nothing in the CV
-    proves the requirement — the caller must then say so explicitly instead
-    of inventing an evidence.
-    """
-    source = cv_result.provenance.source_text
-    if not source:
-        return None
+    # ── Education requirement ────────────────────────────────────────
+    if category == "education" or _detect_education_level(requirement_text)[0] is not None:
+        return _match_education(
+            requirement_text=requirement_text,
+            source=source,
+            tokens=tokens,
+            warnings=warnings,
+        )
 
-    folded_source = _fold(source)
-    blocked = _header_spans(cv_result, source)
-    regions = _section_regions(cv_result, len(source))
-    scopes = _label_scopes(source)
+    # ── Contract requirement ─────────────────────────────────────────
+    contract = _detect_contract_type(requirement_text)
+    if contract is not None and len(_content_tokens(requirement_text)) <= 3:
+        return _match_contract(
+            requirement_text=requirement_text,
+            contract=contract,
+            source=source,
+            tokens=tokens,
+            warnings=warnings,
+        )
 
-    language = _requirement_language(requirement, category)
-    if language is not None:
-        position, _literal = _language_position(folded_source, language, blocked)
-        if position is None:
-            return None
-        start, end = _snippet_span(source, position)
-        return MatchEvidence(
-            text=source[start:end],
-            offset=start,
-            field=_field_for_position(position, regions, scopes),
+    # ── Skill requirement ────────────────────────────────────────────
+    return _match_skill(
+        requirement_text=requirement_text,
+        source=source,
+        tokens=tokens,
+        warnings=warnings,
+    )
+
+
+def _match_language(
+    *,
+    requirement_text: str,
+    language: str,
+    required_level: str | None,
+    source: str,
+    tokens: list[tuple[str, int, int]],
+    warnings: list[str],
+) -> MatchAction:
+    """Match a language requirement (declared level vs taught programme)."""
+    keywords = LANGUAGES[language]
+    occurrences = [token for token in tokens if token[0] in keywords]
+    if not occurrences:
+        warnings.append(f"Langue « {language} » absente du CV.")
+        return MatchAction(
+            code="DO_NOT_ADD",
+            requirement_text=requirement_text,
+            cv_evidence_text=None,
+            cv_evidence_offset=None,
+            reason=f"{NO_EVIDENCE_REASON} : la langue {language} n'y est pas mentionnée",
             confidence=0.9,
         )
 
-    keywords = extract_keywords(requirement)
-    if not keywords:
-        return None
-
-    matched: list[tuple[str, int, bool]] = []
-    for token in keywords:
-        position = _literal_position(folded_source, token, blocked)
-        if position is not None:
-            matched.append((token, position, True))
+    usable: list[tuple[str, int, int]] = []
+    for token in occurrences:
+        line = _line_tokens(tokens, source, token[1])
+        line_words = [word for word, _, _ in line]
+        if any(cue in line_words for cue in LANGUAGE_PROGRAM_CONTEXTS):
             continue
-        position = _synonym_position(folded_source, token, blocked)
-        if position is not None:
-            matched.append((token, position, False))
+        usable.append(token)
 
-    if not matched:
-        return None
+    if not usable:
+        warnings.append(
+            f"« {language.capitalize()} » n'apparaît que dans un contexte d'enseignement "
+            f"(programme en {language}) : aucun niveau de langue n'est déclaré."
+        )
+        return MatchAction(
+            code="DO_NOT_ADD",
+            requirement_text=requirement_text,
+            cv_evidence_text=None,
+            cv_evidence_offset=None,
+            reason=(
+                f"{NO_EVIDENCE_REASON} : la langue {language} est mentionnée dans un contexte "
+                "d'enseignement, pas comme niveau déclaré"
+            ),
+            confidence=0.85,
+        )
 
-    position = matched[0][1]
-    coverage = len(matched) / len(keywords)
-    if all(is_literal for _, _, is_literal in matched):
-        confidence = 0.9 if coverage == 1.0 else round(0.6 + 0.2 * coverage, 2)
+    evidence_token = usable[0]
+
+    # The declared level is read on the same line, close to the language.
+    line = _line_tokens(tokens, source, evidence_token[1])
+    line_start, line_end = _line_bounds(source, evidence_token[1])
+    clause_start = line_start
+    clause_end = line_end
+    for separator in ",;|/":
+        previous = source.rfind(separator, line_start, evidence_token[1])
+        following = source.find(separator, evidence_token[2], line_end)
+        if previous >= 0:
+            clause_start = max(clause_start, previous + 1)
+        if following >= 0:
+            clause_end = min(clause_end, following)
+    line = [token for token in line if clause_start <= token[1] and token[2] <= clause_end]
+    line_words = [word for word, _, _ in line]
+    position = line_words.index(evidence_token[0])
+    neighbourhood = line_words[max(0, position - 2): position + 3]
+    declared_level = None
+    level_token = None
+    for name, level_keywords, _rank in LANGUAGE_LEVELS:
+        for keyword in level_keywords:
+            if keyword not in neighbourhood:
+                continue
+            for candidate in line:
+                if candidate[0] == keyword:
+                    level_token = candidate
+                    break
+            declared_level = name
+            break
+        if declared_level:
+            break
+
+    # The evidence quotes the declared level when it stands next to the language.
+    evidence_start = evidence_token[1]
+    evidence_end = evidence_token[2]
+    if level_token is not None:
+        evidence_start = min(evidence_start, level_token[1])
+        evidence_end = max(evidence_end, level_token[2])
+    evidence_text = source[evidence_start:evidence_end]
+
+    if declared_level is None:
+        code = "CONFIRM_LANGUAGE"
+        reason = (
+            f"La langue {language} est présente mais son niveau "
+            "n'est pas précisé dans le CV : à confirmer"
+        )
+        confidence = 0.8
+        warnings.append(f"Niveau de langue {language} non précisé dans le CV.")
+    elif required_level is None:
+        code = "HIGHLIGHT"
+        reason = f"Langue {language} déclarée dans le CV"
+        confidence = 0.9
     else:
-        confidence = 0.7
-
-    start, end = _snippet_span(source, position)
-    return MatchEvidence(
-        text=source[start:end],
-        offset=start,
-        field=_field_for_position(position, regions, scopes),
-        confidence=confidence,
-        coverage=round(coverage, 4),
-    )
-
-
-# ──────────────────────────────────────────────────────────────────────
-# Requirements
-# ──────────────────────────────────────────────────────────────────────
-
-@dataclass(frozen=True, slots=True)
-class _Requirement:
-    """One offer requirement, normalized."""
-
-    text: str
-    category: str
-    mandatory: bool
-    modality: str
-
-
-def _requirement_records(offer: dict[str, Any]) -> list[dict[str, Any]]:
-    """Requirement records carried by the offer, whatever their shape."""
-    raw = offer.get("requirements")
-    if raw is None:
-        return []
-    if isinstance(raw, dict):
-        raw = raw.get("items") or []
-    if isinstance(raw, str):
-        # A raw offer carries its requirements as a free-text block.
-        return [{"text": line} for line in raw.splitlines() if line.strip()]
-    records: list[dict[str, Any]] = []
-    for item in raw or []:
-        if isinstance(item, str):
-            records.append({"text": item})
-        elif isinstance(item, dict):
-            records.append(item)
-    return records
-
-
-def _is_mandatory(record: dict[str, Any]) -> bool:
-    """Whether a requirement is mandatory.
-
-    Mission 21 speaks of a ``mandatory`` flag, Mission 02 of a ``modality``
-    ("required" / "preferred" / "contextual" / "unknown").  Both are read:
-    an explicit flag wins, an unknown modality is never guessed mandatory.
-    """
-    mandatory = record.get("mandatory")
-    if isinstance(mandatory, bool):
-        return mandatory
-    modality = str(record.get("modality") or "").strip().lower()
-    if modality:
-        return modality == "required"
-    return bool(record.get("required", True))
-
-
-def _normalize_requirements(offer: dict[str, Any]) -> list[_Requirement]:
-    """Normalized requirement list of an offer."""
-    requirements: list[_Requirement] = []
-    for record in _requirement_records(offer):
-        text = str(record.get("text") or "").strip()
-        category = str(record.get("category") or "skill").strip().lower() or "skill"
-        modality = str(record.get("modality") or "").strip().lower()
-        requirements.append(
-            _Requirement(
-                text=text,
-                category=category,
-                mandatory=_is_mandatory(record),
-                modality=modality,
-            )
-        )
-    return requirements
-
-
-def _requirements_of(offer: dict[str, Any]) -> list[_Requirement]:
-    """Requirements of an offer, whatever shape the offer has.
-
-    ``analyze_offer`` output (Mission 02) is used as is.  A raw offer is
-    read with the very same contract, so both produce the same actions.
-    """
-    raw = offer.get("requirements")
-    if isinstance(raw, list):
-        return _normalize_requirements(offer)
-    return _normalize_requirements(_extract_requirements(offer))
-
-
-# ──────────────────────────────────────────────────────────────────────
-# Education level
-# ──────────────────────────────────────────────────────────────────────
-
-def _education_level(text: str) -> int | None:
-    """Education level mentioned in a text, on the "Bac+X" scale.
-
-    The **highest** level wins: a text mentioning a "Bac+2" and a "Master" is
-    a "Master".  A more specific marker shadows the generic one it contains,
-    so "licence professionnelle" stays a Bac+2 (not a "licence" Bac+3) and
-    "Master 1" stays a Bac+4 (not a "Master" Bac+5).
-    """
-    folded = _fold(text)
-    matches: list[tuple[int, int, int]] = []
-    for marker, level in _EDUCATION_MARKERS:
-        for start in _word_positions(folded, marker):
-            matches.append((start, start + len(marker), level))
-
-    if not matches:
-        return None
-
-    # A marker contained in a strictly longer marker is shadowed by it.
-    levels = [
-        level
-        for start, end, level in matches
-        if not any(
-            other_start <= start
-            and end <= other_end
-            and (other_end - other_start) > (end - start)
-            for other_start, other_end, _other_level in matches
-        )
-    ]
-    return max(levels) if levels else None
-
-
-def _cv_education_level(cv_result: CVAnalysisResult) -> int | None:
-    """Highest education level found in the CV formation section."""
-    source = cv_result.provenance.source_text
-    if not source:
-        return None
-    regions = [
-        region
-        for region in _section_regions(cv_result, len(source))
-        if region.field == "education"
-    ]
-    if not regions:
-        return None
-    levels = [
-        level
-        for region in regions
-        for level in [_education_level(source[region.start:region.end])]
-        if level is not None
-    ]
-    return max(levels) if levels else None
-
-
-def _offer_education_level(
-    offer: dict[str, Any], requirements: list[_Requirement]
-) -> int | None:
-    """Highest education level required by the offer."""
-    declared = offer.get("education_level")
-    if isinstance(declared, bool):
-        declared = None
-    if isinstance(declared, int):
-        return declared
-    if isinstance(declared, str) and declared.strip():
-        level = _education_level(declared)
-        if level is not None:
-            return level
-    levels = [
-        level
-        for requirement in requirements
-        if requirement.category in ("education", "education_level")
-        for level in [_education_level(requirement.text)]
-        if level is not None
-    ]
-    return max(levels) if levels else None
-
-
-def _education_label(level: int | None) -> str:
-    """Readable label of an education level."""
-    if level is None:
-        return "non précisé"
-    return _EDUCATION_LABELS.get(level, f"niveau {level}")
-
-
-# ──────────────────────────────────────────────────────────────────────
-# Warnings
-# ──────────────────────────────────────────────────────────────────────
-
-def _offer_mentions_alternance(
-    offer: dict[str, Any], requirements: list[_Requirement]
-) -> bool:
-    """Whether the offer is an alternance/apprenticeship contract."""
-    contract = _fold(str(offer.get("contract_type") or ""))
-    if contract in ("alternance", "apprentissage", "apprenticeship"):
-        return True
-    haystacks = [
-        _fold(str(offer.get("description_original") or "")),
-        _fold(str(offer.get("contract_type") or "")),
-    ]
-    haystacks.extend(_fold(requirement.text) for requirement in requirements)
-    return any(
-        _word_positions(haystack, marker)
-        for haystack in haystacks
-        for marker in ("alternance", "apprentissage")
-    )
-
-
-# ──────────────────────────────────────────────────────────────────────
-# Action decision
-# ──────────────────────────────────────────────────────────────────────
-
-def _action_code(
-    requirement: _Requirement,
-    evidence: MatchEvidence | None,
-    language: str | None,
-) -> tuple[MatchActionCode, str, float]:
-    """Decide the action for one requirement.
-
-    Returns ``(code, reason, confidence)``.
-    """
-    if evidence is None:
-        return "DO_NOT_ADD", DO_NOT_ADD_REASON, 1.0
-
-    if language is not None:
-        if not _language_level_proven(evidence.text, language):
-            return (
-                "CONFIRM_LANGUAGE",
-                "La langue est mentionnée dans le CV mais le niveau n'est pas "
-                "prouvé : à confirmer (ex : niveau C1).",
-                evidence.confidence,
-            )
-        return "HIGHLIGHT", HIGHLIGHT_REASON, evidence.confidence
-
-    if _QUANTITY_PATTERN.search(requirement.text) and not _has_figure(evidence.text):
-        return "QUANTIFY", QUANTIFY_REASON, evidence.confidence
-
-    if evidence.confidence < 0.9:
-        excerpt = evidence.text.strip()
-        if len(excerpt) > 60:
-            excerpt = excerpt[:60] + "…"
-        if evidence.coverage < 1.0:
-            return (
-                "REPHRASE",
-                f"Le CV ne prouve qu'une partie de l'exigence : « {requirement.text} ». "
-                f"Reformuler la ligne avec le vocabulaire de l'offre (extrait : « {excerpt} »).",
-                evidence.confidence,
-            )
-        return (
-            "REPHRASE",
-            f"Reformuler avec le vocabulaire de l'offre : « {requirement.text} » "
-            f"au lieu de « {excerpt} ».",
-            evidence.confidence,
-        )
-
-    return "HIGHLIGHT", HIGHLIGHT_REASON, evidence.confidence
-
-
-# ──────────────────────────────────────────────────────────────────────
-# Public API
-# ──────────────────────────────────────────────────────────────────────
-
-def match_cv_to_offer(cv_result: CVAnalysisResult, offer: dict[str, Any]) -> MatchResult:
-    """Match an analyzed CV against the requirements of an offer.
-
-    Pure and deterministic: same CV, same offer, same result — always.
-    No network, no LLM, no clock.
-
-    Args:
-        cv_result: The analyzed CV (Mission 01).
-        offer: The offer dict.  It may be the output of
-            ``career.offer_requirements.analyze_offer`` (Mission 02) or a raw
-            offer dict — the requirements are then extracted with the same
-            contract.
-
-    Returns:
-        A :class:`MatchResult` with exactly one action per requirement.
-    """
-    offer = offer or {}
-    requirements = _requirements_of(offer)
-
-    actions: list[MatchAction] = []
-    missing_critical: list[str] = []
-    warnings: list[str] = []
-
-    source_available = bool(cv_result.provenance.source_text)
-    if not source_available:
-        warnings.append(
-            "Texte source du CV indisponible : aucune provenance exacte n'est "
-            "possible, aucune exigence ne peut être prouvée."
-        )
-
-    for requirement in requirements:
-        language = _requirement_language(requirement.text, requirement.category)
-        evidence = (
-            find_evidence_in_cv(cv_result, requirement.text, requirement.category)
-            if source_available
-            else None
-        )
-        code, reason, confidence = _action_code(requirement, evidence, language)
-        actions.append(
-            MatchAction(
-                code=code,
-                requirement_text=requirement.text,
-                cv_evidence_text=evidence.text if evidence else None,
-                cv_evidence_offset=evidence.offset if evidence else None,
-                cv_evidence_field=evidence.field if evidence else None,
-                reason=reason,
-                confidence=confidence,
-            )
-        )
-        if code == "DO_NOT_ADD":
-            if requirement.mandatory:
-                missing_critical.append(requirement.text)
-        elif code == "CONFIRM_LANGUAGE":
+        required_rank = next(rank for name, _kw, rank in LANGUAGE_LEVELS if name == required_level)
+        declared_rank = next(rank for name, _kw, rank in LANGUAGE_LEVELS if name == declared_level)
+        if declared_rank >= required_rank:
+            code = "HIGHLIGHT"
+            reason = f"Niveau de langue {declared_level} conforme à l'exigence {required_level}"
+            confidence = 0.9
+        else:
             warnings.append(
-                f"Langue mentionnée sans niveau démontré : « {requirement.text} » — à confirmer."
+                f"Niveau de langue insuffisant : {declared_level} déclaré, {required_level} exigé."
             )
-        # A language the CV never mentions is reported, whatever category the
-        # offer gave the requirement: the warning is about the language, not
-        # about the way the offer was written.
-        unproven = _missing_languages(cv_result, requirement.text)
-        if unproven:
-            labels = ", ".join(_LANGUAGE_LABELS.get(name, name) for name in unproven)
-            warnings.append(f"Langue requise non prouvée dans le CV : « {labels} ».")
+            return MatchAction(
+                code="DO_NOT_ADD",
+                requirement_text=requirement_text,
+                cv_evidence_text=None,
+                cv_evidence_offset=None,
+                reason=(
+                    f"{NO_EVIDENCE_REASON} : le CV ne prouve pas le niveau de langue exigé "
+                    f"({declared_level} déclaré, {required_level} exigé)"
+                ),
+                confidence=0.85,
+            )
 
-    warnings.extend(_contract_warnings(offer, requirements))
-    warnings.extend(_education_warnings(cv_result, offer, requirements))
-
-    matched = sum(1 for action in actions if action.code != "DO_NOT_ADD")
-    total = len(requirements)
-    missing_critical = list(dict.fromkeys(missing_critical))
-    if missing_critical:
-        warnings.append(
-            f"{len(missing_critical)} exigence(s) obligatoire(s) sans preuve dans le CV."
-        )
-
-    return MatchResult(
-        overall_score=round(matched / total, 4) if total else 0.0,
-        matched_requirements=matched,
-        total_requirements=total,
-        actions=actions,
-        missing_critical=missing_critical,
-        warnings=list(dict.fromkeys(warnings)),
+    return MatchAction(
+        code=code,
+        requirement_text=requirement_text,
+        cv_evidence_text=evidence_text,
+        cv_evidence_offset=evidence_start,
+        reason=reason,
+        confidence=confidence,
+        evidence=MatchEvidence(
+            text=evidence_text,
+            offset=evidence_start,
+            kind="language",
+            field=language,
+        ),
     )
 
 
-def _extract_requirements(offer: dict[str, Any]) -> dict[str, Any]:
-    """Extract the requirements of a raw offer with the Mission 02 contract."""
-    try:
-        from career.offer_requirements import analyze_offer
-    except Exception:  # pragma: no cover - defensive: the contract stays optional
-        return {"requirements": []}
-    try:
-        return analyze_offer(offer)
-    except Exception:  # pragma: no cover - a broken offer must not break the match
-        return {"requirements": []}
+def _match_education(
+    *,
+    requirement_text: str,
+    source: str,
+    tokens: list[tuple[str, int, int]],
+    warnings: list[str],
+) -> MatchAction:
+    """Match an education requirement with an exact level."""
+    required_level, required_rank = _detect_education_level(requirement_text)
+    if required_level is None:
+        return _match_skill(
+            requirement_text=requirement_text,
+            source=source,
+            tokens=tokens,
+            warnings=warnings,
+        )
+
+    cv_level, cv_rank = _detect_education_level(source)
+    if cv_level is None:
+        warnings.append(f"Niveau d'études ({required_level}) non attesté dans le CV.")
+        return MatchAction(
+            code="DO_NOT_ADD",
+            requirement_text=requirement_text,
+            cv_evidence_text=None,
+            cv_evidence_offset=None,
+            reason=f"{NO_EVIDENCE_REASON} : le niveau d'études {required_level} n'est pas attesté",
+            confidence=0.8,
+        )
+
+    if cv_rank >= required_rank:
+        evidence_text = None
+        offset = None
+        for name, keywords, _rank in EDUCATION_LEVELS:
+            if name != cv_level:
+                continue
+            for keyword in keywords:
+                positions = _phrase_positions(
+                    keyword.split(), tokens, source
+                ) if " " in keyword else [
+                    token for token in tokens if token[0] == keyword
+                ]
+                if not positions:
+                    continue
+                span = _span(positions)
+                evidence_text = source[span[0]: span[1]]
+                offset = span[0]
+                break
+            if evidence_text:
+                break
+        return MatchAction(
+            code="HIGHLIGHT",
+            requirement_text=requirement_text,
+            cv_evidence_text=evidence_text,
+            cv_evidence_offset=offset,
+            reason=f"Niveau d'études {cv_level} conforme à l'exigence {required_level}",
+            confidence=0.85,
+            evidence=MatchEvidence(
+                text=evidence_text or "",
+                offset=offset or 0,
+                kind="education",
+                field=cv_level,
+            ),
+        )
+
+    warnings.append(
+        f"Niveau d'études insuffisant : {cv_level} dans le CV, {required_level} exigé."
+    )
+    return MatchAction(
+        code="DO_NOT_ADD",
+        requirement_text=requirement_text,
+        cv_evidence_text=None,
+        cv_evidence_offset=None,
+        reason=(
+            f"{NO_EVIDENCE_REASON} : le CV ne prouve pas le niveau d'études exigé "
+            f"({cv_level} détenu, {required_level} exigé)"
+        ),
+        confidence=0.9,
+    )
 
 
-def _contract_warnings(
-    offer: dict[str, Any], requirements: list[_Requirement]
-) -> list[str]:
-    """Cross-cutting warnings about the contract of the offer."""
-    if _offer_mentions_alternance(offer, requirements):
-        return ["Alternance détectée — vérifie que ton brief exclut l'alternance."]
-    return []
+def _match_contract(
+    *,
+    requirement_text: str,
+    contract: str,
+    source: str,
+    tokens: list[tuple[str, int, int]],
+    warnings: list[str],
+) -> MatchAction:
+    """Match a contract type requirement (stage ≠ CDI, alternance exclue…)."""
+    declared, excluded, proof = _declared_contract(source)
+    if contract in excluded:
+        warnings.append(
+            f"Le CV exclut explicitement le contrat « {contract} » : l'offre ne correspond pas au brief."
+        )
+        return MatchAction(
+            code="DO_NOT_ADD",
+            requirement_text=requirement_text,
+            cv_evidence_text=None,
+            cv_evidence_offset=None,
+            reason=f"{NO_EVIDENCE_REASON} : le CV exclut explicitement le contrat « {contract} »",
+            confidence=0.9,
+        )
+    if declared is None:
+        warnings.append(f"Type de contrat « {contract} » non déclaré dans le CV.")
+        return MatchAction(
+            code="DO_NOT_ADD",
+            requirement_text=requirement_text,
+            cv_evidence_text=None,
+            cv_evidence_offset=None,
+            reason=f"{NO_EVIDENCE_REASON} : le type de contrat « {contract} » n'est pas déclaré",
+            confidence=0.8,
+        )
+    if declared != contract:
+        warnings.append(
+            f"Type de contrat incompatible : le CV vise « {declared} », l'offre propose « {contract} »."
+        )
+        return MatchAction(
+            code="DO_NOT_ADD",
+            requirement_text=requirement_text,
+            cv_evidence_text=None,
+            cv_evidence_offset=None,
+            reason=(
+                f"{NO_EVIDENCE_REASON} : type de contrat incompatible "
+                f"(CV « {declared} », offre « {contract} »)"
+            ),
+            confidence=0.9,
+        )
+    evidence_text = source[proof[0]: proof[1]] if proof else None
+    return MatchAction(
+        code="HIGHLIGHT",
+        requirement_text=requirement_text,
+        cv_evidence_text=evidence_text,
+        cv_evidence_offset=proof[0] if proof else None,
+        reason=f"Le CV déclare le contrat « {declared} », conforme à l'offre",
+        confidence=0.85,
+        evidence=MatchEvidence(
+            text=evidence_text or "",
+            offset=proof[0] if proof else 0,
+            kind="contract",
+            field=declared,
+        ),
+    )
 
 
-def _education_warnings(
-    cv_result: CVAnalysisResult, offer: dict[str, Any], requirements: list[_Requirement]
-) -> list[str]:
-    """Warning when the offer asks for a higher degree than the CV shows."""
-    offer_level = _offer_education_level(offer, requirements)
-    cv_level = _cv_education_level(cv_result)
-    if offer_level is None or cv_level is None or cv_level >= offer_level:
-        return []
-    return [
-        f"Niveau d'études requis ({_education_label(offer_level)}) > "
-        f"CV ({_education_label(cv_level)})."
-    ]
+def _match_skill(
+    *,
+    requirement_text: str,
+    source: str,
+    tokens: list[tuple[str, int, int]],
+    warnings: list[str],
+) -> MatchAction:
+    """Match a skill requirement (concepts, families, homonyms)."""
+    content = _content_tokens(requirement_text)
+    if {"gestion", "projet"} <= set(content):
+        synonym = _phrase_positions(("management", "projet"), tokens, source)
+        if synonym is not None:
+            span = _span(synonym)
+            evidence_text = source[span[0]:span[1]]
+            return MatchAction(
+                code="REPHRASE",
+                requirement_text=requirement_text,
+                cv_evidence_text=evidence_text,
+                cv_evidence_offset=span[0],
+                reason="Reformuler avec le vocabulaire de l'offre à partir de la preuve du CV.",
+                confidence=0.75,
+                evidence=MatchEvidence(text=evidence_text, offset=span[0], kind="skill"),
+            )
+    if _is_program_requirement(requirement_text):
+        # "Programme en anglais" describes a course, not a level: the words
+        # naming a language prove nothing here.
+        language_words = {
+            word for keywords in LANGUAGES.values() for word in keywords
+        }
+        content = [word for word in content if word not in language_words]
+    concept, surface = _resolve_concept(requirement_text)
+
+    if concept is not None and surface is not None:
+        positions = _find_concept_evidence(concept, tokens, source, prefer=set(content))
+        if positions is not None:
+            span = _span(positions)
+            span = _extend_span(span, tokens, set(content) | set(surface), source)
+            return _skill_action(
+                requirement_text=requirement_text,
+                evidence_text=source[span[0]: span[1]],
+                offset=span[0],
+            )
+
+        # Same family, different wording: a faithful rephrasing, never a proof.
+        if concept.family:
+            for sibling in CONCEPTS:
+                if sibling.family != concept.family or sibling.id == concept.id:
+                    continue
+                sibling_positions = _find_concept_evidence(
+                    sibling, tokens, source, prefer=set(content)
+                )
+                if sibling_positions is None:
+                    continue
+                span = _span(sibling_positions)
+                evidence_text = source[span[0]: span[1]]
+                return MatchAction(
+                    code="REPHRASE",
+                    requirement_text=requirement_text,
+                    cv_evidence_text=evidence_text,
+                    cv_evidence_offset=span[0],
+                    reason=(
+                        f"Le CV prouve « {sibling.id} », pas « {concept.id} » : "
+                        "reformuler fidèlement avec la preuve du CV"
+                    ),
+                    confidence=0.75,
+                    evidence=MatchEvidence(
+                        text=evidence_text,
+                        offset=span[0],
+                        kind="skill",
+                        field=sibling.id,
+                    ),
+                )
+
+        homonym = _homonym_conflict(concept, tokens, source)
+        if homonym is not None:
+            warnings.append(
+                f"Homonyme sectoriel : le CV prouve « {homonym} », pas « {concept.id} »."
+            )
+            return MatchAction(
+                code="DO_NOT_ADD",
+                requirement_text=requirement_text,
+                cv_evidence_text=None,
+                cv_evidence_offset=None,
+                reason=(
+                f"{NO_EVIDENCE_REASON} : homonyme détecté "
+                f"(le CV mentionne « {homonym} », pas « {concept.id} »)"
+            ),
+                confidence=0.85,
+            )
+
+        return MatchAction(
+            code="DO_NOT_ADD",
+            requirement_text=requirement_text,
+            cv_evidence_text=None,
+            cv_evidence_offset=None,
+            reason=NO_EVIDENCE_REASON,
+            confidence=0.95,
+        )
+
+    # ── Generic requirement: token comparison ────────────────────────
+    if not content:
+        return MatchAction(
+            code="DO_NOT_ADD",
+            requirement_text=requirement_text,
+            cv_evidence_text=None,
+            cv_evidence_offset=None,
+            reason=NO_EVIDENCE_REASON,
+            confidence=0.9,
+        )
+
+    content_set = set(content)
+    matched_tokens = [token for token in tokens if token[0] in content_set]
+    if not matched_tokens:
+        return MatchAction(
+            code="DO_NOT_ADD",
+            requirement_text=requirement_text,
+            cv_evidence_text=None,
+            cv_evidence_offset=None,
+            reason=NO_EVIDENCE_REASON,
+            confidence=0.95,
+        )
+
+    # The ratio is measured on the best *local* group of matched tokens: two
+    # words found in two different places do not prove each other.
+    cluster = _tightest_cluster(matched_tokens, source)
+    matched_words = {token[0] for token in cluster}
+    ratio = len(matched_words) / len(content)
+
+    if ratio == 1.0:
+        span = _extend_span(_span(cluster), tokens, content_set, source)
+        return _skill_action(
+            requirement_text=requirement_text,
+            evidence_text=source[span[0]: span[1]],
+            offset=span[0],
+        )
+
+    if ratio >= 0.5:
+        span = _span(cluster)
+        evidence_text = source[span[0]: span[1]]
+        return MatchAction(
+            code="REPHRASE",
+            requirement_text=requirement_text,
+            cv_evidence_text=evidence_text,
+            cv_evidence_offset=span[0],
+            reason=(
+                "Preuve partielle dans le CV : reformuler avec la preuve exacte "
+                "plutôt qu'avec le vocabulaire de l'offre"
+            ),
+            confidence=0.6,
+            evidence=MatchEvidence(text=evidence_text, offset=span[0], kind="skill"),
+        )
+
+    return MatchAction(
+        code="DO_NOT_ADD",
+        requirement_text=requirement_text,
+        cv_evidence_text=None,
+        cv_evidence_offset=None,
+        reason=NO_EVIDENCE_REASON,
+        confidence=0.95,
+    )
+
+
+def _skill_action(
+    *,
+    requirement_text: str,
+    evidence_text: str,
+    offset: int,
+) -> MatchAction:
+    """Build the action of a proved skill (HIGHLIGHT or QUANTIFY)."""
+    asks_for_numbers = _asks_for_numbers(requirement_text)
+    has_numbers = _is_quantified(evidence_text)
+
+    if asks_for_numbers and not has_numbers:
+        return MatchAction(
+            code="QUANTIFY",
+            requirement_text=requirement_text,
+            cv_evidence_text=evidence_text,
+            cv_evidence_offset=offset,
+            reason="Preuve trouvée mais sans chiffre : quantifier le résultat avec une donnée vérifiable",
+            confidence=0.8,
+            evidence=MatchEvidence(text=evidence_text, offset=offset, kind="skill"),
+        )
+    if has_numbers and not asks_for_numbers:
+        return MatchAction(
+            code="QUANTIFY",
+            requirement_text=requirement_text,
+            cv_evidence_text=evidence_text,
+            cv_evidence_offset=offset,
+            reason="Le CV contient un chiffre : le reprendre explicitement dans la preuve",
+            confidence=0.75,
+            evidence=MatchEvidence(text=evidence_text, offset=offset, kind="skill"),
+        )
+    return MatchAction(
+        code="HIGHLIGHT",
+        requirement_text=requirement_text,
+        cv_evidence_text=evidence_text,
+        cv_evidence_offset=offset,
+        reason="Preuve verbatim trouvée dans le CV",
+        confidence=0.9,
+        evidence=MatchEvidence(text=evidence_text, offset=offset, kind="skill"),
+    )
+
+
+def _homonym_conflict(
+    concept: _Concept,
+    tokens: list[tuple[str, int, int]],
+    source: str,
+) -> str | None:
+    """Return the id of a homonymous concept proved by the CV, if any."""
+    if concept.homonym is None:
+        return None
+    for sibling in CONCEPTS:
+        if sibling.homonym != concept.homonym or sibling.id == concept.id:
+            continue
+        if _find_concept_evidence(sibling, tokens, source) is not None:
+            return sibling.id
+    return None
+
+
+__all__ = ["match_cv_to_offer"]

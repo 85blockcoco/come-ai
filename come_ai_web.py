@@ -8,6 +8,7 @@ model actions are routed through the controlled tools in ``workspace_core``.
 from __future__ import annotations
 
 import hmac
+import hashlib
 import json
 import logging
 import re
@@ -28,11 +29,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
+from career.memory_router import create_memory_router
+from career.personal_memory import StyleMemoryStore
 from career.profile_import import MAX_PROFILE_IMPORT_BYTES
 from career.router import CAREER_STATIC_DIR, create_career_router
 from academics.router import create_academics_router
 from career.service import CareerService
 from personal_memory import PersonalMemoryError, PersonalMemoryStore
+from study_coach.errors import StudyCoachError
 from memory_storage import MemoryStorageError, MemoryStorageService
 from task_queue import (
     ACTIVE_STATUSES,
@@ -48,11 +52,13 @@ from v5_orchestrator import LocalOrchestrator
 from workspace_core import (
     MAX_IMPORT_BYTES,
     SUPPORTED_SUFFIXES,
+    TABULAR_SUFFIXES,
     AgentService,
     AppConfig,
     LocalTools,
     UserFacingError,
     Workspace,
+    extract_text,
     safe_error,
     to_jsonable,
 )
@@ -275,6 +281,29 @@ class MemoryProjectRequest(BaseModel):
     description: str = Field(default="", max_length=2_000)
 
 
+class StudyCourseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    file_id: str = Field(min_length=3, max_length=128)
+    requested_topics: list[Annotated[str, Field(min_length=1, max_length=120)]] = Field(default_factory=list, max_length=12)
+
+
+class StudySessionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    size: int = Field(default=5, ge=1, le=12)
+
+
+class StudyAnswerRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    question_id: str = Field(min_length=3, max_length=128)
+    value: str = Field(min_length=1, max_length=4_000)
+
+
+class HomeworkTaskUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: Literal["todo", "doing", "review", "done"]
+    notes: str = Field(default="", max_length=12_000)
+
+
 def create_app(
     base_dir: Path | None = None,
     agent_override: Any | None = None,
@@ -295,6 +324,10 @@ def create_app(
     logger = _build_logger(config.log_dir)
     agent = agent_override or AgentService(config, workspace)
     career = career_override or CareerService(config.base_dir)
+    # Personal style memory stays next to the Career database (and therefore
+    # outside the general chat workspace).  Construction never parses the file,
+    # so a damaged file cannot prevent the local app from starting.
+    style_memory = StyleMemoryStore(Path(career.data_dir) / "style_memory")
     tools = LocalTools(workspace)
     memory: PersonalMemoryStore | None = None
     memory_error: str | None = None
@@ -336,6 +369,10 @@ def create_app(
     # scans source or creates an export. It owns a separate single worker.
     workshop_instances: list[Any] = []
     workshop_lock = threading.Lock()
+    study_instances: list[Any] = []
+    study_lock = threading.RLock()
+    homework_progress_lock = threading.RLock()
+    homework_progress_path = config.base_dir / "study_data" / "homework_progress.json"
 
     def get_workshop() -> Any:
         with workshop_lock:
@@ -344,6 +381,70 @@ def create_app(
 
                 workshop_instances.append(DeveloperWorkshop(config.base_dir, busy_check=lambda: bool(_task_queue_health(runtime).get("active_count", 0))))
             return workshop_instances[0]
+
+    def get_study_coach() -> Any:
+        """Open the deterministic local Study Coach only when the user needs it."""
+        with study_lock:
+            if not study_instances:
+                from study_coach.engine import StudyCoach
+
+                study_instances.append(StudyCoach.open(config.base_dir / "study_data"))
+            return study_instances[0]
+
+    def read_homework_progress() -> dict[str, Any]:
+        if not homework_progress_path.is_file():
+            return {"schema_version": 1, "files": {}}
+        try:
+            payload = json.loads(homework_progress_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise UserFacingError("La progression de ce devoir est illisible.") from error
+        if not isinstance(payload, dict) or not isinstance(payload.get("files"), dict):
+            raise UserFacingError("La progression de ce devoir est invalide.")
+        return payload
+
+    def write_homework_progress(payload: dict[str, Any]) -> None:
+        homework_progress_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        temporary = homework_progress_path.with_name(f".{homework_progress_path.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            temporary.chmod(0o600)
+            temporary.replace(homework_progress_path)
+            homework_progress_path.chmod(0o600)
+        except OSError as error:
+            temporary.unlink(missing_ok=True)
+            raise UserFacingError("Impossible d’enregistrer la progression locale du devoir.") from error
+
+    def current_homework_tasks(file_id: str) -> tuple[list[dict[str, Any]], int]:
+        with runtime.workspace_lock:
+            inspection = runtime.tools.inspect_file(file_id)
+        if inspection.get("kind") != "document":
+            raise UserFacingError("Le plan de travail est disponible pour les documents textuels.")
+        labels = inspection.get("outline", {}).get("tasks") or []
+        with homework_progress_lock:
+            file_progress = read_homework_progress().get("files", {}).get(file_id, {})
+            saved = file_progress.get("tasks", {}) if isinstance(file_progress, dict) else {}
+        tasks = []
+        for index, raw_label in enumerate(labels, start=1):
+            label = str(raw_label).strip()
+            task_id = "task_" + hashlib.sha256(f"{file_id}\0{label}".encode()).hexdigest()[:16]
+            progress = saved.get(task_id, {}) if isinstance(saved, dict) else {}
+            progress = progress if isinstance(progress, dict) else {}
+            status = progress.get("status", "todo")
+            if status not in {"todo", "doing", "review", "done"}:
+                status = "todo"
+            notes = progress.get("notes", "")
+            if not isinstance(notes, str):
+                notes = ""
+            tasks.append({
+                "id": task_id,
+                "index": index,
+                "label": label,
+                "status": status,
+                "notes": notes,
+                "updated_at": progress.get("updated_at"),
+            })
+        completed = sum(task["status"] == "done" for task in tasks)
+        return tasks, completed
 
     def get_hybrid_chat() -> Any:
         # Construction is inert: opening the interface never loads a model or
@@ -384,6 +485,8 @@ def create_app(
                 runtime.task_runner.stop(wait=False)
             for workshop in workshop_instances:
                 workshop.close()
+            for study_coach in study_instances:
+                study_coach.close()
 
     app = FastAPI(
         title="Côme AI 5.0",
@@ -394,7 +497,9 @@ def create_app(
     )
     app.state.runtime = runtime
     app.state.career = career
+    app.state.style_memory = style_memory
     app.state.get_workshop = get_workshop
+    app.state.get_study_coach = get_study_coach
     # The launcher binds Uvicorn to 127.0.0.1. This is a second line of
     # defence against unexpected Host headers when using a local browser.
     app.add_middleware(
@@ -413,6 +518,13 @@ def create_app(
         paths=("/api/career/profile-imports",),
         prefix=True,
         error_message="Document de profil trop volumineux (maximum 10 Mo).",
+    )
+    app.add_middleware(
+        UploadBodyLimitMiddleware,
+        max_bytes=MAX_CAREER_PROFILE_IMPORT_BYTES,
+        paths=("/api/career/evidence",),
+        prefix=True,
+        error_message="Pièce jointe trop volumineuse (maximum 10 Mo).",
     )
     app.add_middleware(
         UploadBodyLimitMiddleware,
@@ -446,10 +558,12 @@ def create_app(
             response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
-        response.headers["X-Frame-Options"] = "DENY"
+        embedded_career = path == "/career" and request.query_params.get("embed") == "app"
+        response.headers["X-Frame-Options"] = "SAMEORIGIN" if embedded_career else "DENY"
+        frame_ancestors = "'self'" if embedded_career else "'none'"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; base-uri 'none'; form-action 'self'; "
-            "frame-ancestors 'none'; img-src 'self' data:; "
+            f"frame-ancestors {frame_ancestors}; frame-src 'self'; img-src 'self' data:; "
             "style-src 'self'; script-src 'self'; connect-src 'self'"
         )
         return response
@@ -509,42 +623,30 @@ def create_app(
         """The new unified local shell; V3 remains available at `/`."""
         return FileResponse(V5_STATIC_DIR / "index.html", media_type="text/html; charset=utf-8")
 
+
     @app.get("/api/app/missions")
-    async def app_missions() -> dict:
-        import json as _json
-        import os as _os
-        import subprocess as _sp
-        from pathlib import Path as _P
-        def snapshot():
+    async def desktop_missions() -> dict[str, Any]:
+        def snapshot() -> dict[str, Any]:
             try:
-                reg = _json.loads((_P(__file__).resolve().parent / "missions_registry.json").read_text(encoding="utf-8"))
+                registry = json.loads((DESKTOP_STATIC_DIR.parent / "missions_registry.json").read_text(encoding="utf-8"))
             except (OSError, ValueError):
-                return {"available": False, "counts": {}, "missions": [], "workers": 0, "load": 0.0}
-            missions = reg.get("missions", [])
-            counts = {}
-            for m in missions:
-                st = str(m.get("status", "unknown"))
-                counts[st] = counts.get(st, 0) + 1
-            try:
-                workers = _sp.run(["pgrep", "-f", "opencode run --auto"], capture_output=True, text=True, timeout=3).stdout.count("\n")
-            except Exception:
-                workers = 0
-            try:
-                load = round(_os.getloadavg()[0], 1)
-            except Exception:
-                load = 0.0
-            done = {str(m.get("id")) for m in missions if m.get("status") == "done"}
+                return {"available": False, "counts": {}, "missions": [], "workers": None, "load": None}
+            missions = registry.get("missions", []) if isinstance(registry, dict) else []
+            missions = [item for item in missions if isinstance(item, dict)] if isinstance(missions, list) else []
+            counts: dict[str, int] = {}
+            done = {str(item.get("id")) for item in missions if item.get("status") == "done"}
             pending = []
-            for m in missions:
-                if m.get("status") == "done":
-                    continue
-                deps = [str(d) for d in m.get("dependencies", [])]
-                pending.append({"id": str(m.get("id")), "title": str(m.get("title", "")),
-                                "status": str(m.get("status", "")),
-                                "blocked_by": [d for d in deps if d not in done]})
-            return {"available": True, "counts": counts,
-                    "missions": sorted(pending, key=lambda x: int(x["id"]) if x["id"].isdigit() else 0),
-                    "workers": workers, "load": load}
+            for item in missions:
+                status = str(item.get("status") or "unknown")
+                counts[status] = counts.get(status, 0) + 1
+                if status != "done":
+                    dependencies = item.get("dependencies")
+                    dependencies = dependencies if isinstance(dependencies, list) else []
+                    pending.append({
+                        "id": str(item.get("id") or ""), "title": str(item.get("title") or ""),
+                        "status": status, "blocked_by": [str(value) for value in dependencies if str(value) not in done],
+                    })
+            return {"available": True, "counts": counts, "missions": pending, "workers": None, "load": None}
         return await run_in_threadpool(snapshot)
 
     @app.get("/api/health")
@@ -830,6 +932,61 @@ def create_app(
             lambda: runtime.tools.analyze_table(payload.file_id, payload.sheet_name),
         )
 
+    @app.get("/api/study/homework/{file_id}/tasks")
+    async def homework_tasks(file_id: str) -> dict[str, Any]:
+        def read() -> dict[str, Any]:
+            tasks, completed = current_homework_tasks(file_id)
+            total = len(tasks)
+            return {
+                "file_id": file_id,
+                "tasks": tasks,
+                "completed": completed,
+                "total": total,
+                "completion_percent": round(completed / total * 100) if total else 0,
+            }
+
+        return await run_in_threadpool(read)
+
+    @app.put("/api/study/homework/{file_id}/tasks/{task_id}")
+    async def update_homework_task(
+        file_id: str,
+        task_id: str,
+        payload: HomeworkTaskUpdateRequest,
+    ) -> dict[str, Any]:
+        def update() -> dict[str, Any]:
+            tasks, _ = current_homework_tasks(file_id)
+            known_ids = {task["id"] for task in tasks}
+            if task_id not in known_ids:
+                raise UserFacingError("Cette question n’existe plus dans le plan de travail actuel.")
+            with homework_progress_lock:
+                progress = read_homework_progress()
+                files = progress.setdefault("files", {})
+                file_progress = files.get(file_id)
+                if not isinstance(file_progress, dict):
+                    file_progress = {"tasks": {}}
+                    files[file_id] = file_progress
+                saved_tasks = file_progress.get("tasks")
+                if not isinstance(saved_tasks, dict):
+                    saved_tasks = {}
+                    file_progress["tasks"] = saved_tasks
+                saved_tasks[task_id] = {
+                    "status": payload.status,
+                    "notes": payload.notes.strip(),
+                    "updated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+                }
+                write_homework_progress(progress)
+            updated_tasks, completed = current_homework_tasks(file_id)
+            total = len(updated_tasks)
+            return {
+                "file_id": file_id,
+                "tasks": updated_tasks,
+                "completed": completed,
+                "total": total,
+                "completion_percent": round(completed / total * 100) if total else 0,
+            }
+
+        return await run_in_threadpool(update)
+
     @app.post("/api/actions/report")
     async def create_report(payload: FileActionRequest) -> dict[str, Any]:
         # This dedicated endpoint is only reached after a direct browser click.
@@ -838,6 +995,125 @@ def create_app(
             runtime,
             lambda: runtime.tools.create_analysis_workbook(payload.file_id, payload.sheet_name),
         )
+
+    def study_text(file_id: str) -> tuple[str, str]:
+        """Return bounded local course text for one opaque workspace file ID."""
+        with runtime.workspace_lock:
+            path = runtime.workspace.get_path(file_id)
+            if path.suffix.lower() not in TABULAR_SUFFIXES:
+                return path.name, extract_text(path)
+            inspection = runtime.tools.inspect_file(file_id)
+        sections = [f"Document de travail : {inspection.get('file') or path.name}"]
+        sheets = inspection.get("sheets") or {inspection.get("sheet") or "Tableau": inspection}
+        for name, sheet in list(sheets.items())[:25]:
+            sections.append(f"\nFeuille : {name}")
+            columns = sheet.get("column_names") or []
+            if columns:
+                sections.append("Colonnes : " + ", ".join(str(item) for item in columns[:40]))
+            for row in (sheet.get("preview") or [])[:20]:
+                sections.append(json.dumps(row, ensure_ascii=False, default=str))
+        return path.name, "\n".join(sections)[:200_000]
+
+    @app.get("/api/study/overview")
+    async def study_overview() -> dict[str, Any]:
+        def read() -> dict[str, Any]:
+            try:
+                with study_lock:
+                    coach = get_study_coach()
+                    courses = []
+                    for item in coach.list_courses():
+                        syllabus = coach.get_syllabus(str(item.get("id") or ""))
+                        courses.append({
+                            **item,
+                            "notion_count": len(syllabus.notions),
+                            "gap_count": len(syllabus.gaps),
+                        })
+                    return {"courses": courses, "progress": coach.progress()}
+            except StudyCoachError as error:
+                raise UserFacingError(str(error)) from error
+
+        return await run_in_threadpool(read)
+
+    @app.post("/api/study/courses")
+    async def create_study_course(payload: StudyCourseRequest) -> dict[str, Any]:
+        def create() -> dict[str, Any]:
+            try:
+                title, text = study_text(payload.file_id)
+                with study_lock:
+                    syllabus = get_study_coach().ingest_course(
+                        text,
+                        title=title,
+                        source_id=payload.file_id,
+                        requested_topics=payload.requested_topics,
+                    )
+                result = syllabus.to_dict()
+                result["notion_count"] = len(syllabus.notions)
+                result["gap_count"] = len(syllabus.gaps)
+                return result
+            except StudyCoachError as error:
+                raise UserFacingError(str(error)) from error
+
+        return await run_in_threadpool(create)
+
+    @app.post("/api/study/courses/{syllabus_id}/sessions")
+    async def create_study_session(syllabus_id: str, payload: StudySessionRequest) -> dict[str, Any]:
+        def create() -> dict[str, Any]:
+            try:
+                with study_lock:
+                    coach = get_study_coach()
+                    session = coach.start_session(syllabus_id, size=payload.size)
+                    return {
+                        "session_id": session.id,
+                        "syllabus_id": session.syllabus_id,
+                        "title": session.title,
+                        "status": session.status,
+                        "total": len(session.questions),
+                        "question": coach.next_question(session.id),
+                    }
+            except StudyCoachError as error:
+                raise UserFacingError(str(error)) from error
+
+        return await run_in_threadpool(create)
+
+    @app.get("/api/study/sessions/{session_id}")
+    async def read_study_session(session_id: str) -> dict[str, Any]:
+        def read() -> dict[str, Any]:
+            try:
+                with study_lock:
+                    coach = get_study_coach()
+                    session = coach.resume_session(session_id)
+                    return {
+                        "session_id": session.id,
+                        "syllabus_id": session.syllabus_id,
+                        "title": session.title,
+                        "status": session.status,
+                        "answered": session.current_index,
+                        "total": len(session.questions),
+                        "question": coach.next_question(session.id),
+                    }
+            except StudyCoachError as error:
+                raise UserFacingError(str(error)) from error
+
+        return await run_in_threadpool(read)
+
+    @app.post("/api/study/sessions/{session_id}/answers")
+    async def answer_study_question(session_id: str, payload: StudyAnswerRequest) -> dict[str, Any]:
+        def answer() -> dict[str, Any]:
+            try:
+                with study_lock:
+                    coach = get_study_coach()
+                    correction = coach.submit_answer(session_id, payload.question_id, payload.value)
+                    next_question = coach.next_question(session_id)
+                    report = coach.session_report(session_id) if next_question is None else None
+                    return {
+                        "correction": correction.to_dict(),
+                        "question": next_question,
+                        "report": report,
+                    }
+            except StudyCoachError as error:
+                raise UserFacingError(str(error)) from error
+
+        return await run_in_threadpool(answer)
 
     @app.get("/api/outputs")
     async def list_outputs() -> dict[str, Any]:
@@ -931,6 +1207,7 @@ def create_app(
 
     app.include_router(create_career_router(career, ai_generator=career_ai_generator))
     app.include_router(create_academics_router())
+    app.include_router(create_memory_router(style_memory))
     from devkit.router import create_developer_router
 
     app.include_router(create_developer_router(get_workshop))

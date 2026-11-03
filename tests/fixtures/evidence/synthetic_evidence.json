@@ -1,0 +1,74 @@
+[
+  {
+    "id": "preuve-competence-analyse-financiere",
+    "claim": "Analyse financière et valorisation",
+    "source_document": "stage_transaction_services.pdf",
+    "source_location": "page 2, lignes 14-17",
+    "quote": "Participation à l’analyse financière et à la valorisation des actifs.",
+    "evidence_type": "skill",
+    "confidence": "direct"
+  },
+  {
+    "id": "preuve-competence-modelisation",
+    "claim": "Modélisation financière sur Excel",
+    "source_document": "stage_transaction_services.pdf",
+    "source_location": "page 3, lignes 22-28",
+    "quote": "Construction d’un modèle de projection sur trois ans sous Excel.",
+    "evidence_type": "skill",
+    "confidence": "direct"
+  },
+  {
+    "id": "preuve-experience-stage",
+    "claim": "Stage en analyse financière",
+    "source_document": "attestation_stage.pdf",
+    "source_location": "page 1",
+    "quote": "Stage de six mois au sein d’une équipe de recherche.",
+    "evidence_type": "experience",
+    "confidence": "direct"
+  },
+  {
+    "id": "preuve-formation-master",
+    "claim": "Master en finance d’entreprise",
+    "source_document": "diplome_master.pdf",
+    "source_location": "page 1",
+    "quote": "Master en finance d’entreprise, mention finance de marché.",
+    "evidence_type": "education",
+    "confidence": "direct"
+  },
+  {
+    "id": "preuve-langue-anglais",
+    "claim": "Anglais professionnel",
+    "source_document": "certificat_angles.pdf",
+    "source_location": "page 1",
+    "quote": "Certificat de langue niveau C1, sans date d’expiration indiquée.",
+    "evidence_type": "language",
+    "confidence": "direct"
+  },
+  {
+    "id": "preuve-projet-universite",
+    "claim": "Projet universitaire de research equity",
+    "source_document": "rapport_projet.pdf",
+    "source_location": "page 4, lignes 60-71",
+    "quote": "Valorisation d’une société non cotée à partir de multiples sectoriels.",
+    "evidence_type": "project",
+    "confidence": "inferred"
+  },
+  {
+    "id": "preuve-certification-excel",
+    "claim": "Certification bureautique Excel",
+    "source_document": "certification_excel.pdf",
+    "source_location": "page 1",
+    "quote": "Attestation de réussite à la certification bureautique Excel, session 2024.",
+    "evidence_type": "certification",
+    "confidence": "direct"
+  },
+  {
+    "id": "preuve-declaree-langue-italien",
+    "claim": "Italien professionnel",
+    "source_document": "",
+    "source_location": "",
+    "quote": "Italien professionnel, déclaré par la personne sans document joint.",
+    "evidence_type": "language",
+    "confidence": "declared"
+  }
+]

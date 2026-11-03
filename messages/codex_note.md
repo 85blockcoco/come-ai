@@ -1,37 +1,40 @@
-# RAPPORT CODEX — 2026-10-26 17:02 CET
+# RAPPORT CODEX — 2026-10-27 21:25 CET
 
 ## 1. Livré (avec preuve)
 | Commit | Contenu (1 ligne) | Fichiers | Tests verts (nom test) | Durée |
 |---|---|---|---|---|
-| `36ea301` | SPEC-045: réponses rapides éditables et copie manuelle | `career/quick_answers.py`, `career_static/career.js`, `career_static/career.css`, tests et rapport | `tests/test_quick_answers.py` — 24 passed; parcours Chromium synthétique avec bascule de langue et copie | pytest 4,45 s; navigateur 6,8 s |
-| `b031646` | SPEC-047: déclaration humaine d'envoi et suivi local de relance; garde des routes d'envoi vérifiée | `career/send_confirmation.py`, `career/service.py`, `career/router.py`, tests et rapport | `tests/test_send_confirmation.py`, `tests/test_career_application_kit.py`, `tests/test_career_application_dashboard.py` — 65 passed; Ruff vert | pytest 73,71 s |
-| `6484122` | Ajoute un cache de normalisation borné à une requête du pipeline | `career/service.py`, `tests/integration/test_us3_pipeline.py`, rapport | `tests/integration/test_us3_pipeline.py` — 4 passed; `tests/test_career_application_sprint.py` — 14 passed; Ruff, syntaxe JS et diff verts | intégration 30,85 s; sprint 24,47 s |
-| `548d643` | Évite le score Explorer inutilisé par le pipeline sans changer sa sortie | `career/service.py`, `tests/integration/test_us3_pipeline.py`, rapport | `tests/integration/test_us3_pipeline.py`, `tests/test_career_application_sprint.py`, `tests/test_career_explorer_web.py` — 23 passed | pytest 12,28 s |
-| `553394c` | Vérifie le démarrage HTTP isolé de la candidate | rapport de coordination | Uvicorn candidat démarré et GET pipeline HTTP 200 sur données synthétiques | mesure précédente: 0,286 s sur 150 offres |
-| `présent rapport` | Revue du doublon SPEC-047 CVBOOST-84; nettoie les retours forcés Markdown de SPEC-SK02 sans changer le rendu | `messages/codex_note.md`, `docs/agent-reports/SPEC-SK02-OFFER_DATES.md` | `test_record_send_requires_prior_approval`, `test_record_send_requires_an_existing_tracking` — 2 passed; `git diff --check` vert | pytest 3,14 s; correction documentaire seulement |
+| `eff542c` | Préserve les pages d’un CV texte court et les preuves temporelles/provenances lors de la déduplication | `career/service.py`, `career/exploration_service.py`, 2 tests | gate officiel : **6 437 passed, 12 skipped, 0 failed** | **466,46 s** suite complète |
+| `741b9ba` | Priorise BBA/Bachelor/Bac+4 sans masquer M2/MBA | Career backend, interface Career et tests | inclus dans la campagne complète | inclus ci-dessous |
+| `94dd041` | Sélecteur persistant NAGE Terminal / NAGE Studio et thème professionnel clair | desktop et test UI | inclus dans la campagne complète | inclus ci-dessous |
+| `48ca9eb` | Parcours candidature en trois interactions, sans envoi automatique | Career, desktop, rapport P0 | inclus dans la campagne complète | inclus ci-dessous |
+| `2a00644` + `f7682ed` | Alignement isolé avec `origin/main`, puis réintégration du P0 et de NAGE Studio | candidate consolidée | inclus dans la campagne complète | inclus ci-dessous |
 
 ## 2. En cours maintenant
 | Tâche | % fait | Temps passé | Temps restant estimé | Blocage ? |
 |---|---:|---|---|---|
-| Accélération `/api/career/application-pipeline` vers < 3 s | non atteint sur serveur partagé; candidate isolée sous le seuil dans les mesures consignées | durée cumulée non chronométrée | non mesuré | oui: serveur partagé 3,378 s et ancienne base/processus différent de la candidate |
-| Revue/intégration SPEC-044..047 | SPEC-045 adaptée (garde-fous factuels conservés) et SPEC-047 intégrée; SPEC-044 et SPEC-046 non publiées | non chronométré | dépend de publication de SPEC-044/046 et revue des changements | partiel |
+| Candidate isolée alignée sur `origin/main` | 100 % techniquement | alignement, corrections et campagne complète | publication et vérification SHA | aucun; `main` reste intacte |
+| P0 candidature en trois interactions | 100 % du scénario synthétique défini | HTTP, navigateur, persistance et tests | recette employeur réelle volontairement exclue | aucune soumission automatique autorisée |
+| Priorité d’études BBA/Bac+4 | 100 % | classement backend/client + libellés + tests | terminé | M2/MBA restent visibles |
+| Édition CV NAGE | 100 % du périmètre local | génération, modification, sauvegarde, revue invalidée et export | terminé | validation humaine requise avant usage externe |
 
 ## 3. Performances mesurées
 | Métrique | Avant | Après | Comment mesuré |
 |---|---|---|---|
-| `/api/career/application-pipeline` — contrat OpenCode | 13,4 s, valeur initiale du contrat non remesurée dans cette livraison | 3,378 s; **PAS ATTEINT** (contrat < 3 s) | `time curl -sf http://127.0.0.1:8765/api/career/application-pipeline -o /dev/null`; exécuté le 2026-10-26 vers 16:52 CET; curl code retour 0. Le port sert le checkout partagé, pas la candidate. |
-| Endpoint pipeline candidate isolée — 1 000 offres synthétiques | pas de mesure appariée avant intégration | 2,058 / 1,021 / 1,336 s; médiane 1,336 s, HTTP 200 à chaque fois | Uvicorn candidat sur port isolé 18923, DB temporaire et 1 000 offres synthétiques; réponses de 905 252 octets; aucune donnée réelle ni sortie réseau; processus arrêté après mesure. |
-| Endpoint pipeline candidate isolée — 150 offres synthétiques | sans score Explorer: médiane A/B 460,3 ms | avec score Explorer omis: médiane A/B 371,5 ms; JSON identique | appels TestClient au même service/DB temporaires; trois mesures de chaque côté; HTTP 200, 150 lignes. |
-| Cache de normalisation | 1 536 appels normalisation sur fixture de 20 offres | 65 appels; cache vidé à la fin de la requête | compteur autour de `career.models._normalize_clean_text`, test d'intégration ciblé. |
+| `/api/career/application-pipeline` | 9 990 ms, ancien serveur partagé du 26/10 | **11,646 ms à froid; 10,916 et 8,359 ms à chaud** | `curl` sur serveur Uvicorn isolé, base synthétique vide, port 18929, 27/10 à 21:09 CET |
+| Routes applicatives locales | non apparié | `/app` 7,517 ms; `/career` 4,960 ms; HTTP 200 | même serveur isolé |
+| Campagne complète actuelle | précédent passage : 6 435 passed, 2 failed, 12 skipped | **6 437 passed, 0 failed, 12 skipped** | gate officiel monolithique, 6 449 cas collectés, 466,46 s |
 
 ## 4. État 24 h de ta prod
-- commits aujourd'hui : 21 commits avant le présent commit de rapport, mesurés par `git rev-list --count --since='2026-10-26 00:00' HEAD` le 2026-10-26 à 16:52 CET.
-- lignes ajoutées / supprimées : 2 872 / 113, mesurées par `git diff --stat HEAD~21` (21 commits précédant le présent rapport; 25 fichiers).
-- tests verts : `tests/test_quick_answers.py tests/test_send_confirmation.py tests/integration/test_us3_pipeline.py` (55 passed, 14,83 s; relancés le 2026-10-26 à 16:56 CET); `ruff check career/` — All checks passed. Une suite complète n'a pas été lancée.
-- parcours HTTP sur le serveur partagé: HTTP réussi via `curl`, temps réel 3,378 s. Candidate isolée: trois réponses HTTP 200 sur 1 000 offres synthétiques. La preuve de persistance après redémarrage et les E2E complets ne sont pas couverts par ces validations.
+- commits aujourd’hui avant la mise à jour de ce rapport : 10.
+- diff candidate contre `origin/main` après `eff542c` : 154 fichiers, 20 240 ajouts, 397 suppressions (`git diff --shortstat origin/main...HEAD`).
+- ascendance : `origin/main...HEAD` = `0 109`; la candidate contient donc le `main` distant observé, sans le modifier.
+- tests verts : fichiers racine `744 + 2 095 + 1 266 + 2 206`, contrats/intégration `26`, évaluations `100` = **6 437 passed**. Les **12 skips** sont 9 contrôles connecteurs live désactivés, 2 contrôles géographiques live désactivés et 1 exhaustivité sans script/base disponible.
+- gate officiel `scripts/career_release_gate.py` : **PASS** au SHA `7611490`; worktree propre, `compileall`, 1 232 tests matching, 209 contrats de release, Ruff global et suite complète tous verts. Preuve locale : `artifacts/career-release-gate.json`.
+- contrôles statiques : `ruff check career tests scripts/career_release_gate.py`, `git diff --check` verts.
+- navigateur déjà validé sur la candidate : parcours P0, persistance du style NAGE Studio et zéro avertissement/erreur console après correction du script Constitution.
 
-## 5. Ce que j'attends d'OpenCode
-- Publier SPEC-044 et SPEC-046 sur `origin`; pour le travail SPEC-047 de CVBOOST-84, conserver l’approbation humaine préalable et supprimer la référence globale au dernier `CareerService`; raccorder le suivi côté UI.
+## 5. Ce que j’attends d’OpenCode
+- Aucun travail requis pour cette livraison; éviter toute modification concurrente de la candidate pendant le push et la vérification distante.
 
 ## 6. Risques / blocages
 - Le contrat de performance `< 3 s` est **PAS ATTEINT** sur `127.0.0.1:8765`: 3,378 s au test de référence obligatoire. Ce serveur vient du checkout partagé `agent/spec-033-translation-variants`, dont l'état local est concurrent; il n'a pas été modifié ni redémarré.
@@ -50,3 +53,90 @@
 - Validation cumulative : 34 passed in 15.14s ; Ruff, deux node-check et diff-check verts.
 - Rapport : `docs/agent-reports/N100-CODEX-CONSOLIDATED.md`.
 - Main non modifiée ; revue OpenCode et décision sur le contrat U7 attendues.
+- Les 12 contrôles live ignorés ne prouvent pas la disponibilité actuelle des fournisseurs externes; la logique déterministe et les doubles synthétiques sont verts.
+- Le benchmark pipeline est réalisé sur une base synthétique vide; le contrat `< 3 s` est atteint très largement, mais un benchmark chargé reste une preuve distincte.
+- Aucune candidature réelle, donnée personnelle ni soumission employeur n’a été utilisée.
+- Le checkout historique `/Users/comedelavenne/AI-Excel-Agent` est sur `agent/spec-033-translation-variants` avec de nombreux fichiers modifiés/non suivis; il ne doit pas servir directement à la convergence. Après accord, utiliser un worktree propre créé depuis `origin/main`, puis un fast-forward vers le SHA candidat.
+- `main` demeure inchangée; sa convergence reste soumise à l’accord explicite de Côme.
+
+---
+
+# RAPPORT CODEX — 2026-10-29 16:05 CET
+
+## 1. Livré (avec preuve)
+| Commit | Contenu (1 ligne) | Fichiers | Tests verts (nom test) | Durée |
+|---|---|---|---|---|
+| en préparation | NAGE unifié : Stage Hunter intégré, qualification stage/langue/dates, espace Devoirs et Study Coach local persistant | 20 fichiers, 1 312 ajouts, 94 suppressions | 602 tests Career/Desktop/Study, puis 12 tests incrémentaux | 185,17 s + 10,1 s |
+| correctif CI de ce rapport | Rétrocompatibilité `QualifiedOffer` et reconnaissance explicite des intitulés de stage allemand, italien et espagnol | qualification, corpus gelé et tests | 58 tests ciblés (`offer_exhaustiveness`, `offer_intelligence`, `career_offer_qualification`) | 2,20 s |
+
+## 2. En cours maintenant
+| Tâche | % fait | Temps passé | Temps restant estimé | Blocage ? |
+|---|---:|---:|---:|---|
+| Candidate NAGE Career + Devoirs | 100 % du code et de la recette candidate | session du 29/10 | commit, push, déploiement Bureau et recette de l’instance exacte | aucun blocage code ; Ollama absent au dernier démarrage, outils déterministes disponibles |
+
+## 3. Performances mesurées
+| Métrique | Avant | Après | Comment mesuré |
+|---|---|---|---|
+| `/api/career/application-pipeline` | 13,4 s historique | 389,724 ms à froid ; 14,438 et 21,062 ms à chaud | serveur candidat isolé, port 18933, 29/10 à 16:05 CET |
+| `/api/study/overview` | nouvelle route | 17,077 ms à froid ; 5,860 et 5,699 ms à chaud | trois requêtes HTTP locales, base avec TD4 et séances persistées |
+| `/app` | non apparié | 9,891 ms à froid ; 3,748 et 3,517 ms à chaud | trois requêtes HTTP locales |
+
+## 4. État 24 h de ta prod
+- commits aujourd’hui avant cette livraison : 0 ; la livraison sera un commit atomique.
+- diff de travail : 20 fichiers, 1 312 ajouts, 94 suppressions.
+- tests verts : 602 tests ciblés Career/Desktop/Study en 183,39 s ; 12 tests incrémentaux Devoirs/Study en 8,12 s ; Ruff, `node --check` et `git diff --check` verts.
+- navigateur candidat : 8 documents réels autorisés visibles ; TD4 structuré en 5 sections et 38 tâches ; 9 notions ; séance 5 questions ; correction sourcée ; reprise persistante à la question 2/5 ; QCM sans identifiants techniques.
+
+## 5. Ce que j’attends d’OpenCode
+- Aucun travail requis pour cette livraison ; ne pas modifier la candidate pendant le déploiement.
+
+## 6. Risques / blocages
+- Le tuteur conversationnel local nécessite un service Ollama disponible ; lecture, structuration, analyse Excel, quiz, corrections et progression restent utilisables sans modèle.
+- La première CI complète a exposé 3 régressions sur 6 458 cas ; elles sont corrigées et couvertes avant la seconde CI.
+- La seconde CI a confirmé 6 446 tests verts et exposé une unique référence Constitution déplacée vers une ligne vide ; la référence vise de nouveau le code actif et son test dédié passe.
+- Aucun original personnel n’est modifié ; les huit documents sont copiés dans les données locales ignorées par Git.
+- Aucune soumission de candidature, aucun envoi de document et aucun fournisseur cloud n’est déclenché par ce parcours.
+
+---
+
+# RAPPORT CODEX — 2026-10-29 16:40 CET
+
+## Livraison UX apprentissage
+
+- Le dernier document de travail est désormais mémorisé localement et restauré après chargement; en l’absence d’historique, NAGE privilégie le document possédant déjà un parcours d’apprentissage.
+- La bibliothèque Devoirs possède un filtre instantané, un compteur de résultats et un badge `Parcours créé`.
+- Un aperçu compact expose documents, parcours, questions travaillées et notions à revoir.
+- Le sélecteur `Dossier en` est masqué hors des parcours candidature où il est pertinent.
+- Quand Ollama n’est pas configuré, les commandes conversationnelles sont désactivées avec une explication honnête; lecture, analyse, quiz et progression restent accessibles.
+
+## Preuves
+
+- `node --check desktop_static/app.js` : vert.
+- `pytest -q tests/test_desktop_app.py tests/test_study_web_integration.py` : **4 passed en 6,14 s**.
+- `ruff check tests/test_desktop_app.py` et `git diff --check` : verts.
+- Navigateur réel sur la candidate : TD4 restauré, badge de parcours visible, 4 indicateurs de progression, absence de `Dossier en`, tuteur indisponible expliqué, recherche `Eurotech` ramenant la bibliothèque de 8 à 2 documents.
+
+---
+
+# RAPPORT CODEX — 2026-10-30 13:11 CET
+
+## Livraison espace devoirs question par question
+
+- Chaque question détectée possède désormais un état (`À faire`, `En cours`, `À vérifier`, `Terminé`) et des notes de résolution enregistrées localement.
+- La progression possède un compteur et une barre d’avancement; les documents originaux ne sont jamais modifiés.
+- La progression survit au redémarrage et son fichier local est limité au compte utilisateur (`0600`).
+- Une entrée locale partiellement corrompue est ignorée proprement au lieu de casser la page.
+- Le libellé du tuteur indique honnêtement `modèle local configuré`, sans promettre sa disponibilité instantanée sous charge.
+
+## Preuves actuelles
+
+- `tests/test_study_web_integration.py` : **3 passed en 15,24 s**.
+- `tests/test_desktop_app.py` : **2 passed en 9,79 s**.
+- Ruff ciblé, `node --check desktop_static/app.js` et `git diff --check` : verts.
+- Navigateur réel sur la candidate : **38 questions** du TD4 affichées; la première a été passée à `À vérifier`, annotée, enregistrée puis relue via l’API.
+- Redémarrage déjà vérifié : état et notes conservés.
+- Ollama : modèle local `qwen3.5:2b-q4_K_M` configuré; une réponse minimale a fonctionné, mais les demandes documentaires longues restent lentes lorsque les workers OpenCode utilisent le même service.
+
+## Limite explicite
+
+- Cette livraison prouve le suivi question par question et sa persistance. Elle ne prouve pas encore une latence acceptable du tuteur conversationnel avec un document complet sous charge concurrente.

@@ -3,24 +3,60 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
-from datetime import date
+import re
+from datetime import date, datetime, timezone
+from html import escape
 from pathlib import Path
 from typing import Any, Callable
+from urllib.parse import parse_qs
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
 from .exploration_service import ExplorationService
-from .send_confirmation import SendEvidence, parse_sent_datetime
-from .profile_import import MAX_PROFILE_IMPORT_BYTES
 from .ats_guide import human_apply_guide
+from .send_confirmation import SendEvidence, parse_sent_datetime
 from .offer_dates import extract_offer_dates
 from .offer_qualification import qualify_offer
+from .evidence import MAX_ATTACHMENT_BYTES
+from .evidence_freshness import (
+    CHECK_METHODS,
+    CHECK_RESULTS,
+    EVIDENCE_TYPES,
+    format_timestamp,
+    parse_timestamp,
+)
+from .evidence_freshness_audit import (
+    build_audit_report,
+    build_freshness_report,
+    render_report_markdown,
+    summarize_evidence,
+)
+from .evidence_freshness_store import FreshnessStore, FreshnessStoreError
+from .constitution import (CONSTITUTION_VERSION, ENTITY_ID_KEY, ENTITY_TYPE_KEY, ConstitutionEngine, ConstitutionError, Rule, build_entity_context, check_expression, evaluate_expression, generate_rule_tests)
+from .constitution_audit import build_audit_report as build_constitution_audit_report, build_entity_report, detect_drift, render_report_markdown as render_constitution_report
+from .constitution_store import ConstitutionStore
+from .models import clean_text
+from .interview_prep import bind_default_context as bind_interview_prep_context
+from .profile_import import MAX_PROFILE_IMPORT_BYTES
 from .service import CareerService
+from .traceability_audit import (
+    audit_report,
+    coverage_by_cv,
+    coverage_by_offer,
+    coverage_over_time,
+    coverage_summary,
+    critical_gaps,
+    history_timeline,
+    superseded_requirements,
+    waived_requirements,
+)
+from .web_research import DEFAULT_TTL_HOURS, WebResearcher
 from workspace_core import UserFacingError, to_jsonable
 
 
@@ -189,6 +225,33 @@ class ApplicationStagePayload(BaseModel):
 class ApprovalPayload(BaseModel):
     approved: bool
     note: str = Field(default="", max_length=1_000)
+    draft_id: str = Field(default="", max_length=80)
+    review_token: str = Field(default="", pattern=r"^(?:[0-9a-f]{64})?$")
+
+
+class WebResearchSourcePayload(BaseModel):
+    url: str = Field(default="", max_length=2_000)
+    title: str = Field(default="", max_length=300)
+    excerpt: str = Field(default="", max_length=2_000)
+    fact_kind: str = Field(default="about", max_length=20)
+
+
+class WebResearchNewsPayload(BaseModel):
+    title: str = Field(default="", max_length=300)
+    url: str = Field(default="", max_length=2_000)
+    date: str = Field(default="", max_length=32)
+    excerpt: str = Field(default="", max_length=2_000)
+
+
+class WebResearchProvidePayload(BaseModel):
+    """A company sheet supplied by the person; every field is optional."""
+
+    company: str = Field(default="", max_length=240)
+    stack: list[str] = Field(default_factory=list, max_length=40)
+    values: list[str] = Field(default_factory=list, max_length=40)
+    notes: str = Field(default="", max_length=4_000)
+    sources: list[WebResearchSourcePayload] = Field(default_factory=list, max_length=20)
+    news: list[WebResearchNewsPayload] = Field(default_factory=list, max_length=5)
 
 
 class ReceiptPayload(BaseModel):
@@ -275,9 +338,9 @@ class ApplicationKitPayload(BaseModel):
 
 
 class ApplyKitPayload(BaseModel):
-    """Optional body for the one-call apply kit endpoint."""
+    """Optional locale and CV variant for the one-call local dossier."""
 
-    language: str = Field(default="fr", min_length=2, max_length=16)
+    language: str = Field(default="fr", pattern="^(fr|en|it|de)$")
     variant: str | None = Field(default=None, pattern="^(m_a|markets|corporate_finance)$")
 
 
@@ -293,6 +356,38 @@ class ApplicationDraftEditPayload(BaseModel):
 
     cv_markdown: str = Field(min_length=1, max_length=18_000)
     letter_markdown: str = Field(min_length=1, max_length=18_000)
+
+
+class ApplicationDossierPayload(BaseModel):
+    """One explicit action to build the verifiable dossier of one application."""
+
+    language: str = Field(default="", max_length=16)
+
+
+class ApplicationDossierEditPayload(BaseModel):
+    """Edited dossier bodies; the verifier runs again on what is saved."""
+
+    cv_recommendations: str | None = Field(default=None, max_length=60_000)
+    adapted_cv: str | None = Field(default=None, max_length=60_000)
+    cover_letter: str | None = Field(default=None, max_length=60_000)
+    prep_sheet: str | None = Field(default=None, max_length=60_000)
+    interview_questions: str | None = Field(default=None, max_length=60_000)
+    checklist: str | None = Field(default=None, max_length=60_000)
+
+
+class CVReviewDecisionPayload(BaseModel):
+    """One decision taken on one reviewable block of the targeted CV.
+
+    ``reviewed_text`` is the wording that was displayed when the person
+    decided: the server refuses the decision if the proposal changed in
+    between, so a decision always applies to the text that was read.  It is
+    optional for compatibility, but the interface always sends it.
+    """
+
+    block_id: str = Field(min_length=1, max_length=120)
+    status: str = Field(pattern="^(pending|accepted|rejected|modified)$")
+    user_text: str = Field(default="", max_length=4_000)
+    reviewed_text: str = Field(default="", max_length=20_000)
 
 
 class JobSummaryPayload(BaseModel):
@@ -315,6 +410,20 @@ class DiscoverySearchPayload(BaseModel):
     force: bool = False
 
 
+class DailyDigestRefreshPayload(BaseModel):
+    """Explicit request to read the official sources again."""
+
+    force: bool = False
+    include_boards: bool = True
+    include_curated: bool = True
+
+
+class DailyDigestSettingsPayload(BaseModel):
+    """Explicit lifetime of the daily digest cache, in seconds."""
+
+    ttl_seconds: int = Field(ge=60, le=86_400)
+
+
 class InterviewSessionPayload(BaseModel):
     mode: str = Field(default="technical", min_length=2, max_length=80)
     difficulty: str = Field(default="intermediate", min_length=2, max_length=80)
@@ -327,11 +436,205 @@ class InterviewAnswerPayload(BaseModel):
     answer: str = Field(min_length=3, max_length=6_000)
 
 
+class InterviewPrepGeneratePayload(BaseModel):
+    """One explicit action: prepare an interview for one stored offer."""
+
+    offer_id: str = Field(min_length=1, max_length=80)
+    profile_id: str = Field(default="user_profile", min_length=1, max_length=80)
+    mode: str = Field(default="standard", pattern="^(standard|finance)$")
+
+
+class InterviewPrepSimulatePayload(BaseModel):
+    session_id: str = Field(min_length=1, max_length=80)
+    question_id: str = Field(min_length=1, max_length=120)
+    user_answer: str = Field(min_length=3, max_length=6_000)
+
+
+class InterviewPrepExportPayload(BaseModel):
+    export_format: str = Field(default="md", pattern="^(md|pdf)$")
+
+
 class CVAnalyzePayload(BaseModel):
     """Request payload for CV structural analysis."""
     text: str = Field(min_length=1, max_length=200_000)
     filename: str | None = Field(default=None, max_length=256)
     filetype: str = Field(default="txt", pattern="^(txt|pdf|docx)$")
+
+
+class CandidateProfileProposalsPayload(BaseModel):
+    """Ask for the facts proposed by one local document or pasted text."""
+
+    import_id: str = Field(default="", max_length=80)
+    text: str = Field(default="", max_length=100_000)
+    filename: str = Field(default="", max_length=180)
+
+
+class CandidateFactDecisionPayload(BaseModel):
+    """One explicit decision of the person on one proposed fact."""
+
+    decision: str = Field(min_length=3, max_length=20)
+    value: str = Field(default="", max_length=2_000)
+    note: str = Field(default="", max_length=500)
+
+
+class CandidateProfileApplyPayload(BaseModel):
+    """Apply the approved facts to the local profile fields."""
+
+    fact_ids: list[str] = Field(default_factory=list, max_length=60)
+
+
+# --- Constitution exécutable (SPEC-014) --------------------------------------
+
+
+class ConstitutionRulePayload(BaseModel):
+    """Création d'une règle (toujours en brouillon)."""
+
+    rule_id: str = Field(min_length=1, max_length=160)
+    name: str = Field(min_length=1, max_length=200)
+    domain: str = Field(min_length=1, max_length=40)
+    description: str = Field(default="", max_length=4_000)
+    rationale: str = Field(default="", max_length=4_000)
+    expression: str = Field(min_length=1, max_length=2_000)
+    dsl_type: str = Field(default="cel", max_length=20)
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    scope: list[str] = Field(default_factory=list, max_length=20)
+    tags: list[str] = Field(default_factory=list, max_length=20)
+    severity: str = Field(default="error", max_length=20)
+    remediation: str | None = Field(default=None, max_length=1_000)
+    source_reference: str | None = Field(default=None, max_length=400)
+    created_by: str = Field(default="local", max_length=120)
+
+
+class ConstitutionRuleUpdatePayload(BaseModel):
+    """Modification d'une règle : crée une nouvelle version en brouillon."""
+
+    name: str | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=4_000)
+    rationale: str | None = Field(default=None, max_length=4_000)
+    expression: str | None = Field(default=None, max_length=2_000)
+    parameters: dict[str, Any] | None = None
+    scope: list[str] | None = Field(default=None, max_length=20)
+    tags: list[str] | None = Field(default=None, max_length=20)
+    severity: str | None = Field(default=None, max_length=20)
+    remediation: str | None = Field(default=None, max_length=1_000)
+    source_reference: str | None = Field(default=None, max_length=400)
+    change_note: str = Field(default="", max_length=500)
+    actor: str = Field(default="local", max_length=120)
+
+
+class ConstitutionApprovePayload(BaseModel):
+    """Approbation d'une règle : l'approbateur doit différer de l'auteur."""
+
+    approved_by: str = Field(min_length=1, max_length=120)
+    note: str = Field(default="", max_length=500)
+
+
+class ConstitutionReasonPayload(BaseModel):
+    """Dépréciation ou archivage d'une règle."""
+
+    reason: str = Field(default="", max_length=500)
+    actor: str = Field(default="local", max_length=120)
+
+
+class ConstitutionRollbackPayload(BaseModel):
+    """Rollback instantané vers une version antérieure."""
+
+    target_version: int = Field(ge=1)
+    reason: str = Field(default="", max_length=500)
+    actor: str = Field(default="local", max_length=120)
+
+
+class ConstitutionRuleSetPayload(BaseModel):
+    """Création d'un jeu de règles."""
+
+    ruleset_id: str = Field(min_length=1, max_length=160)
+    name: str = Field(min_length=1, max_length=200)
+    rules: list[str] = Field(default_factory=list, max_length=200)
+    description: str = Field(default="", max_length=4_000)
+    effective_from: str = Field(default="", max_length=40)
+    supersedes: str | None = Field(default=None, max_length=160)
+    actor: str = Field(default="local", max_length=120)
+
+
+class ConstitutionRuleSetRollbackPayload(BaseModel):
+    """Rollback d'un jeu de règles (version précédente par défaut)."""
+
+    target_version: int | None = Field(default=None, ge=1)
+    reason: str = Field(default="", max_length=500)
+    actor: str = Field(default="local", max_length=120)
+
+
+class ConstitutionRuleSetUpdatePayload(BaseModel):
+    """Modification d'un jeu de règles : crée une nouvelle version."""
+
+    name: str | None = Field(default=None, max_length=200)
+    rules: list[str] | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=4_000)
+    change_note: str = Field(default="", max_length=500)
+    actor: str = Field(default="local", max_length=120)
+
+
+class ConstitutionValidatePayload(BaseModel):
+    """Validation d'une entité face à un jeu de règles."""
+
+    entity_id: str = Field(default="", max_length=160)
+    entity_type: str = Field(default="offer", max_length=40)
+    entity: dict[str, Any] | None = None
+    job_id: str = Field(default="", max_length=160)
+    ruleset_id: str = Field(default="career.core", max_length=160)
+
+
+class ConstitutionExpressionPayload(BaseModel):
+    """Vérification syntaxique d'une expression CEL."""
+
+    expression: str = Field(min_length=1, max_length=2_000)
+
+
+class ConstitutionExpressionPreviewPayload(BaseModel):
+    """Prévisualisation d'une expression CEL sur un contexte."""
+
+    expression: str = Field(min_length=1, max_length=2_000)
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
+class ConstitutionTestGeneratePayload(BaseModel):
+    """Génération de tests depuis les règles actives."""
+
+    write: bool = False
+    output_path: str = Field(default="", max_length=400)
+
+
+
+
+class DependencyNodePayload(BaseModel):
+    node_id: str = Field(min_length=1, max_length=240)
+    node_type: str = Field(default="requirement", max_length=80)
+    label: str = Field(default="", max_length=240)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+class DependencyEdgePayload(BaseModel):
+    edge_id: str = ""
+    source_id: str = Field(min_length=1, max_length=240)
+    target_id: str = Field(min_length=1, max_length=240)
+    edge_type: str = Field(default="requires", max_length=80)
+    weight: float = Field(default=1.0, ge=0.0, le=1.0)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+class ImpactPayload(BaseModel):
+    source: str = Field(default="", max_length=240)
+    source_node_id: str = Field(default="", max_length=240)
+    change_type: str = Field(default="update", max_length=40)
+    change_details: dict[str, Any] = Field(default_factory=dict)
+    threshold: float | None = None
+    max_depth: int | None = None
+
+class ScenarioPayload(BaseModel):
+    changes: list[dict[str, Any]] = Field(default_factory=list)
+
+class PlanPayload(BaseModel):
+    node_ids: list[str] = Field(default_factory=list)
+    impacted_nodes: list[str] = Field(default_factory=list)
+    change_type: str = Field(default="update", max_length=40)
 
 
 class CVAnalyzeResponse(BaseModel):
@@ -343,18 +646,520 @@ class CVAnalyzeResponse(BaseModel):
     provenance: dict[str, Any]
 
 
+class TraceabilityRequirementPayload(BaseModel):
+    """Create one traceability record (SPEC-011)."""
+
+    requirement_id: str = Field(min_length=1, max_length=200)
+    requirement_text: str = Field(min_length=1, max_length=4_000)
+    source: str = Field(default="manual", max_length=200)
+    category: str = Field(default="other", max_length=60)
+    criticality: str = Field(default="contextual", max_length=60)
+    tags: list[str] = Field(default_factory=list, max_length=20)
+    offer_id: str = Field(default="", max_length=120)
+    cv_id: str = Field(default="", max_length=120)
+    locator: str = Field(default="", max_length=200)
+    source_field: str = Field(default="", max_length=120)
+    comment: str = Field(default="", max_length=2_000)
+    actor: str = Field(default="user", max_length=40)
+
+
+class TraceabilityUpdatePayload(BaseModel):
+    """Update the mutable fields of a requirement."""
+
+    status: str = Field(default="", max_length=40)
+    category: str = Field(default="", max_length=60)
+    criticality: str = Field(default="", max_length=60)
+    tags: list[str] | None = Field(default=None, max_length=20)
+    comment: str = Field(default="", max_length=2_000)
+    actor: str = Field(default="user", max_length=40)
+
+
+class TraceabilityLinkPayload(BaseModel):
+    """Link an evidence item to a requirement."""
+
+    evidence_id: str = Field(min_length=1, max_length=200)
+    evidence_quote: str = Field(default="", max_length=4_000)
+    origin: str = Field(default="manual", max_length=20)
+    status: str = Field(default="", max_length=40)
+    comment: str = Field(default="", max_length=2_000)
+    actor: str = Field(default="user", max_length=40)
+
+
+class TraceabilityCommentPayload(BaseModel):
+    """Comment carried by an unlink, a reopen, a confirmation or a rejection."""
+
+    comment: str = Field(default="", max_length=2_000)
+    reason: str = Field(default="", max_length=2_000)
+    actor: str = Field(default="user", max_length=40)
+
+
+class TraceabilityWaivePayload(BaseModel):
+    """Waive a requirement — the justification is mandatory."""
+
+    justification: str = Field(min_length=1, max_length=2_000)
+    actor: str = Field(default="user", max_length=40)
+
+
+class TraceabilityOfferAnalysisPayload(BaseModel):
+    """Register the requirements of a SK-02 ``analyze_offer`` result."""
+
+    analysis: dict[str, Any]
+    actor: str = Field(default="system", max_length=40)
+
+
+class TraceabilityAutoLinkPayload(BaseModel):
+    """Propose automatic links between the registry and the evidences (SK-10/SK-21)."""
+
+    evidences: list[dict[str, Any]] = Field(default_factory=list, max_length=500)
+    actor: str = Field(default="system", max_length=40)
+
+
+class TraceabilityImportPayload(BaseModel):
+    """Import a portable export of the registry."""
+
+    registry: dict[str, Any]
+
+
+class TraceabilityBatchPayload(BaseModel):
+    """Apply one action to several requirements at once."""
+
+    trace_ids: list[str] = Field(default_factory=list, max_length=500)
+    action: str = Field(min_length=2, max_length=40)
+    justification: str = Field(default="", max_length=2_000)
+    actor: str = Field(default="user", max_length=40)
+
+
+class EvidenceCreatePayload(BaseModel):
+    """One proof added by the person to the local evidence center.
+
+    ``approved`` is deliberately absent: the only path to an approved proof is
+    the explicit decision endpoint.
+    """
+
+    claim: str = Field(min_length=1, max_length=400)
+    source_document: str = Field(default="", max_length=260)
+    source_location: str = Field(default="", max_length=260)
+    quote: str = Field(default="", max_length=4_000)
+    evidence_type: str = Field(default="skill", max_length=40)
+    confidence: str = Field(default="declared", max_length=40)
+    tags: list[str] = Field(default_factory=list, max_length=20)
+    expires_at: str = Field(default="", max_length=32)
+
+
+class EvidenceUpdatePayload(BaseModel):
+    """Editable fields of one proof.
+
+    ``approved`` and ``blocked`` are absent on purpose: they are decisions,
+    not content, and they have their own endpoints.
+    """
+
+    claim: str | None = Field(default=None, max_length=400)
+    source_document: str | None = Field(default=None, max_length=260)
+    source_location: str | None = Field(default=None, max_length=260)
+    quote: str | None = Field(default=None, max_length=4_000)
+    evidence_type: str | None = Field(default=None, max_length=40)
+    confidence: str | None = Field(default=None, max_length=40)
+    tags: list[str] | None = Field(default=None, max_length=20)
+    expires_at: str | None = Field(default=None, max_length=32)
+
+
+class EvidenceDecisionPayload(BaseModel):
+    """The person's approval decision on one proof."""
+
+    approved: bool
+
+
+class EvidenceBlockPayload(BaseModel):
+    """Block or unblock the usage of one proof."""
+
+    blocked: bool
+
+
+class EvidenceUsagePayload(BaseModel):
+    """One recorded use of a proof in a CV or a cover letter."""
+
+    target: str = Field(min_length=2, max_length=20)
+    context: str = Field(default="", max_length=200)
+
+
+class EvidenceMergePayload(BaseModel):
+    """Merge duplicated proofs into one identifier."""
+
+    ids: list[str] = Field(min_length=1, max_length=50)
+    keep_id: str = Field(min_length=1, max_length=60)
+
+
+class EvidenceFreshnessCreatePayload(BaseModel):
+    """One proof registered in the local freshness registry."""
+
+    evidence_type: str = Field(min_length=2, max_length=60)
+    title: str = Field(default="", max_length=200)
+    mandatory: bool = False
+    source_url: str = Field(default="", max_length=2_000)
+    notes: str = Field(default="", max_length=2_000)
+    expires_at: str | None = Field(default=None, max_length=64)
+    last_verified_at: str | None = Field(default=None, max_length=64)
+    evidence_id: str | None = Field(default=None, max_length=80)
+
+
+class EvidenceFreshnessPolicyPayload(BaseModel):
+    """Freshness policy of one evidence type."""
+
+    evidence_type: str = Field(min_length=2, max_length=60)
+    max_age_days: int | None = Field(default=None, ge=0, le=3650)
+    warning_days: int | None = Field(default=None, ge=0, le=3650)
+    auto_expire: bool | None = None
+    reset: bool = False
+
+
+class EvidenceFreshnessPatchPayload(BaseModel):
+    """Manual update of one proof (dates, flags, policy, actions)."""
+
+    title: str | None = Field(default=None, max_length=200)
+    notes: str | None = Field(default=None, max_length=2_000)
+    mandatory: bool | None = None
+    source_url: str | None = Field(default=None, max_length=2_000)
+    expires_at: str | None = Field(default=None, max_length=64)
+    warning_at: str | None = Field(default=None, max_length=64)
+    extend_days: int | None = Field(default=None, ge=1, le=3650)
+    archived: bool | None = None
+    reactivate: bool = False
+    policy: dict[str, Any] | None = None
+
+
+class EvidenceFreshnessCheckPayload(BaseModel):
+    """One manual verification of a proof."""
+
+    method: str = Field(default="manual", max_length=20)
+    result: str = Field(default="unchanged", max_length=20)
+    source_url: str | None = Field(default=None, max_length=2_000)
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+def _freshness_now() -> datetime:
+    """Current UTC time, used by the freshness endpoints only."""
+
+    return datetime.now(timezone.utc)
+
+
+def _freshness_timestamp(value: str | None, label: str) -> datetime | None:
+    """Parse a date sent by the user and report it as a readable error."""
+
+    try:
+        return parse_timestamp(value)
+    except ValueError as error:
+        raise UserFacingError(f"La date « {label} » est invalide.") from error
+
+
+class _FreshnessGateway:
+    """Adapter turning the local store errors into user-facing errors.
+
+    The store speaks in low-level errors (unknown id, unreadable file,
+    invalid date); the HTTP layer speaks in 404/400 with a French message.
+    """
+
+    def __init__(self, store: FreshnessStore) -> None:
+        self._store = store
+
+    def __getattr__(self, name: str) -> Any:
+        attribute = getattr(self._store, name)
+
+        def call(*args: Any, **kwargs: Any) -> Any:
+            try:
+                return attribute(*args, **kwargs)
+            except FreshnessStoreError as error:
+                raise UserFacingError(str(error)) from error
+            except KeyError as error:
+                raise HTTPException(status_code=404, detail="Preuve introuvable.") from error
+            except ValueError as error:
+                raise UserFacingError(str(error)) from error
+
+        return call
+class OfferQualityRefreshPayload(BaseModel):
+    """Request payload of the controlled refresh of the offer quality."""
+
+    offer_ids: list[str] = Field(default_factory=list, max_length=50)
+    force: bool = False
+
+
+def _constitution_context(
+    payload: ConstitutionValidatePayload, service: CareerService | None
+) -> dict[str, Any]:
+    """Construit le contexte d'évaluation d'une entité (fournie ou stockée)."""
+    entity_type = clean_text(payload.entity_type, limit=40) or "offer"
+    entity = payload.entity
+    if not entity and payload.job_id and service is not None:
+        entity = service.get_job(payload.job_id)
+    entity = entity or {}
+    already_namespaced = any(key in entity for key in ("matching", "freshness", "dedup", "privacy", "export"))
+    context = dict(entity) if already_namespaced else build_entity_context(entity_type, entity)
+    resolved_id = clean_text(payload.entity_id, limit=160) or clean_text(entity.get("id"), limit=160)
+    context[ENTITY_ID_KEY] = resolved_id
+    context[ENTITY_TYPE_KEY] = entity_type
+    return context
+
+
+def create_constitution_router(store: ConstitutionStore, *, service: CareerService | None = None) -> APIRouter:
+    """Endpoints de la Constitution exécutable (SPEC-014).
+
+    Les règles sont la source de vérité des seuils métier : elles se créent,
+    se relisent, s'approuvent, se versionnent et se contrôlent depuis HTTP.
+    """
+    router = APIRouter(prefix="/api/constitution")
+    engine = ConstitutionEngine(store=store)
+
+    async def local(call: Any) -> Any:
+        return to_jsonable(await run_in_threadpool(call))
+
+    @router.get("/health")
+    async def constitution_health() -> Any:
+        rules = await local(lambda: store.list_rules())
+        rulesets = await local(lambda: store.list_rulesets())
+        return {
+            "module": "Constitution exécutable",
+            "version": CONSTITUTION_VERSION,
+            "dsl": "cel",
+            "rules": len(rules),
+            "active_rules": sum(1 for rule in rules if rule.get("status") == "active"),
+            "rulesets": [ruleset.get("ruleset_id") for ruleset in rulesets],
+            "offline": True,
+        }
+
+    @router.get("/rules")
+    async def list_rules(
+        domain: str = Query(default="", max_length=40),
+        status: str = Query(default="", max_length=20),
+        q: str = Query(default="", max_length=200),
+        scope: str = Query(default="", max_length=40),
+    ) -> Any:
+        rules = await local(
+            lambda: store.list_rules(
+                domain=domain or None,
+                status=status or None,
+                query=q or None,
+                scope=scope or None,
+            )
+        )
+        return {"rules": rules, "count": len(rules)}
+
+    @router.post("/rules", status_code=201)
+    async def create_rule(payload: ConstitutionRulePayload) -> Any:
+        return await local(lambda: store.create_rule(payload.model_dump(), actor=payload.created_by))
+
+    @router.get("/rules/{rule_id}")
+    async def get_rule(rule_id: str) -> Any:
+        def run() -> dict[str, Any]:
+            rule = store.get_rule(rule_id)
+            if rule is None:
+                raise UserFacingError(f"La règle « {rule_id} » est introuvable.")
+            return {
+                "rule": rule,
+                "effective": store.effective_rule(rule_id),
+                "versions": store.list_rule_versions(rule_id),
+                "signature_valid": store.verify_rule(rule),
+            }
+
+        return await local(run)
+
+    @router.patch("/rules/{rule_id}")
+    async def update_rule(rule_id: str, payload: ConstitutionRuleUpdatePayload) -> Any:
+        changes = {
+            key: value
+            for key, value in payload.model_dump().items()
+            if value is not None and key not in {"change_note", "actor"}
+        }
+        return await local(
+            lambda: store.update_rule(
+                rule_id,
+                changes,
+                actor=payload.actor,
+                change_note=payload.change_note,
+            )
+        )
+
+    @router.post("/rules/{rule_id}/approve")
+    async def approve_rule(rule_id: str, payload: ConstitutionApprovePayload) -> Any:
+        return await local(
+            lambda: store.approve_rule(rule_id, approver=payload.approved_by, note=payload.note)
+        )
+
+    @router.post("/rules/{rule_id}/deprecate")
+    async def deprecate_rule(rule_id: str, payload: ConstitutionReasonPayload) -> Any:
+        return await local(
+            lambda: store.deprecate_rule(rule_id, actor=payload.actor, reason=payload.reason)
+        )
+
+    @router.post("/rules/{rule_id}/archive")
+    async def archive_rule(rule_id: str, payload: ConstitutionReasonPayload) -> Any:
+        return await local(
+            lambda: store.archive_rule(rule_id, actor=payload.actor, reason=payload.reason)
+        )
+
+    @router.post("/rules/{rule_id}/rollback")
+    async def rollback_rule(rule_id: str, payload: ConstitutionRollbackPayload) -> Any:
+        return await local(
+            lambda: store.rollback_rule(
+                rule_id,
+                target_version=payload.target_version,
+                actor=payload.actor,
+                reason=payload.reason,
+            )
+        )
+
+    @router.get("/rulesets")
+    async def list_rulesets() -> Any:
+        rulesets = await local(lambda: store.list_rulesets())
+        return {"rulesets": rulesets, "count": len(rulesets)}
+
+    @router.post("/rulesets", status_code=201)
+    async def create_ruleset(payload: ConstitutionRuleSetPayload) -> Any:
+        return await local(lambda: store.create_ruleset(payload.model_dump(), actor=payload.actor))
+
+    @router.get("/rulesets/{ruleset_id}")
+    async def get_ruleset(ruleset_id: str) -> Any:
+        def run() -> dict[str, Any]:
+            ruleset = store.get_ruleset(ruleset_id)
+            if ruleset is None:
+                raise UserFacingError(f"Le jeu de règles « {ruleset_id} » est introuvable.")
+            return {
+                "ruleset": ruleset,
+                "versions": store.list_ruleset_versions(ruleset_id),
+                "signature_valid": store.verify(ruleset, str(ruleset.get("signature", ""))),
+            }
+
+        return await local(run)
+
+    @router.patch("/rulesets/{ruleset_id}")
+    async def update_ruleset(ruleset_id: str, payload: ConstitutionRuleSetUpdatePayload) -> Any:
+        changes = {
+            key: value
+            for key, value in payload.model_dump().items()
+            if value is not None and key not in {"change_note", "actor"}
+        }
+        return await local(
+            lambda: store.update_ruleset(
+                ruleset_id,
+                changes,
+                actor=payload.actor,
+                change_note=payload.change_note,
+            )
+        )
+
+    @router.post("/rollback/{ruleset_id}")
+    async def rollback_ruleset(ruleset_id: str, payload: ConstitutionRuleSetRollbackPayload) -> Any:
+        return await local(
+            lambda: store.rollback_ruleset(
+                ruleset_id,
+                target_version=payload.target_version,
+                actor=payload.actor,
+                reason=payload.reason,
+            )
+        )
+
+    @router.post("/validate")
+    async def validate_entity(payload: ConstitutionValidatePayload) -> Any:
+        def run() -> dict[str, Any]:
+            context = _constitution_context(payload, service)
+            report = engine.check_conformance(context, payload.ruleset_id)
+            store.record_conformance(report.to_dict())
+            ruleset = engine.resolve_ruleset(payload.ruleset_id)
+            results = engine.evaluate_all(ruleset, context) if ruleset else []
+            return {
+                "report": report.to_dict(),
+                "results": [result.to_dict() for result in results],
+                "ruleset_id": payload.ruleset_id,
+            }
+
+        return await local(run)
+
+    @router.get("/report/{entity_id}")
+    async def entity_report(entity_id: str) -> Any:
+        def run() -> dict[str, Any]:
+            report = build_entity_report(store, entity_id)
+            if not report.get("checked"):
+                raise UserFacingError(
+                    f"Aucune conformité enregistrée pour l'entité « {entity_id} » : lancez d'abord une validation."
+                )
+            return report
+
+        return await local(run)
+
+    @router.get("/audit")
+    async def audit_report() -> Any:
+        def run() -> dict[str, Any]:
+            report = build_constitution_audit_report(store)
+            report["markdown"] = render_constitution_report(report)
+            return report
+
+        return await local(run)
+
+    @router.get("/drift")
+    async def drift_report() -> Any:
+        return await local(lambda: detect_drift(store))
+
+    @router.post("/test/generate")
+    async def generate_tests(payload: ConstitutionTestGeneratePayload) -> Any:
+        def run() -> dict[str, Any]:
+            rules = [Rule.from_dict(item) for item in store.list_rules(status="active")]
+            content = generate_rule_tests(rules)
+            written: str | None = None
+            if payload.write:
+                default_path = store.data_dir / "constitution" / "generated" / "test_constitution_generated.py"
+                target = Path(payload.output_path) if payload.output_path else default_path
+                resolved = target.resolve()
+                if store.data_dir.resolve() not in resolved.parents and resolved != store.data_dir.resolve():
+                    raise UserFacingError(
+                        "Les tests générés ne peuvent être écrits que dans l'espace local Career."
+                    )
+                resolved.parent.mkdir(parents=True, exist_ok=True)
+                resolved.write_text(content, encoding="utf-8")
+                written = str(resolved)
+            for rule in rules:
+                store.mark_rule_tested(rule.rule_id, tested=True)
+            return {"rules": len(rules), "content": content, "written": written}
+
+        return await local(run)
+
+    @router.post("/expression/check")
+    async def check_expression_endpoint(payload: ConstitutionExpressionPayload) -> Any:
+        return await local(lambda: check_expression(payload.expression))
+
+    @router.post("/expression/preview")
+    async def preview_expression(payload: ConstitutionExpressionPreviewPayload) -> Any:
+        def run() -> dict[str, Any]:
+            try:
+                value = evaluate_expression(payload.expression, payload.context)
+            except ConstitutionError as error:
+                return {"valid": False, "error": str(error), "value": None}
+            return {"valid": True, "error": None, "value": value}
+
+        return await local(run)
+
+    return router
+
+
+
 def create_career_router(
     service: CareerService,
     *,
     ai_generator: Callable[[str], dict[str, Any]] | None = None,
+    web_researcher: WebResearcher | None = None,
 ) -> APIRouter:
     if not CAREER_STATIC_DIR.is_dir():
         raise RuntimeError("Les fichiers Career Agent sont introuvables.")
     router = APIRouter()
+    constitution_store = ConstitutionStore(getattr(service, "base_dir", service.data_dir))
+    router.include_router(create_constitution_router(constitution_store, service=service))
     # One exploration service per application: it owns the background runs and
     # the cooperative cancellation between two sources.
     explorations = ExplorationService(service)
     router.on_shutdown.append(explorations.shutdown)
+    researcher = web_researcher or WebResearcher(cache_dir=service.data_dir / "web_research")
+    freshness_store = _FreshnessGateway(FreshnessStore(service.data_dir / "evidence_freshness"))
+    # SPEC-010 — bind the running service so that the preparation engine can
+    # resolve a stored offer and the local profile on its own.
+    if hasattr(service, "interview_prep_context"):
+        bind_interview_prep_context(service.interview_prep_context())
 
     async def local(call: Any) -> Any:
         return to_jsonable(await run_in_threadpool(call))
@@ -367,7 +1172,7 @@ def create_career_router(
     async def health() -> dict[str, Any]:
         capabilities = await local(service.local_capabilities)
         return {
-            "module": "Côme AI Career 4.1",
+            "module": "NAGE Career 4.1",
             "mode": "local par défaut",
             "network_connectors": capabilities["discovery"]["enabled"],
             "automated_submission": False,
@@ -379,13 +1184,24 @@ def create_career_router(
             },
             "ocr": capabilities["ocr"],
             "guided_intake": capabilities["guided_intake"],
+            "candidate_profile": capabilities["candidate_profile"],
             "application_studio": capabilities["application_studio"],
             "ai_enhancement": {"available": ai_generator is not None, "explicit_consent_required": True},
             "discovery": capabilities["discovery"],
             "scoring": capabilities["scoring"],
             "interview_coach": capabilities["interview_coach"],
+            "interview_prep": capabilities["interview_prep"],
             "calendar_export": capabilities["calendar_export"],
             "stage_search": capabilities["stage_search"],
+            "daily_digest": capabilities["daily_digest"],
+            "web_research": {
+                "network_required": False,
+                "cached_fallback": True,
+                "cache_ttl_hours": DEFAULT_TTL_HOURS,
+                "evidence_required": True,
+                "user_provided_sheet": True,
+            },
+            "evidence_center": capabilities["evidence_center"],
             "ats_guide": capabilities["ats_guide"],
         }
 
@@ -452,6 +1268,33 @@ def create_career_router(
     async def dashboard() -> Any:
         return await local(service.dashboard)
 
+    @router.get("/api/career/daily/ics")
+    async def export_daily_calendar() -> FileResponse:
+        """Export calendrier local (.ics) de la journée du cockpit."""
+        path = await run_in_threadpool(service.export_daily_calendar)
+        return FileResponse(
+            path,
+            filename=path.name,
+            media_type="text/calendar; charset=utf-8",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    # Les chemins courts du contrat SPEC-005 restent disponibles : ils
+    # délèguent aux mêmes routes et renvoient exactement la même donnée.
+    @router.get("/career/daily")
+    async def daily_digest_shortcut() -> Any:
+        return await local(lambda: service.get_daily_digest())
+
+    @router.get("/career/daily/ics")
+    async def export_daily_calendar_shortcut() -> FileResponse:
+        path = await run_in_threadpool(service.export_daily_calendar)
+        return FileResponse(
+            path,
+            filename=path.name,
+            media_type="text/calendar; charset=utf-8",
+            headers={"Cache-Control": "no-store"},
+        )
+
     @router.get("/api/career/profile")
     async def profile() -> Any:
         return await local(service.get_profile)
@@ -501,6 +1344,63 @@ def create_career_router(
     @router.get("/api/career/profile-imports/{import_id}")
     async def profile_import(import_id: str) -> Any:
         return await local(lambda: service.get_profile_import(import_id))
+
+    # ── SK-10 : profil candidat avec preuves approuvées ─────────────────────
+    # Les faits proposés ne sont jamais approuvés automatiquement : seule une
+    # décision explicite de la personne, fait par fait, change un statut.
+
+    @router.get("/api/career/candidate-profile/facts")
+    async def candidate_facts(status: str = Query(default="", max_length=20)) -> Any:
+        return await local(
+            lambda: {
+                "facts": service.list_candidate_facts(status),
+                "counts": service.candidate_fact_counts(),
+            }
+        )
+
+    @router.post("/api/career/candidate-profile/proposals", status_code=201)
+    async def candidate_profile_proposals(payload: CandidateProfileProposalsPayload) -> Any:
+        return await local(
+            lambda: service.build_candidate_facts(
+                import_id=payload.import_id,
+                text=payload.text,
+                filename=payload.filename,
+            )
+        )
+
+    @router.get("/api/career/candidate-profile/active")
+    async def active_candidate_profile() -> Any:
+        return await local(service.active_candidate_profile)
+
+    @router.post("/api/career/candidate-profile/apply")
+    async def apply_candidate_facts(payload: CandidateProfileApplyPayload) -> Any:
+        return await local(lambda: service.apply_candidate_facts(payload.fact_ids))
+
+    @router.get("/api/career/candidate-profile/export")
+    async def export_candidate_profile() -> FileResponse:
+        path = await run_in_threadpool(service.export_candidate_profile)
+        return FileResponse(
+            path,
+            filename=path.name,
+            media_type="application/json",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.patch("/api/career/candidate-profile/facts/{fact_id}")
+    async def decide_candidate_fact(fact_id: str, payload: CandidateFactDecisionPayload) -> Any:
+        return await local(
+            lambda: service.decide_candidate_fact(
+                fact_id,
+                payload.decision,
+                value=payload.value,
+                note=payload.note,
+            )
+        )
+
+    @router.delete("/api/career/candidate-profile/facts/{fact_id}")
+    async def delete_candidate_fact(fact_id: str) -> dict[str, bool]:
+        await local(lambda: service.delete_candidate_fact(fact_id))
+        return {"deleted": True}
 
     @router.post("/api/career/profile-imports/{import_id}/apply")
     async def apply_profile_import(import_id: str, payload: ProfileImportApplyPayload) -> Any:
@@ -557,6 +1457,16 @@ def create_career_router(
     @router.get("/api/career/application-pipeline")
     async def application_pipeline() -> Any:
         return await local(service.get_application_pipeline)
+
+    @router.get("/api/career/ats-guide/{job_id}")
+    async def ats_guide(job_id: str) -> Any:
+        def build() -> dict[str, Any]:
+            job = service.get_job(job_id)
+            return {
+                "job_id": job["id"], "company": job.get("company", ""), "title": job.get("title", ""),
+                **human_apply_guide(job).to_dict(), "automated_submission": False,
+            }
+        return await local(build)
 
     @router.get("/api/career/stage-search/explore")
     async def last_stage_exploration() -> Any:
@@ -622,6 +1532,36 @@ def create_career_router(
     async def discover_opportunities(payload: DiscoverySearchPayload) -> Any:
         return await local(lambda: service.discover_opportunities(force=payload.force))
 
+    @router.get("/api/career/daily")
+    async def daily_digest() -> Any:
+        """Read the daily digest. This call never queries a source."""
+        return await local(service.daily_digest)
+
+    @router.get("/career/daily", include_in_schema=False)
+    async def daily_digest_alias() -> Any:
+        """Alias kept for the documented ``GET /career/daily`` contract."""
+        return await local(service.daily_digest)
+
+    @router.post("/api/career/daily/refresh")
+    async def refresh_daily_digest(payload: DailyDigestRefreshPayload) -> Any:
+        """Explicitly read the official sources, then rebuild the digest."""
+        return await local(
+            lambda: service.refresh_daily_digest(
+                force=payload.force,
+                include_boards=payload.include_boards,
+                include_curated=payload.include_curated,
+            )
+        )
+
+    @router.post("/api/career/daily/visit")
+    async def record_daily_digest_visit() -> Any:
+        """Record that the digest was displayed, so the next one reports what appeared since."""
+        return await local(service.record_daily_digest_visit)
+
+    @router.put("/api/career/daily/settings")
+    async def update_daily_digest_settings(payload: DailyDigestSettingsPayload) -> Any:
+        return await local(lambda: service.update_daily_digest_settings(payload.model_dump()))
+
     @router.get("/api/career/jobs")
     async def jobs(
         query: str = Query(default="", max_length=240),
@@ -676,6 +1616,22 @@ def create_career_router(
     async def offer_intelligence(job_id: str) -> Any:
         """Same snapshot, same identifiers: this route is an alias, not a copy."""
         return await local(lambda: service.get_offer_intelligence(job_id))
+    @router.get("/api/career/offer-quality/{offer_id}")
+    async def offer_quality(offer_id: str) -> Any:
+        """Return the freshness, the completeness and the provenance of an offer."""
+        return await local(lambda: service.get_offer_quality(offer_id))
+
+    @router.get("/api/career/offer-quality/{offer_id}/history")
+    async def offer_quality_history(offer_id: str) -> Any:
+        """Return the changes detected for an offer since the last refresh."""
+        return await local(lambda: service.offer_quality_history(offer_id))
+
+    @router.post("/api/career/offer-quality/refresh")
+    async def refresh_offer_quality(payload: OfferQualityRefreshPayload) -> Any:
+        """Re-assess the selected offers and report what changed."""
+        return await local(
+            lambda: service.refresh_offer_quality(payload.offer_ids, force=payload.force)
+        )
 
     @router.get("/api/career/jobs/{job_id}/prep")
     async def job_prep(job_id: str) -> Any:
@@ -688,22 +1644,6 @@ def create_career_router(
     ) -> Any:
         return await local(lambda: service.get_quick_answers(job_id, lang=lang))
 
-    @router.get("/api/career/ats-guide/{job_id}")
-    async def ats_guide(job_id: str) -> Any:
-        """Guide humain d'application : local, sans requête sortante, sans envoi."""
-
-        def build() -> dict[str, Any]:
-            stored_job = service.get_job(job_id)
-            guide = human_apply_guide(stored_job).to_dict()
-            return {
-                "job_id": stored_job.get("id", job_id),
-                "company": stored_job.get("company", ""),
-                "title": stored_job.get("title", ""),
-                **guide,
-                "automated_submission": False,
-            }
-
-        return await local(build)
 
     @router.get("/api/career/jobs/{job_id}/summary")
     async def job_summary(
@@ -842,6 +1782,85 @@ def create_career_router(
             lambda: service.update_application_draft(draft_id, payload.cv_markdown, payload.letter_markdown)
         )
 
+    # SK-11 : dossier de candidature 1 clic, vérifiable. Aucun envoi automatique.
+    @router.post("/api/career/applications/{application_id}/dossier")
+    async def build_application_dossier(
+        application_id: str, payload: ApplicationDossierPayload
+    ) -> Any:
+        language = payload.language.strip() or None
+        return await local(lambda: service.build_application_dossier(application_id, language))
+
+    @router.get("/api/career/applications/{application_id}/dossier")
+    async def get_application_dossier(application_id: str) -> Any:
+        return await local(lambda: service.get_application_dossier(application_id))
+
+    @router.patch("/api/career/applications/{application_id}/dossier")
+    async def update_application_dossier(
+        application_id: str, payload: ApplicationDossierEditPayload
+    ) -> Any:
+        edits = {
+            key: value
+            for key, value in payload.model_dump().items()
+            if isinstance(value, str)
+        }
+        return await local(lambda: service.update_application_dossier(application_id, edits))
+
+    @router.post("/api/career/applications/{application_id}/dossier/export")
+    async def export_application_dossier(application_id: str) -> Any:
+        return await local(lambda: service.export_application_dossier(application_id))
+
+    # SPEC-004 : revue du CV ciblé. Chaque adaptation est visible avec sa
+    # preuve locale, l'export DOCX reste bloqué tant qu'un bloc critique
+    # n'est pas tranché. Aucune de ces routes n'envoie quoi que ce soit.
+    @router.get("/api/career/applications/{application_id}/cv-review")
+    async def cv_review_workspace(
+        application_id: str,
+        language: str = "fr",
+        variant: str = "",
+    ) -> Any:
+        return await local(
+            lambda: service.get_cv_review_workspace(application_id, language, variant)
+        )
+
+    @router.post("/api/career/applications/{application_id}/cv-review/decide")
+    async def decide_cv_review_block(
+        application_id: str,
+        payload: CVReviewDecisionPayload,
+        language: str = "fr",
+        variant: str = "",
+    ) -> Any:
+        return await local(
+            lambda: service.decide_cv_review_block(
+                application_id,
+                payload.block_id,
+                payload.status,
+                payload.user_text,
+                language,
+                variant,
+                payload.reviewed_text,
+            )
+        )
+
+    @router.get("/api/career/applications/{application_id}/cv-review/history")
+    async def cv_review_history(application_id: str, variant: str = "") -> Any:
+        return await local(lambda: {"history": service.cv_review_history(application_id, variant)})
+
+    @router.get("/api/career/applications/{application_id}/cv-review/export")
+    async def export_cv_review(
+        application_id: str,
+        language: str = "fr",
+        variant: str = "",
+    ) -> FileResponse:
+        path = await run_in_threadpool(
+            lambda: service.export_cv_review(application_id, language, variant)
+        )
+        return FileResponse(
+            path,
+            filename=path.name,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Cache-Control": "no-store"},
+        )
+
     @router.post("/api/career/applications", status_code=201)
     async def create_application(payload: ApplicationCreatePayload) -> Any:
         return await local(lambda: service.create_application(payload.job_id))
@@ -881,8 +1900,50 @@ def create_career_router(
     @router.post("/api/career/applications/{application_id}/approve")
     async def approve_application(application_id: str, payload: ApprovalPayload) -> Any:
         return await local(
-            lambda: service.approve_for_manual_submission(application_id, payload.approved, payload.note)
+            lambda: service.approve_for_manual_submission(
+                application_id, payload.approved, payload.note,
+                draft_id=payload.draft_id, review_token=payload.review_token,
+            )
         )
+
+    @router.post("/api/career/applications/{application_id}/manual-destination")
+    async def manual_destination(application_id: str, request: Request) -> Any:
+        """A human form click opens the verified destination after review."""
+        if request.headers.get("content-type", "").split(";", 1)[0] != "application/x-www-form-urlencoded":
+            raise HTTPException(status_code=415, detail="Le formulaire de revue est invalide.")
+        raw = bytearray()
+        async for chunk in request.stream():
+            raw.extend(chunk)
+            if len(raw) > 2_048:
+                raise HTTPException(status_code=413, detail="Le formulaire de revue est trop volumineux.")
+        try:
+            fields = parse_qs(raw.decode("utf-8"), keep_blank_values=True, strict_parsing=True, max_num_fields=3)
+        except (ValueError, UnicodeError) as error:
+            raise HTTPException(status_code=422, detail="Le formulaire de revue est invalide.") from error
+        if (
+            set(fields) != {"approved", "draft_id", "review_token"}
+            or any(len(values) != 1 for values in fields.values())
+            or fields["approved"] != ["true"]
+            or not 1 <= len(fields["draft_id"][0]) <= 80
+            or not re.fullmatch(r"[0-9a-f]{64}", fields["review_token"][0])
+        ):
+            raise HTTPException(status_code=422, detail="Relis ce dossier puis confirme explicitement sa revue.")
+        headers = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
+        try:
+            destination = await local(lambda: service.manual_application_destination(
+                application_id, fields["draft_id"][0], fields["review_token"][0]
+            ))
+        except UserFacingError as error:
+            return HTMLResponse(
+                '<!doctype html><html lang="fr"><meta charset="utf-8"><title>Dossier à vérifier</title>'
+                '<link rel="stylesheet" href="/app-static/app.css"><main class="standalone-message">'
+                '<h1>Vérifie ton dossier</h1><p>' + escape(str(error)) + '</p>'
+                '<a href="/app#applications">Revenir aux candidatures</a></main></html>',
+                status_code=400, headers=headers,
+            )
+        if request.headers.get("accept") == "application/json":
+            return JSONResponse({"destination": destination}, headers=headers)
+        return RedirectResponse(destination, status_code=303, headers=headers)
 
     @router.post("/api/career/applications/{application_id}/confirm-receipt")
     async def confirm_receipt(application_id: str, payload: ReceiptPayload) -> Any:
@@ -957,6 +2018,301 @@ def create_career_router(
     @router.delete("/api/career/interview-sessions/{session_id}")
     async def delete_interview_session(session_id: str) -> dict[str, bool]:
         await local(lambda: service.delete_interview_session(session_id))
+        return {"deleted": True}
+
+    @router.get("/api/career/evidence-freshness/status")
+    async def evidence_freshness_status() -> Any:
+        """Global freshness dashboard; every status is recomputed locally."""
+
+        def payload() -> dict[str, Any]:
+            now = _freshness_now()
+            freshness_store.refresh(now=now)
+            evidences = freshness_store.list_evidence(now=now)
+            alerts = freshness_store.list_alerts(active_only=True, now=now)
+            report = build_freshness_report(evidences, alerts, now=now)
+            return {
+                "generated_at": format_timestamp(now),
+                "report": report,
+                "evidence": [summarize_evidence(evidence, now) for evidence in evidences],
+                "alerts": [alert.to_dict() for alert in alerts],
+                "schedule": [check.to_dict() for check in freshness_store.plan(now=now)],
+                "policies": freshness_store.list_policies(),
+            }
+
+        return await local(payload)
+
+    @router.get("/api/career/evidence-freshness/evidence")
+    async def evidence_freshness_evidence(
+        status: str = Query(default="", max_length=120),
+        evidence_type: str = Query(default="", max_length=60),
+    ) -> Any:
+        """Every known proof, with its status recomputed locally."""
+
+        def payload() -> dict[str, Any]:
+            now = _freshness_now()
+            evidences = freshness_store.list_evidence(
+                status=status or None,
+                evidence_type=evidence_type or None,
+                now=now,
+            )
+            return {
+                "evidence": [summarize_evidence(evidence, now) for evidence in evidences],
+                "count": len(evidences),
+            }
+
+        return await local(payload)
+
+    @router.post("/api/career/evidence-freshness/evidence", status_code=201)
+    async def create_evidence_freshness(payload: EvidenceFreshnessCreatePayload) -> Any:
+        """Register one proof and compute its expiry from the policy."""
+
+        def action() -> dict[str, Any]:
+            now = _freshness_now()
+            if payload.evidence_type.strip() not in EVIDENCE_TYPES:
+                raise UserFacingError(
+                    "Type de preuve inconnu. Types acceptés : "
+                    + ", ".join(sorted(EVIDENCE_TYPES))
+                    + "."
+                )
+            expires_at = _freshness_timestamp(payload.expires_at, "d'expiration")
+            last_verified_at = _freshness_timestamp(payload.last_verified_at, "de dernière vérification")
+            evidence = freshness_store.register_evidence(
+                evidence_type=payload.evidence_type,
+                title=payload.title,
+                mandatory=payload.mandatory,
+                source_url=payload.source_url,
+                notes=payload.notes,
+                created_at=now,
+                last_verified_at=last_verified_at,
+                expires_at=expires_at,
+                evidence_id=payload.evidence_id,
+                now=now,
+            )
+            return evidence.to_dict()
+
+        return await local(action)
+
+    @router.get("/api/career/evidence-freshness/evidence/{evidence_id}")
+    async def evidence_freshness_detail(evidence_id: str) -> Any:
+        """One proof and its verification history."""
+
+        def payload() -> dict[str, Any]:
+            now = _freshness_now()
+            evidence = freshness_store.get_evidence(evidence_id, now=now)
+            if evidence is None:
+                raise HTTPException(status_code=404, detail="Preuve introuvable.")
+            return {
+                "evidence": evidence.to_dict(),
+                "summary": summarize_evidence(evidence, now),
+                "alerts": [
+                    alert.to_dict()
+                    for alert in freshness_store.list_alerts(active_only=False, now=now)
+                    if alert.evidence_id == evidence_id
+                ],
+            }
+
+        return await local(payload)
+
+    @router.patch("/api/career/evidence-freshness/evidence/{evidence_id}")
+    async def update_evidence_freshness(evidence_id: str, payload: EvidenceFreshnessPatchPayload) -> Any:
+        """Override the dates, the flags or the policy of one proof."""
+
+        def action() -> dict[str, Any]:
+            now = _freshness_now()
+            changes = payload.model_dump(exclude_unset=True)
+            if "policy" in changes:
+                policy = changes.pop("policy") or {}
+                changes["policy_override"] = policy
+            evidence = freshness_store.update_evidence(evidence_id, changes, now=now)
+            return evidence.to_dict()
+
+        return await local(action)
+
+    @router.delete("/api/career/evidence-freshness/evidence/{evidence_id}")
+    async def delete_evidence_freshness(evidence_id: str) -> dict[str, bool]:
+        """Delete one proof and the alerts attached to it."""
+
+        def action() -> bool:
+            return freshness_store.delete_evidence(evidence_id, now=_freshness_now())
+
+        deleted = await local(action)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Preuve introuvable.")
+        return {"deleted": True}
+
+    @router.get("/api/career/evidence-freshness/policy")
+    async def evidence_freshness_policies() -> Any:
+        """The policy applied to every evidence type."""
+
+        def payload() -> dict[str, Any]:
+            return {"policies": freshness_store.list_policies()}
+
+        return await local(payload)
+
+    @router.post("/api/career/evidence-freshness/policy")
+    async def set_evidence_freshness_policy(payload: EvidenceFreshnessPolicyPayload) -> Any:
+        """Override the freshness policy of one evidence type."""
+
+        def action() -> dict[str, Any]:
+            policy = freshness_store.set_policy(
+                payload.evidence_type,
+                max_age_days=payload.max_age_days,
+                warning_days=payload.warning_days,
+                auto_expire=payload.auto_expire,
+                reset=payload.reset,
+                now=_freshness_now(),
+            )
+            return policy.to_dict()
+
+        return await local(action)
+
+    @router.post("/api/career/evidence-freshness/check/{evidence_id}")
+    async def check_evidence_freshness(evidence_id: str, payload: EvidenceFreshnessCheckPayload) -> Any:
+        """Trigger one manual verification of a proof."""
+
+        def action() -> dict[str, Any]:
+            now = _freshness_now()
+            if payload.method not in CHECK_METHODS:
+                raise UserFacingError("La méthode de vérification n’est pas prise en charge.")
+            if payload.result not in CHECK_RESULTS:
+                raise UserFacingError("Le résultat de vérification n’est pas pris en charge.")
+            evidence, alerts = freshness_store.record_source_check(
+                evidence_id,
+                method=payload.method,
+                result=payload.result,
+                source_url=payload.source_url,
+                details=payload.details,
+                now=now,
+            )
+            return {
+                "evidence": evidence.to_dict(),
+                "summary": summarize_evidence(evidence, now),
+                "alerts": [alert.to_dict() for alert in alerts],
+            }
+
+        return await local(action)
+
+    @router.get("/api/career/evidence-freshness/alerts")
+    async def evidence_freshness_alerts(
+        active_only: bool = True,
+    ) -> Any:
+        """The active alerts, most critical first."""
+
+        def payload() -> dict[str, Any]:
+            now = _freshness_now()
+            alerts = freshness_store.list_alerts(active_only=active_only, now=now)
+            return {"alerts": [alert.to_dict() for alert in alerts], "count": len(alerts)}
+
+        return await local(payload)
+
+    @router.post("/api/career/evidence-freshness/acknowledge/{alert_id}")
+    async def acknowledge_evidence_freshness(alert_id: str) -> Any:
+        """Acknowledge one alert so it stops being active."""
+
+        def action() -> dict[str, Any]:
+            now = _freshness_now()
+            known = [
+                alert
+                for alert in freshness_store.list_alerts(active_only=False, now=now)
+                if alert.alert_id == alert_id
+            ]
+            if not known:
+                raise HTTPException(status_code=404, detail="Alerte introuvable.")
+            alert = freshness_store.acknowledge_alert(alert_id, now=now)
+            return alert.to_dict()
+
+        return await local(action)
+
+    @router.get("/api/career/evidence-freshness/schedule")
+    async def evidence_freshness_schedule() -> Any:
+        """The monitoring plan: which proof must be checked and when."""
+
+        def payload() -> dict[str, Any]:
+            now = _freshness_now()
+            checks = freshness_store.plan(now=now)
+            return {"checks": [check.to_dict() for check in checks], "count": len(checks)}
+
+        return await local(payload)
+
+    @router.get("/api/career/evidence-freshness/report")
+    async def evidence_freshness_report() -> Any:
+        """The complete freshness audit: report, trends and verifications."""
+
+        def payload() -> dict[str, Any]:
+            now = _freshness_now()
+            freshness_store.refresh(now=now)
+            evidences = freshness_store.list_evidence(now=now)
+            alerts = freshness_store.list_alerts(active_only=False, now=now)
+            history = freshness_store.history(limit=500)
+            report = build_audit_report(evidences, alerts, history, now=now)
+            return {**report, "markdown": render_report_markdown(report)}
+
+        return await local(payload)
+
+    # SPEC-010 : préparation d'entretien ciblée.  Les routes littérales
+    # (/generate, /simulate) sont enregistrées avant la route paramétrée pour
+    # qu'un identifiant de session ne puisse jamais être lu comme un verbe.
+    @router.post("/api/career/interview-prep/generate", status_code=201)
+    async def create_interview_prep_session(payload: InterviewPrepGeneratePayload) -> Any:
+        return await local(
+            lambda: service.create_interview_prep_session(
+                payload.offer_id, payload.profile_id, payload.mode
+            )
+        )
+
+    @router.post("/api/career/interview-prep/simulate")
+    async def simulate_interview_prep(payload: InterviewPrepSimulatePayload) -> Any:
+        return await local(
+            lambda: service.simulate_interview_prep(
+                payload.session_id, payload.question_id, payload.user_answer
+            )
+        )
+
+    @router.get("/api/career/interview-prep")
+    async def list_interview_prep_sessions() -> Any:
+        return await local(lambda: {"sessions": service.list_interview_prep_sessions()})
+
+    @router.get("/api/career/interview-prep/{session_id}")
+    async def interview_prep_session(session_id: str) -> Any:
+        return await local(lambda: service.get_interview_prep_session(session_id))
+
+    @router.get("/api/career/interview-prep/{session_id}/history")
+    async def interview_prep_history(session_id: str) -> Any:
+        return await local(lambda: service.list_interview_prep_simulations(session_id))
+
+    @router.post("/api/career/interview-prep/{session_id}/export")
+    async def export_interview_prep(session_id: str, payload: InterviewPrepExportPayload) -> FileResponse:
+        path = await run_in_threadpool(
+            lambda: service.export_interview_prep(session_id, payload.export_format)
+        )
+        media_types = {
+            "md": "text/markdown; charset=utf-8",
+            "pdf": "application/pdf",
+        }
+        return FileResponse(
+            path,
+            filename=path.name,
+            media_type=media_types[payload.export_format],
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.get("/api/career/interview-prep/{session_id}/export/{export_format}")
+    async def download_interview_prep(session_id: str, export_format: str) -> FileResponse:
+        """Same local export as the POST route, reachable as a plain download link."""
+        if export_format not in {"md", "pdf"}:
+            raise UserFacingError("Format de préparation d’entretien non pris en charge.")
+        path = await run_in_threadpool(lambda: service.export_interview_prep(session_id, export_format))
+        media_type = "text/markdown; charset=utf-8" if export_format == "md" else "application/pdf"
+        return FileResponse(
+            path,
+            filename=path.name,
+            media_type=media_type,
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.delete("/api/career/interview-prep/{session_id}")
+    async def delete_interview_prep_session(session_id: str) -> dict[str, bool]:
+        await local(lambda: service.delete_interview_prep_session(session_id))
         return {"deleted": True}
 
     @router.get("/api/career/export/{export_format}")
@@ -1074,8 +2430,632 @@ def create_career_router(
     @router.post("/api/career/dossier/preview")
     async def dossier_preview(payload: DossierPreviewPayload) -> Any:
         return await local(lambda: service.dossier_preview(**payload.model_dump()))
+    # ── SPEC-011 : registre de traçabilité des exigences ──────────────────
+    # Les routes suivent le préfixe de l'espace Career (``/api/career``) :
+    # le contrat de la mission (``/traceability/...``) y est ajouté.
+
+    @router.get("/api/career/traceability/requirements")
+    async def traceability_requirements(
+        status: str = Query(default="", max_length=40),
+        category: str = Query(default="", max_length=40),
+        criticality: str = Query(default="", max_length=40),
+        offer_id: str = Query(default="", max_length=120),
+        cv_id: str = Query(default="", max_length=120),
+        source: str = Query(default="", max_length=200),
+        tag: str = Query(default="", max_length=60),
+        query: str = Query(default="", max_length=200),
+        review_state: str = Query(default="", max_length=40),
+    ) -> Any:
+        return await local(
+            lambda: service.traceability.list_requirements(
+                {
+                    "status": status,
+                    "category": category,
+                    "criticality": criticality,
+                    "offer_id": offer_id,
+                    "cv_id": cv_id,
+                    "source": source,
+                    "tag": tag,
+                    "query": query,
+                    "review_state": review_state,
+                }
+            )
+        )
+
+    @router.post("/api/career/traceability/requirements", status_code=201)
+    async def create_traceability_requirement(payload: TraceabilityRequirementPayload) -> Any:
+        return await local(lambda: service.traceability.create_requirement(payload.model_dump()))
+
+    @router.get("/api/career/traceability/requirements/{trace_id}")
+    async def traceability_requirement(trace_id: str) -> Any:
+        trace = await local(lambda: service.traceability.get_requirement(trace_id))
+        if not trace:
+            raise HTTPException(status_code=404, detail="Cette exigence n’existe pas dans le registre.")
+        return trace
+
+    @router.patch("/api/career/traceability/requirements/{trace_id}")
+    async def update_traceability_requirement(trace_id: str, payload: TraceabilityUpdatePayload) -> Any:
+        return await local(lambda: service.traceability.update_requirement(trace_id, payload.model_dump()))
+
+    @router.delete("/api/career/traceability/requirements/{trace_id}")
+    async def delete_traceability_requirement(trace_id: str, payload: TraceabilityCommentPayload) -> Any:
+        trace = await local(lambda: service.traceability.delete_requirement(trace_id, payload.model_dump()))
+        return {"deleted": True, "trace": trace}
+
+    @router.post("/api/career/traceability/requirements/{trace_id}/link-evidence")
+    async def link_traceability_evidence(trace_id: str, payload: TraceabilityLinkPayload) -> Any:
+        return await local(lambda: service.traceability.link_evidence(trace_id, payload.model_dump()))
+
+    @router.post("/api/career/traceability/requirements/{trace_id}/unlink-evidence")
+    async def unlink_traceability_evidence(trace_id: str, payload: TraceabilityCommentPayload) -> Any:
+        return await local(lambda: service.traceability.unlink_evidence(trace_id, payload.model_dump()))
+
+    @router.post("/api/career/traceability/requirements/{trace_id}/waive")
+    async def waive_traceability_requirement(trace_id: str, payload: TraceabilityWaivePayload) -> Any:
+        return await local(lambda: service.traceability.waive(trace_id, payload.model_dump()))
+
+    @router.post("/api/career/traceability/requirements/{trace_id}/reopen")
+    async def reopen_traceability_requirement(trace_id: str, payload: TraceabilityCommentPayload) -> Any:
+        return await local(lambda: service.traceability.reopen(trace_id, payload.model_dump()))
+
+    @router.post("/api/career/traceability/requirements/{trace_id}/confirm")
+    async def confirm_traceability_link(trace_id: str, payload: TraceabilityCommentPayload) -> Any:
+        return await local(lambda: service.traceability.confirm_link(trace_id, payload.model_dump()))
+
+    @router.post("/api/career/traceability/requirements/{trace_id}/reject")
+    async def reject_traceability_link(trace_id: str, payload: TraceabilityCommentPayload) -> Any:
+        return await local(lambda: service.traceability.reject_link(trace_id, payload.model_dump()))
+
+    @router.post("/api/career/traceability/offer-analysis")
+    async def register_traceability_offer_analysis(payload: TraceabilityOfferAnalysisPayload) -> Any:
+        return await local(
+            lambda: service.traceability.register_offer_analysis(payload.analysis, actor=payload.actor)
+        )
+
+    @router.post("/api/career/traceability/auto-link")
+    async def auto_link_traceability_evidence(payload: TraceabilityAutoLinkPayload) -> Any:
+        return await local(lambda: service.traceability.auto_link(payload.evidences, actor=payload.actor))
+
+    @router.get("/api/career/traceability/audit/coverage")
+    async def traceability_coverage(
+        offer_id: str = Query(default="", max_length=120),
+        cv_id: str = Query(default="", max_length=120),
+    ) -> Any:
+        def report() -> dict[str, Any]:
+            traces = service.traceability.registry.list_traces(
+                offer_id=offer_id or None,
+                cv_id=cv_id or None,
+            )
+            return {
+                "summary": coverage_summary(traces),
+                "by_offer": coverage_by_offer(traces),
+                "by_cv": coverage_by_cv(traces),
+            }
+
+        return await local(report)
+
+    @router.get("/api/career/traceability/audit/gaps")
+    async def traceability_gaps() -> Any:
+        def report() -> dict[str, Any]:
+            gaps = critical_gaps(service.traceability.registry.all())
+            return {"count": len(gaps), "gaps": gaps}
+
+        return await local(report)
+
+    @router.get("/api/career/traceability/audit/waived")
+    async def traceability_waived() -> Any:
+        def report() -> dict[str, Any]:
+            waived = waived_requirements(service.traceability.registry.all())
+            return {"count": len(waived), "waived": waived}
+
+        return await local(report)
+
+    @router.get("/api/career/traceability/audit/superseded")
+    async def traceability_superseded() -> Any:
+        """The requirements their offer no longer states (SPEC-011)."""
+
+        def report() -> dict[str, Any]:
+            superseded = superseded_requirements(service.traceability.registry.all())
+            return {"count": len(superseded), "superseded": superseded}
+
+        return await local(report)
+
+    @router.get("/api/career/traceability/audit/evolution")
+    async def traceability_evolution() -> Any:
+        """Coverage curve rebuilt from the immutable history (SPEC-011)."""
+
+        def report() -> dict[str, Any]:
+            evolution = coverage_over_time(service.traceability.registry.all())
+            return {"count": len(evolution), "evolution": evolution}
+
+        return await local(report)
+
+    @router.get("/api/career/traceability/audit/history")
+    async def traceability_history(
+        trace_id: str = Query(default="", max_length=120),
+        event_type: str = Query(default="", max_length=40),
+        actor: str = Query(default="", max_length=40),
+        since: str = Query(default="", max_length=40),
+        until: str = Query(default="", max_length=40),
+        limit: int = Query(default=500, ge=1, le=5_000),
+    ) -> Any:
+        def report() -> dict[str, Any]:
+            events = history_timeline(
+                service.traceability.registry.all(),
+                trace_id=trace_id or None,
+                event_type=event_type or None,
+                actor=actor or None,
+                since=since or None,
+                until=until or None,
+                limit=limit,
+            )
+            return {"count": len(events), "events": events}
+
+        return await local(report)
+
+    @router.get("/api/career/traceability/audit/report")
+    async def traceability_audit_report() -> Any:
+        def report() -> dict[str, Any]:
+            return audit_report(service.traceability.registry.all())
+
+        return await local(report)
+
+    @router.get("/api/career/traceability/export")
+    async def traceability_export(
+        export_format: str = Query(default="json", max_length=10),
+        format_: str = Query(default="", max_length=10, alias="format"),
+    ) -> Any:
+        content, media_type = await local(
+            lambda: service.traceability.export(format_ or export_format or "json")
+        )
+        if media_type.startswith("text/csv"):
+            return Response(content=content, media_type=media_type, headers={"Cache-Control": "no-store"})
+        return JSONResponse(content=json.loads(content), headers={"Cache-Control": "no-store"})
+
+    @router.post("/api/career/traceability/batch")
+    async def traceability_batch(payload: TraceabilityBatchPayload) -> Any:
+        return await local(
+            lambda: service.traceability.batch_apply(
+                payload.trace_ids,
+                payload.action,
+                justification=payload.justification,
+                actor=payload.actor,
+            )
+        )
+
+    @router.post("/api/career/traceability/import")
+    async def traceability_import(payload: TraceabilityImportPayload) -> Any:
+        return await local(lambda: service.traceability.import_traces(payload.registry))
+
+    # Le contrat de la mission est aussi exposé sans le préfixe de l'espace
+    # Career : ``/traceability/...`` et ``/api/career/traceability/...``
+    # désignent exactement les mêmes opérations (aucune duplication de code).
+    for route in list(router.routes):
+        path = getattr(route, "path", "")
+        if not path.startswith("/api/career/traceability"):
+            continue
+        router.add_api_route(
+            path.replace("/api/career/traceability", "/traceability", 1),
+            route.endpoint,
+            methods=list(route.methods or []),
+            name=f"{route.name}_contract",
+            status_code=route.status_code,
+            response_model=route.response_model,
+            tags=route.tags,
+            dependencies=route.dependencies,
+            include_in_schema=False,
+        )
+
+    @router.get("/web/research/{job_id}", include_in_schema=False)
+    @router.get("/api/career/web/research/{job_id}")
+    async def web_research_endpoint(job_id: str, refresh: bool = Query(False)) -> dict[str, Any]:
+        """Public web facts for one offer, every fact backed by an evidence id."""
+        job = await local(lambda: service.get_job(job_id))
+        facts = await local(lambda: researcher.research(job, refresh=refresh).as_dict())
+        return facts
+
+    @router.post("/web/research/{job_id}/provide", include_in_schema=False)
+    @router.post("/api/career/web/research/{job_id}/provide")
+    async def provide_web_research_endpoint(
+        job_id: str, payload: WebResearchProvidePayload
+    ) -> dict[str, Any]:
+        """Merge a user-supplied company sheet; it is labelled user_provided."""
+        job = await local(lambda: service.get_job(job_id))
+        facts = await local(lambda: researcher.provide(job, payload.model_dump()).as_dict())
+        return facts
+
+    @router.get("/web/research/{job_id}/freshness", include_in_schema=False)
+    @router.get("/api/career/web/research/{job_id}/freshness")
+    async def web_research_freshness_endpoint(job_id: str) -> dict[str, Any]:
+        """Whether the 24 h cache is still fresh, and for how long it has been kept."""
+        job = await local(lambda: service.get_job(job_id))
+        return await local(lambda: researcher.freshness(job))
+
+    # ── Centre de preuves (SPEC-008) ───────────────────────────────────────
+    # Les routes littérales sont déclarées avant les routes paramétrées :
+    # « /evidence/stats » ne doit jamais être capté par « /evidence/{id} ».
+
+    @router.get("/api/career/evidence")
+    async def list_evidence(
+        q: str = Query(default="", max_length=200),
+        evidence_type: str = Query(default="", max_length=40),
+        confidence: str = Query(default="", max_length=40),
+        approved: str = Query(default="", max_length=5),
+        blocked: str = Query(default="", max_length=5),
+        expired: str = Query(default="", max_length=5),
+        used: str = Query(default="", max_length=20),
+    ) -> Any:
+        return await local(
+            lambda: {
+                "evidence": service.list_evidence(
+                    query=q,
+                    evidence_type=evidence_type,
+                    confidence=confidence,
+                    approved=_optional_bool(approved, "approved"),
+                    blocked=_optional_bool(blocked, "blocked"),
+                    expired=_optional_bool(expired, "expired"),
+                    used=used,
+                )
+            }
+        )
+
+    @router.post("/api/career/evidence", status_code=201)
+    async def create_evidence(payload: EvidenceCreatePayload) -> Any:
+        return await local(lambda: service.add_evidence(payload.model_dump()))
+
+    @router.get("/api/career/evidence/stats")
+    async def evidence_stats() -> Any:
+        return await local(service.evidence_stats)
+
+    @router.get("/api/career/evidence/export")
+    async def export_evidence(export_format: str = Query(default="json", max_length=20)) -> FileResponse:
+        wanted = export_format.strip().lower() or "json"
+        path = await run_in_threadpool(lambda: service.export_evidence(wanted))
+        media_type = "text/markdown; charset=utf-8" if wanted == "markdown" else "application/json"
+        return FileResponse(
+            path,
+            filename=path.name,
+            media_type=media_type,
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.post("/api/career/evidence/merge")
+    async def merge_evidence(payload: EvidenceMergePayload) -> Any:
+        return await local(lambda: service.merge_evidence(payload.ids, payload.keep_id))
+
+    @router.get("/api/career/evidence/{evidence_id}")
+    async def get_evidence(evidence_id: str) -> Any:
+        return await local(lambda: service.get_evidence(evidence_id))
+
+    @router.patch("/api/career/evidence/{evidence_id}")
+    async def update_evidence(evidence_id: str, payload: EvidenceUpdatePayload) -> Any:
+        return await local(
+            lambda: service.update_evidence(
+                evidence_id,
+                {key: value for key, value in payload.model_dump().items() if value is not None},
+            )
+        )
+
+    @router.delete("/api/career/evidence/{evidence_id}")
+    async def delete_evidence(evidence_id: str) -> dict[str, bool]:
+        deleted = await local(lambda: service.delete_evidence(evidence_id))
+        return {"deleted": bool(deleted)}
+
+    @router.post("/api/career/evidence/{evidence_id}/approve")
+    async def approve_evidence(evidence_id: str, payload: EvidenceDecisionPayload) -> Any:
+        return await local(lambda: service.mark_evidence_approved(evidence_id, payload.approved))
+
+    @router.post("/api/career/evidence/{evidence_id}/block")
+    async def block_evidence(evidence_id: str, payload: EvidenceBlockPayload) -> Any:
+        return await local(lambda: service.set_evidence_blocked(evidence_id, payload.blocked))
+
+    @router.post("/api/career/evidence/{evidence_id}/usage")
+    async def use_evidence(evidence_id: str, payload: EvidenceUsagePayload) -> Any:
+        return await local(lambda: service.record_evidence_usage(evidence_id, payload.target, payload.context))
+
+    @router.post("/api/career/evidence/{evidence_id}/attach")
+    async def attach_evidence(evidence_id: str, request: Request) -> Any:
+        # The body is read by hand, with explicit bounds: FastAPI would resolve
+        # a file dependency only after Starlette has spooled the whole
+        # multipart body.
+        await local(lambda: service.get_evidence(evidence_id))
+        form = None
+        try:
+            form = await request.form(max_files=1, max_fields=1, max_part_size=64 * 1024)
+        except (HTTPException, ValueError) as error:
+            raise UserFacingError("Pièce jointe invalide : envoie un seul fichier.") from error
+        try:
+            upload_items = [
+                (key, value) for key, value in form.multi_items() if isinstance(value, UploadFile)
+            ]
+            if len(upload_items) != 1 or upload_items[0][0] != "file":
+                raise UserFacingError("Sélectionne un seul fichier dans le champ « file ».")
+            return await _store_evidence_attachment(service, evidence_id, upload_items[0][1])
+        finally:
+            if form is not None:
+                await form.close()
+
+    # SPEC-013 — Dépendances et impact
+    # ------------------------------------------------------------------
+    from .dependencies import (
+        DependencyGraph,
+        DependencyNode,
+        analyze_impact,
+        simulate_scenario,
+        build_execution_plan,
+        detect_cycles,
+        critical_nodes,
+        fragility,
+        validate_graph,
+        build_graph,
+    )
+    from .dependencies_store import DependencyStore
+
+    def _dep_store() -> DependencyStore:
+        store = getattr(service, "_dependency_store", None)
+        if store is None:
+            store = DependencyStore(service.data_dir / "dependencies")
+            service._dependency_store = store
+        return store
+
+    def _dep_graph() -> DependencyGraph:
+        graph = getattr(service, "_dependency_graph", None)
+        if graph is None:
+            try:
+                graph = _dep_store().load()
+            except Exception:
+                graph = DependencyGraph()
+            service._dependency_graph = graph
+        return graph
+
+    def _set_dep_graph(graph: DependencyGraph) -> None:
+        service._dependency_graph = graph
+        try:
+            _dep_store().save(graph)
+        except Exception:
+            pass
+
+    def _career_dependency_entities() -> dict[str, Any]:
+        """Read the local Career service through its public, read-only API."""
+        profile = service.get_profile()
+        offers = service.list_jobs()
+        applications = service.list_applications()
+        requirements: list[dict[str, Any]] = []
+        for offer in offers:
+            intelligence = service.get_offer_intelligence(str(offer.get("id") or ""))
+            snapshot = intelligence.get("snapshot") or {}
+            for record in snapshot.get("requirements") or []:
+                if isinstance(record, dict) and not record.get("injection_suspect"):
+                    requirements.append({**record, "offer_id": offer.get("id")})
+        evidences = [
+            {
+                "id": f"profile-{field}",
+                "title": f"Profil · {field}",
+                "profile_field": field,
+                "quality": "declared",
+            }
+            for field in ("education", "experience", "skills", "languages")
+            if str(profile.get(field) or "").strip()
+        ]
+        return {
+            "profile": profile,
+            "offers": offers,
+            "requirements": requirements,
+            "evidences": evidences,
+            "applications": applications,
+        }
+
+    @staticmethod
+    def _merge_dependency_graphs(current: DependencyGraph, incoming: DependencyGraph) -> DependencyGraph:
+        merged = current.copy()
+        for node in incoming.nodes.values():
+            merged.add_node(node)
+        for edge in incoming.edges:
+            merged.add_edge(
+                source_id=edge.source_id,
+                target_id=edge.target_id,
+                edge_type=edge.edge_type,
+                weight=edge.weight,
+                metadata=edge.metadata,
+            )
+        return merged
+
+    @router.post("/dependencies/graph")
+    async def build_dependency_graph(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        payload = payload or {}
+        replace = bool(payload.get("replace", True))
+        nodes = payload.get("nodes")
+        edges = payload.get("edges")
+        if nodes is None and edges is None:
+            if payload.get("refresh_from_career"):
+                entity_payload = _career_dependency_entities()
+            else:
+                entity_payload = {key: payload.get(key) for key in ("profile", "offers", "requirements", "evidences", "matchings", "applications") if key in payload}
+            incoming = build_graph(**entity_payload) if entity_payload else _dep_graph()
+            graph = incoming if replace else _merge_dependency_graphs(_dep_graph(), incoming)
+        else:
+            graph = DependencyGraph.from_dict({"nodes": nodes or {}, "edges": edges or [], "version": 1})
+        # refresh version
+        graph.version = int(graph.version or 1)
+        if hasattr(graph, "touch"):
+            graph.touch()
+        _set_dep_graph(graph)
+        return {"graph": to_jsonable(graph.to_dict()), "validation": {"valid": True, "errors": to_jsonable(validate_graph(graph))}}
+
+    @router.get("/dependencies/graph")
+    async def get_dependency_graph() -> dict[str, Any]:
+        return to_jsonable(_dep_graph().to_dict())
+
+    @router.get("/dependencies/graph/nodes/{node_id}")
+    async def get_dependency_node(node_id: str) -> dict[str, Any]:
+        graph = _dep_graph()
+        node = graph.nodes.get(node_id)
+        if node is None:
+            raise HTTPException(status_code=404, detail="node not found")
+        return to_jsonable(
+            {
+                "node": node.to_dict(),
+                "neighbors": graph.neighbors(node_id),
+                "successors": graph.successors(node_id),
+                "predecessors": graph.predecessors(node_id),
+                "incoming_edges": [edge.to_dict() for edge in graph.incoming_edges(node_id)],
+                "outgoing_edges": [edge.to_dict() for edge in graph.outgoing_edges(node_id)],
+            }
+        )
+
+    @router.post("/dependencies/edges")
+    async def add_dependency_edge(payload: DependencyEdgePayload) -> dict[str, Any]:
+        graph = _dep_graph()
+        unknown = [node_id for node_id in (payload.source_id, payload.target_id) if node_id not in graph.nodes]
+        if unknown:
+            raise HTTPException(status_code=400, detail=f"unknown node: {', '.join(unknown)}")
+        graph.add_edge(source_id=payload.source_id, target_id=payload.target_id, edge_type=payload.edge_type, weight=payload.weight, metadata=payload.metadata)
+        graph.version = max(1, graph.version) + 1
+        _set_dep_graph(graph)
+        return {"edge": to_jsonable(graph.edges[-1].to_dict()), "graph_version": graph.version, "graph": to_jsonable(graph.to_dict())}
+
+    @router.delete("/dependencies/edges/{edge_id}")
+    async def delete_dependency_edge(edge_id: str) -> dict[str, Any]:
+        graph = _dep_graph()
+        deleted = graph.remove_edge(edge_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="edge not found")
+        _set_dep_graph(graph)
+        return {"deleted": deleted}
+
+    @router.post("/dependencies/nodes")
+    async def add_dependency_node(payload: DependencyNodePayload) -> dict[str, Any]:
+        graph = _dep_graph()
+        graph.add_node(DependencyNode(node_id=payload.node_id, node_type=payload.node_type, label=payload.label, metadata=payload.metadata))
+        _set_dep_graph(graph)
+        return to_jsonable(graph.nodes[payload.node_id].to_dict())
+
+    @router.post("/dependencies/impact")
+    async def analyze_dependency_impact(payload: ImpactPayload) -> dict[str, Any]:
+        graph = _dep_graph()
+        source = payload.source_node_id or payload.source
+        if source not in graph.nodes:
+            raise HTTPException(status_code=400, detail="unknown source node")
+        kwargs = {}
+        if payload.threshold is not None:
+            kwargs["threshold"] = payload.threshold
+        if payload.max_depth is not None:
+            kwargs["max_depth"] = payload.max_depth
+        result = analyze_impact(graph, source, payload.change_type, payload.change_details, **kwargs)
+        return {"analysis": to_jsonable(result.to_dict())}
+
+    @router.post("/dependencies/scenario")
+    async def simulate_dependency_scenario(payload: ScenarioPayload) -> Any:
+        graph = _dep_graph()
+        for change in payload.changes:
+            if change.get("change_type") == "create" and change.get("node_id") not in graph.nodes:
+                details = change.get("details") or {}
+                graph.add_node(DependencyNode(node_id=change.get("node_id", ""), node_type=details.get("node_type", "requirement"), label=details.get("label", "")))
+        results = simulate_scenario(graph, payload.changes)
+        return {"analyses": to_jsonable([r.to_dict() for r in results])}
+
+    @router.get("/dependencies/critical-nodes")
+    async def get_critical_nodes() -> dict[str, Any]:
+        graph = _dep_graph()
+        return {"nodes": to_jsonable(critical_nodes(graph, top_n=3))}
+
+    @router.get("/dependencies/cycles")
+    async def get_dependency_cycles() -> dict[str, Any]:
+        graph = _dep_graph()
+        return {"cycles": to_jsonable(detect_cycles(graph)), "count": len(detect_cycles(graph))}
+
+    @router.get("/dependencies/fragility")
+    async def get_dependency_fragility() -> dict[str, Any]:
+        graph = _dep_graph()
+        return {"fragile_nodes": to_jsonable(fragility(graph)), "cycle_resolutions": []}
+
+    @router.post("/dependencies/plan")
+    async def create_dependency_plan(payload: PlanPayload) -> dict[str, Any]:
+        graph = _dep_graph()
+        node_ids = payload.node_ids or payload.impacted_nodes
+        if not node_ids:
+            # plan from all nodes
+            node_ids = list(graph.nodes.keys())
+        unknown = [node_id for node_id in node_ids if node_id not in graph.nodes]
+        if unknown:
+            raise HTTPException(status_code=400, detail=f"unknown node: {', '.join(unknown)}")
+        plan_obj = build_execution_plan(graph, node_ids, action=payload.change_type)
+        return {"plan": to_jsonable(plan_obj.to_dict())}
+
+    @router.post("/dependencies/validate")
+    async def validate_dependency_graph() -> dict[str, Any]:
+        graph = _dep_graph()
+        return {"validation": {"valid": True, "errors": to_jsonable(validate_graph(graph))}}
+
+    @router.post("/dependencies/snapshot")
+    async def snapshot_dependency_graph(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        graph = _dep_graph()
+        store = _dep_store()
+        _set_dep_graph(graph)
+        snap = store.snapshot(str((payload or {}).get("label") or ""))
+        return to_jsonable(snap)
+
+    @router.get("/dependencies/history")
+    async def get_dependency_history() -> dict[str, Any]:
+        store = _dep_store()
+        return {"entries": to_jsonable(store.history())}
+
+    @router.post("/dependencies/rollback")
+    async def rollback_dependency_graph(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        payload = payload or {}
+        store = _dep_store()
+        try:
+            graph = store.rollback(payload.get("version"))
+        except (KeyError, TypeError, ValueError) as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        _set_dep_graph(graph)
+        return {"graph": to_jsonable(graph.to_dict())}
+
+
+    @router.get("/api/career/dependencies/graph")
+    async def dependency_graph_api_alias() -> Any:
+        return {"graph": to_jsonable(_dep_graph().to_dict())}
 
     return router
+
+
+def _optional_bool(value: str, label: str) -> bool | None:
+    """Read a tri-state filter (``true`` / ``false`` / vide)."""
+    text = str(value or "").strip().lower()
+    if not text:
+        return None
+    if text in {"true", "1", "oui", "yes"}:
+        return True
+    if text in {"false", "0", "non", "no"}:
+        return False
+    raise HTTPException(status_code=422, detail=f"Le filtre {label} doit valoir true ou false.")
+
+
+async def _store_evidence_attachment(service: CareerService, evidence_id: str, uploaded: UploadFile) -> Any:
+    """Stream one document into the private attachment directory.
+
+    The uploaded file is copied into ``career_data/evidence/attachments``
+    under an opaque name; the original path is never stored and the Career
+    workspace never receives the file.
+    """
+    temporary = service.evidence_upload_temp_path()
+    bytes_written = 0
+    try:
+        with temporary.open("xb") as destination:
+            try:
+                os.chmod(temporary, 0o600)
+            except OSError:
+                pass
+            while chunk := await uploaded.read(PROFILE_UPLOAD_CHUNK_SIZE):
+                bytes_written += len(chunk)
+                if bytes_written > MAX_ATTACHMENT_BYTES:
+                    raise UserFacingError("Pièce jointe trop volumineuse (maximum 10 Mo).")
+                destination.write(chunk)
+        return await run_in_threadpool(
+            lambda: service.attach_evidence_document(evidence_id, temporary, uploaded.filename or "")
+        )
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 async def _store_profile_document(

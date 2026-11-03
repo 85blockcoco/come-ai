@@ -1,0 +1,85 @@
+{
+  "connector": "public_ats",
+  "provider": "smartrecruiters",
+  "note": "SmartRecruiters publishes the country in location.country and the city in location.city.",
+  "cases": [
+    {
+      "case_id": "smartrecruiters_france_allowed",
+      "description": "Une offre SmartRecruiters publiée en France est gardée quand la France n'est pas exclue : le filtre ne refuse que les pays demandés.",
+      "countries_exclude": ["BE"],
+      "feed": {
+        "content": [
+          {
+            "id": "sr-fr-1",
+            "name": "Corporate Finance Intern",
+            "applyUrl": "https://www.smartrecruiters.com/Synthetic/jobs/sr-fr-1",
+            "description": "<p>Financial analysis and valuation. This synthetic internship lasts six months.</p>",
+            "typeOfEmployment": {"label": "Internship"},
+            "company": {"name": "Synthetic Finance"},
+            "location": {"city": "Paris", "country": "France"}
+          }
+        ]
+      },
+      "expect": {"kept_source_ids": ["sr-fr-1"], "excluded_by_country": {}}
+    },
+    {
+      "case_id": "smartrecruiters_paris_france",
+      "description": "Une offre SmartRecruiters publiée à Paris, France est filtrée à la source.",
+      "countries_exclude": ["FR"],
+      "feed": {
+        "content": [
+          {
+            "id": "sr-fr-2",
+            "name": "Corporate Finance Intern",
+            "applyUrl": "https://www.smartrecruiters.com/Synthetic/jobs/sr-fr-2",
+            "description": "<p>Financial analysis and valuation. This synthetic internship lasts six months.</p>",
+            "typeOfEmployment": {"label": "Internship"},
+            "company": {"name": "Synthetic Finance"},
+            "location": {"city": "Paris", "country": "France"}
+          }
+        ]
+      },
+      "expect": {"kept_source_ids": [], "excluded_by_country": {"FR": 1}}
+    },
+    {
+      "case_id": "smartrecruiters_include_germany_keeps_germany",
+      "description": "Une liste d'inclusion garde l'Allemagne : une source ciblée ne ramène que les pays demandés.",
+      "countries_exclude": [],
+      "countries_include": ["DE"],
+      "feed": {
+        "content": [
+          {
+            "id": "sr-de-1",
+            "name": "Corporate Finance Intern",
+            "applyUrl": "https://www.smartrecruiters.com/Synthetic/jobs/sr-de-1",
+            "description": "<p>Financial analysis and valuation. This synthetic internship lasts six months.</p>",
+            "typeOfEmployment": {"label": "Internship"},
+            "company": {"name": "Synthetic Finance"},
+            "location": {"city": "Munich", "country": "Germany"}
+          }
+        ]
+      },
+      "expect": {"kept_source_ids": ["sr-de-1"], "excluded_by_country": {}}
+    },
+    {
+      "case_id": "smartrecruiters_include_germany_drops_france",
+      "description": "Une liste d'inclusion écarte la France : la source ne ramène que les pays demandés.",
+      "countries_exclude": [],
+      "countries_include": ["DE"],
+      "feed": {
+        "content": [
+          {
+            "id": "sr-fr-out",
+            "name": "Corporate Finance Intern",
+            "applyUrl": "https://www.smartrecruiters.com/Synthetic/jobs/sr-fr-out",
+            "description": "<p>Financial analysis and valuation. This synthetic internship lasts six months.</p>",
+            "typeOfEmployment": {"label": "Internship"},
+            "company": {"name": "Synthetic Finance"},
+            "location": {"city": "Lyon", "country": "France"}
+          }
+        ]
+      },
+      "expect": {"kept_source_ids": [], "excluded_by_country": {"FR": 1}}
+    }
+  ]
+}

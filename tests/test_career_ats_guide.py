@@ -72,12 +72,11 @@ def test_detects_platform_from_official_domain(platform: str) -> None:
     assert detect_platform(job["official_url"], job["source_name"]) == platform
 
 
-def test_source_name_completes_an_employer_owned_domain() -> None:
+def test_source_name_never_proves_an_unknown_platform() -> None:
     job = JOBS["source_only_greenhouse"]
     guide = human_apply_guide(job)
-    assert guide.platform == "greenhouse"
-    # Le domaine appartient à l'employeur : ne jamais fabriquer /apply ni #app.
-    assert guide.apply_url == job["official_url"]
+    assert guide.platform is None
+    assert guide.apply_url == ""
 
 
 def test_custom_source_returns_custom_platform() -> None:
@@ -90,7 +89,8 @@ def test_custom_source_returns_custom_platform() -> None:
 def test_unknown_platform_is_honest_and_generic() -> None:
     guide = human_apply_guide(JOBS["unknown"])
     assert guide.platform is None
-    assert guide.apply_url == JOBS["unknown"]["official_url"]
+    assert guide.apply_url == ""
+    assert guide.source_verified is False
     assert len(guide.steps) >= 4
     assert "générique" in guide.steps[0].tips.lower()
     assert "compte peut être nécessaire" in guide.steps[0].tips.lower()
@@ -107,10 +107,9 @@ def test_detection_is_deterministic_and_has_no_side_effect() -> None:
 # URL directe du formulaire
 # ---------------------------------------------------------------------------
 
-def test_greenhouse_points_at_the_inline_application_anchor() -> None:
+def test_greenhouse_preserves_the_published_url_without_inventing_an_anchor() -> None:
     guide = human_apply_guide(JOBS["greenhouse"])
-    assert guide.apply_url.endswith("#app")
-    assert guide.apply_url.startswith(JOBS["greenhouse"]["official_url"])
+    assert guide.apply_url == JOBS["greenhouse"]["official_url"]
 
 
 def test_lever_points_at_the_apply_path() -> None:
@@ -119,10 +118,10 @@ def test_lever_points_at_the_apply_path() -> None:
     assert guide.apply_url.startswith(JOBS["lever"]["official_url"].rstrip("/"))
 
 
-def test_jobvite_and_ashby_direct_urls_follow_their_patterns() -> None:
+def test_direct_links_are_published_instead_of_guessed() -> None:
     jobvite = human_apply_guide(JOBS["jobvite"])
     ashby = human_apply_guide(JOBS["ashby"])
-    assert jobvite.apply_url.endswith("/apply")
+    assert jobvite.apply_url == JOBS["jobvite"]["official_url"]
     assert ashby.apply_url.endswith("/application")
 
 
@@ -265,7 +264,38 @@ def test_guide_never_opens_a_network_connection(monkeypatch: pytest.MonkeyPatch)
 
     for platform in (*OFFICIAL_URL_PLATFORMS, "custom", "unknown"):
         guide = human_apply_guide(JOBS[platform])
-        assert guide.apply_url.startswith("https://")
+        assert guide.apply_url.startswith("https://") if platform != "unknown" else guide.apply_url == ""
+
+
+def test_unverified_source_never_enables_a_destination() -> None:
+    job = {**JOBS["lever"], "source_verified": False}
+    guide = human_apply_guide(job)
+    assert guide.platform == "lever"
+    assert guide.apply_url == ""
+    assert guide.source_verified is False
+    assert guide.warnings
+
+
+@pytest.mark.parametrize("url", [
+    "http://jobs.lever.co/synthetic/offer",
+    "https://jobs.lever.co/synthetic/offer\n",
+    "https://jobs.lever.co/synthetic/offer%0a",
+    "https://jobs.lever.co/synthetic/offer%250d",
+    "https://careers.example.local/job",
+    "https://jobs.lever.co/synthetic/offer?redirect=https://attacker.example.test",
+])
+def test_rejects_insecure_local_encoded_or_redirecting_links(url: str) -> None:
+    with pytest.raises(UserFacingError):
+        detect_platform(url)
+
+
+@pytest.mark.parametrize("url", [
+    "https://attacker.example.test/collect",
+    "https://jobs.lever.co/another-employer/another-offer/apply",
+])
+def test_publisher_apply_link_cannot_switch_host_or_offer(url: str) -> None:
+    job = {**JOBS["lever"], "source_material": {"material": {"source_fields": {"lever": {"applyUrl": url}}}}}
+    assert human_apply_guide(job).apply_url == job["official_url"]
 
 
 # ---------------------------------------------------------------------------
@@ -292,7 +322,8 @@ def test_endpoint_returns_a_local_guide_and_never_submits(tmp_path: Path) -> Non
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["platform"] == "greenhouse"
-    assert payload["apply_url"].endswith("#app")
+    assert payload["apply_url"] == ""
+    assert payload["source_verified"] is False
     assert payload["needs_account"] is False
     assert payload["estimated_minutes"] == 12
     assert len(payload["steps"]) >= 4

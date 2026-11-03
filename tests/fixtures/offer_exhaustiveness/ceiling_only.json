@@ -1,0 +1,11 @@
+{
+  "qualification": {
+    "provenance": {
+      "duration_ceiling_months": {
+        "value": 6,
+        "source": "description_passage",
+        "quote": "up to 6 months"
+      }
+    }
+  }
+}

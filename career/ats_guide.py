@@ -1,7 +1,7 @@
 """SPEC-046 — reconnaissance locale de la plateforme ATS et guide humain.
 
 Ce module ne fait **aucune requête réseau** : la plateforme est déduite du lien
-officiel déjà enregistré et, à défaut, du nom de source.  Il ne soumet jamais
+officiel déjà enregistré ; le nom de source sert seulement au contrôle de cohérence.  Il ne soumet jamais
 une candidature.  Le guide décrit les étapes qu'une personne devra accomplir
 elle-même dans le formulaire de l'employeur.
 
@@ -16,10 +16,11 @@ from __future__ import annotations
 import ipaddress
 import re
 import urllib.parse
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field as dataclass_field
 from typing import Any
 
 from workspace_core import UserFacingError
+from .source_fields import source_fields_of
 
 MAX_URL_LENGTH = 2_000
 MAX_PLATFORM_TEXT = 200
@@ -126,15 +127,13 @@ class ApplyGuide:
     steps: list[GuideStep]
     needs_account: bool
     estimated_minutes: int
+    source_verified: bool = False
+    warnings: list[str] = dataclass_field(default_factory=list)
+    estimated_minutes_is_indicative: bool = True
+    needs_account_is_indicative: bool = True
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            "platform": self.platform,
-            "apply_url": self.apply_url,
-            "steps": [asdict(step) for step in self.steps],
-            "needs_account": self.needs_account,
-            "estimated_minutes": self.estimated_minutes,
-        }
+        return asdict(self)
 
 
 # ---------------------------------------------------------------------------
@@ -160,7 +159,13 @@ def _check_url(value: Any) -> CheckedUrl:
     ou usurpé.
     """
 
-    raw = str(value or "").strip()
+    raw = str(value or "")
+    decoded = raw
+    for _ in range(3):
+        if _CONTROL_RE.search(decoded):
+            raise _reject("Le lien de l’offre contient des caractères de contrôle : il est refusé.")
+        decoded = urllib.parse.unquote(decoded)
+    raw = raw.strip()
     if not raw:
         raise _reject(
             "Aucun lien officiel n’est enregistré pour cette offre : le guide ne peut pas pointer vers un formulaire."
@@ -175,8 +180,8 @@ def _check_url(value: Any) -> CheckedUrl:
         raise _reject("Le lien de l’offre est illisible : il est refusé.") from error
 
     scheme = parsed.scheme.lower()
-    if scheme not in {"http", "https"}:
-        raise _reject("Seuls les liens http(s) publics peuvent ouvrir un formulaire de candidature.")
+    if scheme != "https":
+        raise _reject("Seuls les liens https publics peuvent ouvrir un formulaire de candidature.")
     if parsed.username or parsed.password:
         raise _reject("Le lien de l’offre contient un identifiant ou un mot de passe : il est refusé.")
     if not parsed.hostname:
@@ -185,12 +190,19 @@ def _check_url(value: Any) -> CheckedUrl:
         port = parsed.port
     except ValueError as error:
         raise _reject("Le port du lien de l’offre est invalide : il est refusé.") from error
-    if port is not None and port not in {80, 443}:
+    if port is not None and port != 443:
         raise _reject("Le lien de l’offre utilise un port non standard : il est refusé par prudence.")
 
     hostname = parsed.hostname.lower().rstrip(".")
     if not hostname or not _HOSTNAME_RE.fullmatch(hostname):
         raise _reject("Le domaine du lien de l’offre n’est pas un nom public valide : il est refusé.")
+    if hostname.endswith((".local", ".internal", ".localhost", ".localdomain")):
+        raise _reject("Un domaine local n’est pas une destination de candidature publique.")
+    for key, target in urllib.parse.parse_qsl(parsed.query):
+        if key.casefold() in {"redirect", "redirect_url", "redirect_uri", "return_url", "next", "continue", "url"}:
+            destination = urllib.parse.urlsplit(target)
+            if destination.netloc and destination.hostname != hostname:
+                raise _reject("Le lien redirige vers un autre domaine : il doit être vérifié sur la source officielle.")
     try:
         ipaddress.ip_address(hostname)
     except ValueError:
@@ -259,61 +271,40 @@ def detect_platform(url: Any, source_name: Any = "") -> str | None:
         raise _reject(
             "Le nom de source annonce une plateforme qui ne correspond pas au domaine du lien : le guide est refusé par prudence."
         )
-    # Un domaine employeur inconnu reste acceptable lorsque la source déclare
-    # la plateforme (ex. lien carrière direct d'un employeur qui utilise
-    # Greenhouse).  Dans ce cas le lien officiel n'est jamais transformé.
-    return from_url or from_source
+    # A source label is not proof of the platform behind an unknown host.
+    return from_url
 
 
 # ---------------------------------------------------------------------------
 # URL directe du formulaire
 # ---------------------------------------------------------------------------
 
-def _url_with(parsed: urllib.parse.SplitResult, *, path: str | None = None, fragment: str | None = None) -> str:
-    return urllib.parse.urlunsplit(
-        (
-            parsed.scheme,
-            parsed.netloc,
-            parsed.path if path is None else path,
-            parsed.query,
-            parsed.fragment if fragment is None else fragment,
-        )
-    )
+def _published_apply_url(job: dict[str, Any], checked: CheckedUrl) -> tuple[str, bool]:
+    """Use a published form URL only when it stays on the same offer."""
+    material = job.get("source_material")
+    material = material.get("material") if isinstance(material, dict) else None
+    published = source_fields_of(material if isinstance(material, dict) else job)
+    fields = published.get(str(job.get("source_name") or "").lower(), {})
+    candidate = fields.get("applyUrl") or fields.get("apply_url") or fields.get("application_url")
+    if not candidate:
+        return checked.url, False
+    try:
+        target = _check_url(candidate)
+    except UserFacingError:
+        return checked.url, True
+    original_path = checked.parsed.path.rstrip("/")
+    target_path = target.parsed.path.rstrip("/")
+    if target.hostname != checked.hostname or not (
+        target_path == original_path or target_path.startswith(original_path + "/")
+    ):
+        return checked.url, True
+    original_query = dict(urllib.parse.parse_qsl(checked.parsed.query))
+    target_query = dict(urllib.parse.parse_qsl(target.parsed.query))
+    for key in ("gh_jid", "jobId", "postingId", "jid", "reqId"):
+        if key in original_query and target_query.get(key) != original_query[key]:
+            return checked.url, True
+    return target.url, False
 
-
-def _direct_apply_url(platform: str | None, checked: CheckedUrl) -> str:
-    """Transformer le lien public en lien de formulaire quand le motif est sûr.
-
-    Seules les transformations documentées et réversibles sont appliquées.
-    Pour les plateformes dont le formulaire est une modale de la même page, le
-    lien officiel est conservé tel quel.
-    """
-
-    parsed = checked.parsed
-    path = parsed.path
-
-    if platform == "greenhouse" and "/jobs/" in path and not parsed.fragment:
-        return _url_with(parsed, fragment="app")
-    if platform == "lever":
-        cleaned = path.rstrip("/")
-        if cleaned.count("/") >= 2 and not cleaned.lower().endswith("/apply"):
-            return _url_with(parsed, path=f"{cleaned}/apply")
-    if platform == "jobvite" and "/job/" in path:
-        cleaned = path.rstrip("/")
-        if not cleaned.lower().endswith("/apply"):
-            return _url_with(parsed, path=f"{cleaned}/apply")
-    if platform == "ashby" and not parsed.fragment:
-        cleaned = path.rstrip("/")
-        if cleaned.count("/") >= 2 and not cleaned.lower().endswith(("/application", "/apply")):
-            return _url_with(parsed, path=f"{cleaned}/application")
-    # Workday, SmartRecruiters, RecruitCRM, Breezy, RippleMatch : le formulaire
-    # est servi par la page officielle elle-même, ou son URL varie par tenant.
-    return checked.url
-
-
-# ---------------------------------------------------------------------------
-# Guides humains
-# ---------------------------------------------------------------------------
 
 _CV_STEP = GuideStep(
     title="Préparer et téléverser le CV",
@@ -339,7 +330,7 @@ _PLATFORM_GUIDES: dict[str, tuple[bool, int, tuple[GuideStep, ...]]] = {
             GuideStep(
                 title="Ouvrir le formulaire Greenhouse",
                 fields=["document:cv"],
-                tips="Sur une annonce Greenhouse, le bouton « Apply » ouvre le formulaire en bas de page (ancre #app). Aucun compte candidat n’est nécessaire.",
+                tips="Sur une annonce Greenhouse, repère le bouton « Apply » ou la section de candidature de la page officielle. Vérifie sur le formulaire si un compte est demandé.",
             ),
             _CV_STEP,
             GuideStep(
@@ -372,7 +363,7 @@ _PLATFORM_GUIDES: dict[str, tuple[bool, int, tuple[GuideStep, ...]]] = {
             GuideStep(
                 title="Ouvrir la candidature Lever",
                 fields=["document:cv"],
-                tips="Le bouton « Apply for this job » mène à /apply. Aucun compte n’est requis pour candidater.",
+                tips="Repère le bouton « Apply for this job » sur la fiche officielle. Les exigences de compte peuvent varier selon l’employeur.",
             ),
             _CV_STEP,
             _LETTER_STEP,
@@ -397,7 +388,7 @@ _PLATFORM_GUIDES: dict[str, tuple[bool, int, tuple[GuideStep, ...]]] = {
             GuideStep(
                 title="Créer ou retrouver un compte Workday",
                 fields=["profile:contact_email"],
-                tips="Un compte Workday est presque toujours requis. Utilise un mot de passe unique ; Côme AI ne le stocke pas.",
+                tips="Un compte Workday peut être demandé. Utilise un mot de passe unique ; Côme AI ne le stocke pas.",
             ),
             _CV_STEP,
             GuideStep(
@@ -432,7 +423,7 @@ _PLATFORM_GUIDES: dict[str, tuple[bool, int, tuple[GuideStep, ...]]] = {
             GuideStep(
                 title="Ouvrir la fiche SmartRecruiters",
                 fields=["document:cv"],
-                tips="Le bouton « I’m interested » ouvre le formulaire sur la même page ; aucun compte n’est nécessaire.",
+                tips="Le bouton « I’m interested » ouvre le formulaire sur la même page ; vérifie si un compte est demandé.",
             ),
             _CV_STEP,
             GuideStep(
@@ -500,7 +491,7 @@ _PLATFORM_GUIDES: dict[str, tuple[bool, int, tuple[GuideStep, ...]]] = {
             GuideStep(
                 title="Ouvrir le formulaire Breezy",
                 fields=["document:cv"],
-                tips="Le bouton « Apply now » affiche le formulaire sur la même page ; aucun compte n’est requis.",
+                tips="Le bouton « Apply now » affiche le formulaire sur la même page ; vérifie si un compte est demandé.",
             ),
             _CV_STEP,
             GuideStep(
@@ -528,7 +519,7 @@ _PLATFORM_GUIDES: dict[str, tuple[bool, int, tuple[GuideStep, ...]]] = {
             GuideStep(
                 title="Ouvrir l’annonce Jobvite",
                 fields=["document:cv"],
-                tips="Le bouton « Apply » mène au formulaire /apply ; un compte est parfois proposé mais rarement obligatoire.",
+                tips="Repère le bouton « Apply » sur la fiche officielle et vérifie si le formulaire demande un compte.",
             ),
             _CV_STEP,
             _LETTER_STEP,
@@ -554,7 +545,7 @@ _PLATFORM_GUIDES: dict[str, tuple[bool, int, tuple[GuideStep, ...]]] = {
             GuideStep(
                 title="Ouvrir la candidature Ashby",
                 fields=["document:cv"],
-                tips="Ashby sert le formulaire sur /application depuis la fiche de l’offre ; aucun compte n’est requis.",
+                tips="Ouvre la candidature depuis la fiche officielle Ashby et vérifie les champs demandés.",
             ),
             _CV_STEP,
             GuideStep(
@@ -684,20 +675,31 @@ def human_apply_guide(job: dict[str, Any]) -> ApplyGuide:
     source_name = job.get("source_name", "") if isinstance(job, dict) else getattr(job, "source_name", "")
     checked = _check_url(official_url)
     platform = detect_platform(checked.url, source_name)
-    from_url = _platform_from_host(checked.hostname)
 
     if platform in _PLATFORM_GUIDES:
         needs_account, estimated_minutes, steps = _PLATFORM_GUIDES[platform]
-        step_list = list(steps)
+        step_list = [GuideStep(step.title, list(step.fields), step.tips) for step in steps]
     else:
-        needs_account, estimated_minutes, step_list = False, 15, list(_GENERIC_GUIDE)
+        needs_account, estimated_minutes = False, 15
+        step_list = [GuideStep(step.title, list(step.fields), step.tips) for step in _GENERIC_GUIDE]
+
+    trust = job.get("official_source_trust") or {}
+    verified = bool(job.get("source_verified")) and isinstance(trust, dict) and trust.get("status") == "verified"
+    warnings = ["Étapes, durée et besoin de compte sont indicatifs ; le formulaire de l’employeur doit être relu."]
+    apply_url = ""
+    if verified:
+        apply_url, rejected = _published_apply_url(job, checked)
+        if rejected:
+            warnings.append("Le lien de formulaire publié n’a pas été retenu ; le lien officiel de l’offre est conservé.")
+    else:
+        warnings.append("Source officielle non vérifiée : aucun lien de candidature n’est proposé.")
 
     return ApplyGuide(
         platform=platform,
-        # Une transformation d'URL n'est sûre que sur un domaine officiel de la
-        # plateforme ; un lien employeur reconnu via la source reste intact.
-        apply_url=_direct_apply_url(platform, checked) if from_url else checked.url,
+        apply_url=apply_url,
         steps=step_list,
         needs_account=needs_account,
         estimated_minutes=estimated_minutes,
+        source_verified=verified,
+        warnings=warnings,
     )
