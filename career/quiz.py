@@ -82,10 +82,10 @@ class QuizEngine:
         if not chapter:
             return None
         chosen_difficulty = difficulty or self.difficulty(chapter)
-        section_hits = self.index.search(chapter, limit=8, section=chapter)
+        section_hits = self.index.chunks_for_section(chapter)
         if chapter.lower().startswith(("topic ", "chapter ", "section ")) and not section_hits:
             return None
-        chunks = self.index.search(chapter, limit=8)
+        chunks = section_hits[:8] if section_hits else self.index.search(chapter, limit=8)
         if not chunks:
             return None
         attempts = self._conn.execute("SELECT COUNT(*) FROM quiz_attempts WHERE chapter = ?", (chapter,)).fetchone()[0]

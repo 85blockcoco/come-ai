@@ -99,5 +99,8 @@ def test_learning_routes_are_local_and_refuse_unknown_chapter(tmp_path: Path) ->
         assert response.json()["citations"]
         assert client.get("/career/chapters").json()["chapters"]
         assert client.get("/career/search", params={"q": "MOIC"}).json()["results"]
+        chapter_question = client.post("/career/quiz/next", json={"chapter": "TOPIC 3"})
+        assert chapter_question.status_code == 200
+        assert chapter_question.json()["question"]["chapter"] == "TOPIC 3"
         missing = client.post("/career/quiz/next", json={"chapter": "TOPIC 99"})
         assert missing.status_code == 404

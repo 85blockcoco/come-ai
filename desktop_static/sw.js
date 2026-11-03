@@ -13,6 +13,13 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET') return;
   if (url.pathname.startsWith('/api') || url.pathname.startsWith('/career')) {
+    if (url.pathname.startsWith('/career/summary/')) {
+      e.respondWith(fetch(e.request).then((response) => {
+        const copy = response.clone();
+        return caches.open(CACHE).then((cache) => cache.put(e.request, copy)).then(() => response);
+      }).catch(() => caches.match(e.request)));
+      return;
+    }
     e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
     return;
   }

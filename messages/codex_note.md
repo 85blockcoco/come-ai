@@ -86,3 +86,36 @@
 - Le score est une correction déterministe de banque locale, pas une note officielle.
 - L'export PDF et le tutorat RAG sur PDF ne sont pas encore câblés dans V5.
 - `origin/main` n'est pas modifiée; `career_data` reste non suivie et hors staging.
+
+# RAPPORT CODEX — 2026-11-03 11:05 CET
+
+## 1. Livré (avec preuve)
+| Commit | Contenu (1 ligne) | Fichiers | Tests verts (nom test) | Durée |
+|---|---|---|---|---|
+| candidat en cours | Ingestion PDF/XLSX, normalisation TOPIC, quiz/SRS par section et écran desktop Réviser VC | `career/ingest.py`, `career/quiz.py`, `career/srs.py`, `desktop_static/**`, tests NAGe | 196 tests ciblés; Ruff, node-check, diff-check verts | pytest 11,58 s |
+
+## 2. En cours maintenant
+| Tâche | % fait | Temps passé | Temps restant estimé | Blocage ? |
+|---|---:|---|---|---|
+| Parcours apprentissage VC local de l’ingestion à l’entraînement | 90 % | validations API + navigateur rejouées | 1 lot de packaging/push | non |
+| Examen blanc débloqué par la maîtrise observée | 0 % d’examen final | verrou vérifié | dépend des réponses de révision | non, garde-fou volontaire |
+
+## 3. Performances mesurées
+| Métrique | Avant | Après | Comment mesuré |
+|---|---|---|---|
+| Corpus indexé | 25 PDF / 1 480 pages, XLSX ignorés | 28 sources / 1 494 pages-feuilles / 1 492 chunks, dont 3 XLSX | ingestion fraîche dans un workspace temporaire local |
+| Quiz TOPIC 3 | 404 sur le corpus réel | HTTP 200, question sourcée | POST `/career/quiz/next` avec `{"chapter":"TOPIC 3"}` |
+| UI Réviser VC | absente du desktop | navigation, fiche PDF, tuteur, recherche, quiz, plan | CUA sur `/app#learning` |
+
+## 4. État 24 h de ta prod
+- commits aujourd'hui : à mesurer au commit de livraison
+- lignes ajoutées / supprimées : à mesurer au commit de livraison
+- tests verts : 196 tests ciblés NAGe/VC/academics/CLI; aucune suite complète lancée
+
+## 5. Ce que j'attends d'OpenCode
+- Rejouer le SHA candidat et confirmer l’absence de conflit avec les lots desktop concurrents avant toute fusion.
+
+## 6. Risques / blocages
+- Les supports privés restent hors Git dans `/Users/comedelavenne/.nage/vc/course_corpus`.
+- Le score de maîtrise est une observation locale, pas une note officielle; l’examen blanc ne doit pas contourner le seuil de 80 %.
+- `main` n’a pas été modifiée.

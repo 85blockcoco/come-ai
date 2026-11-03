@@ -65,7 +65,7 @@ class SRSStore:
     def generate(self, index: CorpusIndex, *, chapter: str | None = None, limit: int = 40) -> list[Flashcard]:
         import json
 
-        chunks = index.search(chapter or "venture capital startup valuation term sheet governance", limit=min(limit, 20), section=chapter)
+        chunks = index.chunks_for_section(chapter)[: min(limit, 20)] if chapter else index.search("venture capital startup valuation term sheet governance", limit=min(limit, 20))
         created: list[Flashcard] = []
         for chunk in chunks:
             sentence = re.split(r"(?<=[.!?])\s+|\n+", chunk.text.strip())[0].strip()

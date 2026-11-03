@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 DEFAULT_CORPUS_ROOT = Path("/Users/comedelavenne/.nage/vc/course_corpus")
-MAX_PDF_BYTES = 50 * 1024 * 1024
+MAX_SOURCE_BYTES = 50 * 1024 * 1024
 MAX_CHUNK_CHARS = 2_400
 MIN_CHUNK_CHARS = 20
 
@@ -52,6 +52,29 @@ def _cosine(query: dict[str, float], vector: dict[str, float]) -> float:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _topic_from_name(name: str) -> str | None:
+    """Return a stable topic prefix for filenames such as ``Topic_3_...``."""
+    match = re.search(r"(?:^|[^a-z])topic[_ -]?(\d+)(?=$|[^0-9])", name, re.IGNORECASE)
+    return f"TOPIC {match.group(1)}" if match else None
+
+
+def _normalize_section(value: str, source_name: str = "") -> str:
+    """Keep human headings readable while making topic filters deterministic."""
+    clean = re.sub(r"\s+", " ", value).strip(" -•\t")
+    topic = _topic_from_name(source_name)
+    match = re.match(r"^topic\s*(\d+)\b(?:\s*[—–:-]\s*(.*))?$", clean, re.IGNORECASE)
+    if match:
+        suffix = f" — {match.group(2).strip()}" if match.group(2) else ""
+        return f"TOPIC {match.group(1)}{suffix}"
+    if topic:
+        # Topic PDFs often use numbered slide headings ("3. Valuation")
+        # instead of repeating their filename's topic label. Keep both so
+        # ``TOPIC 3`` remains a stable filter while the slide title is useful
+        # in the UI and citations.
+        return f"{topic} — {clean}" if clean and clean != "Document" else topic
+    return clean or _topic_from_name(source_name) or "Document"
 
 
 @dataclass(frozen=True)
@@ -154,36 +177,61 @@ class CorpusIndex:
             candidate.relative_to(root)
         except ValueError as error:
             raise CorpusError("Ce fichier est hors du corpus de cours autorisé.") from error
-        if candidate.suffix.lower() != ".pdf" and not candidate.name.lower().endswith(".pdf.txt"):
-            raise CorpusError("Le corpus pédagogique accepte uniquement des PDF locaux.")
+        allowed = candidate.suffix.lower() in {".pdf", ".xlsx"} or candidate.name.lower().endswith((".pdf.txt", ".xlsx.txt"))
+        if not allowed:
+            raise CorpusError("Le corpus pédagogique accepte uniquement des PDF ou XLSX locaux.")
         if not candidate.is_file():
             raise CorpusError("Le document de cours demandé est introuvable.")
-        if candidate.stat().st_size > MAX_PDF_BYTES:
-            raise CorpusError("Le PDF de cours dépasse la taille locale autorisée.")
+        if candidate.stat().st_size > MAX_SOURCE_BYTES:
+            raise CorpusError("Le document de cours dépasse la taille locale autorisée.")
         return candidate
 
     @staticmethod
     def _read_pages(path: Path) -> list[SourcePage]:
-        if path.name.lower().endswith(".pdf.txt"):
+        if path.name.lower().endswith((".pdf.txt", ".xlsx.txt")):
             raw = path.read_text(encoding="utf-8", errors="replace")
             source_id = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
-            matches = list(re.finditer(r"^===\s*PAGE\s+(\d+)\s*===\s*$", raw, re.MULTILINE | re.IGNORECASE))
+            is_xlsx = path.name.lower().endswith(".xlsx.txt")
+            marker = r"^===\s*SHEET\s+(.+?)\s*===\s*$" if is_xlsx else r"^===\s*PAGE\s+(\d+)\s*===\s*$"
+            matches = list(re.finditer(marker, raw, re.MULTILINE | re.IGNORECASE))
             if not matches:
-                return [SourcePage(source_id, str(path.with_name(path.name[:-4])), 1, raw.strip(), "Document")]
+                source_name = path.name[:-4]
+                return [SourcePage(source_id, str(path.with_name(source_name)), 1, raw.strip(), _topic_from_name(source_name) or "Document")]
             pages: list[SourcePage] = []
             for index, marker in enumerate(matches):
                 start = marker.end()
                 end = matches[index + 1].start() if index + 1 < len(matches) else len(raw)
-                page_number = int(marker.group(1))
+                page_number = index + 1 if is_xlsx else int(marker.group(1))
                 text = raw[start:end].strip()
                 lines = [re.sub(r"\s+", " ", line).strip() for line in text.splitlines() if line.strip()]
-                section = "Document"
+                source_name = path.name[:-4]
+                section = _topic_from_name(source_name) or (marker.group(1).strip() if is_xlsx else "Document")
                 for line in lines[:12]:
                     lower = line.lower()
                     if lower.startswith(("topic ", "chapter ", "section ", "session ", "part ")) or (line == line.upper() and sum(char.isalpha() for char in line) >= 5):
                         section = line[:180]
                         break
-                pages.append(SourcePage(source_id, str(path.with_name(path.name[:-4])), page_number, "\n".join(lines), section))
+                pages.append(SourcePage(source_id, str(path.with_name(source_name)), page_number, "\n".join(lines), _normalize_section(section, source_name)))
+            return pages
+        if path.suffix.lower() == ".xlsx":
+            try:
+                from openpyxl import load_workbook
+            except ImportError as error:  # pragma: no cover - packaging failure
+                raise CorpusError("La lecture des XLSX nécessite openpyxl localement.") from error
+            try:
+                workbook = load_workbook(path, data_only=False, read_only=True)
+            except Exception as error:
+                raise CorpusError(f"XLSX illisible : {path.name}.") from error
+            source_id = hashlib.sha256(path.read_bytes()).hexdigest()[:24]
+            pages: list[SourcePage] = []
+            for number, sheet in enumerate(workbook.worksheets, start=1):
+                rows: list[str] = []
+                for row in sheet.iter_rows(values_only=True):
+                    values = [str(value).strip() for value in row if value is not None and str(value).strip()]
+                    if values:
+                        rows.append(" | ".join(values))
+                pages.append(SourcePage(source_id, str(path), number, "\n".join(rows), _normalize_section(sheet.title, path.name)))
+            workbook.close()
             return pages
         try:
             from pypdf import PdfReader
@@ -204,8 +252,10 @@ class CorpusIndex:
                 is_heading = lower.startswith(("topic ", "chapter ", "section ", "session ", "part ")) or bool(_NUMBERED_SECTION_RE.match(line))
                 is_heading = is_heading or (line == line.upper() and sum(char.isalpha() for char in line) >= 5)
                 if is_heading and len(line) <= 180:
-                    current_section = line[:180]
+                    current_section = _normalize_section(line[:180], path.name)
                     break
+            if current_section == "Document":
+                current_section = _topic_from_name(path.name) or current_section
             pages.append(SourcePage(source_id, str(path), number, "\n".join(lines), current_section))
         return pages
 
@@ -246,7 +296,7 @@ class CorpusIndex:
         with self._conn:
             self._conn.execute(
                 "INSERT INTO documents(source_id,source_path,sha256,pages,characters,ingested_at) VALUES(?,?,?,?,?,?)",
-                (source_id, str(authorized), digest, len(pages), characters, _now()),
+                (source_id, pages[0].source_path if pages else str(authorized), digest, len(pages), characters, _now()),
             )
             self._conn.executemany(
                 "INSERT INTO chunks(chunk_id,source_id,source_path,page_start,page_end,section,text,vector_json) VALUES(?,?,?,?,?,?,?,?)",
@@ -269,10 +319,13 @@ class CorpusIndex:
         # ``.pdf.txt`` mirrors so indexing can run without copying personal
         # documents into Git or requiring a second read of the source folder.
         paths.extend(sorted(self.corpus_root.rglob("*.pdf.txt")))
+        paths.extend(sorted(self.corpus_root.rglob("*.xlsx")))
+        paths.extend(sorted(self.corpus_root.rglob("*.xlsx.txt")))
         seen_stems: set[str] = set()
         for path in paths:
-            stem = path.name[:-4] if path.name.lower().endswith(".pdf.txt") else path.name
-            if stem in seen_stems and path.name.lower().endswith(".pdf.txt"):
+            mirror = path.name.lower().endswith((".pdf.txt", ".xlsx.txt"))
+            stem = path.name[:-4] if mirror else path.name
+            if stem in seen_stems and mirror:
                 continue
             seen_stems.add(stem)
             try:
@@ -327,7 +380,26 @@ class CorpusIndex:
         return scored[: max(1, min(limit, 20))]
 
     def chunks_for_section(self, section: str) -> list[SourceChunk]:
-        return self.search(section, limit=20, section=section)
+        """Return all indexed chunks in a section without scoring the heading.
+
+        Topic labels are metadata, not necessarily words in the extracted body;
+        filtering through ``search()`` therefore used to make valid chapters
+        look empty (especially for spreadsheet sheets and sparse PDF pages).
+        """
+        needle = str(section or "").strip().lower()
+        if not needle:
+            return []
+        rows = self._conn.execute(
+            "SELECT * FROM chunks WHERE lower(section) LIKE ? ORDER BY source_path, page_start, chunk_id LIMIT 100",
+            (f"%{needle}%",),
+        ).fetchall()
+        return [
+            SourceChunk(
+                row["chunk_id"], row["source_id"], row["source_path"],
+                int(row["page_start"]), int(row["page_end"]), row["section"], row["text"], 0.0,
+            )
+            for row in rows
+        ]
 
     def sections(self) -> list[str]:
         rows = self._conn.execute("SELECT DISTINCT section FROM chunks WHERE trim(section) <> '' ORDER BY section").fetchall()

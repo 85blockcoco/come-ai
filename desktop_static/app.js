@@ -11,6 +11,11 @@
     jobs: null,
     overview: null,
     missions: null,
+    learning: {
+      manifest: null, chapters: [], dashboard: null, plan: null, due: [],
+      selectedChapter: "TOPIC 3", summary: null, quiz: null, tutor: null,
+      search: [], searchQuery: "", busy: false,
+    },
     filter: "",
     tracker: null,
     chat: [],
@@ -67,6 +72,7 @@
     tracking: { title: "Suivi", subtitle: "envois confirmés · relances à copier" },
     offers: { title: "Offres", subtitle: "offres suivies · filtre instantané" },
     assistant: { title: "Terminal", subtitle: "assistant local · aucun cloud par défaut" },
+    learning: { title: "Réviser VC", subtitle: "cours sourcé · progression · entraînement jusqu’à l’examen" },
     missions: { title: "Missions", subtitle: "flotte de construction · preuves vérifiées" },
     memory: { title: "Mémoire", subtitle: "sources locales indexées · citables · supprimables" },
   };
@@ -97,6 +103,18 @@
     jobs: async () => (state.jobs = await api("/api/career/jobs?limit=300")),
     overview: async () => (state.overview = await api("/api/v5/overview")),
     missions: async () => (state.missions = await api("/api/app/missions")),
+    learning: async () => {
+      const [manifest, chapters, dashboard, plan, due] = await Promise.all([
+        api("/career/manifest"), api("/career/chapters"), api("/career/learning/dashboard"),
+        api("/career/plan"), api("/career/srs/due?limit=8"),
+      ]);
+      state.learning.manifest = manifest;
+      state.learning.chapters = chapters.chapters || [];
+      state.learning.dashboard = dashboard;
+      state.learning.plan = plan;
+      state.learning.due = due.cards || [];
+      return state.learning;
+    },
   };
 
   async function loadAll() {
@@ -160,6 +178,7 @@
     else if (view === "applications") renderApplications();
     else if (view === "offers") renderOffers();
     else if (view === "assistant") renderAssistant();
+    else if (view === "learning") renderLearning();
     else if (view === "missions") renderMissions();
     else if (view === "memory") renderMemory();
   }
@@ -479,6 +498,123 @@
         $("#chatForm").requestSubmit();
       }
     });
+  }
+
+  const learningTopics = [
+    ["TOPIC 1", "Introduction & écosystème"],
+    ["TOPIC 2", "Évaluer une startup"],
+    ["TOPIC 3", "Valorisation, ownership & returns"],
+    ["TOPIC 4", "Term sheets & négociation"],
+    ["TOPIC 5", "Gouvernance, suivi & exits"],
+  ];
+
+  function renderLearning() {
+    const host = $("#view-learning");
+    const l = state.learning;
+    if (!l.manifest) { host.replaceChildren(loading()); return; }
+    const chapters = learningTopics.map(([value, label]) => el("option", { value }, `${value} · ${label}`));
+    const select = el("select", { class: "learning-select", "aria-label": "Chapitre à réviser" }, chapters);
+    select.value = l.selectedChapter;
+    select.addEventListener("change", async () => {
+      l.selectedChapter = select.value; l.summary = null; l.quiz = null;
+      renderLearning();
+      await loadLearningSummary();
+    });
+    const d = l.dashboard || {};
+    const score = Math.round(Number(d.overall_score || 0) * 100);
+    const docs = l.manifest.documents?.length ?? 0;
+    const pages = l.manifest.pages ?? 0;
+    const summaryBlock = l.summary
+      ? el("div", { class: "learning-summary" },
+          el("div", { class: "learning-summary-head" }, el("strong", {}, l.summary.chapter),
+            el("a", { class: "chip green", href: `/career/summary/${encodeURIComponent(l.selectedChapter)}/pdf`, target: "_blank", rel: "noopener" }, "fiche PDF ↗")),
+          ...[["Définitions", l.summary.definitions], ["Formules", l.summary.formulas], ["À retenir", l.summary.key_points]].map(([title, items]) =>
+            el("div", { class: "learning-list" }, el("b", {}, title), ...(items?.slice(0, 4).map((item) => el("p", {}, item)) || [el("p", { class: "note" }, "Aucun élément retrouvé.")]))),
+          el("div", { class: "learning-citations" }, "Sources : ", ...(l.summary.citations || []).slice(0, 5).map((cite) => el("span", { class: "chip" }, `${cite.source} · p.${cite.page}`))),
+        )
+      : el("div", { class: "empty" }, el("strong", {}, "Fiche prête à ouvrir"), el("span", {}, "Choisis un chapitre puis ouvre sa fiche sourcée."));
+    const quizBlock = l.quiz
+      ? el("div", { class: "learning-quiz" },
+          el("div", { class: "section-title no-gap" }, el("h3", {}, "Quiz progressif"), el("span", { class: "hint" }, l.quiz.difficulty || "foundation")),
+          el("p", {}, l.quiz.prompt),
+          el("div", { class: "quiz-options" }, l.quiz.options.map((option, index) => el("button", { class: "quiz-option", type: "button", onclick: () => answerLearningQuiz(index) }, `${String.fromCharCode(65 + index)}. ${option}`))),
+          el("p", { class: "note tight" }, "Chaque réponse reste liée à sa citation. Si tu bloques, ouvre la fiche avant de répondre."),
+        )
+      : el("div", { class: "learning-quiz" }, el("div", { class: "section-title no-gap" }, el("h3", {}, "Quiz progressif"), el("span", { class: "hint" }, "récupération active")), el("p", {}, "Une question sourcée, puis un retour immédiat sur ta maîtrise."), el("button", { class: "primary-btn", type: "button", onclick: loadLearningQuiz }, "Lancer une question"));
+    const tutorAnswer = l.tutor ? el("div", { class: "tutor-answer", role: "status" }, el("p", {}, l.tutor.answer || l.tutor.message || "Réponse refusée."), el("div", { class: "learning-citations" }, ...(l.tutor.citations || []).map((cite) => el("span", { class: "chip green" }, `${cite.source} · p.${cite.page}`)))) : null;
+    const tutorForm = el("form", { class: "tutor-form" },
+      el("textarea", { id: "learningQuestion", rows: "2", maxlength: "4000", placeholder: "Je n’ai pas compris… explique-moi avec le cours." }),
+      el("button", { class: "ghost-btn", type: "submit" }, "Demander au tuteur"),
+    );
+    tutorForm.addEventListener("submit", askLearningTutor);
+    const searchForm = el("form", { class: "learning-search" },
+      el("input", { id: "learningSearchInput", type: "search", value: l.searchQuery, placeholder: "Rechercher une notion dans les 28 sources…", "aria-label": "Rechercher dans le cours" }),
+      el("button", { class: "ghost-btn", type: "submit" }, "Chercher"),
+    );
+    searchForm.addEventListener("submit", searchLearning);
+    const searchResults = l.search.length
+      ? el("div", { class: "search-results" }, l.search.slice(0, 6).map((hit) =>
+        el("div", { class: "search-result" },
+          el("b", {}, `${hit.source} · p.${hit.page}`),
+          el("span", {}, hit.excerpt),
+        )))
+      : el("p", { class: "note" }, "Recherche une notion, une formule ou un terme de term sheet.");
+    const planItems = (l.plan?.sessions || []).slice(0, 5).map((session) =>
+      el("div", {}, el("b", {}, session.date), el("span", {}, session.chapter), el("small", {}, session.phase)));
+    host.replaceChildren(
+      el("div", { class: "card learning-hero" },
+        el("div", {}, el("h2", {}, "Objectif : arriver prêt à l’examen."), el("p", {}, `${docs} sources locales · ${num(pages)} pages · aucune réponse hors corpus. Révise en priorité ce qui n’est pas maîtrisé.`)),
+        el("div", { class: "learning-score" }, el("b", {}, `${score}%`), el("small", {}, "maîtrise observée")),
+      ),
+      el("div", { class: "learning-toolbar card" }, select, el("span", { class: "chip green" }, `${d.mastered_count ?? 0}/${d.total_count ?? 5} chapitres maîtrisés`), el("span", { class: "chip amber" }, `${l.due.length} cartes dues`), el("a", { class: "ghost-btn", href: "/career/plan", target: "_blank", rel: "noopener" }, "Plan détaillé ↗")),
+      el("div", { class: "learning-grid" },
+        el("div", { class: "card padded" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Fiche du chapitre"), el("span", { class: "hint" }, "sourcée page par page")), summaryBlock, el("button", { class: "ghost-btn", type: "button", onclick: loadLearningSummary }, "Actualiser la fiche")),
+        el("div", { class: "card padded" }, quizBlock),
+      ),
+      el("div", { class: "learning-grid" },
+        el("div", { class: "card padded" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Tuteur du cours"), el("span", { class: "hint" }, "mode : je n’ai pas compris")), tutorForm, tutorAnswer),
+        el("div", { class: "card padded" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Recherche"), el("span", { class: "hint" }, "citations conservées")), searchForm, searchResults),
+      ),
+      el("div", { class: "card padded learning-plan" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Plan des prochaines sessions"), el("span", { class: "hint" }, `${l.plan?.start || "—"} → ${l.plan?.until || "—"}`)), el("div", { class: "plan-row" }, planItems)),
+    );
+    if (!l.summary) loadLearningSummary();
+  }
+
+  async function loadLearningSummary() {
+    const l = state.learning;
+    try { l.summary = await api(`/career/summary/${encodeURIComponent(l.selectedChapter)}`); renderLearning(); }
+    catch (error) { console.error("LEARNING_SUMMARY_FAIL", error.message); }
+  }
+
+  async function loadLearningQuiz() {
+    const l = state.learning;
+    try { const data = await api("/career/quiz/next", { method: "POST", body: JSON.stringify({ chapter: l.selectedChapter }) }); l.quiz = data.question; renderLearning(); }
+    catch (error) { alert(`Quiz indisponible : ${error.message}`); }
+  }
+
+  async function answerLearningQuiz(index) {
+    const l = state.learning;
+    if (!l.quiz) return;
+    try { const result = await api("/career/quiz/answer", { method: "POST", body: JSON.stringify({ question_id: l.quiz.question_id, option_index: index }) }); l.dashboard = { ...(l.dashboard || {}), overall_score: result.mastery?.score || 0 }; l.quiz = null; await loaders.learning(); renderLearning(); }
+    catch (error) { alert(`Réponse non enregistrée : ${error.message}`); }
+  }
+
+  async function askLearningTutor(event) {
+    event.preventDefault();
+    const input = $("#learningQuestion");
+    if (!input?.value.trim()) return;
+    const l = state.learning;
+    try { l.tutor = await api("/career/tutor/ask", { method: "POST", body: JSON.stringify({ question: input.value.trim(), mode: "explanation" }) }); renderLearning(); }
+    catch (error) { alert(`Tuteur indisponible : ${error.message}`); }
+  }
+
+  async function searchLearning(event) {
+    event.preventDefault();
+    const input = $("#learningSearchInput");
+    const query = input?.value.trim(); if (!query) return;
+    const l = state.learning; l.searchQuery = query;
+    try { l.search = (await api(`/career/search?q=${encodeURIComponent(query)}&limit=8`)).results || []; renderLearning(); }
+    catch (error) { alert(`Recherche indisponible : ${error.message}`); }
   }
 
   async function sendChat(event) {
