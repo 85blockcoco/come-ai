@@ -1,5 +1,5 @@
 const CACHE = 'nage-shell-v1';
-const SHELL = ['/app-static/', '/app-static/index.html', '/app-static/app.css?v=20261103-vc-review-4', '/app-static/app.js?v=20261103-vc-review-4', '/app-static/icon.png'];
+const SHELL = ['/app-static/', '/app-static/index.html', '/app-static/app.css?v=20261103-vc-review-4&build=immersive-4', '/app-static/app.js?v=20261103-vc-review-4&build=immersive-4', '/app-static/icon.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

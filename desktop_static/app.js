@@ -19,7 +19,7 @@
     learning: {
       manifest: null, coverage: null, chapters: [], dashboard: null, plan: null, due: [], srsStats: null, error: "",
       selectedChapter: "TOPIC 3", summary: null, summaryLoading: false, quiz: null, tutor: null,
-      quizFeedback: null, srsRevealed: false, srsBusy: false, exam: null, examResult: null,
+      quizFeedback: null, quizHintOpen: false, srsRevealed: false, srsBusy: false, exam: null, examResult: null,
       examBusy: false, examSubmitting: false, tutorMode: "explanation",
       practiceCases: [], practiceError: "", practiceCaseId: "VC25-Q16", practiceAnswers: {}, practiceResult: null, practiceBusy: false,
       search: [], searchQuery: "", busy: false,
@@ -543,12 +543,20 @@
   }
 
   const learningTopics = [
-    ["TOPIC 1", "Introduction & écosystème"],
-    ["TOPIC 2", "Évaluer une startup"],
-    ["TOPIC 3", "Valorisation, ownership & returns"],
-    ["TOPIC 4", "Term sheets & négociation"],
-    ["TOPIC 5", "Gouvernance, suivi & exits"],
+    ["TOPIC 1", "Introduction & écosystème", "🌱"],
+    ["TOPIC 2", "Évaluer une startup", "🔎"],
+    ["TOPIC 3", "Valorisation, ownership & returns", "🧮"],
+    ["TOPIC 4", "Term sheets & négociation", "📝"],
+    ["TOPIC 5", "Gouvernance, suivi & exits", "🌍"],
   ];
+
+  const learningHints = {
+    "TOPIC 1": "Pense aux trois rôles du financement par étapes : inciter à atteindre des jalons, apprendre sur l’entreprise et garder l’option de poursuivre ou d’arrêter.",
+    "TOPIC 2": "Repars des axes de la Venture Evaluation Matrix et demande-toi quelles preuves soutiennent vraiment chaque dimension.",
+    "TOPIC 3": "Écris les formules avant les chiffres. Distingue valeur post-money, part acquise, multiple de sortie et rendement annuel.",
+    "TOPIC 4": "Compare l’effet économique des clauses dans chaque scénario de sortie. Une préférence et une participation ne se calculent pas de la même façon.",
+    "TOPIC 5": "Relie droits de décision, suivi de l’entreprise et scénario de sortie; identifie qui peut agir et à quel moment.",
+  };
 
   function renderLearning() {
     const host = $("#view-learning");
@@ -581,15 +589,43 @@
     const learningProgress = Math.round((revisionProgress + (understood ? 100 : 0) + exerciseProgress + examProgress) / 4);
     const currentStep = [revisionProgress, understood ? 100 : 0, exerciseProgress, examProgress].findIndex((value) => value < 100);
     const scrollToStudyStep = (id) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    let focusPlan;
+    if (l.due.length) {
+      focusPlan = { eyebrow: `${l.due.length} carte${l.due.length === 1 ? "" : "s"} à revoir`, title: "Réactive tes connaissances", text: "Réponds de mémoire avant de retourner la carte. Chaque rappel t’indique ce qui tient déjà et ce qui mérite un autre passage.", label: "Commencer les cartes", target: "study-revision" };
+    } else if (!cardsTotal) {
+      focusPlan = { eyebrow: "Première étape · rappel actif", title: "Construis ton premier jeu de révision", text: `Crée des cartes sourcées pour ${l.selectedChapter}, puis entraîne-toi sans relire la réponse.`, label: "Créer mes cartes", action: generateLearningCards };
+    } else if (!understood) {
+      focusPlan = { eyebrow: "Prochaine étape · comprendre", title: "Relie les idées entre elles", text: "Lis les notions du chapitre, ouvre les extraits du cours et demande une reformulation si un passage reste flou.", label: "Ouvrir le cours", target: "study-learning" };
+    } else if (exerciseProgress < 100) {
+      focusPlan = { eyebrow: "Prochaine étape · s’entraîner", title: "Teste ce que tu viens d’apprendre", text: "Une question ciblée permet de repérer précisément la notion à retravailler.", label: "Faire une question", target: "study-exercises" };
+    } else {
+      focusPlan = { eyebrow: "Prochaine étape · consolider", title: "Tu peux passer au défi suivant", text: "Continue avec un exercice du sujet passé ou vérifie les conditions du simulateur d’examen.", label: "Voir les exercices", target: "study-exercises" };
+    }
+    const startFocusSession = () => focusPlan.action ? focusPlan.action() : scrollToStudyStep(focusPlan.target);
+    const learningFocus = el("section", { class: "card learning-focus", "aria-labelledby": "learningFocusTitle" },
+      el("div", { class: "learning-focus-art", "aria-hidden": "true" },
+        el("div", { class: "learning-illustration" },
+          el("span", { class: "learning-illustration-book" }, "📖"),
+          el("span", { class: "learning-illustration-idea" }, "💡"),
+          el("span", { class: "learning-illustration-sparkle" }, "✨"),
+          el("div", { class: "learning-illustration-caption" }, el("i"), el("i"), el("i"), el("i")))),
+      el("div", { class: "learning-focus-copy" },
+        el("span", { class: "learning-focus-eyebrow" }, "Ta prochaine petite victoire · ", focusPlan.eyebrow),
+        el("h2", { id: "learningFocusTitle" }, focusPlan.title),
+        el("p", {}, focusPlan.text),
+        el("button", { class: "primary-btn learning-focus-action", type: "button", onclick: startFocusSession }, focusPlan.label),
+        el("small", {}, "La progression suit tes activités dans NAGe; elle ne prédit pas ta note.")),
+      el("div", { class: "learning-progress-ring", style: `--learning-progress: ${learningProgress}%`, role: "img", "aria-label": `${learningProgress}% du parcours enregistré` },
+        el("div", {}, el("strong", {}, `${learningProgress}%`), el("span", {}, "parcours"))));
     const learningPath = el("section", { class: "card padded learning-path", "aria-labelledby": "learningPathTitle" },
       el("div", { class: "learning-path-top" }, el("h2", { id: "learningPathTitle" }, "Ton parcours jusqu’à l’examen"), el("strong", {}, `${learningProgress}%`)),
       el("p", {}, "Révision → apprentissage → exercices → examen blanc. L’avancement suit les activités faites; la maîtrise reste mesurée par tes réponses aux quiz."),
       el("progress", { max: "100", value: String(learningProgress), "aria-label": `Progression du parcours d’étude : ${learningProgress}%` }),
       el("div", { class: "learning-step-grid" }, ...[
-        { title: "1. Réviser", progress: revisionProgress, detail: cardsTotal ? `${cardsReviewed}/${cardsTotal} cartes de ce chapitre notées.` : "Génère des cartes sourcées pour commencer.", label: "Voir les cartes", target: "study-revision" },
-        { title: "2. Apprendre", progress: understood ? 100 : 0, detail: "Lis la fiche du cours, demande une explication, puis fais ton auto-évaluation.", label: understood ? "À revoir" : "J’ai compris", toggle: true },
-        { title: "3. S’exercer", progress: exerciseProgress, detail: `${Math.min(exerciseCovered, exerciseTarget)}/${exerciseTarget} questions distinctes vues · ${Number(selectedProgress.correct || 0)}/${exerciseAttempts || 0} justes.`, label: "Commencer un quiz", target: "study-exercises" },
-        { title: "4. Examen blanc", progress: examProgress, detail: completedExams ? `Examen(s) terminé(s) : ${completedExams} · dernier score ${Math.round(Number(d.exam?.last_score || 0) * 100)}%.` : `${masteredChapters}/${totalChapters} chapitres à 80 % pour déverrouiller l’examen complet.`, label: completedExams ? "Revoir l’examen" : "Voir les conditions", target: "study-exam" },
+        { title: "📇 Réviser", progress: revisionProgress, detail: cardsTotal ? `${cardsReviewed}/${cardsTotal} cartes de ce chapitre notées.` : "Génère des cartes sourcées pour commencer.", label: "Voir les cartes", target: "study-revision" },
+        { title: "📘 Comprendre", progress: understood ? 100 : 0, detail: "Lis les notions repérées dans le cours, ouvre les extraits, puis fais ton auto-évaluation.", label: understood ? "À revoir" : "J’ai compris", toggle: true },
+        { title: "🧮 S’entraîner", progress: exerciseProgress, detail: `${Math.min(exerciseCovered, exerciseTarget)}/${exerciseTarget} questions distinctes vues · ${Number(selectedProgress.correct || 0)}/${exerciseAttempts || 0} justes.`, label: "Commencer un quiz", target: "study-exercises" },
+        { title: "🏁 Se tester", progress: examProgress, detail: completedExams ? `Examen(s) terminé(s) : ${completedExams} · dernier score ${Math.round(Number(d.exam?.last_score || 0) * 100)}%.` : `${masteredChapters}/${totalChapters} chapitres au seuil de maîtrise pour déverrouiller l’examen.`, label: completedExams ? "Revoir l’examen" : "Voir les conditions", target: "study-exam" },
       ].map((step, index) => el("article", { class: "learning-step", "data-current": String(index === currentStep), "aria-current": index === currentStep ? "step" : null },
         el("div", { class: "learning-step-head" }, el("strong", {}, step.title), el("span", {}, `${step.progress}%`)),
         el("p", {}, step.detail),
@@ -599,19 +635,23 @@
           : el("button", { class: "ghost-btn", type: "button", onclick: () => scrollToStudyStep(step.target) }, step.label),
       ))),
     );
-    const chapters = learningTopics.map(([value, label]) => el("option", { value, selected: l.selectedChapter === value }, `${value} · ${label}`));
-    const select = el("select", { class: "learning-select", "aria-label": "Chapitre à réviser" }, ...chapters);
-    select.addEventListener("change", async () => {
-      l.selectedChapter = select.value; l.summary = null; l.quiz = null; l.quizFeedback = null; l.srsRevealed = false;
+    const changeLearningChapter = async (chapter) => {
+      if (chapter === l.selectedChapter) return;
+      l.selectedChapter = chapter; l.summary = null; l.quiz = null; l.quizFeedback = null; l.quizHintOpen = false; l.srsRevealed = false;
       await loaders.learning(); renderLearning(); await loadLearningSummary();
-    });
+    };
+    const chapters = learningTopics.map(([value, label, icon]) => el("option", { value, selected: l.selectedChapter === value }, `${icon} ${value} · ${label}`));
+    const select = el("select", { class: "learning-select", "aria-label": "Chapitre à réviser" }, ...chapters);
+    select.addEventListener("change", () => changeLearningChapter(select.value));
+    const topicIcon = (chapter) => learningTopics.find(([value]) => value === chapter)?.[2] || "📘";
     const notionCards = (d.notions || []).map((item) => {
       const accuracy = item.score_percent ?? Math.round((item.score || 0) * 100);
       const required = Math.max(1, Number(item.coverage_required || item.attempts_required || 2));
       const covered = Number(item.covered ?? item.attempts ?? 0);
       const value = Math.round(accuracy * Math.min(1, covered / required));
-      return el("article", { class: "learning-chapter" },
-        el("div", { class: "learning-chapter-head" }, el("strong", {}, item.chapter), el("b", {}, `${value}%`)),
+      const active = item.chapter === l.selectedChapter;
+      return el("button", { class: `learning-chapter${active ? " is-selected" : ""}`, type: "button", "aria-pressed": String(active), onclick: () => changeLearningChapter(item.chapter) },
+        el("div", { class: "learning-chapter-head" }, el("strong", {}, `${topicIcon(item.chapter)} ${learningTopics.find(([key]) => key === item.chapter)?.[1] || item.chapter}`), el("b", {}, `${value}%`)),
         el("progress", { max: "100", value: String(value), "aria-label": `Progression vers la maîtrise ${item.chapter}` }),
         el("div", { class: "learning-chapter-foot" }, el("span", {}, `${item.correct || 0}/${item.attempts || 0} justes · ${accuracy}%`), el("span", { class: item.mastered ? "status-good" : "status-low" }, item.mastered ? "Maîtrisé" : "À renforcer")),
         el("small", {}, `${covered}/${required} questions distinctes · ${item.attempts || 0} réponses · ${item.due || 0} cartes dues`));
@@ -629,15 +669,64 @@
     const citationDetails = (cite) => cite ? el("details", { class: "citation-details" }, el("summary", {}, `Voir l’extrait · ${cite.source || "cours"} · ${citationLocation(cite)}`), el("p", {}, cite.excerpt || "Extrait indisponible dans le corpus indexé.")) : null;
     const summary = l.summary
       ? el("div", { class: "learning-summary" },
-          el("div", { class: "learning-summary-head" }, el("strong", {}, l.summary.chapter), el("a", { class: "chip green", href: `/career/summary/${encodeURIComponent(l.selectedChapter)}/pdf`, target: "_blank", rel: "noopener" }, "Télécharger la fiche PDF ↗")),
-          ...[["Définitions", l.summary.definitions], ["Formules", l.summary.formulas], ["À retenir", l.summary.key_points]].map(([title, items]) => el("div", { class: "learning-list" }, el("b", {}, title), ...(items?.slice(0, 4).map((item) => el("p", {}, item)) || [el("p", { class: "note" }, "Aucun élément retrouvé.")]))),
-          el("div", { class: "learning-citations" }, "Sources : ", ...(l.summary.citations || []).slice(0, 5).map((cite) => el("span", { class: "chip" }, `${cite.source} · ${citationLocation(cite)}`))))
+          el("div", { class: "learning-summary-head" }, el("strong", {}, `Fiche active · ${l.summary.chapter}`), el("a", { class: "chip green", href: `/career/summary/${encodeURIComponent(l.selectedChapter)}/pdf`, target: "_blank", rel: "noopener" }, "Télécharger la fiche PDF ↗")),
+          el("p", { class: "learning-summary-note" }, "Extraits repérés dans les documents indexés — ouvre une rubrique pour tout lire. Des formules ou tableaux peuvent être extraits de façon fragmentaire : vérifie leur passage source avant de les mémoriser."),
+          ...[["📘 Définitions", l.summary.definitions], ["🧮 Formules repérées", l.summary.formulas], ["✨ Idées à retenir", l.summary.key_points]].map(([title, items], index) => {
+            const entries = Array.isArray(items) ? items : [];
+            return el("details", { class: "learning-list-group", open: index === 0 ? true : null },
+              el("summary", {}, title, el("span", { class: "learning-list-count" }, String(entries.length))),
+              ...(entries.length ? entries.map((item) => el("p", {}, item)) : [el("p", { class: "note" }, "Aucun élément retrouvé dans cette rubrique pour ce chapitre.")]));
+          }),
+          el("div", { class: "learning-citations" }, el("strong", {}, "Sources liées · ouvre les extraits"), ...(l.summary.citations || []).map(citationDetails)))
       : el("div", { class: "empty" }, el("strong", {}, l.summaryLoading ? "Chargement de la fiche…" : "Fiche du chapitre"), el("span", {}, "La fiche est extraite du cours et garde ses références de page."));
+    const mathTerm = (symbol, subscript = "") => el("span", { class: "formula-term" }, symbol, subscript ? el("sub", {}, subscript) : null);
+    const formulaCard = (title, equation, note) => el("article", { class: "formula-card" },
+      el("span", { class: "formula-card-title" }, title), equation, el("small", {}, note));
+    const formulaBoard = l.selectedChapter === "TOPIC 3"
+      ? el("section", { class: "card formula-board", "aria-labelledby": "formulaBoardTitle" },
+          el("div", { class: "formula-board-head" },
+            el("div", {}, el("span", { class: "learning-focus-eyebrow" }, "🧮 Atelier visuel · calculs VC"), el("h2", { id: "formulaBoardTitle" }, "De l’investissement au rendement"), el("p", {}, "Lis le chemin une fois, puis essaie de refaire le calcul sans regarder.")),
+            el("span", { class: "formula-source-badge" }, "Cours Topic 3 · pp. 2, 10, 16–17")),
+          el("div", { class: "formula-flow", role: "img", "aria-label": "Investissement, valorisation post-money, part de l'investisseur, produit de sortie, MOIC puis IRR" },
+            el("div", {}, el("span", {}, "💶"), el("strong", {}, "Investissement"), el("small", {}, "I")), el("span", { class: "formula-flow-arrow", "aria-hidden": "true" }, "→"),
+            el("div", {}, el("span", {}, "🏷️"), el("strong", {}, "Post-money"), el("small", {}, "V_POST")), el("span", { class: "formula-flow-arrow", "aria-hidden": "true" }, "→"),
+            el("div", {}, el("span", {}, "📊"), el("strong", {}, "Part VC"), el("small", {}, "F_INV = I ÷ V_POST")), el("span", { class: "formula-flow-arrow", "aria-hidden": "true" }, "→"),
+            el("div", {}, el("span", {}, "🚪"), el("strong", {}, "Sortie"), el("small", {}, "X → MOIC → IRR"))),
+          el("div", { class: "formula-grid" },
+            formulaCard("1 · Valoriser le tour", el("div", { class: "formula-equation-stack" },
+              el("div", { class: "formula-equation" }, mathTerm("V", "POST"), " = I ÷ F", el("sub", {}, "INV")),
+              el("div", { class: "formula-equation" }, mathTerm("V", "PRE"), " = V", el("sub", {}, "POST"), " − I")),
+              "Tour simple; un pool d’options change la table fully diluted."),
+            formulaCard("2 · Trouver la part", el("div", { class: "formula-equation" }, mathTerm("F", "INV"), " = I ÷ V", el("sub", {}, "POST")), "Part post-money de l’investisseur dans le calcul simple du cours."),
+            formulaCard("3 · Mesurer le multiple", el("div", { class: "formula-equation" }, "MOIC", el("sub", {}, "i"), " = X", el("sub", {}, "i"), " ÷ I", el("sub", {}, "i")), "Le MOIC compare le produit reçu au capital investi; il ne tient pas compte du temps."),
+            formulaCard("4 · Annualiser le rendement", el("div", { class: "formula-equation" }, "IRR", el("sub", {}, "i"), " = MOIC", el("sub", {}, "i"), el("sup", {}, "1 / T", el("sub", {}, "i")), " − 1"), "T est la durée en années. Un même MOIC donne un IRR plus faible si l’attente est plus longue.")),
+          el("div", { class: "formula-glossary" }, el("span", {}, "I · capital investi"), el("span", {}, "X · produit reçu à la sortie"), el("span", {}, "T · durée en années"), el("span", {}, "ρ · hurdle rate")),
+          el("details", { class: "formula-worked-example" },
+            el("summary", {}, "✨ Dérouler un calcul du sujet 2025 · Q16"),
+            el("p", { class: "formula-challenge-prompt" }, "Avant de révéler les étapes, prends une feuille : investissement 5 M$, sortie 50 M$ dans 5 ans, hurdle 40 %. Quelle part l’investisseur vise-t-il ?"),
+            el("ol", { class: "formula-steps" },
+              el("li", {}, el("span", {}, "1"), el("div", {}, el("strong", {}, "Calculer le multiple requis"), el("p", {}, "(1 + 40 %)⁵ = 1,40⁵ ≈ 5,378×"))),
+              el("li", {}, el("span", {}, "2"), el("div", {}, el("strong", {}, "Revenir à la post-money"), el("p", {}, "50 M$ ÷ 5,378 ≈ 9,297 M$"))),
+              el("li", {}, el("span", {}, "3"), el("div", {}, el("strong", {}, "Calculer l’ownership"), el("p", {}, "5 M$ ÷ 9,297 M$ ≈ 53,8 %"))),
+            ),
+            el("p", { class: "formula-source-note" }, "Exemple repris du corrigé 2025, p. 4. C’est un sujet passé, pas une prédiction du prochain examen."),
+            el("button", { class: "ghost-btn", type: "button", onclick: () => scrollToStudyStep("study-exercises") }, "Continuer avec les exercices")))
+      : null;
     const quiz = l.quiz
-      ? el("div", { class: "learning-quiz" }, el("div", { class: "section-title no-gap" }, el("h3", {}, "Quiz progressif"), el("span", { class: "hint" }, l.quiz.difficulty)), el("p", {}, l.quiz.prompt), citationDetails(l.quiz.citation), el("div", { class: "quiz-options" }, ...l.quiz.options.map((option, index) => el("button", { class: "quiz-option", type: "button", disabled: l.busy, onclick: () => answerLearningQuiz(index) }, `${String.fromCharCode(65 + index)}. ${option}`))))
+      ? el("div", { class: "learning-quiz" },
+          el("div", { class: "section-title no-gap" }, el("h3", {}, "Quiz progressif"), el("span", { class: "hint" }, l.quiz.difficulty)),
+          el("p", { class: "quiz-prompt" }, l.quiz.prompt),
+          el("button", { class: "hint-button", type: "button", "aria-expanded": String(l.quizHintOpen), onclick: () => { l.quizHintOpen = !l.quizHintOpen; renderLearning(); } }, l.quizHintOpen ? "💡 Masquer l’indice" : "💡 Besoin d’un indice ?"),
+          l.quizHintOpen ? el("div", { class: "quiz-hint", role: "note" }, el("strong", {}, "Indice de méthode"), el("p", {}, learningHints[l.selectedChapter] || "Reformule la notion avec les mots du cours, puis vérifie l’extrait source.")) : null,
+          citationDetails(l.quiz.citation),
+          el("div", { class: "quiz-options" }, ...l.quiz.options.map((option, index) => el("button", { class: "quiz-option", type: "button", disabled: l.busy, onclick: () => answerLearningQuiz(index) }, `${String.fromCharCode(65 + index)}. ${option}`))))
       : el("div", { class: "learning-quiz" }, el("div", { class: "section-title no-gap" }, el("h3", {}, "Quiz progressif"), el("span", { class: "hint" }, "correction sourcée")),
-          l.quizFeedback ? el("div", { class: l.quizFeedback.correct ? "quiz-feedback is-correct" : "quiz-feedback is-wrong", role: "status" }, el("strong", {}, l.quizFeedback.correct ? "Bonne réponse" : "À revoir"), el("p", {}, l.quizFeedback.correct_answer), el("p", {}, l.quizFeedback.explanation), citationDetails(l.quizFeedback.citation), el("button", { class: "primary-btn", type: "button", onclick: loadLearningQuiz }, "Question suivante"))
-            : el("div", {}, el("p", {}, "Une question à la fois : réponds, lis la correction, puis retente."), el("button", { class: "primary-btn", type: "button", onclick: loadLearningQuiz }, "Lancer une question")));
+          l.quizFeedback ? el("div", { class: l.quizFeedback.correct ? "quiz-feedback is-correct" : "quiz-feedback is-wrong", role: "status" },
+            el("span", { class: "quiz-feedback-emoji", "aria-hidden": "true" }, l.quizFeedback.correct ? "🎯" : "🌱"),
+            el("strong", {}, l.quizFeedback.correct ? "Bien joué, tu l’as retrouvée !" : "On comprend l’erreur et on repart."),
+            el("p", {}, l.quizFeedback.correct_answer), el("p", {}, l.quizFeedback.explanation), citationDetails(l.quizFeedback.citation),
+            el("button", { class: "primary-btn", type: "button", onclick: loadLearningQuiz }, l.quizFeedback.correct ? "Continuer mon parcours" : "Essayer une autre question"))
+            : el("div", { class: "quiz-start" }, el("p", {}, "Une question à la fois : tente une réponse, lis pourquoi, puis poursuis à ton rythme."), el("button", { class: "primary-btn", type: "button", onclick: loadLearningQuiz }, "Lancer une question")));
     const practiceCase = l.practiceCases.find((item) => item.case_id === l.practiceCaseId) || l.practiceCases[0];
     if (practiceCase && practiceCase.case_id !== l.practiceCaseId) l.practiceCaseId = practiceCase.case_id;
     const practiceSelect = el("select", { class: "learning-select", "aria-label": "Exercice chiffré du sujet passé" },
@@ -693,10 +782,10 @@
       practiceResult);
     const card = l.due[0];
     const srs = card
-      ? el("div", { class: "srs-card" }, el("p", { class: "srs-card-question" }, card.question), l.srsRevealed
-        ? el("div", { class: "srs-card-answer" }, el("p", {}, card.answer), citationDetails(card.source), el("div", { class: "srs-ratings", role: "group", "aria-label": "Évaluer la carte" }, ...[["again", "Encore"], ["hard", "Difficile"], ["good", "Bien"], ["easy", "Facile"]].map(([rating, label]) => el("button", { class: "ghost-btn", type: "button", disabled: l.srsBusy, onclick: () => reviewLearningCard(rating) }, label))))
+      ? el("div", { class: "srs-card" }, el("span", { class: "srs-card-nudge" }, "🧠 Essaie de répondre avant de retourner la carte"), el("p", { class: "srs-card-question" }, card.question), l.srsRevealed
+        ? el("div", { class: "srs-card-answer" }, el("p", {}, card.answer), citationDetails(card.source), el("div", { class: "srs-ratings", role: "group", "aria-label": "Évaluer ton rappel" }, ...[["again", "😕", "Encore"], ["hard", "🤔", "Difficile"], ["good", "🙂", "Bien"], ["easy", "🚀", "Facile"]].map(([rating, icon, label]) => el("button", { class: "ghost-btn srs-rating", type: "button", disabled: l.srsBusy, "aria-label": label, onclick: () => reviewLearningCard(rating) }, el("span", { "aria-hidden": "true" }, icon), label))))
         : el("button", { class: "primary-btn", type: "button", onclick: () => { l.srsRevealed = true; renderLearning(); } }, "Révéler la réponse"))
-      : el("div", { class: "empty" }, el("strong", {}, l.srsStats?.total ? "Toutes les cartes sont à jour" : "Aucune carte encore"), el("span", {}, l.srsStats?.total ? "Ta prochaine révision est planifiée." : `Génère des cartes sourcées pour ${l.selectedChapter}.`));
+      : el("div", { class: "empty srs-empty" }, el("span", { class: "srs-empty-emoji", "aria-hidden": "true" }, l.srsStats?.total ? "✨" : "🌱"), el("strong", {}, l.srsStats?.total ? "Bravo, les rappels du moment sont faits !" : "Ta première séance commence ici"), el("span", {}, l.srsStats?.total ? "Aucune carte n’est due maintenant. Tu peux lire une fiche ou tester une question." : `Génère des cartes sourcées pour ${l.selectedChapter}.`));
     const tutorForm = el("form", { class: "tutor-form" },
       el("textarea", { id: "learningQuestion", rows: "2", maxlength: "4000", placeholder: "Je n’ai pas compris… explique-moi avec le cours.", "aria-label": "Question sur le cours" }),
       el("select", { id: "learningTutorMode", class: "learning-select", "aria-label": "Mode d’explication" }, ...[["explanation", "Expliquer"], ["reformulation", "Reformuler"], ["example", "Exemple du cours"], ["beginner", "Comme à un débutant"], ["did_not_understand", "Je n’ai pas compris"]].map(([value, label]) => el("option", { value, selected: l.tutorMode === value }, label))),
@@ -737,20 +826,38 @@
       el("div", { class: "card padded" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Tuteur du cours"), el("span", { class: "hint" }, "réponses bornées au chapitre sélectionné")), tutorForm, tutor));
     const searchPanel = el("div", { class: "card padded" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Recherche dans le cours"), el("span", { class: "hint" }, "tous les supports")), searchForm, searchResults);
     const exercisePanel = el("div", { class: "card padded learning-exercise", id: "study-exercises" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Étape 3 · Exercices progressifs"), el("span", { class: "hint" }, l.quiz?.difficulty || "correction sourcée")), quiz, guidedPractice);
+    const coveragePanel = el("div", { class: "card coverage-panel" },
+      el("div", { class: "coverage-head" }, el("strong", {}, "Couverture des supports"), el("span", { class: coveragePct === 100 ? "status-good" : "status-low" }, coverage.inventory_available ? `${coverage.indexed_sources}/${coverage.expected_sources} fichiers · ${coveragePct}%` : "Inventaire source indisponible")),
+      el("progress", { max: "100", value: String(coveragePct), "aria-label": "Couverture des fichiers de cours" }),
+      el("small", {}, `${num(coverage.covered_content_units || 0)}/${num(coverage.expected_content_units || 0)} pages ou feuilles indexées · local uniquement`),
+      el("p", { class: "coverage-audit-note" }, "🔎 Contrôle d’exhaustivité · l’audit indépendant du 3 novembre a relevé un PDF au-delà de la limite d’import et un examen 2024 scanné sans texte extrait. Le pourcentage ci-dessus décrit l’index local; il ne prouve pas que toutes les pages et formules du dossier sont couvertes."),
+      el("details", { class: "coverage-details" }, el("summary", {}, "Voir les fichiers du corpus"), el("ul", {}, ...(coverage.sources || []).map((source) => el("li", { class: source.text_available ? "coverage-ok" : "coverage-missing" }, `${source.text_available ? "✓" : "!"} ${source.name} · ${num(source.indexed_units)}/${num(source.expected_content_units)} unités`)))));
+    const learningToolbar = el("div", { class: "learning-toolbar card" }, select,
+      el("span", { class: "chip green" }, `${d.mastered_count || 0}/${d.total_count || 5} chapitres maîtrisés`),
+      el("span", { class: "chip amber" }, `${d.cards_due ?? l.due.length} cartes dues`),
+      el("a", { class: "ghost-btn", href: "/career/plan", target: "_blank", rel: "noopener" }, "Plan détaillé ↗"),
+      el("a", { class: "ghost-btn", href: "/career/plan/pdf", target: "_blank", rel: "noopener" }, "Plan PDF ↗"));
+    const chapterProgressPanel = el("div", { class: "card padded chapter-dashboard" },
+      el("div", { class: "section-title no-gap" }, el("h2", {}, "Progression vers la maîtrise"), el("span", { class: "hint" }, `justesse moyenne observée ${score}%`)),
+      el("div", { class: "chapter-progress-grid" }, ...notionCards));
+    const learningPlan = el("div", { class: "card padded learning-plan" },
+      el("div", { class: "section-title no-gap" }, el("h2", {}, "Plan des prochaines sessions"), el("span", { class: "hint" }, `${l.plan?.start || "—"} → ${l.plan?.until || "—"}`)),
+      el("div", { class: "plan-row" }, ...planItems));
     host.replaceChildren(
-      el("div", { class: "card learning-hero" }, el("div", {}, el("h2", {}, "Objectif : arriver prêt à l’examen."), el("p", {}, `${l.manifest.documents?.length || 0} sources locales indexées · ${num(l.manifest.pages || 0)} pages / feuilles · aucune réponse hors corpus.`)), el("div", { class: "learning-score" }, el("b", {}, `${score}%`), el("small", {}, "justesse moyenne observée"))),
+      learningFocus,
       learningSubjectNav,
       learningPath,
-      el("div", { class: "card coverage-panel" }, el("div", { class: "coverage-head" }, el("strong", {}, "Couverture des supports"), el("span", { class: coveragePct === 100 ? "status-good" : "status-low" }, coverage.inventory_available ? `${coverage.indexed_sources}/${coverage.expected_sources} fichiers · ${coveragePct}%` : "Inventaire source indisponible")), el("progress", { max: "100", value: String(coveragePct), "aria-label": "Couverture des fichiers de cours" }), el("small", {}, `${num(coverage.covered_content_units || 0)}/${num(coverage.expected_content_units || 0)} pages ou feuilles indexées · local uniquement`), el("details", { class: "coverage-details" }, el("summary", {}, "Voir les fichiers du corpus"), el("ul", {}, ...(coverage.sources || []).map((source) => el("li", { class: source.text_available ? "coverage-ok" : "coverage-missing" }, `${source.text_available ? "✓" : "!"} ${source.name} · ${num(source.indexed_units)}/${num(source.expected_content_units)} unités`))))),
-      el("div", { class: "learning-toolbar card" }, select, el("span", { class: "chip green" }, `${d.mastered_count || 0}/${d.total_count || 5} chapitres maîtrisés`), el("span", { class: "chip amber" }, `${d.cards_due ?? l.due.length} cartes dues`), el("a", { class: "ghost-btn", href: "/career/plan", target: "_blank", rel: "noopener" }, "Plan détaillé ↗"), el("a", { class: "ghost-btn", href: "/career/plan/pdf", target: "_blank", rel: "noopener" }, "Plan PDF ↗")),
-      examObjectivePanel,
-      el("div", { class: "card padded chapter-dashboard" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Progression vers la maîtrise"), el("span", { class: "hint" }, `justesse moyenne observée ${score}%`)), el("div", { class: "chapter-progress-grid" }, ...notionCards)),
+      learningToolbar,
       revisionPanel,
+      formulaBoard,
       learningPanel,
       searchPanel,
       exercisePanel,
-      el("div", { class: "card padded learning-plan" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Plan des prochaines sessions"), el("span", { class: "hint" }, `${l.plan?.start || "—"} → ${l.plan?.until || "—"}`)), el("div", { class: "plan-row" }, ...planItems)),
-      exam);
+      exam,
+      learningPlan,
+      chapterProgressPanel,
+      examObjectivePanel,
+      coveragePanel);
     if (!l.summary && !l.summaryLoading) loadLearningSummary();
   }
 
@@ -766,7 +873,7 @@
 
   async function loadLearningQuiz() {
     const l = state.learning;
-    try { const data = await api("/career/quiz/next", { method: "POST", body: JSON.stringify({ chapter: l.selectedChapter }) }); l.quiz = data.question; l.quizFeedback = null; renderLearning(); }
+    try { const data = await api("/career/quiz/next", { method: "POST", body: JSON.stringify({ chapter: l.selectedChapter }) }); l.quiz = data.question; l.quizFeedback = null; l.quizHintOpen = false; renderLearning(); }
     catch (error) { alert(`Quiz indisponible : ${error.message}`); }
   }
 
@@ -794,7 +901,7 @@
     const l = state.learning;
     if (!l.quiz) return;
     l.busy = true;
-    try { renderLearning(); const result = await api("/career/quiz/answer", { method: "POST", body: JSON.stringify({ question_id: l.quiz.question_id, option_index: index }) }); l.quiz = null; l.quizFeedback = result; await loaders.learning(); }
+    try { renderLearning(); const result = await api("/career/quiz/answer", { method: "POST", body: JSON.stringify({ question_id: l.quiz.question_id, option_index: index }) }); l.quiz = null; l.quizHintOpen = false; l.quizFeedback = result; await loaders.learning(); }
     catch (error) { alert(`Réponse non enregistrée : ${error.message}`); }
     finally { l.busy = false; renderLearning(); }
   }
