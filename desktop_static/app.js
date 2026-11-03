@@ -619,12 +619,13 @@
       el("progress", { max: "100", value: String(examObjectivesPct), "aria-label": "Notions repérées du sujet VC 2025 vues en quiz" }),
       el("small", {}, "Il s’agit d’un suivi de couverture du sujet historique, pas d’une maîtrise ni d’une simulation des cas libres."),
       (examObjectives.missing_ids || []).length ? el("details", { class: "coverage-details" }, el("summary", {}, "Voir les objectifs encore à pratiquer"), el("p", {}, examObjectives.missing_ids.map((tag) => tag.replace("VC25-Q", "Q")).join(" · "))) : null);
-    const citationDetails = (cite) => cite ? el("details", { class: "citation-details" }, el("summary", {}, `Voir l’extrait · ${cite.source || "cours"} · p.${cite.page ?? "—"}`), el("p", {}, cite.excerpt || "Extrait indisponible dans le corpus indexé.")) : null;
+    const citationLocation = (cite) => /\.xlsx$/i.test(cite?.source || "") && cite.section ? `onglet ${cite.section}` : `p.${cite?.page ?? "—"}`;
+    const citationDetails = (cite) => cite ? el("details", { class: "citation-details" }, el("summary", {}, `Voir l’extrait · ${cite.source || "cours"} · ${citationLocation(cite)}`), el("p", {}, cite.excerpt || "Extrait indisponible dans le corpus indexé.")) : null;
     const summary = l.summary
       ? el("div", { class: "learning-summary" },
           el("div", { class: "learning-summary-head" }, el("strong", {}, l.summary.chapter), el("a", { class: "chip green", href: `/career/summary/${encodeURIComponent(l.selectedChapter)}/pdf`, target: "_blank", rel: "noopener" }, "Télécharger la fiche PDF ↗")),
           ...[["Définitions", l.summary.definitions], ["Formules", l.summary.formulas], ["À retenir", l.summary.key_points]].map(([title, items]) => el("div", { class: "learning-list" }, el("b", {}, title), ...(items?.slice(0, 4).map((item) => el("p", {}, item)) || [el("p", { class: "note" }, "Aucun élément retrouvé.")]))),
-          el("div", { class: "learning-citations" }, "Sources : ", ...(l.summary.citations || []).slice(0, 5).map((cite) => el("span", { class: "chip" }, `${cite.source} · p.${cite.page}`))))
+          el("div", { class: "learning-citations" }, "Sources : ", ...(l.summary.citations || []).slice(0, 5).map((cite) => el("span", { class: "chip" }, `${cite.source} · ${citationLocation(cite)}`))))
       : el("div", { class: "empty" }, el("strong", {}, l.summaryLoading ? "Chargement de la fiche…" : "Fiche du chapitre"), el("span", {}, "La fiche est extraite du cours et garde ses références de page."));
     const quiz = l.quiz
       ? el("div", { class: "learning-quiz" }, el("div", { class: "section-title no-gap" }, el("h3", {}, "Quiz progressif"), el("span", { class: "hint" }, l.quiz.difficulty)), el("p", {}, l.quiz.prompt), citationDetails(l.quiz.citation), el("div", { class: "quiz-options" }, ...l.quiz.options.map((option, index) => el("button", { class: "quiz-option", type: "button", disabled: l.busy, onclick: () => answerLearningQuiz(index) }, `${String.fromCharCode(65 + index)}. ${option}`))))
@@ -646,11 +647,16 @@
       const groups = [...new Set(practiceCase.steps.map((step) => step.group))];
       for (const group of groups) {
         const fields = practiceCase.steps.filter((step) => step.group === group).map((step) => {
-          const input = el("input", {
-            type: "text", inputmode: "decimal", autocomplete: "off", spellcheck: "false",
-            value: l.practiceAnswers[step.step_id] || "", "aria-label": `${step.label}, en ${step.unit}`,
-            oninput: (event) => { l.practiceAnswers[step.step_id] = event.target.value; },
-          });
+          const savedAnswer = l.practiceAnswers[step.step_id] ?? "";
+          const input = step.input_type === "choice"
+            ? el("select", { class: "practice-control", "aria-label": step.label, onchange: (event) => { l.practiceAnswers[step.step_id] = event.target.value; } },
+                el("option", { value: "", selected: !savedAnswer }, "Choisir Alpha ou Mega"),
+                ...step.choices.map((choice) => el("option", { value: choice, selected: savedAnswer === choice }, choice)))
+            : el("input", {
+                class: "practice-control", type: "text", inputmode: "decimal", autocomplete: "off", spellcheck: "false",
+                value: savedAnswer, "aria-label": `${step.label}, en ${step.unit}`,
+                oninput: (event) => { l.practiceAnswers[step.step_id] = event.target.value; },
+              });
           return el("label", { class: "practice-step" },
             el("span", {}, el("strong", {}, step.label), el("small", {}, `${step.points} pt · ${step.unit}`)), input);
         });
@@ -665,13 +671,18 @@
           el("p", { class: "practice-rubric-note" }, l.practiceResult.rubric),
           ...l.practiceResult.steps.map((step) => el("article", { class: `practice-feedback ${step.correct ? "is-correct" : "is-wrong"}` },
             el("div", { class: "practice-feedback-head" }, el("strong", {}, step.label), el("span", {}, `${step.awarded} / ${step.points} pt`)),
-            el("p", {}, step.valid_number ? `Ta réponse : ${step.entered} ${step.unit}` : "Aucun nombre exploitable saisi."),
+            el("p", {}, step.valid_answer ? `Ta réponse : ${step.entered_display}${step.unit && step.input_type !== "choice" ? ` ${step.unit}` : ""}` : step.input_type === "choice" ? "Aucune option valide choisie." : "Aucun nombre exploitable saisi."),
             el("p", {}, `Réponse attendue : ${step.expected_display}`),
             el("p", {}, step.explanation))),
           ...(l.practiceResult.citations || []).map(citationDetails)) : null;
+    const practiceScoreCaption = practiceCase
+      ? practiceCase.official_question_score > practiceCase.max_score
+        ? `${practiceCase.max_score} points indicatifs · ${practiceCase.official_question_score} points au total`
+        : `${practiceCase.max_score} points`
+      : "";
     const guidedPractice = el("section", { class: "case-practice", "aria-label": "Exercices chiffrés de l’examen passé" },
-      el("div", { class: "case-practice-head" }, el("div", {}, el("h3", {}, "Calculs au format de l’épreuve"), el("p", {}, "Travaille les questions 16 à 19 avec des étapes explicites et un barème partiel pédagogique.")), practiceSelect),
-      practiceCase ? el("div", { class: "case-practice-prompt" }, el("strong", {}, `${practiceCase.exam_question} · ${practiceCase.max_score} points`), el("p", {}, practiceCase.prompt), el("small", {}, `Tentatives : ${practiceCase.stats.attempts} · meilleur score : ${practiceCase.stats.best_score == null ? "—" : `${practiceCase.stats.best_score}/${practiceCase.stats.max_score}`}`), ...(practiceCase.citations || []).map(citationDetails)) : el("p", { class: "note" }, "Aucun exercice disponible."),
+      el("div", { class: "case-practice-head" }, el("div", {}, el("h3", {}, "Calculs au format de l’épreuve"), el("p", {}, "Entraîne-toi sur les questions 16 à 21. Les points par sous-partie de Q20/Q21 sont indicatifs : le corrigé ne donne qu’un total de 15 points par question.")), practiceSelect),
+      practiceCase ? el("div", { class: "case-practice-prompt" }, el("strong", {}, `${practiceCase.exam_question} · ${practiceScoreCaption}`), el("p", {}, practiceCase.prompt), el("small", {}, `Tentatives : ${practiceCase.stats.attempts} · meilleur score : ${practiceCase.stats.best_score == null ? "—" : `${practiceCase.stats.best_score}/${practiceCase.stats.max_score}`}`), ...(practiceCase.citations || []).map(citationDetails)) : el("p", { class: "note" }, "Aucun exercice disponible."),
       practiceForm,
       practiceResult);
     const card = l.due[0];
@@ -689,7 +700,7 @@
     const searchForm = el("form", { class: "learning-search" }, el("input", { id: "learningSearchInput", type: "search", value: l.searchQuery, placeholder: `Rechercher dans les ${l.manifest.documents?.length || 0} sources…`, "aria-label": "Rechercher dans le cours" }), el("button", { class: "ghost-btn", type: "submit" }, "Chercher"));
     searchForm.addEventListener("submit", searchLearning);
     const tutor = l.tutor ? el("div", { class: "tutor-answer", role: "status" }, el("p", {}, l.tutor.answer || l.tutor.message || "Réponse refusée."), ...((l.tutor.citations || []).map(citationDetails))) : null;
-    const searchResults = l.search.length ? el("div", { class: "search-results" }, ...l.search.slice(0, 8).map((hit) => el("div", { class: "search-result" }, el("b", {}, `${hit.source} · p.${hit.page}`), el("span", {}, hit.excerpt)))) : el("p", { class: "note" }, "Recherche une formule, une notion ou un terme du cours.");
+    const searchResults = l.search.length ? el("div", { class: "search-results" }, ...l.search.slice(0, 8).map((hit) => el("div", { class: "search-result" }, el("b", {}, `${hit.source} · ${citationLocation(hit)}`), el("span", {}, hit.excerpt)))) : el("p", { class: "note" }, "Recherche une formule, une notion ou un terme du cours.");
     const planItems = (l.plan?.sessions || []).map((session) => el("div", {}, el("b", {}, session.date), el("span", {}, session.chapter), el("small", {}, session.phase)));
     let exam;
     if (l.examResult) {

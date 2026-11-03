@@ -21,10 +21,13 @@ class PracticeStep:
     group: str
     label: str
     unit: str
-    expected: float
+    expected: float | None
     tolerance: float
     points: float
     explanation: str
+    input_type: str = "number"
+    choices: tuple[str, ...] = ()
+    expected_choice: str | None = None
 
 
 @dataclass(frozen=True)
@@ -38,6 +41,9 @@ class PracticeCase:
     citation_source_contains: str
     course_query: str
     steps: tuple[PracticeStep, ...]
+    official_question_score: float | None = None
+    rubric_note: str | None = None
+    course_section: str | None = None
 
     @property
     def max_score(self) -> float:
@@ -51,9 +57,13 @@ class PracticeCase:
             "chapter": self.chapter,
             "prompt": self.prompt,
             "max_score": self.max_score,
-            "rubric": "Barème pédagogique NAGe, indicatif; le corrigé officiel ne publie pas de grille de points partiels.",
+            "official_question_score": self.official_question_score or self.max_score,
+            "rubric": self.rubric_note or "Barème pédagogique NAGe, indicatif; le corrigé officiel ne publie pas de grille de points partiels.",
             "steps": [
-                {"step_id": step.step_id, "group": step.group, "label": step.label, "unit": step.unit, "points": step.points}
+                {
+                    "step_id": step.step_id, "group": step.group, "label": step.label, "unit": step.unit,
+                    "points": step.points, "input_type": step.input_type, "choices": list(step.choices),
+                }
                 for step in self.steps
             ],
             "citations": citations,
@@ -127,6 +137,121 @@ _CASES: tuple[PracticeCase, ...] = (
             PracticeStep("series_c_exit_pct", "3 · Ownership à la sortie", "Part Series C à la sortie", "%", 10.0, 0.5, 0.5, "La participation Series C est de 200 / 2 000 = 10 %; aucun tour ultérieur ne la dilue."),
         ),
     ),
+    PracticeCase(
+        "VC25-Q20A", "Q20 a", "Comparer les term sheets", "TOPIC 4",
+        "Du point de vue des fondateurs de Butchered Data, choisis l’offre la plus favorable dans chacune des cinq catégories. Compare les données des offres Alpha et Mega; il faut aussi tenir compte de la cap table et du contrôle.",
+        "Butchered Data Alpha Mega term sheet valuation ownership anti-dilution option pool vesting board",
+        _EXAM_SOURCE,
+        "liquidation preference anti-dilution broad based weighted average full ratchet vesting board control option pool",
+        (
+            PracticeStep("valuation", "a · Term sheet", "Valorisation et part des fondateurs", "offre", None, 0, 0.8, "Mega : les fondateurs détiennent 31,9 % contre 26,4 % avec Alpha, selon la cap table fournie." , "choice", ("Alpha", "Mega"), "Mega"),
+            PracticeStep("anti_dilution", "a · Term sheet", "Protection anti-dilution", "offre", None, 0, 0.8, "Alpha : le weighted average broad-based est moins sévère pour les fondateurs qu’un full ratchet, qui réajuste le prix de conversion au prix du nouveau tour." , "choice", ("Alpha", "Mega"), "Alpha"),
+            PracticeStep("option_pool", "a · Term sheet", "Taille du pool d’options", "offre", None, 0, 0.8, "Mega : le pool post-money est de 15 % contre 25 % pour Alpha, donc une dilution moindre des autres actionnaires." , "choice", ("Alpha", "Mega"), "Mega"),
+            PracticeStep("vesting", "a · Term sheet", "Conditions de vesting du CEO", "offre", None, 0, 0.8, "Alpha : l’offre décrite n’ajoute pas de clause de reverse vesting du CEO; Mega rend 75 % des actions sujettes au rachat sur 36 mois." , "choice", ("Alpha", "Mega"), "Alpha"),
+            PracticeStep("board", "a · Term sheet", "Contrôle du board", "offre", None, 0, 0.8, "Alpha : les actions ordinaires désignent deux sièges sur trois; avec Mega, les investisseurs en désignent deux." , "choice", ("Alpha", "Mega"), "Alpha"),
+        ),
+        15,
+        "Barème pédagogique indicatif NAGe : 4 points attribués à cette partie de Q20, sur 15 au total. Le corrigé officiel ne répartit pas les points par sous-partie.",
+    ),
+    PracticeCase(
+        "VC25-Q20B", "Q20 b", "Payoffs selon la valeur de sortie", "TOPIC 4",
+        "Calcule le montant reçu par Alpha et Mega pour chaque valeur de sortie. Alpha détient 4 M$ de preferred convertible et 44,4 % sur une base convertie. Mega a investi 6 M$ en preferred participante, participe à 50 % après sa préférence de 1x et son retour est plafonné à 2,5x; la conversion complète devient préférable au-delà du seuil indiqué par le corrigé.",
+        "Butchered Data exit value Alpha payoff Mega payoff 5 10 28 35 4.44 12.43 15.54 17.5",
+        _EXAM_SOURCE,
+        "participating preferred liquidation preference cap as-converted payoff convertible preferred exit valuation",
+        (
+            PracticeStep("alpha_5", "b · Payoff à la sortie", "Alpha à 5 M$ de sortie", "M$", 4.0, 0.02, 1, "Alpha reçoit le plus élevé entre la préférence de 4 M$ et la conversion : max(4; 44,4 % × 5) = 4 M$."),
+            PracticeStep("mega_5", "b · Payoff à la sortie", "Mega à 5 M$ de sortie", "M$", 5.0, 0.02, 1, "Le produit disponible est inférieur à la préférence de 6 M$; Mega reçoit le produit disponible, soit 5 M$."),
+            PracticeStep("alpha_10", "b · Payoff à la sortie", "Alpha à 10 M$ de sortie", "M$", 4.44, 0.04, 1, "Conversion : 44,4 % × 10 = 4,44 M$, supérieure à la préférence de 4 M$."),
+            PracticeStep("mega_10", "b · Payoff à la sortie", "Mega à 10 M$ de sortie", "M$", 8.0, 0.03, 1, "Préférence participante : 6 + 50 % × (10 − 6) = 8 M$, sous le cap de 15 M$."),
+            PracticeStep("alpha_28", "b · Payoff à la sortie", "Alpha à 28 M$ de sortie", "M$", 12.43, 0.05, 1, "Conversion : 44,4 % × 28 ≈ 12,43 M$, supérieure à la préférence de 4 M$."),
+            PracticeStep("mega_28", "b · Payoff à la sortie", "Mega à 28 M$ de sortie", "M$", 15.0, 0.03, 1, "La préférence participante atteint 17 M$ avant application du cap; le paiement est plafonné à 2,5 × 6 = 15 M$."),
+            PracticeStep("alpha_35", "b · Payoff à la sortie", "Alpha à 35 M$ de sortie", "M$", 15.54, 0.06, 1, "Conversion : 44,4 % × 35 ≈ 15,54 M$, supérieure à la préférence de 4 M$."),
+            PracticeStep("mega_35", "b · Payoff à la sortie", "Mega à 35 M$ de sortie", "M$", 17.5, 0.04, 1, "La conversion complète donne 50 % × 35 = 17,5 M$, supérieure au cap de 15 M$; le seuil de conversion est 30 M$."),
+        ),
+        15,
+        "Barème pédagogique indicatif NAGe : 8 points attribués à cette partie de Q20, sur 15 au total. Le corrigé officiel ne répartit pas les points par sous-partie.",
+    ),
+    PracticeCase(
+        "VC25-Q20C", "Q20 c", "Full ratchet en Series B", "TOPIC 4",
+        "Si Butchered Data choisit Mega, la Series B émet de nouvelles actions à 0,90 $ par action. Le prix de conversion de Mega est ajusté par full ratchet depuis son prix initial de 1 $. Calcule les actions ordinaires reçues par les 6 millions d’actions preferred de Mega.",
+        "Butchered Data Mega Series B issue price 0.90 full ratchet common shares 6.67 million",
+        _EXAM_SOURCE,
+        "full ratchet anti-dilution conversion price preferred shares new issue price",
+        (
+            PracticeStep("common_shares", "c · Conversion", "Actions ordinaires après full ratchet", "M d’actions", 6.67, 0.02, 3, "Le full ratchet ramène le prix de conversion de 1,00 $ à 0,90 $. Actions converties = 6 M$ / 0,90 $ = 6,67 millions."),
+        ),
+        15,
+        "Barème pédagogique indicatif NAGe : 3 points attribués à cette partie de Q20, sur 15 au total. Le corrigé officiel ne répartit pas les points par sous-partie.",
+    ),
+    PracticeCase(
+        "VC25-Q21A", "Q21 a", "Calcul des offres initiales", "TOPIC 3",
+        "Ali Baba détient 3 millions d’actions. VW propose 2 M$ à 5 M$ post-money; XY propose 1 M$ à 3 M$ pre-money. Pour chaque offre, calcule les valeurs pre-money et post-money, le prix par action, les actions nouvelles, le total d’actions et la part du fondateur. Montants en millions.",
+        "Magical Genie Veronika Windel Xavier Ypsalia initial financing pre-money post-money price per share founder ownership 5 4 60 75",
+        _EXAM_SOURCE,
+        "pre-money post-money valuation price per share new shares founder ownership financing round",
+        (
+            PracticeStep("vw_pre", "a · Offre VW", "Pre-money VW", "M$", 3, 0.02, 0.25, "Pre-money = post-money − investissement = 5 − 2 = 3 M$."),
+            PracticeStep("vw_post", "a · Offre VW", "Post-money VW", "M$", 5, 0.02, 0.25, "La valorisation post-money est donnée : 5 M$."),
+            PracticeStep("vw_price", "a · Offre VW", "Prix par action VW", "$ / action", 1, 0.02, 0.25, "Prix = pre-money / actions existantes = 3 M$ / 3 M actions = 1 $ par action."),
+            PracticeStep("vw_new_shares", "a · Offre VW", "Actions nouvelles VW", "M d’actions", 2, 0.02, 0.25, "Actions nouvelles = investissement / prix = 2 M$ / 1 $ = 2 millions."),
+            PracticeStep("vw_total_shares", "a · Offre VW", "Total d’actions VW", "M d’actions", 5, 0.02, 0.25, "Total = 3 millions d’actions du fondateur + 2 millions nouvelles = 5 millions."),
+            PracticeStep("vw_founder_pct", "a · Offre VW", "Part du fondateur VW", "%", 60, 0.3, 0.25, "Part = 3 / 5 = 60 %."),
+            PracticeStep("xy_pre", "a · Offre XY", "Pre-money XY", "M$", 3, 0.02, 0.25, "La pre-money de XY est donnée : 3 M$."),
+            PracticeStep("xy_post", "a · Offre XY", "Post-money XY", "M$", 4, 0.02, 0.25, "Post-money = pre-money + investissement = 3 + 1 = 4 M$."),
+            PracticeStep("xy_price", "a · Offre XY", "Prix par action XY", "$ / action", 1, 0.02, 0.25, "Prix = pre-money / actions existantes = 3 M$ / 3 M actions = 1 $ par action."),
+            PracticeStep("xy_new_shares", "a · Offre XY", "Actions nouvelles XY", "M d’actions", 1, 0.02, 0.25, "Actions nouvelles = investissement / prix = 1 M$ / 1 $ = 1 million."),
+            PracticeStep("xy_total_shares", "a · Offre XY", "Total d’actions XY", "M d’actions", 4, 0.02, 0.25, "Total = 3 millions d’actions du fondateur + 1 million nouvelle = 4 millions."),
+            PracticeStep("xy_founder_pct", "a · Offre XY", "Part du fondateur XY", "%", 75, 0.3, 0.25, "Part = 3 / 4 = 75 %."),
+        ),
+        15,
+        "Barème pédagogique indicatif NAGe : 3 points attribués à cette partie de Q21, sur 15 au total. Le corrigé officiel ne répartit pas les points par sous-partie.",
+    ),
+    PracticeCase(
+        "VC25-Q21B", "Q21 b", "Second tour selon le scénario", "TOPIC 3",
+        "Calcule les six lignes de la table de financement du second tour pour les trois scénarios avec financement : pre-money, post-money, prix par action, actions nouvelles, total d’actions et ownership du fondateur. VW au scénario 1 n’a pas de second tour : sa cap table reste celle de la partie a. Montants et actions en millions.",
+        "Magical Genie scenario 1 scenario 2 VW XY second financing round pre-money post-money new shares founder ownership 0.5 4 8 66.7 33.3 25",
+        _EXAM_SOURCE,
+        "financing rounds pre-money post-money share price dilution founder ownership new shares",
+        (
+            PracticeStep("s1_xy_pre", "b · Scénario 1 · XY", "Pre-money XY", "M$", 8, 0.05, 0.5, "La société a 4 M d’actions existantes à 2 $ : pre-money = 4 × 2 = 8 M$."),
+            PracticeStep("s1_xy_post", "b · Scénario 1 · XY", "Post-money XY", "M$", 9, 0.05, 0.5, "Post-money = pre-money + investissement = 8 + 1 = 9 M$."),
+            PracticeStep("s1_xy_price", "b · Scénario 1 · XY", "Prix par action", "$ / action", 2, 0.02, 0.5, "Le prix de souscription du scénario 1 est donné : 2 $ par action."),
+            PracticeStep("s1_xy_new", "b · Scénario 1 · XY", "Actions nouvelles", "M d’actions", 0.5, 0.02, 0.5, "Actions nouvelles = 1 M$ / 2 $ = 0,5 million."),
+            PracticeStep("s1_xy_total", "b · Scénario 1 · XY", "Total d’actions", "M d’actions", 4.5, 0.02, 0.5, "Total = 4 + 0,5 = 4,5 millions d’actions."),
+            PracticeStep("s1_xy_founder_pct", "b · Scénario 1 · XY", "Ownership du fondateur", "%", 66.7, 0.4, 0.5, "Ownership = 3 / 4,5 = 66,7 %."),
+            PracticeStep("s2_vw_pre", "b · Scénario 2 · VW", "Pre-money VW", "M$", 1.25, 0.03, 0.5, "Les 5 M d’actions existantes valent 0,25 $ chacune : pre-money = 1,25 M$."),
+            PracticeStep("s2_vw_post", "b · Scénario 2 · VW", "Post-money VW", "M$", 2.25, 0.03, 0.5, "Post-money = 1,25 + 1 = 2,25 M$."),
+            PracticeStep("s2_vw_price", "b · Scénario 2 · VW", "Prix par action", "$ / action", 0.25, 0.01, 0.5, "Le prix de souscription du scénario 2 est donné : 0,25 $ par action."),
+            PracticeStep("s2_vw_new", "b · Scénario 2 · VW", "Actions nouvelles", "M d’actions", 4, 0.05, 0.5, "Actions nouvelles = 1 M$ / 0,25 $ = 4 millions."),
+            PracticeStep("s2_vw_total", "b · Scénario 2 · VW", "Total d’actions", "M d’actions", 9, 0.05, 0.5, "Total = 5 + 4 = 9 millions d’actions."),
+            PracticeStep("s2_vw_founder_pct", "b · Scénario 2 · VW", "Ownership du fondateur", "%", 33.3, 0.4, 0.5, "Ownership = 3 / 9 = 33,3 %."),
+            PracticeStep("s2_xy_pre", "b · Scénario 2 · XY", "Pre-money XY", "M$", 1, 0.03, 0.5, "Les 4 M d’actions existantes valent 0,25 $ chacune : pre-money = 1 M$."),
+            PracticeStep("s2_xy_post", "b · Scénario 2 · XY", "Post-money XY", "M$", 3, 0.03, 0.5, "Post-money = 1 + 2 = 3 M$."),
+            PracticeStep("s2_xy_price", "b · Scénario 2 · XY", "Prix par action", "$ / action", 0.25, 0.01, 0.5, "Le prix de souscription du scénario 2 est donné : 0,25 $ par action."),
+            PracticeStep("s2_xy_new", "b · Scénario 2 · XY", "Actions nouvelles", "M d’actions", 8, 0.05, 0.5, "Actions nouvelles = 2 M$ / 0,25 $ = 8 millions."),
+            PracticeStep("s2_xy_total", "b · Scénario 2 · XY", "Total d’actions", "M d’actions", 12, 0.05, 0.5, "Total = 4 + 8 = 12 millions d’actions."),
+            PracticeStep("s2_xy_founder_pct", "b · Scénario 2 · XY", "Ownership du fondateur", "%", 25, 0.3, 0.5, "Ownership = 3 / 12 = 25 %."),
+        ),
+        15,
+        "Barème pédagogique indicatif NAGe : 9 points attribués à cette partie de Q21, sur 15 au total. Le corrigé officiel ne répartit pas les points par sous-partie.",
+    ),
+    PracticeCase(
+        "VC25-Q21C", "Q21 c", "Valeur espérée des offres", "TOPIC 3",
+        "Le scénario 1 a une probabilité de 75 % et le scénario 2 de 25 %. Pour VW et XY, calcule l’ownership espérée du fondateur puis sa richesse finale espérée si la sortie vaut 10 M$.",
+        "Magical Genie expected ownership expected final wealth 53.33 56.25 5.333 5.625 probability scenario",
+        _EXAM_SOURCE,
+        "expected ownership probability weighted scenarios expected value exit wealth founder dilution",
+        (
+            PracticeStep("vw_expected_pct", "c · Offre VW", "Ownership espérée du fondateur", "%", 53.33, 0.15, 0.75, "Ownership espérée = 75 % × 60 % + 25 % × 33,3 % ≈ 53,33 %."),
+            PracticeStep("vw_expected_wealth", "c · Offre VW", "Richesse finale espérée", "M$", 5.333, 0.03, 0.75, "Richesse espérée = 53,33 % × 10 M$ ≈ 5,333 M$."),
+            PracticeStep("xy_expected_pct", "c · Offre XY", "Ownership espérée du fondateur", "%", 56.25, 0.15, 0.75, "Ownership espérée = 75 % × 66,7 % + 25 % × 25 % = 56,25 %."),
+            PracticeStep("xy_expected_wealth", "c · Offre XY", "Richesse finale espérée", "M$", 5.625, 0.03, 0.75, "Richesse espérée = 56,25 % × 10 M$ = 5,625 M$."),
+        ),
+        15,
+        "Barème pédagogique indicatif NAGe : 3 points attribués à cette partie de Q21, sur 15 au total. Le corrigé officiel ne répartit pas les points par sous-partie.",
+        course_section="4. TrafalgarTech",
+    ),
 )
 
 
@@ -156,11 +281,23 @@ def _parse_number(raw: Any, *, unit: str) -> float | None:
 
 
 def _display_expected(step: PracticeStep) -> str:
+    if step.input_type == "choice":
+        return step.expected_choice or ""
     if step.unit == "%":
         value = f"{step.expected:.2f}".rstrip("0").rstrip(".")
         return f"{value} %"
-    value = f"{step.expected:.6g}"
+    value = f"{float(step.expected or 0):.6g}"
     return f"{value} {step.unit}".strip()
+
+
+def _parse_choice(raw: Any, step: PracticeStep) -> str | None:
+    if not isinstance(raw, str) or len(raw) > 80:
+        return None
+    candidate = raw.strip().casefold()
+    for option in step.choices:
+        if candidate in {option.casefold(), option[0].casefold()}:
+            return option
+    return None
 
 
 class CasePracticeEngine:
@@ -195,7 +332,7 @@ class CasePracticeEngine:
     def _citations(self, case: PracticeCase, *, reveal_excerpt: bool = False) -> list[dict[str, Any]]:
         hits = self.index.search(case.citation_query, limit=20)
         official = [hit for hit in hits if case.citation_source_contains in Path(hit.source_path).name.casefold()]
-        course = self.index.search(case.course_query, limit=20, section=case.chapter)
+        course = self.index.search(case.course_query, limit=20, section=case.course_section or case.chapter)
         result: list[dict[str, Any]] = []
         for hit in (official[:1] + course[:1]):
             cite = hit.citation()
@@ -231,18 +368,31 @@ class CasePracticeEngine:
     def submit(self, case_id: str, answers: dict[str, Any]) -> dict[str, Any]:
         case = self._case(case_id)
         if not isinstance(answers, dict):
-            raise ValueError("Les réponses doivent être fournies sous forme de champs numériques.")
+            raise ValueError("Les réponses doivent être fournies sous forme de champs connus.")
         known_steps = {step.step_id: step for step in case.steps}
         if set(answers) - set(known_steps):
             raise ValueError("Une réponse ne correspond à aucun champ de cet exercice.")
         with self._lock:
             graded: list[dict[str, Any]] = []
             score = 0.0
-            safe_answers: dict[str, float | None] = {}
+            safe_answers: dict[str, float | str | None] = {}
             for step in case.steps:
-                entered = _parse_number(answers.get(step.step_id), unit=step.unit)
-                safe_answers[step.step_id] = entered
-                correct = entered is not None and abs(entered - step.expected) <= step.tolerance
+                if step.input_type == "choice":
+                    entered_choice = _parse_choice(answers.get(step.step_id), step)
+                    safe_answers[step.step_id] = entered_choice
+                    entered: float | str | None = entered_choice
+                    valid_answer = entered_choice is not None
+                    correct = valid_answer and entered_choice == step.expected_choice
+                    entered_display = entered_choice or ""
+                    expected: float | str | None = step.expected_choice
+                else:
+                    entered_number = _parse_number(answers.get(step.step_id), unit=step.unit)
+                    safe_answers[step.step_id] = entered_number
+                    entered = entered_number
+                    valid_answer = entered_number is not None
+                    correct = valid_answer and step.expected is not None and abs(entered_number - step.expected) <= step.tolerance
+                    entered_display = f"{entered_number:g}" if entered_number is not None else ""
+                    expected = step.expected
                 awarded = step.points if correct else 0.0
                 score += awarded
                 graded.append({
@@ -250,12 +400,15 @@ class CasePracticeEngine:
                     "group": step.group,
                     "label": step.label,
                     "unit": step.unit,
+                    "input_type": step.input_type,
                     "entered": entered,
-                    "valid_number": entered is not None,
+                    "entered_display": entered_display,
+                    "valid_number": step.input_type == "number" and valid_answer,
+                    "valid_answer": valid_answer,
                     "correct": correct,
                     "awarded": awarded,
                     "points": step.points,
-                    "expected": step.expected,
+                    "expected": expected,
                     "expected_display": _display_expected(step),
                     "explanation": step.explanation,
                 })
@@ -267,7 +420,7 @@ class CasePracticeEngine:
                 "score": round(score, 2),
                 "max_score": max_score,
                 "percent": round(score / max_score * 100) if max_score else 0,
-                "rubric": "Barème pédagogique NAGe, indicatif; le corrigé officiel ne publie pas de grille de points partiels.",
+                "rubric": case.rubric_note or "Barème pédagogique NAGe, indicatif; le corrigé officiel ne publie pas de grille de points partiels.",
                 "steps": graded,
                 "citations": citations,
                 "local_only": True,

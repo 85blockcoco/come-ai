@@ -54,3 +54,15 @@ Le lot 2 est publié dans `7dde24008049887183650e0299e0ce789294232f`; la branche
 ## Livraison du lot 3 — calculs Q16–Q19
 
 Le code et l’interface sont publiés dans `8a4c1aae5477878c8cb18db6d18a7d4d242c3633`, complétés par `25e071c` pour restaurer le dernier résultat après rechargement. Les deux SHA ont été poussés sur la branche candidate. Les validations finales de ce lot : **22 passed en 3,89 s** sur les trois suites ciblées; Ruff, `node --check desktop_static/app.js` et `git diff --check` réussis. Le parcours Q16 et la persistance après redémarrage ont été vérifiés sur des données synthétiques et un profil temporaire isolé. Le rapport d’alignement détaille le périmètre et les limites.
+
+## Livraison du lot 4 — cas d’examen Q20/Q21
+
+Les six sous-parties de la section C du sujet 2025 sont maintenant entraînables dans l’interface : choix comparés de term sheets, tableaux de payoff, full ratchet, offres initiales, tours de financement selon les scénarios et richesse espérée. Q20a accepte Alpha/Mega dans des menus; les autres réponses sont numériques. Le corrigé est caché avant soumission, les tentatives restent locales et la correction donne la réponse attendue avec son raisonnement.
+
+Le crédit partiel est marqué comme indicatif : Q20a/b/c attribuent 4/8/3 points et Q21a/b/c 3/9/3, soit 15 points par question. Le corrigé ne publie pas de distribution officielle entre sous-parties.
+
+Sur copies locales temporaires du corrigé, des supports Topic 3/4 et du classeur d’exercices, les citations réelles ont été vérifiées : corrigé p. 7 pour Q20, corrigé p. 8 pour Q21; Q20 renvoie aussi à Topic 4 p. 6/14/24, Q21a/b à Topic 3 p. 2, et Q21c à l’onglet `4. TrafalgarTech` du classeur. Le corpus temporaire comptait 4 documents, 86 pages/onglets et 86 unités sans erreur d’extraction.
+
+Validations après ce lot : **24 passed en 3,04 s** (`tests/test_nage_case_practice.py`, `tests/test_nage_learning_ui.py`, `tests/test_nage_learning.py`); Ruff ciblé, `node --check desktop_static/app.js` et `git diff --check` réussis. Une recette navigateur synthétique antérieure a noté Q20a 4/4, Q20b 8/8, Q21a 3/3 et Q21c 3/3, et restauré la dernière tentative après redémarrage. L’amélioration finale qui affiche la feuille XLSX et la nouvelle sélection de source Q21c n’a pas été vérifiée au navigateur cette fois; le détail se trouve dans `NAGE-VC-EXAM-ALIGNMENT.md`.
+
+La couverture de toutes les notions du cours n’est toujours pas prouvée. Un document volumineux, un examen numérisé et les pages à formules/images non interprétées restent à examiner. L’examen blanc chronométré complet demeure distinct et incomplet par rapport au format historique. La candidate n’a pas été vérifiée via l’icône du bureau. Aucun travail n’a été intégré à `main` ni à `/Users/comedelavenne/NAGE-release`.

@@ -98,3 +98,27 @@ Livré sur `codex/vc-mastery-20261103` par `8a4c1aae5477878c8cb18db6d18a7d4d242c
 - `/Users/comedelavenne/AI-Excel-Agent/.venv/bin/python -m pytest -q tests/test_nage_learning.py tests/test_nage_learning_ui.py` : **14 passed en 3,64 s**, exécuté depuis ce worktree sur le SHA audité.
 - `/Users/comedelavenne/AI-Excel-Agent/.venv/bin/ruff check career/quiz.py career/exam.py tests/test_nage_learning.py tests/test_nage_learning_ui.py` : **All checks passed**.
 - `git diff --check` : réussite. Les dossiers locaux non suivis `career_data` et `learning_data/` sont restés intacts et hors de l’index Git.
+
+## Lot 4 — exercices guidés Q20/Q21
+
+La candidate ajoute les six sous-parties du cas 2025 : comparaison des deux term sheets, payoffs Alpha/Mega, full ratchet, offre initiale VW/XY, tours de financement selon les scénarios et valeur espérée. Les champs Q20a sont des choix Alpha/Mega; les autres champs restent des réponses numériques. Une réponse ne peut pas exposer le corrigé avant sa soumission et les résultats restent enregistrés localement.
+
+Les points partiels sont explicitement pédagogiques : Q20a/b/c = 4/8/3 points et Q21a/b/c = 3/9/3 points. Chaque question conserve son total officiel de 15 points. Le corrigé de 2025 ne précise pas la répartition officielle entre sous-parties; ces sous-scores ne sont donc pas présentés comme le barème de l’enseignant.
+
+### Vérifications et preuves
+
+- Réindexation temporaire, isolée et locale de quatre copies des documents autorisés (corrigé 2025, Topic 3, Topic 4, classeur de solutions) : **4 documents, 86 pages/onglets, 86 unités, aucune erreur**. Les originaux n’ont pas été modifiés et aucune donnée n’a été envoyée à un modèle externe.
+- Citations retournées par le moteur sur les cas réels : Q20a → corrigé p. 7 + Topic 4 p. 6; Q20b → corrigé p. 7 + Topic 4 p. 14; Q20c → corrigé p. 7 + Topic 4 p. 24; Q21a/b → corrigé p. 8 + Topic 3 p. 2; Q21c → corrigé p. 8 + `Class assignments - solutions.xlsx`, onglet `4. TrafalgarTech`.
+- Suite ciblée rejouée après les changements du lot : `tests/test_nage_case_practice.py tests/test_nage_learning_ui.py tests/test_nage_learning.py` → **24 passed en 3,04 s**.
+- Ruff ciblé sur `career/case_practice.py`, `tests/test_nage_case_practice.py`, `tests/test_nage_learning_ui.py` : **All checks passed**. `node --check desktop_static/app.js` et `git diff --check` : réussite.
+- Le navigateur avait précédemment vérifié, sur données de test isolées, Q20a (4/4), Q20b (8/8), Q21a (3/3), Q21c (3/3) et le rétablissement de la dernière tentative après redémarrage. La toute dernière modification d’affichage « onglet » et de sélection de la citation Q21c n’a pas été rejouée dans le navigateur : l’instance temporaire sur le port de test dédié n’était pas joignable depuis le navigateur de cette session. Le port de test préexistant accessible est rattaché à `/Users/comedelavenne/NAGE-release` et n’a pas été utilisé.
+
+### Limites restantes
+
+- La preuve Q20/Q21 repose sur le sujet historique 2025 et quatre documents copiés dans un corpus temporaire; elle ne démontre pas une couverture exhaustive des 29 fichiers ni des épreuves futures.
+- La grille officielle de points partiels reste absente.
+- Le simulateur chronométré global est toujours le QCM de six questions; Q16–Q21 constituent un entraînement guidé distinct, pas une simulation chronométrée complète de 90 minutes.
+- La vérification par icône du bureau n’a pas été effectuée.
+- Les exercices ne promettent aucun résultat d’examen. Aucun score browser n’est un score de l’étudiant.
+
+Les résultats de cette section remplacent, pour l’état Q20/Q21, la ligne « prochaine mission » du rapport ci-dessus. Restent en priorité : auditer les unités non extraites de façon sûre, étendre les cas d’examen et refaire une recette de bout en bout sur un navigateur isolé puis le lanceur concerné, sans toucher à `/Users/comedelavenne/NAGE-release`.

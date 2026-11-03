@@ -951,8 +951,8 @@ a.inline-link:hover { background: var(--nag-accent-soft); }
 .practice-step { display: grid; gap: 6px; min-width: 0; }
 .practice-step > span { display: flex; justify-content: space-between; gap: 8px; color: var(--soft); font: 12px/1.4 ui-sans-serif, system-ui, sans-serif; }
 .practice-step small { color: var(--mute); font-size: 10px; white-space: nowrap; }
-.practice-step input { width: 100%; min-height: 38px; padding: 8px 10px; border: 1px solid var(--line-hard); border-radius: 7px; background: var(--panel); color: var(--text); font: inherit; font-variant-numeric: tabular-nums; }
-.practice-step input:focus-visible, .case-practice-head select:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.practice-step .practice-control { width: 100%; min-width: 0; min-height: 38px; padding: 8px 10px; border: 1px solid var(--line-hard); border-radius: 7px; background: var(--panel); color: var(--text); font: inherit; font-variant-numeric: tabular-nums; }
+.practice-step .practice-control:focus-visible, .case-practice-head select:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
 .practice-result { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--line-hard); border-radius: 10px; background: var(--panel-2); }
 .practice-result-head, .practice-feedback-head { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
 .practice-result-head strong { color: var(--green-2); font-size: 15px; }

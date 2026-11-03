@@ -21,10 +21,11 @@ def test_desktop_learning_surface_is_wired_to_local_learning_routes() -> None:
         'Progression vers la maîtrise', 'Télécharger la fiche PDF', 'plan/pdf',
         'Notions du sujet 2025 vues en quiz', 'questions distinctes', 'exam_objectives',
         '"/career/practice/cases"', '/career/practice/cases/${encodeURIComponent(l.practiceCaseId)}/submit',
-        'Calculs au format de l’épreuve', 'Corriger mes calculs', 'barème partiel pédagogique', 'latest_result',
+        'Calculs au format de l’épreuve', 'Corriger mes calculs', 'points par sous-partie de Q20/Q21 sont indicatifs', 'latest_result',
+        'input_type === "choice"', 'practiceScoreCaption', 'Q20/Q21', 'Choisir Alpha ou Mega',
         'examTimer', 'Encore', 'Difficile', 'Facile', '"/career/ingest"',
         'Réessayer l’import local', 'Couverture des supports',
-        'Voir l’extrait', 'cite.excerpt',
+        'Voir l’extrait', 'cite.excerpt', 'const citationLocation', 'onglet ${cite.section}', 'citationLocation(cite)',
         'section: l.selectedChapter', 'Ton parcours jusqu’à l’examen', 'learningProgress',
         'nage-style', 'study-revision', 'study-exercises', 'study-exam',
     ):
@@ -33,3 +34,4 @@ def test_desktop_learning_surface_is_wired_to_local_learning_routes() -> None:
     assert ':root[data-style="study"]' in css
     assert ".learning-step-grid" in css
     assert ".case-practice" in css
+    assert ".practice-control" in css
