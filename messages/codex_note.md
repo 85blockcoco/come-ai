@@ -56,8 +56,8 @@
 ## 1. Livré (avec preuve)
 | Commit | Contenu (1 ligne) | Fichiers | Tests verts (nom test) | Durée |
 |---|---|---|---|---|
-| candidat en cours | Coach VC visible dans V5 : session SRS locale, révélation contrôlée, notation et radar/plan | `academics/router.py`, `v5_static/index.html`, `v5_static/v5.js`, `v5_static/v5.css`, tests VC | `tests/test_vc_http_user_flow.py`, `tests/test_vc_ui.py` + suites VC/academics/CLI | 189 passed, 13,68 s; Ruff, node-check, diff-check verts |
-| candidat en cours | Examen blanc local chronométré : génération par topics, questions sans réponses, sauvegarde des réponses, correction détaillée et remédiation | `academics/router.py`, `v5_static/index.html`, `v5_static/v5.js`, tests VC | `test_vc_mock_exam_is_timed_answerable_and_corrected`, `test_vc_exam_rejects_answers_for_unknown_questions` | inclus dans 189 passed |
+| `c24ed52` | Coach VC visible dans V5 : session SRS locale, révélation contrôlée, notation et radar/plan | `academics/router.py`, `v5_static/index.html`, `v5_static/v5.js`, `v5_static/v5.css`, tests VC | `tests/test_vc_http_user_flow.py`, `tests/test_vc_ui.py` + suites VC/academics/CLI | 189 passed, 13,68 s; Ruff, node-check, diff-check verts |
+| `c24ed52` | Examen blanc local chronométré : génération par topics, questions sans réponses, sauvegarde des réponses, correction détaillée et remédiation | `academics/router.py`, `v5_static/index.html`, `v5_static/v5.js`, tests VC | `test_vc_mock_exam_is_timed_answerable_and_corrected`, `test_vc_exam_rejects_answers_for_unknown_questions` | inclus dans 189 passed |
 
 ## 2. En cours maintenant
 | Tâche | % fait | Temps passé | Temps restant estimé | Blocage ? |
