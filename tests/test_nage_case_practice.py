@@ -126,7 +126,11 @@ def test_partial_credit_bad_values_and_attempts_persist_locally(tmp_path: Path) 
 
     reopened = CasePracticeEngine(index, db_path)
     stats = next(item["stats"] for item in reopened.list_cases()["cases"] if item["case_id"] == "VC25-Q16")
-    assert stats == {"attempts": 1, "best_score": 1.0, "max_score": 3.0, "local_only": True}
+    assert stats["attempts"] == 1
+    assert stats["best_score"] == 1.0
+    assert stats["max_score"] == 3.0
+    assert stats["local_only"] is True
+    assert stats["latest_result"]["steps"][1]["correct"] is True
     reopened.close()
     index.close()
 
@@ -148,5 +152,8 @@ def test_practice_routes_return_cases_submit_and_reject_unknown_case(tmp_path: P
         submitted = client.post("/career/practice/cases/VC25-Q16/submit", json={"answers": {"ccm": 5.378, "proceeds": 26.89, "ownership": 53.8}})
         assert submitted.status_code == 200
         assert submitted.json()["score"] == 3.0
+        refreshed = client.get("/career/practice/cases").json()
+        q16 = next(item for item in refreshed["cases"] if item["case_id"] == "VC25-Q16")
+        assert q16["stats"]["latest_result"]["score"] == 3.0
         assert client.post("/career/practice/cases/unknown/submit", json={"answers": {}}).status_code == 404
         assert client.post("/api/career/practice/cases/VC25-Q16/submit", json={"answers": {"unknown": 3}}).status_code == 400

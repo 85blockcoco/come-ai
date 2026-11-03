@@ -207,15 +207,17 @@ class CasePracticeEngine:
 
     def _stats(self, case_id: str) -> dict[str, Any]:
         rows = self._conn.execute(
-            "SELECT score, max_score FROM case_practice_attempts WHERE case_id=? ORDER BY id DESC",
+            "SELECT score, max_score, result_json FROM case_practice_attempts WHERE case_id=? ORDER BY id DESC",
             (case_id,),
         ).fetchall()
         scores = [float(row["score"]) for row in rows]
         max_score = float(rows[0]["max_score"]) if rows else self._case(case_id).max_score
+        latest_result = json.loads(rows[0]["result_json"]) if rows else None
         return {
             "attempts": len(rows),
             "best_score": max(scores) if scores else None,
             "max_score": max_score,
+            "latest_result": latest_result,
             "local_only": True,
         }
 

@@ -139,6 +139,11 @@
           learning.practiceCaseId = learning.practiceCases[0]?.case_id || "";
           learning.practiceAnswers = {};
           learning.practiceResult = null;
+        } else {
+          const selectedCase = learning.practiceCases.find((item) => item.case_id === learning.practiceCaseId);
+          if (!learning.practiceResult || learning.practiceResult.case_id !== selectedCase?.case_id) {
+            learning.practiceResult = selectedCase?.stats?.latest_result || null;
+          }
         }
         return learning;
       } catch (error) {
@@ -633,7 +638,7 @@
     practiceSelect.addEventListener("change", () => {
       l.practiceCaseId = practiceSelect.value;
       l.practiceAnswers = {};
-      l.practiceResult = null;
+      l.practiceResult = l.practiceCases.find((item) => item.case_id === l.practiceCaseId)?.stats?.latest_result || null;
       renderLearning();
     });
     const practiceForm = el("form", { class: "practice-form" });
