@@ -28,6 +28,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
+from career.learning_router import create_learning_router
 from career.profile_import import MAX_PROFILE_IMPORT_BYTES
 from career.router import CAREER_STATIC_DIR, create_career_router
 from academics.router import create_academics_router
@@ -931,6 +932,7 @@ def create_app(
 
     app.include_router(create_career_router(career, ai_generator=career_ai_generator))
     app.include_router(create_academics_router())
+    app.include_router(create_learning_router(config.base_dir / "learning_data"))
     from devkit.router import create_developer_router
 
     app.include_router(create_developer_router(get_workshop))
