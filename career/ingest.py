@@ -15,6 +15,8 @@ import json
 import math
 import re
 import sqlite3
+from functools import wraps
+from threading import RLock
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -32,6 +34,14 @@ _STOPWORDS = {
     "for", "from", "il", "in", "la", "le", "les", "of", "on", "or", "par", "pour", "que", "qui",
     "sur", "the", "un", "une", "what", "which", "why", "with",
 }
+
+
+def _sqlite_locked(method):
+    @wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with self._lock:
+            return method(self, *args, **kwargs)
+    return wrapper
 
 
 def _tokens(text: str) -> list[str]:
@@ -140,6 +150,7 @@ class CorpusIndex:
             self.db_path = configured / "corpus.sqlite3"
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         self.corpus_root = Path(corpus_root or DEFAULT_CORPUS_ROOT).expanduser()
+        self._lock = RLock()
         self._conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(
@@ -161,6 +172,7 @@ class CorpusIndex:
         self._conn.execute("INSERT OR REPLACE INTO metadata(key,value) VALUES('corpus_root',?)", (str(self.corpus_root),))
         self._conn.commit()
 
+    @_sqlite_locked
     def close(self) -> None:
         self._conn.close()
 
@@ -283,6 +295,7 @@ class CorpusIndex:
                 chunks.append(SourceChunk(chunk_id, page.source_id, page.source_path, page.page, page.page, page.section, buffer))
         return chunks
 
+    @_sqlite_locked
     def ingest_file(self, path: str | Path) -> IngestReport:
         authorized = self._authorized(Path(path))
         pages = self._read_pages(authorized)
@@ -304,6 +317,7 @@ class CorpusIndex:
             )
         return IngestReport(str(self.corpus_root), 1, len(pages), len(chunks), characters, [], [])
 
+    @_sqlite_locked
     def ingest_directory(self, root: str | Path | None = None) -> IngestReport:
         if root is not None:
             self.corpus_root = Path(root).expanduser().resolve()
@@ -339,12 +353,15 @@ class CorpusIndex:
                 totals[index] += value
         return IngestReport(str(self.corpus_root), *totals, skipped, errors)
 
+    @_sqlite_locked
     def document_count(self) -> int:
         return int(self._conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0])
 
+    @_sqlite_locked
     def chunk_count(self) -> int:
         return int(self._conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0])
 
+    @_sqlite_locked
     def manifest(self) -> dict[str, Any]:
         rows = self._conn.execute("SELECT source_id,source_path,sha256,pages,characters,ingested_at FROM documents ORDER BY source_path").fetchall()
         return {
@@ -357,6 +374,70 @@ class CorpusIndex:
             "chunks": self.chunk_count(),
         }
 
+    @_sqlite_locked
+    def coverage(self) -> dict[str, Any]:
+        """Compare the indexed corpus with its private source manifest.
+
+        The manifest stores only source inventory and extraction counts. This
+        makes missing files and empty text visible without copying course
+        material into the repository or exposing the original folder path.
+        """
+        manifest_path = self.corpus_root / "manifest.json"
+        try:
+            inventory = json.loads(manifest_path.read_text(encoding="utf-8"))
+            expected = inventory.get("files", [])
+        except (OSError, json.JSONDecodeError, AttributeError):
+            expected = []
+        rows = self._conn.execute(
+            "SELECT source_path, pages, characters FROM documents ORDER BY source_path"
+        ).fetchall()
+        indexed = {Path(row["source_path"]).name: row for row in rows}
+        sources: list[dict[str, Any]] = []
+        expected_units = 0
+        covered_units = 0
+        missing: list[str] = []
+        empty: list[str] = []
+        for item in expected:
+            display_name = str(item.get("name") or item.get("relative_path") or "source inconnue")
+            mirror = str(item.get("text_file") or "")
+            key = Path(mirror[:-4] if mirror.lower().endswith(".txt") else mirror).name or display_name
+            row = indexed.get(key)
+            expected_for_file = int(item.get("nonempty_pages") or item.get("pages") or len(item.get("sheets", [])) or 0)
+            expected_units += expected_for_file
+            indexed_pages = int(row["pages"]) if row else 0
+            chars = int(row["characters"]) if row else 0
+            covered = min(expected_for_file, indexed_pages) if row and chars else 0
+            covered_units += covered
+            if row is None:
+                missing.append(display_name)
+            elif chars <= 0:
+                empty.append(display_name)
+            sources.append({
+                "name": display_name,
+                "kind": str(item.get("kind") or Path(display_name).suffix.lstrip(".")).lower(),
+                "expected_content_units": expected_for_file,
+                "indexed_units": indexed_pages,
+                "characters": chars,
+                "indexed": row is not None,
+                "text_available": bool(row and chars),
+            })
+        expected_sources = len(expected)
+        indexed_sources = sum(1 for item in sources if item["indexed"])
+        return {
+            "inventory_available": bool(expected),
+            "expected_sources": expected_sources,
+            "indexed_sources": indexed_sources,
+            "missing_sources": missing,
+            "empty_sources": empty,
+            "source_coverage": round(indexed_sources / expected_sources, 4) if expected_sources else None,
+            "expected_content_units": expected_units,
+            "covered_content_units": covered_units,
+            "content_coverage": round(covered_units / expected_units, 4) if expected_units else None,
+            "sources": sources,
+            "local_only": True,
+        }
+
+    @_sqlite_locked
     def search(self, query: str, *, limit: int = 5, section: str | None = None) -> list[SourceChunk]:
         terms = _tokens(query)
         if not terms:
@@ -379,6 +460,7 @@ class CorpusIndex:
         scored.sort(key=lambda item: (-item.score, item.source_path, item.page_start, item.chunk_id))
         return scored[: max(1, min(limit, 20))]
 
+    @_sqlite_locked
     def chunks_for_section(self, section: str) -> list[SourceChunk]:
         """Return all indexed chunks in a section without scoring the heading.
 
@@ -390,7 +472,7 @@ class CorpusIndex:
         if not needle:
             return []
         rows = self._conn.execute(
-            "SELECT * FROM chunks WHERE lower(section) LIKE ? ORDER BY source_path, page_start, chunk_id LIMIT 100",
+            "SELECT * FROM chunks WHERE lower(section) LIKE ? ORDER BY source_path, page_start, chunk_id",
             (f"%{needle}%",),
         ).fetchall()
         return [
@@ -401,6 +483,7 @@ class CorpusIndex:
             for row in rows
         ]
 
+    @_sqlite_locked
     def sections(self) -> list[str]:
         rows = self._conn.execute("SELECT DISTINCT section FROM chunks WHERE trim(section) <> '' ORDER BY section").fetchall()
         return [str(row[0]) for row in rows]

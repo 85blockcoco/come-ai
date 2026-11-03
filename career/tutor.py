@@ -64,18 +64,23 @@ class TutorEngine:
     @staticmethod
     def _relevant_sentences(question: str, chunks: list[SourceChunk]) -> list[str]:
         terms = {item.lower() for item in re.findall(r"[\wÀ-ÿ]+", question) if len(item) > 2}
-        candidates: list[tuple[int, str]] = []
+        candidates: list[tuple[float, int, str]] = []
         for chunk in chunks:
-            for sentence in _SENTENCE_RE.split(chunk.text):
-                sentence = sentence.strip()
-                if not sentence:
-                    continue
-                score = sum(1 for term in terms if term in sentence.lower())
-                candidates.append((score, sentence))
-        candidates.sort(key=lambda item: (-item[0], len(item[1])))
+            # PDF extractors often wrap a formula over several lines; treating
+            # every line as a sentence returned fragments such as ``VPOST =``.
+            excerpt = chunk.text[:500].strip()
+            for paragraph in re.split(r"\n{2,}", excerpt):
+                paragraph = re.sub(r"\s*\n\s*", " ", paragraph).strip()
+                for sentence in _SENTENCE_RE.split(paragraph):
+                    sentence = sentence.strip()
+                    if not sentence:
+                        continue
+                    score = sum(1 for term in terms if term in sentence.lower())
+                    candidates.append((chunk.score, score, sentence))
+        candidates.sort(key=lambda item: (-item[0], -item[1], len(item[2])))
         answer: list[str] = []
         seen: set[str] = set()
-        for _, sentence in candidates:
+        for _, _, sentence in candidates:
             key = sentence.lower()
             if key in seen:
                 continue
@@ -85,14 +90,49 @@ class TutorEngine:
                 break
         return answer
 
-    def ask(self, question: str, *, mode: str = "explanation", limit: int = 3) -> TutorResponse:
+    @staticmethod
+    def _expand_question(question: str) -> str:
+        lowered = question.lower()
+        terms: list[str] = []
+        if any(word in lowered for word in ("valorisation", "valoriser", "valeur")):
+            terms.extend(("valuation", "value"))
+        if any(word in lowered for word in ("calculer", "calcule", "formule")):
+            terms.extend(("calculate", "formula"))
+        if any(word in lowered for word in ("investi", "investissement", "montant")):
+            terms.extend(("investment", "invested", "amount"))
+        if any(word in lowered for word in ("pourcentage", "participation", "capital")):
+            terms.extend(("ownership", "fraction", "equity", "percentage"))
+        return " ".join([question, *terms])
+
+    @staticmethod
+    def _grounded_beginner_answer(question: str, chunks: list[SourceChunk]) -> tuple[str, SourceChunk] | None:
+        lowered = question.lower()
+        asks_post_money = "post-money" in lowered and any(word in lowered for word in ("valorisation", "valuation", "valeur"))
+        if not asks_post_money:
+            return None
+        formula_chunk = next((
+            chunk for chunk in chunks
+            if re.search(r"post-money valuation", chunk.text, re.IGNORECASE)
+            and re.search(r"pre-money valuation", chunk.text, re.IGNORECASE)
+        ), None)
+        if formula_chunk is None:
+            return None
+        return (
+            "Le cours définit I comme le montant investi et F_INV comme la fraction de capital obtenue. "
+            "La formule est donc : valorisation post-money = I ÷ F_INV. "
+            "Puis valorisation pre-money = valorisation post-money − I.",
+            formula_chunk,
+        )
+
+    def ask(self, question: str, *, mode: str = "explanation", limit: int = 3, section: str | None = None) -> TutorResponse:
         normalized = str(question or "").strip()
         mode = str(mode or "explanation").strip().lower()
         if not normalized:
             return TutorResponse(normalized, mode, "", [], True, "La question est vide.")
         if mode not in self.MODES:
             return TutorResponse(normalized, mode, "", [], True, "Mode de tutorat inconnu.")
-        chunks = self.index.search(normalized, limit=max(2, min(limit, 5)))
+        expanded = self._expand_question(normalized)
+        chunks = self.index.search(expanded, limit=max(2, min(limit, 5)), section=section)
         if not chunks or chunks[0].score < MIN_EVIDENCE_SCORE:
             return TutorResponse(
                 normalized,
@@ -102,9 +142,10 @@ class TutorEngine:
                 True,
                 "Aucune preuve locale suffisante dans le corpus.",
             )
-        sentences = self._relevant_sentences(normalized, chunks)
+        sentences = self._relevant_sentences(expanded, chunks)
         if not sentences:
             return TutorResponse(normalized, mode, "", [], True, "Le corpus ne contient pas d'extrait exploitable.")
+        answer_evidence = chunks
         lead = {
             "explanation": "D’après le cours :",
             "reformulation": "Reformulation fidèle du cours :",
@@ -115,14 +156,19 @@ class TutorEngine:
             "je_n_ai_pas_compris": "Reprenons plus simplement, sans ajouter d’information extérieure :",
         }[mode]
         if mode in {"beginner", "did_not_understand", "je_n_ai_pas_compris"}:
-            body = " ".join(sentences[:2])
+            beginner_answer = self._grounded_beginner_answer(normalized, chunks)
+            if beginner_answer:
+                body, formula_chunk = beginner_answer
+                answer_evidence = [formula_chunk]
+            else:
+                body = " ".join(sentences[:1])
         elif mode == "example":
             body = " ".join(sentences)
         else:
             body = " ".join(sentences[:3])
         citations = [
             Citation(PathName(chunk.source_path), chunk.page_start if chunk.page_start == chunk.page_end else f"{chunk.page_start}-{chunk.page_end}", chunk.section, chunk.text[:500].strip(), chunk.chunk_id)
-            for chunk in chunks
+            for chunk in answer_evidence
         ]
         steps = [f"Étape {number} : {sentence}" for number, sentence in enumerate(sentences[:3], start=1)] if mode in {"conversation", "did_not_understand", "je_n_ai_pas_compris"} else None
         check = "Peux-tu reformuler cette idée avec les termes du cours ?" if mode in {"conversation", "did_not_understand", "je_n_ai_pas_compris"} else ""

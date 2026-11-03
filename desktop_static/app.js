@@ -5,7 +5,9 @@
   window.__appState = null;
 
   const savedTheme = localStorage.getItem("nage-theme");
+  const savedStyle = localStorage.getItem("nage-style");
   if (savedTheme === "light") document.documentElement.dataset.theme = "light";
+  if (savedStyle === "study") document.documentElement.dataset.style = "study";
 
   const state = window.__appState = {
     view: "today",
@@ -15,8 +17,10 @@
     overview: null,
     missions: null,
     learning: {
-      manifest: null, chapters: [], dashboard: null, plan: null, due: [],
-      selectedChapter: "TOPIC 3", summary: null, quiz: null, tutor: null,
+      manifest: null, coverage: null, chapters: [], dashboard: null, plan: null, due: [], srsStats: null, error: "",
+      selectedChapter: "TOPIC 3", summary: null, summaryLoading: false, quiz: null, tutor: null,
+      quizFeedback: null, srsRevealed: false, srsBusy: false, exam: null, examResult: null,
+      examBusy: false, examSubmitting: false, tutorMode: "explanation",
       search: [], searchQuery: "", busy: false,
     },
     filter: "",
@@ -61,6 +65,7 @@
       try {
         const body = await response.json();
         if (body?.detail) detail = typeof body.detail === "string" ? body.detail : detail;
+        if (body?.error_id) detail += ` (réf. ${body.error_id})`;
       } catch { /* corps non JSON */ }
       throw new Error(detail);
     }
@@ -107,16 +112,31 @@
     overview: async () => (state.overview = await api("/api/v5/overview")),
     missions: async () => (state.missions = await api("/api/app/missions")),
     learning: async () => {
-      const [manifest, chapters, dashboard, plan, due] = await Promise.all([
-        api("/career/manifest"), api("/career/chapters"), api("/career/learning/dashboard"),
-        api("/career/plan"), api("/career/srs/due?limit=8"),
-      ]);
-      state.learning.manifest = manifest;
-      state.learning.chapters = chapters.chapters || [];
-      state.learning.dashboard = dashboard;
-      state.learning.plan = plan;
-      state.learning.due = due.cards || [];
-      return state.learning;
+      const learning = state.learning;
+      learning.error = "";
+      try {
+        let manifest = await api("/career/manifest");
+        if (!manifest.documents?.length) {
+          if (!learningIngestPromise) learningIngestPromise = api("/career/ingest", { method: "POST", body: JSON.stringify({}) }).finally(() => { learningIngestPromise = null; });
+          const ingestion = await learningIngestPromise;
+          manifest = ingestion.manifest || await api("/career/manifest");
+        }
+        const [coverage, chapters, dashboard, plan, due] = await Promise.all([
+          api("/career/coverage"), api("/career/chapters"), api("/career/learning/dashboard"),
+          api("/career/plan"), api(`/career/srs/due?limit=8&chapter=${encodeURIComponent(learning.selectedChapter)}`),
+        ]);
+        learning.manifest = manifest;
+        learning.coverage = coverage;
+        learning.chapters = chapters.chapters || [];
+        learning.dashboard = dashboard;
+        learning.plan = plan;
+        learning.due = due.cards || [];
+        learning.srsStats = due.stats || null;
+        return learning;
+      } catch (error) {
+        learning.error = error.message;
+        throw error;
+      }
     },
   };
 
@@ -514,92 +534,223 @@
   function renderLearning() {
     const host = $("#view-learning");
     const l = state.learning;
+    if (!l.manifest && l.error) {
+      host.replaceChildren(el("section", { class: "card padded learning-load-error", role: "alert" },
+        el("h2", {}, "Le cours n’a pas pu être indexé"),
+        el("p", {}, `${l.error} Les documents restent sur cet appareil; aucune donnée ne part vers un modèle.`),
+        el("button", { class: "primary-btn", type: "button", onclick: async () => { l.error = ""; renderLearning(); try { await loaders.learning(); } catch { /* le panneau d'erreur reste visible */ } renderLearning(); } }, "Réessayer l’import local")));
+      return;
+    }
     if (!l.manifest) { host.replaceChildren(loading()); return; }
-    const chapters = learningTopics.map(([value, label]) => el("option", { value }, `${value} · ${label}`));
-    const select = el("select", { class: "learning-select", "aria-label": "Chapitre à réviser" }, chapters);
-    select.value = l.selectedChapter;
-    select.addEventListener("change", async () => {
-      l.selectedChapter = select.value; l.summary = null; l.quiz = null;
-      renderLearning();
-      await loadLearningSummary();
-    });
     const d = l.dashboard || {};
     const score = Math.round(Number(d.overall_score || 0) * 100);
-    const docs = l.manifest.documents?.length ?? 0;
-    const pages = l.manifest.pages ?? 0;
-    const summaryBlock = l.summary
+    const selectedProgress = (d.notions || []).find((item) => item.chapter === l.selectedChapter) || {};
+    const cardsTotal = Number(selectedProgress.total || 0);
+    const cardsReviewed = Number(selectedProgress.reviewed || 0);
+    const revisionProgress = cardsTotal ? Math.min(100, Math.round(cardsReviewed / cardsTotal * 100)) : 0;
+    const understoodKey = `nage-learning-understood:${l.selectedChapter}`;
+    const understood = localStorage.getItem(understoodKey) === "true";
+    const exerciseTarget = Math.max(1, Number(selectedProgress.attempts_required || 5));
+    const exerciseAttempts = Number(selectedProgress.attempts || 0);
+    const exerciseProgress = Math.min(100, Math.round(exerciseAttempts / exerciseTarget * 100));
+    const totalChapters = Number(d.total_count || learningTopics.length);
+    const masteredChapters = Number(d.mastered_count || 0);
+    const examReadiness = totalChapters ? Math.round(masteredChapters / totalChapters * 100) : 0;
+    const completedExams = Number(d.exam?.completed || 0);
+    const examProgress = completedExams ? 100 : Math.round(examReadiness / 2);
+    const learningProgress = Math.round((revisionProgress + (understood ? 100 : 0) + exerciseProgress + examProgress) / 4);
+    const currentStep = [revisionProgress, understood ? 100 : 0, exerciseProgress, examProgress].findIndex((value) => value < 100);
+    const scrollToStudyStep = (id) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const learningPath = el("section", { class: "card padded learning-path", "aria-labelledby": "learningPathTitle" },
+      el("div", { class: "learning-path-top" }, el("h2", { id: "learningPathTitle" }, "Ton parcours jusqu’à l’examen"), el("strong", {}, `${learningProgress}%`)),
+      el("p", {}, "Révision → apprentissage → exercices → examen blanc. L’avancement suit les activités faites; la maîtrise reste mesurée par tes réponses aux quiz."),
+      el("progress", { max: "100", value: String(learningProgress), "aria-label": `Progression du parcours d’étude : ${learningProgress}%` }),
+      el("div", { class: "learning-step-grid" }, ...[
+        { title: "1. Réviser", progress: revisionProgress, detail: cardsTotal ? `${cardsReviewed}/${cardsTotal} cartes de ce chapitre notées.` : "Génère des cartes sourcées pour commencer.", label: "Voir les cartes", target: "study-revision" },
+        { title: "2. Apprendre", progress: understood ? 100 : 0, detail: "Lis la fiche du cours, demande une explication, puis fais ton auto-évaluation.", label: understood ? "À revoir" : "J’ai compris", toggle: true },
+        { title: "3. S’exercer", progress: exerciseProgress, detail: `${Math.min(exerciseAttempts, exerciseTarget)}/${exerciseTarget} questions du chapitre · ${Number(selectedProgress.correct || 0)}/${exerciseAttempts || 0} justes.`, label: "Commencer un quiz", target: "study-exercises" },
+        { title: "4. Examen blanc", progress: examProgress, detail: completedExams ? `Examen(s) terminé(s) : ${completedExams} · dernier score ${Math.round(Number(d.exam?.last_score || 0) * 100)}%.` : `${masteredChapters}/${totalChapters} chapitres à 80 % pour déverrouiller l’examen complet.`, label: completedExams ? "Revoir l’examen" : "Voir les conditions", target: "study-exam" },
+      ].map((step, index) => el("article", { class: "learning-step", "data-current": String(index === currentStep), "aria-current": index === currentStep ? "step" : null },
+        el("div", { class: "learning-step-head" }, el("strong", {}, step.title), el("span", {}, `${step.progress}%`)),
+        el("p", {}, step.detail),
+        el("progress", { max: "100", value: String(step.progress), "aria-label": `Avancement ${step.title}` }),
+        step.toggle
+          ? el("button", { class: understood ? "ghost-btn" : "primary-btn", type: "button", onclick: () => { localStorage.setItem(understoodKey, String(!understood)); renderLearning(); } }, step.label)
+          : el("button", { class: "ghost-btn", type: "button", onclick: () => scrollToStudyStep(step.target) }, step.label),
+      ))),
+    );
+    const chapters = learningTopics.map(([value, label]) => el("option", { value, selected: l.selectedChapter === value }, `${value} · ${label}`));
+    const select = el("select", { class: "learning-select", "aria-label": "Chapitre à réviser" }, ...chapters);
+    select.addEventListener("change", async () => {
+      l.selectedChapter = select.value; l.summary = null; l.quiz = null; l.quizFeedback = null; l.srsRevealed = false;
+      await loaders.learning(); renderLearning(); await loadLearningSummary();
+    });
+    const notionCards = (d.notions || []).map((item) => {
+      const accuracy = item.score_percent ?? Math.round((item.score || 0) * 100);
+      const required = Math.max(1, Number(item.attempts_required || 2));
+      const value = Math.round(accuracy * Math.min(1, Number(item.attempts || 0) / required));
+      return el("article", { class: "learning-chapter" },
+        el("div", { class: "learning-chapter-head" }, el("strong", {}, item.chapter), el("b", {}, `${value}%`)),
+        el("progress", { max: "100", value: String(value), "aria-label": `Progression vers la maîtrise ${item.chapter}` }),
+        el("div", { class: "learning-chapter-foot" }, el("span", {}, `${item.correct || 0}/${item.attempts || 0} justes · ${accuracy}%`), el("span", { class: item.mastered ? "status-good" : "status-low" }, item.mastered ? "Maîtrisé" : "À renforcer")),
+        el("small", {}, `${item.attempts || 0}/${required} quiz · ${item.due || 0} cartes dues · ${item.total || 0} créées`));
+    });
+    const coverage = l.coverage || {};
+    const coveragePct = Math.round(Number(coverage.source_coverage || 0) * 100);
+    const citationDetails = (cite) => cite ? el("details", { class: "citation-details" }, el("summary", {}, `Voir l’extrait · ${cite.source || "cours"} · p.${cite.page ?? "—"}`), el("p", {}, cite.excerpt || "Extrait indisponible dans le corpus indexé.")) : null;
+    const summary = l.summary
       ? el("div", { class: "learning-summary" },
-          el("div", { class: "learning-summary-head" }, el("strong", {}, l.summary.chapter),
-            el("a", { class: "chip green", href: `/career/summary/${encodeURIComponent(l.selectedChapter)}/pdf`, target: "_blank", rel: "noopener" }, "fiche PDF ↗")),
-          ...[["Définitions", l.summary.definitions], ["Formules", l.summary.formulas], ["À retenir", l.summary.key_points]].map(([title, items]) =>
-            el("div", { class: "learning-list" }, el("b", {}, title), ...(items?.slice(0, 4).map((item) => el("p", {}, item)) || [el("p", { class: "note" }, "Aucun élément retrouvé.")]))),
-          el("div", { class: "learning-citations" }, "Sources : ", ...(l.summary.citations || []).slice(0, 5).map((cite) => el("span", { class: "chip" }, `${cite.source} · p.${cite.page}`))),
-        )
-      : el("div", { class: "empty" }, el("strong", {}, "Fiche prête à ouvrir"), el("span", {}, "Choisis un chapitre puis ouvre sa fiche sourcée."));
-    const quizBlock = l.quiz
-      ? el("div", { class: "learning-quiz" },
-          el("div", { class: "section-title no-gap" }, el("h3", {}, "Quiz progressif"), el("span", { class: "hint" }, l.quiz.difficulty || "foundation")),
-          el("p", {}, l.quiz.prompt),
-          el("div", { class: "quiz-options" }, l.quiz.options.map((option, index) => el("button", { class: "quiz-option", type: "button", onclick: () => answerLearningQuiz(index) }, `${String.fromCharCode(65 + index)}. ${option}`))),
-          el("p", { class: "note tight" }, "Chaque réponse reste liée à sa citation. Si tu bloques, ouvre la fiche avant de répondre."),
-        )
-      : el("div", { class: "learning-quiz" }, el("div", { class: "section-title no-gap" }, el("h3", {}, "Quiz progressif"), el("span", { class: "hint" }, "récupération active")), el("p", {}, "Une question sourcée, puis un retour immédiat sur ta maîtrise."), el("button", { class: "primary-btn", type: "button", onclick: loadLearningQuiz }, "Lancer une question"));
-    const tutorAnswer = l.tutor ? el("div", { class: "tutor-answer", role: "status" }, el("p", {}, l.tutor.answer || l.tutor.message || "Réponse refusée."), el("div", { class: "learning-citations" }, ...(l.tutor.citations || []).map((cite) => el("span", { class: "chip green" }, `${cite.source} · p.${cite.page}`)))) : null;
+          el("div", { class: "learning-summary-head" }, el("strong", {}, l.summary.chapter), el("a", { class: "chip green", href: `/career/summary/${encodeURIComponent(l.selectedChapter)}/pdf`, target: "_blank", rel: "noopener" }, "Télécharger la fiche PDF ↗")),
+          ...[["Définitions", l.summary.definitions], ["Formules", l.summary.formulas], ["À retenir", l.summary.key_points]].map(([title, items]) => el("div", { class: "learning-list" }, el("b", {}, title), ...(items?.slice(0, 4).map((item) => el("p", {}, item)) || [el("p", { class: "note" }, "Aucun élément retrouvé.")]))),
+          el("div", { class: "learning-citations" }, "Sources : ", ...(l.summary.citations || []).slice(0, 5).map((cite) => el("span", { class: "chip" }, `${cite.source} · p.${cite.page}`))))
+      : el("div", { class: "empty" }, el("strong", {}, l.summaryLoading ? "Chargement de la fiche…" : "Fiche du chapitre"), el("span", {}, "La fiche est extraite du cours et garde ses références de page."));
+    const quiz = l.quiz
+      ? el("div", { class: "learning-quiz" }, el("div", { class: "section-title no-gap" }, el("h3", {}, "Quiz progressif"), el("span", { class: "hint" }, l.quiz.difficulty)), el("p", {}, l.quiz.prompt), citationDetails(l.quiz.citation), el("div", { class: "quiz-options" }, ...l.quiz.options.map((option, index) => el("button", { class: "quiz-option", type: "button", disabled: l.busy, onclick: () => answerLearningQuiz(index) }, `${String.fromCharCode(65 + index)}. ${option}`))))
+      : el("div", { class: "learning-quiz" }, el("div", { class: "section-title no-gap" }, el("h3", {}, "Quiz progressif"), el("span", { class: "hint" }, "correction sourcée")),
+          l.quizFeedback ? el("div", { class: l.quizFeedback.correct ? "quiz-feedback is-correct" : "quiz-feedback is-wrong", role: "status" }, el("strong", {}, l.quizFeedback.correct ? "Bonne réponse" : "À revoir"), el("p", {}, l.quizFeedback.correct_answer), el("p", {}, l.quizFeedback.explanation), citationDetails(l.quizFeedback.citation), el("button", { class: "primary-btn", type: "button", onclick: loadLearningQuiz }, "Question suivante"))
+            : el("div", {}, el("p", {}, "Une question à la fois : réponds, lis la correction, puis retente."), el("button", { class: "primary-btn", type: "button", onclick: loadLearningQuiz }, "Lancer une question")));
+    const card = l.due[0];
+    const srs = card
+      ? el("div", { class: "srs-card" }, el("p", { class: "srs-card-question" }, card.question), l.srsRevealed
+        ? el("div", { class: "srs-card-answer" }, el("p", {}, card.answer), citationDetails(card.source), el("div", { class: "srs-ratings", role: "group", "aria-label": "Évaluer la carte" }, ...[["again", "Encore"], ["hard", "Difficile"], ["good", "Bien"], ["easy", "Facile"]].map(([rating, label]) => el("button", { class: "ghost-btn", type: "button", disabled: l.srsBusy, onclick: () => reviewLearningCard(rating) }, label))))
+        : el("button", { class: "primary-btn", type: "button", onclick: () => { l.srsRevealed = true; renderLearning(); } }, "Révéler la réponse"))
+      : el("div", { class: "empty" }, el("strong", {}, l.srsStats?.total ? "Toutes les cartes sont à jour" : "Aucune carte encore"), el("span", {}, l.srsStats?.total ? "Ta prochaine révision est planifiée." : `Génère des cartes sourcées pour ${l.selectedChapter}.`));
     const tutorForm = el("form", { class: "tutor-form" },
-      el("textarea", { id: "learningQuestion", rows: "2", maxlength: "4000", placeholder: "Je n’ai pas compris… explique-moi avec le cours." }),
-      el("button", { class: "ghost-btn", type: "submit" }, "Demander au tuteur"),
-    );
+      el("textarea", { id: "learningQuestion", rows: "2", maxlength: "4000", placeholder: "Je n’ai pas compris… explique-moi avec le cours.", "aria-label": "Question sur le cours" }),
+      el("select", { id: "learningTutorMode", class: "learning-select", "aria-label": "Mode d’explication" }, ...[["explanation", "Expliquer"], ["reformulation", "Reformuler"], ["example", "Exemple du cours"], ["beginner", "Comme à un débutant"], ["did_not_understand", "Je n’ai pas compris"]].map(([value, label]) => el("option", { value, selected: l.tutorMode === value }, label))),
+      el("button", { class: "ghost-btn", type: "submit" }, "Demander au tuteur"));
     tutorForm.addEventListener("submit", askLearningTutor);
-    const searchForm = el("form", { class: "learning-search" },
-      el("input", { id: "learningSearchInput", type: "search", value: l.searchQuery, placeholder: "Rechercher une notion dans les 28 sources…", "aria-label": "Rechercher dans le cours" }),
-      el("button", { class: "ghost-btn", type: "submit" }, "Chercher"),
-    );
+    $("#learningTutorMode", tutorForm).addEventListener("change", (event) => { l.tutorMode = event.target.value; });
+    const searchForm = el("form", { class: "learning-search" }, el("input", { id: "learningSearchInput", type: "search", value: l.searchQuery, placeholder: `Rechercher dans les ${l.manifest.documents?.length || 0} sources…`, "aria-label": "Rechercher dans le cours" }), el("button", { class: "ghost-btn", type: "submit" }, "Chercher"));
     searchForm.addEventListener("submit", searchLearning);
-    const searchResults = l.search.length
-      ? el("div", { class: "search-results" }, l.search.slice(0, 6).map((hit) =>
-        el("div", { class: "search-result" },
-          el("b", {}, `${hit.source} · p.${hit.page}`),
-          el("span", {}, hit.excerpt),
-        )))
-      : el("p", { class: "note" }, "Recherche une notion, une formule ou un terme de term sheet.");
-    const planItems = (l.plan?.sessions || []).slice(0, 5).map((session) =>
-      el("div", {}, el("b", {}, session.date), el("span", {}, session.chapter), el("small", {}, session.phase)));
+    const tutor = l.tutor ? el("div", { class: "tutor-answer", role: "status" }, el("p", {}, l.tutor.answer || l.tutor.message || "Réponse refusée."), ...((l.tutor.citations || []).map(citationDetails))) : null;
+    const searchResults = l.search.length ? el("div", { class: "search-results" }, ...l.search.slice(0, 8).map((hit) => el("div", { class: "search-result" }, el("b", {}, `${hit.source} · p.${hit.page}`), el("span", {}, hit.excerpt)))) : el("p", { class: "note" }, "Recherche une formule, une notion ou un terme du cours.");
+    const planItems = (l.plan?.sessions || []).map((session) => el("div", {}, el("b", {}, session.date), el("span", {}, session.chapter), el("small", {}, session.phase)));
+    let exam;
+    if (l.examResult) {
+      exam = el("section", { class: "exam-panel", "aria-live": "polite" }, el("div", { class: "section-title" }, el("h2", {}, "Correction de l’examen blanc"), el("b", { class: "exam-score" }, `${Math.round(l.examResult.score * 100)}% · ${l.examResult.correct}/${l.examResult.total}`)),
+        el("p", {}, l.examResult.status === "timed_out" ? "Temps écoulé ; les réponses enregistrées ont été corrigées." : "Examen terminé. La correction est reliée au cours."),
+        l.examResult.remediation?.length ? el("p", { class: "exam-remediation" }, `À retravailler : ${l.examResult.remediation.join(" · ")}`) : el("p", { class: "status-good" }, "Aucun chapitre en remédiation."),
+        ...(l.examResult.corrections || []).map((item, index) => el("article", { class: "exam-correction" }, el("strong", {}, `${index + 1}. ${item.chapter} · ${item.correct ? "juste" : "à revoir"}`), el("p", {}, item.prompt), el("p", {}, `Ta réponse : ${item.selected_answer || "sans réponse"}`), el("p", {}, `Réponse attendue : ${item.correct_answer}`), el("p", {}, item.explanation), citationDetails(item.citation))),
+        el("button", { class: "ghost-btn", type: "button", onclick: () => { l.examResult = null; renderLearning(); } }, "Fermer la correction"));
+    } else if (l.exam?.status === "ready") {
+      exam = el("section", { class: "exam-panel" }, el("div", { class: "section-title" }, el("h2", {}, "Examen blanc"), el("b", { id: "examTimer", class: "exam-timer", role: "timer" }, "30:00")), el("p", { class: "note" }, `${Object.keys(l.exam.answers || {}).length}/${l.exam.questions.length} réponses enregistrées · chaque choix est sauvegardé localement.`),
+        ...l.exam.questions.map((question, index) => el("article", { class: "exam-question" }, el("strong", {}, `${index + 1}. ${question.chapter}`), el("p", {}, question.prompt), el("div", { class: "quiz-options" }, ...question.options.map((option, optionIndex) => el("button", { class: "quiz-option", type: "button", disabled: l.examBusy || l.examSubmitting, "aria-pressed": String(l.exam.answers[question.question_id] === optionIndex), onclick: () => answerLearningExam(question.question_id, optionIndex) }, `${String.fromCharCode(65 + optionIndex)}. ${option}`))))),
+        el("button", { class: "primary-btn", type: "button", disabled: l.examSubmitting, onclick: submitLearningExam }, l.examSubmitting ? "Correction…" : "Terminer et corriger"));
+    } else {
+      exam = el("section", { class: "exam-panel" }, el("div", { class: "section-title" }, el("h2", {}, "Simulateur d’examen"), el("span", { class: "hint" }, "seuil de maîtrise : 80%")),
+        l.exam?.status === "blocked" ? el("div", { class: "exam-gate" }, el("p", {}, l.exam.reason), ...(l.exam.gate?.missing || []).map((item) => el("p", {}, `${item.chapter} · ${Math.round(item.score * 100)}% · ${item.attempts}/${item.attempts_required} quiz corrigés`))) : el("p", {}, "Six questions sourcées, avec un accent sur la valorisation et les calculs, correction détaillée et chapitres à retravailler."),
+        el("button", { class: "primary-btn", type: "button", disabled: l.examBusy, onclick: startLearningExam }, l.examBusy ? "Préparation…" : "Lancer l’examen blanc"));
+    }
+    exam.id = "study-exam";
+    const revisionPanel = el("div", { class: "card padded srs-panel", id: "study-revision" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Étape 1 · Révision active"), el("span", { class: "hint" }, `${l.due.length} cartes dues · ${l.selectedChapter}`)), srs, el("button", { class: "ghost-btn", type: "button", disabled: l.srsBusy, onclick: generateLearningCards }, l.srsBusy ? "Génération locale…" : `Générer / compléter les cartes de ${l.selectedChapter}`));
+    const learningPanel = el("div", { class: "learning-grid", id: "study-learning" },
+      el("div", { class: "card padded" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Étape 2 · Apprendre avec le cours"), el("span", { class: "hint" }, l.selectedChapter)), summary, el("button", { class: "ghost-btn", type: "button", onclick: loadLearningSummary }, "Actualiser la fiche")),
+      el("div", { class: "card padded" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Tuteur du cours"), el("span", { class: "hint" }, "réponses bornées au chapitre sélectionné")), tutorForm, tutor));
+    const searchPanel = el("div", { class: "card padded" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Recherche dans le cours"), el("span", { class: "hint" }, "tous les supports")), searchForm, searchResults);
+    const exercisePanel = el("div", { class: "card padded learning-exercise", id: "study-exercises" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Étape 3 · Exercices progressifs"), el("span", { class: "hint" }, l.quiz?.difficulty || "correction sourcée")), quiz);
     host.replaceChildren(
-      el("div", { class: "card learning-hero" },
-        el("div", {}, el("h2", {}, "Objectif : arriver prêt à l’examen."), el("p", {}, `${docs} sources locales · ${num(pages)} pages · aucune réponse hors corpus. Révise en priorité ce qui n’est pas maîtrisé.`)),
-        el("div", { class: "learning-score" }, el("b", {}, `${score}%`), el("small", {}, "maîtrise observée")),
-      ),
-      el("div", { class: "learning-toolbar card" }, select, el("span", { class: "chip green" }, `${d.mastered_count ?? 0}/${d.total_count ?? 5} chapitres maîtrisés`), el("span", { class: "chip amber" }, `${l.due.length} cartes dues`), el("a", { class: "ghost-btn", href: "/career/plan", target: "_blank", rel: "noopener" }, "Plan détaillé ↗")),
-      el("div", { class: "learning-grid" },
-        el("div", { class: "card padded" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Fiche du chapitre"), el("span", { class: "hint" }, "sourcée page par page")), summaryBlock, el("button", { class: "ghost-btn", type: "button", onclick: loadLearningSummary }, "Actualiser la fiche")),
-        el("div", { class: "card padded" }, quizBlock),
-      ),
-      el("div", { class: "learning-grid" },
-        el("div", { class: "card padded" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Tuteur du cours"), el("span", { class: "hint" }, "mode : je n’ai pas compris")), tutorForm, tutorAnswer),
-        el("div", { class: "card padded" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Recherche"), el("span", { class: "hint" }, "citations conservées")), searchForm, searchResults),
-      ),
-      el("div", { class: "card padded learning-plan" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Plan des prochaines sessions"), el("span", { class: "hint" }, `${l.plan?.start || "—"} → ${l.plan?.until || "—"}`)), el("div", { class: "plan-row" }, planItems)),
-    );
-    if (!l.summary) loadLearningSummary();
+      el("div", { class: "card learning-hero" }, el("div", {}, el("h2", {}, "Objectif : arriver prêt à l’examen."), el("p", {}, `${l.manifest.documents?.length || 0} sources locales indexées · ${num(l.manifest.pages || 0)} pages / feuilles · aucune réponse hors corpus.`)), el("div", { class: "learning-score" }, el("b", {}, `${score}%`), el("small", {}, "justesse moyenne observée"))),
+      learningPath,
+      el("div", { class: "card coverage-panel" }, el("div", { class: "coverage-head" }, el("strong", {}, "Couverture des supports"), el("span", { class: coveragePct === 100 ? "status-good" : "status-low" }, coverage.inventory_available ? `${coverage.indexed_sources}/${coverage.expected_sources} fichiers · ${coveragePct}%` : "Inventaire source indisponible")), el("progress", { max: "100", value: String(coveragePct), "aria-label": "Couverture des fichiers de cours" }), el("small", {}, `${num(coverage.covered_content_units || 0)}/${num(coverage.expected_content_units || 0)} pages ou feuilles indexées · local uniquement`), el("details", { class: "coverage-details" }, el("summary", {}, "Voir les fichiers du corpus"), el("ul", {}, ...(coverage.sources || []).map((source) => el("li", { class: source.text_available ? "coverage-ok" : "coverage-missing" }, `${source.text_available ? "✓" : "!"} ${source.name} · ${num(source.indexed_units)}/${num(source.expected_content_units)} unités`))))),
+      el("div", { class: "learning-toolbar card" }, select, el("span", { class: "chip green" }, `${d.mastered_count || 0}/${d.total_count || 5} chapitres maîtrisés`), el("span", { class: "chip amber" }, `${d.cards_due ?? l.due.length} cartes dues`), el("a", { class: "ghost-btn", href: "/career/plan", target: "_blank", rel: "noopener" }, "Plan détaillé ↗"), el("a", { class: "ghost-btn", href: "/career/plan/pdf", target: "_blank", rel: "noopener" }, "Plan PDF ↗")),
+      el("div", { class: "card padded chapter-dashboard" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Progression vers la maîtrise"), el("span", { class: "hint" }, `justesse moyenne observée ${score}%`)), el("div", { class: "chapter-progress-grid" }, ...notionCards)),
+      revisionPanel,
+      learningPanel,
+      searchPanel,
+      exercisePanel,
+      el("div", { class: "card padded learning-plan" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Plan des prochaines sessions"), el("span", { class: "hint" }, `${l.plan?.start || "—"} → ${l.plan?.until || "—"}`)), el("div", { class: "plan-row" }, ...planItems)),
+      exam);
+    if (!l.summary && !l.summaryLoading) loadLearningSummary();
   }
+
+  let learningIngestPromise = null;
 
   async function loadLearningSummary() {
     const l = state.learning;
-    try { l.summary = await api(`/career/summary/${encodeURIComponent(l.selectedChapter)}`); renderLearning(); }
+    l.summaryLoading = true;
+    try { l.summary = await api(`/career/summary/${encodeURIComponent(l.selectedChapter)}`); }
     catch (error) { console.error("LEARNING_SUMMARY_FAIL", error.message); }
+    finally { l.summaryLoading = false; renderLearning(); }
   }
 
   async function loadLearningQuiz() {
     const l = state.learning;
-    try { const data = await api("/career/quiz/next", { method: "POST", body: JSON.stringify({ chapter: l.selectedChapter }) }); l.quiz = data.question; renderLearning(); }
+    try { const data = await api("/career/quiz/next", { method: "POST", body: JSON.stringify({ chapter: l.selectedChapter }) }); l.quiz = data.question; l.quizFeedback = null; renderLearning(); }
     catch (error) { alert(`Quiz indisponible : ${error.message}`); }
   }
 
   async function answerLearningQuiz(index) {
     const l = state.learning;
     if (!l.quiz) return;
-    try { const result = await api("/career/quiz/answer", { method: "POST", body: JSON.stringify({ question_id: l.quiz.question_id, option_index: index }) }); l.dashboard = { ...(l.dashboard || {}), overall_score: result.mastery?.score || 0 }; l.quiz = null; await loaders.learning(); renderLearning(); }
+    l.busy = true;
+    try { renderLearning(); const result = await api("/career/quiz/answer", { method: "POST", body: JSON.stringify({ question_id: l.quiz.question_id, option_index: index }) }); l.quiz = null; l.quizFeedback = result; await loaders.learning(); }
     catch (error) { alert(`Réponse non enregistrée : ${error.message}`); }
+    finally { l.busy = false; renderLearning(); }
+  }
+
+  async function generateLearningCards() {
+    const l = state.learning; l.srsBusy = true; l.srsRevealed = false; renderLearning();
+    try {
+      await api(`/career/srs/generate?chapter=${encodeURIComponent(l.selectedChapter)}&limit=1000`, { method: "POST" });
+      await loaders.learning();
+    } catch (error) { alert(`Cartes indisponibles : ${error.message}`); }
+    finally { l.srsBusy = false; renderLearning(); }
+  }
+
+  async function reviewLearningCard(rating) {
+    const l = state.learning; const card = l.due[0]; if (!card) return;
+    l.srsBusy = true;
+    try {
+      await api("/career/srs/review", { method: "POST", body: JSON.stringify({ card_id: card.card_id, rating }) });
+      l.srsRevealed = false;
+      await loaders.learning();
+    } catch (error) { alert(`Révision non enregistrée : ${error.message}`); }
+    finally { l.srsBusy = false; renderLearning(); }
+  }
+
+  async function startLearningExam() {
+    const l = state.learning; l.examBusy = true; l.examResult = null; renderLearning();
+    try {
+      const exam = await api("/career/exam/start", { method: "POST", body: JSON.stringify({ size: 6, duration_minutes: 30 }) });
+      l.exam = exam.status === "ready" ? { ...exam, answers: {} } : exam;
+      if (exam.status === "ready") startLearningExamTimer();
+    } catch (error) { l.exam = { status: "blocked", reason: error.message }; }
+    finally { l.examBusy = false; renderLearning(); }
+  }
+
+  function startLearningExamTimer() {
+    const l = state.learning;
+    if (learningExamTimer) clearInterval(learningExamTimer);
+    const expires = Date.parse(l.exam.timer.expires_at);
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((expires - Date.now()) / 1000));
+      const timer = $("#examTimer");
+      if (timer) timer.textContent = `Temps restant ${String(Math.floor(remaining / 60)).padStart(2, "0")}:${String(remaining % 60).padStart(2, "0")}`;
+      if (!remaining) { clearInterval(learningExamTimer); learningExamTimer = null; submitLearningExam(); }
+    };
+    tick(); learningExamTimer = setInterval(tick, 1000);
+  }
+
+  async function answerLearningExam(questionId, optionIndex) {
+    const l = state.learning; if (!l.exam || l.examBusy) return;
+    l.examBusy = true; l.exam.answers[questionId] = optionIndex; renderLearning();
+    try {
+      await api("/career/exam/answer", { method: "POST", body: JSON.stringify({ exam_id: l.exam.exam_id, question_id: questionId, option_index: optionIndex }) });
+    } catch (error) { delete l.exam.answers[questionId]; alert(`Réponse non enregistrée : ${error.message}`); }
+    finally { l.examBusy = false; renderLearning(); }
+  }
+
+  async function submitLearningExam() {
+    const l = state.learning; if (!l.exam || l.exam.status !== "ready" || l.examSubmitting) return;
+    l.examSubmitting = true; renderLearning();
+    try {
+      l.examResult = await api("/career/exam/submit", { method: "POST", body: JSON.stringify({ exam_id: l.exam.exam_id }) });
+      l.exam = null;
+      if (learningExamTimer) clearInterval(learningExamTimer); learningExamTimer = null;
+      await loaders.learning();
+    } catch (error) { alert(`Correction indisponible : ${error.message}`); }
+    finally { l.examSubmitting = false; renderLearning(); }
   }
 
   async function askLearningTutor(event) {
@@ -607,7 +758,7 @@
     const input = $("#learningQuestion");
     if (!input?.value.trim()) return;
     const l = state.learning;
-    try { l.tutor = await api("/career/tutor/ask", { method: "POST", body: JSON.stringify({ question: input.value.trim(), mode: "explanation" }) }); renderLearning(); }
+    try { l.tutor = await api("/career/tutor/ask", { method: "POST", body: JSON.stringify({ question: input.value.trim(), mode: l.tutorMode, section: l.selectedChapter }) }); renderLearning(); }
     catch (error) { alert(`Tuteur indisponible : ${error.message}`); }
   }
 
@@ -877,6 +1028,12 @@
   }
   $("#refreshBtn").addEventListener("click", refresh);
   $("#themeSelect").value = savedTheme === "light" ? "light" : "dark";
+  $("#styleSelect").value = savedStyle === "study" ? "study" : "nage";
+  $("#styleSelect").addEventListener("change", (event) => {
+    const style = event.target.value === "study" ? "study" : "nage";
+    document.documentElement.dataset.style = style === "study" ? "study" : "";
+    localStorage.setItem("nage-style", style);
+  });
   $("#themeSelect").addEventListener("change", (event) => {
     const theme = event.target.value === "light" ? "light" : "dark";
     document.documentElement.dataset.theme = theme === "light" ? "light" : "";

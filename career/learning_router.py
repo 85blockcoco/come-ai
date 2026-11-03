@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
@@ -16,7 +16,7 @@ from .ingest import CorpusError, CorpusIndex, DEFAULT_CORPUS_ROOT
 from .plan import VC_CHAPTERS, build_plan
 from .quiz import QuizEngine
 from .srs import SRSStore
-from .summary import build_summary, export_summary_pdf
+from .summary import build_summary, export_plan_pdf, export_summary_pdf
 from .tutor import TutorEngine
 
 
@@ -29,12 +29,14 @@ class TutorPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
     question: str = Field(min_length=1, max_length=4_000)
     mode: str = Field(default="explanation", max_length=30)
+    section: str | None = Field(default=None, max_length=180)
 
 
 class SRSReviewPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
     card_id: str = Field(min_length=8, max_length=80)
-    quality: int = Field(ge=0, le=5)
+    quality: int | None = Field(default=None, ge=0, le=5)
+    rating: Literal["again", "hard", "good", "easy"] | None = None
 
 
 class QuizNextPayload(BaseModel):
@@ -58,8 +60,14 @@ class ExamPayload(BaseModel):
 
 class ExamAnswerPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    exam_id: str = Field(min_length=16, max_length=64)
     question_id: str = Field(min_length=8, max_length=80)
     option_index: int = Field(ge=0, le=10)
+
+
+class ExamSubmitPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    exam_id: str = Field(min_length=16, max_length=64)
 
 
 class LearningWorkspace:
@@ -111,6 +119,9 @@ def create_learning_router(base_dir: str | Path, *, corpus_root: str | Path | No
     async def manifest() -> dict[str, Any]:
         return await run_in_threadpool(workspace.index.manifest)
 
+    async def coverage() -> dict[str, Any]:
+        return await run_in_threadpool(workspace.index.coverage)
+
     for path in ("/career/manifest", "/career/learning/manifest"):
         router.add_api_route(path, manifest, methods=["GET"])
         router.add_api_route("/api" + path, manifest, methods=["GET"])
@@ -122,12 +133,12 @@ def create_learning_router(base_dir: str | Path, *, corpus_root: str | Path | No
         hits = await run_in_threadpool(workspace.index.search, q, limit=max(1, min(limit, 20)))
         return {"query": q, "results": [item.citation() | {"score": item.score} for item in hits], "local_only": True}
 
-    for path, endpoint, methods in (("/career/chapters", chapters, ["GET"]), ("/career/search", search, ["GET"]), ("/career/learning/search", search, ["GET"])):
+    for path, endpoint, methods in (("/career/chapters", chapters, ["GET"]), ("/career/search", search, ["GET"]), ("/career/learning/search", search, ["GET"]), ("/career/coverage", coverage, ["GET"])):
         router.add_api_route(path, endpoint, methods=methods)
         router.add_api_route("/api" + path, endpoint, methods=methods)
 
     async def tutor(payload: TutorPayload) -> dict[str, Any]:
-        return (await run_in_threadpool(TutorEngine(workspace.index).ask, payload.question, mode=payload.mode)).to_dict()
+        return (await run_in_threadpool(TutorEngine(workspace.index).ask, payload.question, mode=payload.mode, section=payload.section)).to_dict()
 
     for path in ("/career/tutor/ask", "/career/tutor/explain"):
         router.add_api_route(path, tutor, methods=["POST"])
@@ -152,7 +163,8 @@ def create_learning_router(base_dir: str | Path, *, corpus_root: str | Path | No
 
     async def srs_due(limit: int = 20, chapter: str | None = None) -> dict[str, Any]:
         cards = await run_in_threadpool(workspace.srs.due, limit=limit, chapter=chapter)
-        return {"cards": [card.to_dict() for card in cards], "stats": workspace.srs.stats(), "local_only": True}
+        stats = await run_in_threadpool(workspace.srs.stats, chapter=chapter)
+        return {"cards": [card.to_dict() for card in cards], "stats": stats, "local_only": True}
 
     async def srs_generate(chapter: str | None = None, limit: int = 40) -> dict[str, Any]:
         cards = await run_in_threadpool(workspace.srs.generate, workspace.index, chapter=chapter, limit=limit)
@@ -160,7 +172,10 @@ def create_learning_router(base_dir: str | Path, *, corpus_root: str | Path | No
 
     async def srs_review(payload: SRSReviewPayload) -> dict[str, Any]:
         try:
-            card = await run_in_threadpool(workspace.srs.review, payload.card_id, payload.quality)
+            if payload.quality is None and payload.rating is None:
+                raise ValueError("Choisis une note Again, Hard, Good ou Easy.")
+            quality = payload.quality if payload.quality is not None else workspace.srs.rating_quality(payload.rating or "")
+            card = await run_in_threadpool(workspace.srs.review, payload.card_id, quality)
         except (KeyError, ValueError) as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
         return {"card": card.to_dict(), "stats": workspace.srs.stats(), "local_only": True}
@@ -188,6 +203,12 @@ def create_learning_router(base_dir: str | Path, *, corpus_root: str | Path | No
     async def plan() -> dict[str, Any]:
         return await run_in_threadpool(build_plan, workspace.quiz)
 
+    async def plan_pdf() -> FileResponse:
+        result = await run_in_threadpool(build_plan, workspace.quiz)
+        target = workspace.pdf_dir / "revision-plan.pdf"
+        await run_in_threadpool(export_plan_pdf, result, target)
+        return FileResponse(target, media_type="application/pdf", filename=target.name)
+
     async def exam(payload: ExamPayload) -> dict[str, Any]:
         chapters = payload.chapters or VC_CHAPTERS
         try:
@@ -197,14 +218,37 @@ def create_learning_router(base_dir: str | Path, *, corpus_root: str | Path | No
 
     async def exam_answer(payload: ExamAnswerPayload) -> dict[str, Any]:
         try:
-            return await run_in_threadpool(workspace.exam.answer, payload.question_id, payload.option_index)
+            return await run_in_threadpool(workspace.exam.answer, payload.exam_id, payload.question_id, payload.option_index)
+        except (KeyError, ValueError) as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+
+    async def exam_submit(payload: ExamSubmitPayload) -> dict[str, Any]:
+        try:
+            return await run_in_threadpool(workspace.exam.submit, payload.exam_id)
         except (KeyError, ValueError) as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
 
     async def dashboard() -> dict[str, Any]:
-        return await run_in_threadpool(workspace.quiz.dashboard, VC_CHAPTERS)
+        result = await run_in_threadpool(workspace.quiz.dashboard, VC_CHAPTERS)
+        for item in result["notions"]:
+            item["score_percent"] = round(item["score"] * 100)
+            item.update(workspace.srs.stats(chapter=item["chapter"]))
+        result["weak_points"] = [item for item in result["notions"] if not item["mastered"]]
+        result["cards_due"] = sum(item["due"] for item in result["notions"])
+        result["cards_total"] = sum(item["total"] for item in result["notions"])
+        result["exam"] = await run_in_threadpool(workspace.exam.stats)
+        return result
 
-    for path, endpoint, methods in (("/career/plan", plan, ["GET"]), ("/career/exam/start", exam, ["POST"]), ("/career/exam/answer", exam_answer, ["POST"]), ("/career/dashboard", dashboard, ["GET"]), ("/career/learning/dashboard", dashboard, ["GET"])):
+    routes = (
+        ("/career/plan", plan, ["GET"]),
+        ("/career/plan/pdf", plan_pdf, ["GET"]),
+        ("/career/exam/start", exam, ["POST"]),
+        ("/career/exam/answer", exam_answer, ["POST"]),
+        ("/career/exam/submit", exam_submit, ["POST"]),
+        ("/career/dashboard", dashboard, ["GET"]),
+        ("/career/learning/dashboard", dashboard, ["GET"]),
+    )
+    for path, endpoint, methods in routes:
         router.add_api_route(path, endpoint, methods=methods)
         # ``/api/career/dashboard`` belongs to the existing application
         # dashboard; the learning dashboard has its explicit learning alias.

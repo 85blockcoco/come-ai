@@ -87,4 +87,36 @@ def export_summary_pdf(summary: ChapterSummary, destination: str | Path) -> Path
     return path
 
 
-__all__ = ["ChapterSummary", "build_summary", "export_summary_pdf"]
+def export_plan_pdf(plan: dict[str, Any], destination: str | Path) -> Path:
+    """Export the current mastery-based revision plan as a local PDF."""
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.units import cm
+        from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+        from xml.sax.saxutils import escape
+    except ImportError as error:  # pragma: no cover - packaging failure
+        raise RuntimeError("L’export PDF nécessite reportlab localement.") from error
+    path = Path(destination)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    styles = getSampleStyleSheet()
+    sessions = plan.get("sessions", [])
+    story: list[Any] = [
+        Paragraph("Plan de révision Venture Capital", styles["Title"]),
+        Paragraph(f"Du {escape(str(plan.get('start', '—')))} au {escape(str(plan.get('until', '—')))}", styles["BodyText"]),
+        Spacer(1, 0.35 * cm),
+    ]
+    for session in sessions:
+        story.append(Paragraph(f"{escape(str(session.get('date', '')))} — {escape(str(session.get('chapter', 'Chapitre')))}", styles["Heading2"]))
+        story.append(Paragraph(escape(str(session.get("phase", "Révision"))).replace("_", " "), styles["BodyText"]))
+        activities = session.get("activities", [])
+        for activity in activities:
+            story.append(Paragraph(f"• {escape(str(activity))}", styles["BodyText"]))
+        story.append(Spacer(1, 0.2 * cm))
+    if not sessions:
+        story.append(Paragraph("Aucune session n’est planifiée.", styles["BodyText"]))
+    SimpleDocTemplate(str(path), pagesize=A4, rightMargin=1.7 * cm, leftMargin=1.7 * cm, topMargin=1.5 * cm, bottomMargin=1.5 * cm).build(story)
+    return path
+
+
+__all__ = ["ChapterSummary", "build_summary", "export_plan_pdf", "export_summary_pdf"]
