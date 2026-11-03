@@ -22,6 +22,9 @@
       quizFeedback: null, quizHintOpen: false, srsRevealed: false, srsBusy: false, exam: null, examResult: null,
       examBusy: false, examSubmitting: false, tutorMode: "explanation",
       practiceCases: [], practiceError: "", practiceCaseId: "VC25-Q16", practiceAnswers: {}, practiceResult: null, practiceBusy: false,
+      lessons: [], reviewQueue: [], lessonMessage: "", lessonBusy: false,
+      pastPapers: [], paper: null, paperYear: 2025, paperQuestionId: "", paperScope: "chapter",
+      paperAnswerDraft: {}, paperResult: null, paperError: "", paperBusy: false,
       search: [], searchQuery: "", busy: false,
     },
     filter: "",
@@ -39,6 +42,8 @@
       if (key === "class") node.className = value;
       else if (key === "html") node.innerHTML = value;
       else if (key === "style") node.style.cssText = value; // CSSOM : autorisé par la CSP
+      else if (key === "value" && "value" in node) node.value = value;
+      else if (key === "checked" && "checked" in node) node.checked = Boolean(value);
       else if (key.startsWith("on")) node.addEventListener(key.slice(2), value);
       else if (value !== null && value !== undefined && value !== false) node.setAttribute(key, value);
     }
@@ -122,9 +127,10 @@
           const ingestion = await learningIngestPromise;
           manifest = ingestion.manifest || await api("/career/manifest");
         }
-        const [coverage, chapters, dashboard, plan, due] = await Promise.all([
+        const [coverage, chapters, dashboard, plan, due, lessons, paperIndex] = await Promise.all([
           api("/career/coverage"), api("/career/chapters"), api("/career/learning/dashboard"),
           api("/career/plan"), api(`/career/srs/due?limit=8&chapter=${encodeURIComponent(learning.selectedChapter)}`),
+          api("/career/learning/lessons"), api("/career/past-papers"),
         ]);
         let practice = { cases: [] };
         try {
@@ -140,6 +146,9 @@
         learning.plan = plan;
         learning.due = due.cards || [];
         learning.srsStats = due.stats || null;
+        learning.lessons = lessons.lessons || [];
+        learning.reviewQueue = lessons.review_queue || [];
+        learning.pastPapers = paperIndex.papers || [];
         learning.practiceCases = practice.cases || [];
         if (!learning.practiceCases.some((item) => item.case_id === learning.practiceCaseId)) {
           learning.practiceCaseId = learning.practiceCases[0]?.case_id || "";
@@ -150,6 +159,10 @@
           if (!learning.practiceResult || learning.practiceResult.case_id !== selectedCase?.case_id) {
             learning.practiceResult = selectedCase?.stats?.latest_result || null;
           }
+        }
+        if (!learning.paper || learning.paper.year !== learning.paperYear) {
+          try { learning.paper = await api(`/career/past-papers/${learning.paperYear}?scope=all`); }
+          catch (error) { learning.paperError = error.message; }
         }
         return learning;
       } catch (error) {
@@ -558,6 +571,194 @@
     "TOPIC 5": "Relie droits de décision, suivi de l’entreprise et scénario de sortie; identifie qui peut agir et à quel moment.",
   };
 
+  const lessonIcons = { "TOPIC 1": "🌱", "TOPIC 2": "🔎", "TOPIC 3": "🧮", "TOPIC 4": "📝", "TOPIC 5": "🌍" };
+  const lessonForChapter = (chapter = state.learning.selectedChapter) => state.learning.lessons.find((item) => item.chapter === chapter) || null;
+
+  async function loadPastPaper(year, questionId = "") {
+    const l = state.learning;
+    l.paperBusy = true; l.paperError = ""; l.paperResult = null;
+    try {
+      l.paper = await api(`/career/past-papers/${Number(year)}?scope=all`);
+      l.paperYear = Number(year);
+      const questions = l.paper.questions || [];
+      l.paperQuestionId = questions.some((item) => item.id === questionId)
+        ? questionId
+        : (questions.find((item) => item.course_chapter === l.selectedChapter)?.id || questions[0]?.id || "");
+      l.paperAnswerDraft = {};
+      renderLearning();
+      return true;
+    } catch (error) {
+      l.paperError = error.message;
+      return false;
+    } finally { l.paperBusy = false; }
+  }
+
+  async function chooseLessonAction(action) {
+    const l = state.learning;
+    const lesson = lessonForChapter();
+    if (!lesson || l.lessonBusy) return;
+    l.lessonBusy = true; l.lessonMessage = "";
+    try {
+      await api(`/career/learning/lessons/${encodeURIComponent(lesson.id)}/action`, {
+        method: "POST", body: JSON.stringify({ action }),
+      });
+      const refreshed = await api("/career/learning/lessons");
+      l.lessons = refreshed.lessons || [];
+      l.reviewQueue = refreshed.review_queue || [];
+      if (action === "practice") {
+        l.paperScope = "chapter";
+        const ready = await loadPastPaper(lesson.recommended_exam.year, lesson.recommended_exam.question_id);
+        l.lessonMessage = ready
+          ? `Annale ${lesson.recommended_exam.year} ouverte : ${lesson.recommended_exam.question_id}. Le corrigé restera masqué jusqu’à ta réponse.`
+          : `L’action est enregistrée; l’annale n’a pas pu s’ouvrir (${l.paperError}).`;
+        renderLearning();
+        document.getElementById("study-past-papers")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      } else {
+        l.lessonMessage = action === "understood"
+          ? "Auto-évaluation enregistrée. La maîtrise reste évaluée séparément par tes réponses aux exercices."
+          : "Ajouté à ta liste À revoir. Tu pourras rouvrir la leçon depuis cette liste.";
+        renderLearning();
+      }
+    } catch (error) {
+      l.lessonMessage = `Impossible d’enregistrer ce choix : ${error.message}`;
+      renderLearning();
+    } finally { l.lessonBusy = false; }
+  }
+
+  async function submitPastPaperQuestion() {
+    const l = state.learning;
+    const question = (l.paper?.questions || []).find((item) => item.id === l.paperQuestionId);
+    if (!question || l.paperBusy) return;
+    let answers;
+    if (question.kind === "case" && question.parts?.length) {
+      answers = Object.fromEntries(question.parts.map((part) => [part.id, String(l.paperAnswerDraft[part.id] || "")]));
+    } else {
+      answers = { [question.id]: String(l.paperAnswerDraft[question.id] || "") };
+    }
+    if (!Object.values(answers).some((answer) => String(answer).trim())) {
+      l.paperError = "Saisis une réponse avant d’afficher le corrigé.";
+      l.paperResult = null;
+      renderLearning();
+      return;
+    }
+    l.paperBusy = true; l.paperError = "";
+    try {
+      l.paperResult = await api(`/career/past-papers/${l.paperYear}/grade`, { method: "POST", body: JSON.stringify({ answers }) });
+    } catch (error) { l.paperError = error.message; }
+    finally { l.paperBusy = false; renderLearning(); }
+  }
+
+  function currentPastPaperQuestions() {
+    const l = state.learning;
+    return (l.paper?.questions || []).filter((question) => {
+      if (l.paperScope === "chapter") return question.course_chapter === l.selectedChapter;
+      if (l.paperScope === "course") return question.course_scope === "core" || question.course_scope === "related";
+      return true;
+    });
+  }
+
+  function renderCourseLesson() {
+    const l = state.learning;
+    const lesson = lessonForChapter();
+    if (!lesson) return el("div", { class: "lesson-empty" }, el("p", {}, "La leçon de ce chapitre n’est pas disponible."));
+    const sections = lesson.sections || [];
+    const sourceText = (source) => `${source.file} · ${source.pages || source.sheets || "source locale"}`;
+    return el("article", { class: "course-lesson", "aria-labelledby": "courseLessonTitle" },
+      el("div", { class: "course-lesson-head" },
+        el("div", { class: "course-lesson-mark", "aria-hidden": "true" }, lessonIcons[lesson.chapter] || "📘"),
+        el("div", {},
+          el("span", { class: "course-lesson-kicker" }, `${lesson.chapter} · ${sections.length} parties · cours guidé`),
+          el("h3", { id: "courseLessonTitle" }, lesson.title),
+          el("p", {}, lesson.objective)),
+        el("span", { class: `lesson-status lesson-status-${lesson.progress?.status || "new"}` },
+          lesson.progress?.status === "understood" ? "Compris" : lesson.progress?.status === "review" ? "À revoir" : "À apprendre")),
+      el("div", { class: "lesson-roadmap", "aria-label": "Plan de la leçon" }, ...sections.map((section, index) =>
+        el("span", { class: "lesson-roadmap-step" }, el("b", {}, String(index + 1).padStart(2, "0")), section.title.replace(/^\d+\.\s*/, "")))),
+      ...sections.map((section, index) => el("section", { class: "lesson-section", "aria-labelledby": `lessonSection${index}` },
+        el("div", { class: "lesson-section-heading" }, el("span", { class: "lesson-step-number" }, String(index + 1).padStart(2, "0")), el("h4", { id: `lessonSection${index}` }, section.title)),
+        el("p", { class: "lesson-explanation" }, section.explain),
+        section.key_ideas?.length ? el("ul", { class: "lesson-key-ideas" }, ...section.key_ideas.map((idea) => el("li", {}, idea))) : null,
+        section.formulas?.length ? el("div", { class: "lesson-formula-list", "aria-label": "Formules à retenir" }, ...section.formulas.map((formula) => el("code", {}, formula))) : null,
+        section.procedure?.length ? el("div", { class: "lesson-procedure" }, el("strong", {}, "Méthode pas à pas"), el("ol", {}, ...section.procedure.map((step) => el("li", {}, step)))) : null,
+        section.example ? el("details", { class: "lesson-example" },
+          el("summary", {}, el("span", { "aria-hidden": "true" }, "🧩"), el("strong", {}, "Exercice guidé"), el("span", {}, section.example.prompt)),
+          el("ol", {}, ...(section.example.steps || []).map((step) => el("li", {}, step))),
+          el("p", { class: "lesson-answer" }, el("strong", {}, "À retenir · "), section.example.answer),
+          section.example.exam_refs?.length ? el("p", { class: "lesson-exam-ref" }, `Annale(s) à pratiquer dans le sujet : ${section.example.exam_refs.join(" · ")}`) : null) : null,
+        el("div", { class: "lesson-sources", "aria-label": "Sources de cette partie" }, ...(section.sources || []).map((source) => el("span", {}, sourceText(source)))),
+      )),
+      lesson.exam_question_ids?.length ? el("p", { class: "lesson-coverage-note" }, `Annales liées à cette leçon : ${lesson.exam_question_ids.join(" · ")}`) : null,
+      l.lessonMessage ? el("p", { class: l.lessonMessage.startsWith("Impossible") ? "error-note" : "lesson-action-message", role: "status" }, l.lessonMessage) : null,
+      el("div", { class: "lesson-end-choice", "aria-label": "Choisir la suite après cette leçon" },
+        el("strong", {}, "Que veux-tu faire maintenant ?"),
+        el("div", { class: "lesson-action-buttons" },
+          el("button", { class: "primary-btn", type: "button", disabled: l.lessonBusy, onclick: () => chooseLessonAction("understood") }, "✓ J’ai compris cette leçon"),
+          el("button", { class: "ghost-btn", type: "button", disabled: l.lessonBusy, onclick: () => chooseLessonAction("practice") }, "🧮 M’entraîner sur une annale"),
+          el("button", { class: "ghost-btn", type: "button", disabled: l.lessonBusy, onclick: () => chooseLessonAction("review") }, "🔖 Ajouter à À revoir"))),
+      el("small", { class: "lesson-self-rating-note" }, `Entraînements depuis cette leçon : ${lesson.progress?.practice_count || 0}. « J’ai compris » est une auto-évaluation, pas une preuve de maîtrise.`));
+  }
+
+  function renderPastPaperPractice() {
+    const l = state.learning;
+    const paper = l.paper;
+    const allQuestions = currentPastPaperQuestions();
+    const selected = allQuestions.find((item) => item.id === l.paperQuestionId) || allQuestions[0] || null;
+    if (selected && selected.id !== l.paperQuestionId) l.paperQuestionId = selected.id;
+    const questionSelect = el("select", { class: "learning-select past-paper-question-select", "aria-label": "Question de l’annale" }, ...allQuestions.map((item) => {
+      const scope = item.course_scope === "core" ? "VC" : item.course_scope === "related" ? "connexe" : item.course_scope === "outside_vc_scope" ? "PE/M&A" : "à classer";
+      return el("option", { value: item.id, selected: item.id === selected?.id }, `Q${item.number} · ${scope} · ${item.points} pt`);
+    }));
+    questionSelect.addEventListener("change", () => { l.paperQuestionId = questionSelect.value; l.paperResult = null; renderLearning(); });
+    const years = el("select", { class: "learning-select", "aria-label": "Année de l’annale" }, ...(l.pastPapers || []).map((item) =>
+      el("option", { value: String(item.year), selected: item.year === l.paperYear }, `${item.year} · ${item.question_count} questions · ${item.core_count} VC · ${item.related_count} connexes · ${item.outside_vc_scope_count} PE/M&A${item.unclassified_count ? ` · ${item.unclassified_count} à classer` : ""}`)));
+    years.addEventListener("change", async () => { await loadPastPaper(Number(years.value)); });
+    const scopeChoices = [
+      ["chapter", `Ce chapitre · ${l.selectedChapter}`], ["course", "VC et questions connexes"], ["all", "Toutes les questions du sujet"],
+    ];
+    const scopeButtons = el("div", { class: "past-paper-filters", role: "group", "aria-label": "Filtrer les questions" }, ...scopeChoices.map(([value, label]) =>
+      el("button", { class: l.paperScope === value ? "past-paper-filter is-active" : "past-paper-filter", type: "button", "aria-pressed": String(l.paperScope === value), onclick: () => { l.paperScope = value; l.paperResult = null; renderLearning(); } }, label)));
+    let questionBody = null;
+    if (selected) {
+      const scopeLabel = selected.course_scope === "core" ? "Dans le cours VC" : selected.course_scope === "related" ? "Connexe au cours · à distinguer" : selected.course_scope === "outside_vc_scope" ? "PE/M&A · hors cœur VC" : "À classer · vérifier le sujet";
+      const answerFields = selected.kind === "mcq"
+        ? el("div", { class: "past-paper-options", role: "radiogroup", "aria-label": "Choisir une réponse" }, ...(selected.choices || []).map((choice) =>
+            el("label", { class: "past-paper-option" },
+              el("input", { type: "radio", name: "pastPaperAnswer", value: choice.label, checked: l.paperAnswerDraft[selected.id] === choice.label, onchange: () => { l.paperAnswerDraft[selected.id] = choice.label; l.paperResult = null; } }),
+              el("span", {}, el("b", {}, `${choice.label}.`), ` ${choice.text}`))))
+        : selected.kind === "case" && selected.parts?.length
+          ? el("div", { class: "past-paper-parts" }, ...selected.parts.map((part) => el("label", { class: "past-paper-part" },
+              el("strong", {}, `${part.prompt} · ${part.points} pt`),
+              part.kind === "numeric"
+                ? el("input", { class: "practice-control", type: "text", inputmode: "decimal", value: l.paperAnswerDraft[part.id] || "", oninput: (event) => { l.paperAnswerDraft[part.id] = event.target.value; l.paperResult = null; }, "aria-label": part.prompt })
+                : el("textarea", { class: "past-paper-text-answer", rows: "3", maxlength: "4000", value: l.paperAnswerDraft[part.id] || "", oninput: (event) => { l.paperAnswerDraft[part.id] = event.target.value; l.paperResult = null; }, "aria-label": part.prompt }))))
+          : selected.kind === "numeric"
+            ? el("label", { class: "past-paper-part" }, el("strong", {}, `Ta réponse numérique · ${selected.points} pt`), el("input", { class: "practice-control", type: "text", inputmode: "decimal", value: l.paperAnswerDraft[selected.id] || "", oninput: (event) => { l.paperAnswerDraft[selected.id] = event.target.value; l.paperResult = null; }, "aria-label": "Réponse numérique" }))
+            : el("label", { class: "past-paper-part" }, el("strong", {}, `Ta réponse · ${selected.points} pt`), el("textarea", { class: "past-paper-text-answer", rows: "4", maxlength: "4000", value: l.paperAnswerDraft[selected.id] || "", oninput: (event) => { l.paperAnswerDraft[selected.id] = event.target.value; l.paperResult = null; }, "aria-label": "Rédiger ta réponse" }));
+      questionBody = el("article", { class: "past-paper-question", "aria-labelledby": "pastPaperPrompt" },
+        el("div", { class: "past-paper-question-meta" }, el("span", {}, `Question ${selected.number} · ${selected.points} point${selected.points === 1 ? "" : "s"}`), el("span", { class: selected.course_scope === "core" ? "status-good" : "status-low" }, scopeLabel)),
+        el("p", { id: "pastPaperPrompt", class: "past-paper-prompt" }, selected.prompt),
+        answerFields,
+        el("div", { class: "past-paper-question-actions" },
+          el("button", { class: "ghost-btn", type: "button", disabled: !allQuestions.length || allQuestions[0]?.id === selected.id, onclick: () => { const index = allQuestions.findIndex((item) => item.id === selected.id); l.paperQuestionId = allQuestions[Math.max(0, index - 1)]?.id || selected.id; l.paperResult = null; renderLearning(); } }, "← Précédente"),
+          el("button", { class: "primary-btn", type: "button", disabled: l.paperBusy, onclick: submitPastPaperQuestion }, l.paperBusy ? "Correction…" : "Vérifier ma réponse"),
+          el("button", { class: "ghost-btn", type: "button", disabled: !allQuestions.length || allQuestions[allQuestions.length - 1]?.id === selected.id, onclick: () => { const index = allQuestions.findIndex((item) => item.id === selected.id); l.paperQuestionId = allQuestions[Math.min(allQuestions.length - 1, index + 1)]?.id || selected.id; l.paperResult = null; renderLearning(); } }, "Suivante →")),
+        l.paperResult ? el("div", { class: "past-paper-feedback", role: "status" },
+          ...((l.paperResult.items || []).map((item) => el("article", { class: `past-paper-feedback-item ${item.status === "correct" ? "is-correct" : item.status === "incorrect" ? "is-wrong" : "is-self-assess"}` },
+            el("strong", {}, item.status === "correct" ? "✓ Bonne réponse" : item.status === "incorrect" ? "À corriger" : "À auto-évaluer avec le corrigé"),
+            item.expected !== undefined && item.expected !== null ? el("p", {}, `Attendu : ${item.expected}${item.unit ? ` ${item.unit}` : ""}`) : null,
+            item.solution ? el("p", {}, item.solution) : null,
+            item.model_answer ? el("p", {}, `Réponse de référence : ${item.model_answer}`) : null))),
+          el("small", {}, "Correction affichée après ta tentative. Les questions ouvertes ne sont pas notées automatiquement par un modèle.")) : null);
+    }
+    return el("section", { class: "past-paper-practice", id: "study-past-papers", "aria-labelledby": "pastPapersTitle" },
+      el("div", { class: "past-paper-head" }, el("div", {}, el("span", { class: "course-lesson-kicker" }, "Annales vérifiées · 2023–2025"), el("h3", { id: "pastPapersTitle" }, "S’entraîner sur les sujets déjà tombés"), el("p", {}, "Les 67 questions des packs 2023, 2024 et 2025 sont consultables. Les questions PE/M&A restent visibles et clairement séparées.")), years),
+      el("p", { class: "past-paper-audit-note" }, "Le scan 2024 a été rapproché du sujet corrigé en excluant sa couverture. Les deux fichiers 2023 sont deux versions du même examen du 12 décembre, pas deux annales supplémentaires."),
+      el("div", { class: "past-paper-toolbar" }, scopeButtons, questionSelect),
+      paper ? el("div", { class: "past-paper-progress", role: "status" }, `${selected ? allQuestions.findIndex((item) => item.id === selected.id) + 1 : 0}/${allQuestions.length} questions affichées · ${paper.title} · ${paper.duration_minutes} min`) : null,
+      l.paperError ? el("p", { class: "error-note", role: "alert" }, l.paperError) : null,
+      questionBody || el("p", { class: "note" }, l.paperBusy ? "Chargement du sujet…" : `Aucune question classée pour ${l.selectedChapter} dans ce filtre. Essaie « Toutes les questions du sujet » pour vérifier le reste.`));
+  }
+
   function renderLearning() {
     const host = $("#view-learning");
     const l = state.learning;
@@ -575,8 +776,9 @@
     const cardsTotal = Number(selectedProgress.total || 0);
     const cardsReviewed = Number(selectedProgress.reviewed || 0);
     const revisionProgress = cardsTotal ? Math.min(100, Math.round(cardsReviewed / cardsTotal * 100)) : 0;
-    const understoodKey = `nage-learning-understood:${l.selectedChapter}`;
-    const understood = localStorage.getItem(understoodKey) === "true";
+    const activeLesson = lessonForChapter();
+    const understood = activeLesson?.progress?.status === "understood";
+    const markedForReview = activeLesson?.progress?.status === "review";
     const exerciseTarget = Math.max(1, Number(selectedProgress.coverage_required || selectedProgress.attempts_required || 5));
     const exerciseCovered = Number(selectedProgress.covered ?? selectedProgress.attempts ?? 0);
     const exerciseAttempts = Number(selectedProgress.attempts || 0);
@@ -623,16 +825,14 @@
       el("progress", { max: "100", value: String(learningProgress), "aria-label": `Progression du parcours d’étude : ${learningProgress}%` }),
       el("div", { class: "learning-step-grid" }, ...[
         { title: "📇 Réviser", progress: revisionProgress, detail: cardsTotal ? `${cardsReviewed}/${cardsTotal} cartes de ce chapitre notées.` : "Génère des cartes sourcées pour commencer.", label: "Voir les cartes", target: "study-revision" },
-        { title: "📘 Comprendre", progress: understood ? 100 : 0, detail: "Lis les notions repérées dans le cours, ouvre les extraits, puis fais ton auto-évaluation.", label: understood ? "À revoir" : "J’ai compris", toggle: true },
+        { title: "📘 Comprendre", progress: understood ? 100 : 0, detail: markedForReview ? "Cette leçon figure dans ta liste À revoir." : "Lis le cours guidé, essaie l’exemple, puis choisis comment poursuivre.", label: "Ouvrir la leçon", target: "study-learning" },
         { title: "🧮 S’entraîner", progress: exerciseProgress, detail: `${Math.min(exerciseCovered, exerciseTarget)}/${exerciseTarget} questions distinctes vues · ${Number(selectedProgress.correct || 0)}/${exerciseAttempts || 0} justes.`, label: "Commencer un quiz", target: "study-exercises" },
         { title: "🏁 Se tester", progress: examProgress, detail: completedExams ? `Examen(s) terminé(s) : ${completedExams} · dernier score ${Math.round(Number(d.exam?.last_score || 0) * 100)}%.` : `${masteredChapters}/${totalChapters} chapitres au seuil de maîtrise pour déverrouiller l’examen.`, label: completedExams ? "Revoir l’examen" : "Voir les conditions", target: "study-exam" },
       ].map((step, index) => el("article", { class: "learning-step", "data-current": String(index === currentStep), "aria-current": index === currentStep ? "step" : null },
         el("div", { class: "learning-step-head" }, el("strong", {}, step.title), el("span", {}, `${step.progress}%`)),
         el("p", {}, step.detail),
         el("progress", { max: "100", value: String(step.progress), "aria-label": `Avancement ${step.title}` }),
-        step.toggle
-          ? el("button", { class: understood ? "ghost-btn" : "primary-btn", type: "button", onclick: () => { localStorage.setItem(understoodKey, String(!understood)); renderLearning(); } }, step.label)
-          : el("button", { class: "ghost-btn", type: "button", onclick: () => scrollToStudyStep(step.target) }, step.label),
+        el("button", { class: "ghost-btn", type: "button", onclick: () => scrollToStudyStep(step.target) }, step.label),
       ))),
     );
     const changeLearningChapter = async (chapter) => {
@@ -650,10 +850,11 @@
       const covered = Number(item.covered ?? item.attempts ?? 0);
       const value = Math.round(accuracy * Math.min(1, covered / required));
       const active = item.chapter === l.selectedChapter;
+      const progressStatus = lessonForChapter(item.chapter)?.progress?.status;
       return el("button", { class: `learning-chapter${active ? " is-selected" : ""}`, type: "button", "aria-pressed": String(active), onclick: () => changeLearningChapter(item.chapter) },
         el("div", { class: "learning-chapter-head" }, el("strong", {}, `${topicIcon(item.chapter)} ${learningTopics.find(([key]) => key === item.chapter)?.[1] || item.chapter}`), el("b", {}, `${value}%`)),
         el("progress", { max: "100", value: String(value), "aria-label": `Progression vers la maîtrise ${item.chapter}` }),
-        el("div", { class: "learning-chapter-foot" }, el("span", {}, `${item.correct || 0}/${item.attempts || 0} justes · ${accuracy}%`), el("span", { class: item.mastered ? "status-good" : "status-low" }, item.mastered ? "Maîtrisé" : "À renforcer")),
+        el("div", { class: "learning-chapter-foot" }, el("span", {}, `${item.correct || 0}/${item.attempts || 0} justes · ${accuracy}%`), el("span", { class: progressStatus === "understood" ? "status-good" : progressStatus === "review" ? "status-low" : item.mastered ? "status-good" : "status-low" }, progressStatus === "understood" ? "Leçon comprise" : progressStatus === "review" ? "À revoir" : item.mastered ? "Maîtrisé au quiz" : "À renforcer")),
         el("small", {}, `${covered}/${required} questions distinctes · ${item.attempts || 0} réponses · ${item.due || 0} cartes dues`));
     });
     const coverage = l.coverage || {};
@@ -679,6 +880,14 @@
           }),
           el("div", { class: "learning-citations" }, el("strong", {}, "Sources liées · ouvre les extraits"), ...(l.summary.citations || []).map(citationDetails)))
       : el("div", { class: "empty" }, el("strong", {}, l.summaryLoading ? "Chargement de la fiche…" : "Fiche du chapitre"), el("span", {}, "La fiche est extraite du cours et garde ses références de page."));
+    const automaticSummary = el("details", { class: "automatic-summary" }, el("summary", {}, "Consulter les extraits automatiques du corpus"), summary);
+    const reviewQueuePanel = l.reviewQueue.length
+      ? el("section", { class: "card padded review-queue", "aria-labelledby": "reviewQueueTitle" },
+          el("div", { class: "section-title no-gap" }, el("h2", { id: "reviewQueueTitle" }, `À revoir · ${l.reviewQueue.length} leçon${l.reviewQueue.length === 1 ? "" : "s"}`), el("span", { class: "hint" }, "enregistré sur cet appareil")),
+          el("div", { class: "review-queue-list" }, ...l.reviewQueue.map((entry) => el("article", { class: "review-queue-item" },
+            el("div", {}, el("b", {}, `${lessonIcons[entry.chapter] || "📘"} ${entry.title}`), el("small", {}, entry.chapter)),
+            el("button", { class: "ghost-btn", type: "button", onclick: async () => { const target = l.lessons.find((item) => item.id === entry.id); if (target) await changeLearningChapter(target.chapter); scrollToStudyStep("study-learning"); } }, "Reprendre la leçon")))))
+      : null;
     const mathTerm = (symbol, subscript = "") => el("span", { class: "formula-term" }, symbol, subscript ? el("sub", {}, subscript) : null);
     const formulaCard = (title, equation, note) => el("article", { class: "formula-card" },
       el("span", { class: "formula-card-title" }, title), equation, el("small", {}, note));
@@ -822,15 +1031,15 @@
       el("span", { class: "learning-subject-meta" }, `${learningTopics.length} chapitres · ${num(l.manifest.documents?.length || 0)} supports locaux`));
     const revisionPanel = el("div", { class: "card padded srs-panel", id: "study-revision" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Étape 1 · Révision active"), el("span", { class: "hint" }, `${l.due.length} cartes dues · ${l.selectedChapter}`)), srs, el("button", { class: "ghost-btn", type: "button", disabled: l.srsBusy, onclick: generateLearningCards }, l.srsBusy ? "Génération locale…" : `Générer / compléter les cartes de ${l.selectedChapter}`));
     const learningPanel = el("div", { class: "learning-grid", id: "study-learning" },
-      el("div", { class: "card padded" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Étape 2 · Apprendre avec le cours"), el("span", { class: "hint" }, l.selectedChapter)), summary, el("button", { class: "ghost-btn", type: "button", onclick: loadLearningSummary }, "Actualiser la fiche")),
+      el("div", { class: "card padded course-lesson-container" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Étape 2 · Le cours guidé"), el("span", { class: "hint" }, l.selectedChapter)), renderCourseLesson(), automaticSummary, el("button", { class: "ghost-btn", type: "button", onclick: loadLearningSummary }, "Actualiser les extraits automatiques")),
       el("div", { class: "card padded" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Tuteur du cours"), el("span", { class: "hint" }, "réponses bornées au chapitre sélectionné")), tutorForm, tutor));
     const searchPanel = el("div", { class: "card padded" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Recherche dans le cours"), el("span", { class: "hint" }, "tous les supports")), searchForm, searchResults);
-    const exercisePanel = el("div", { class: "card padded learning-exercise", id: "study-exercises" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Étape 3 · Exercices progressifs"), el("span", { class: "hint" }, l.quiz?.difficulty || "correction sourcée")), quiz, guidedPractice);
+    const exercisePanel = el("div", { class: "card padded learning-exercise", id: "study-exercises" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Étape 3 · Exercices progressifs"), el("span", { class: "hint" }, l.quiz?.difficulty || "correction sourcée")), quiz, guidedPractice, renderPastPaperPractice());
     const coveragePanel = el("div", { class: "card coverage-panel" },
       el("div", { class: "coverage-head" }, el("strong", {}, "Couverture des supports"), el("span", { class: coveragePct === 100 ? "status-good" : "status-low" }, coverage.inventory_available ? `${coverage.indexed_sources}/${coverage.expected_sources} fichiers · ${coveragePct}%` : "Inventaire source indisponible")),
       el("progress", { max: "100", value: String(coveragePct), "aria-label": "Couverture des fichiers de cours" }),
       el("small", {}, `${num(coverage.covered_content_units || 0)}/${num(coverage.expected_content_units || 0)} pages ou feuilles indexées · local uniquement`),
-      el("p", { class: "coverage-audit-note" }, "🔎 Contrôle d’exhaustivité · l’audit indépendant du 3 novembre a relevé un PDF au-delà de la limite d’import et un examen 2024 scanné sans texte extrait. Le pourcentage ci-dessus décrit l’index local; il ne prouve pas que toutes les pages et formules du dossier sont couvertes."),
+      el("p", { class: "coverage-audit-note" }, "🔎 Contrôle d’exhaustivité · les 5 supports principaux ont des leçons guidées; les 67 questions des annales 2023–2025 sont consultables et le scan 2024 a été rapproché de son corrigé en excluant la couverture. Un rapport PDF de 56 MiB et certaines pages/tableaux restent à vérifier. Le pourcentage de l’index ne prouve pas à lui seul l’exhaustivité de toutes les formules et notions."),
       el("details", { class: "coverage-details" }, el("summary", {}, "Voir les fichiers du corpus"), el("ul", {}, ...(coverage.sources || []).map((source) => el("li", { class: source.text_available ? "coverage-ok" : "coverage-missing" }, `${source.text_available ? "✓" : "!"} ${source.name} · ${num(source.indexed_units)}/${num(source.expected_content_units)} unités`)))));
     const learningToolbar = el("div", { class: "learning-toolbar card" }, select,
       el("span", { class: "chip green" }, `${d.mastered_count || 0}/${d.total_count || 5} chapitres maîtrisés`),
@@ -847,6 +1056,7 @@
       learningFocus,
       learningSubjectNav,
       learningPath,
+      reviewQueuePanel,
       learningToolbar,
       revisionPanel,
       formulaBoard,

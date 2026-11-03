@@ -8,10 +8,14 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.concurrency import run_in_threadpool
 
+from academics.vc.errors import ContentError, InputError
+from academics.vc.pastpapers import find_paper, grade_paper, load_papers, paper_payload
+
 from .case_practice import CasePracticeEngine
+from .course_lessons import LessonProgressStore, classify_exam_question, lesson_payloads
 from .exam import ExamEngine
 from .ingest import CorpusError, CorpusIndex, DEFAULT_CORPUS_ROOT
 from .plan import VC_CHAPTERS, build_plan
@@ -76,6 +80,23 @@ class CasePracticePayload(BaseModel):
     answers: dict[str, str | int | float | None] = Field(max_length=20)
 
 
+class LessonActionPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    action: Literal["understood", "practice", "review"]
+
+
+class PastPaperGradePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    answers: dict[str, str] = Field(max_length=100)
+
+    @field_validator("answers")
+    @classmethod
+    def bound_answer_values(cls, answers: dict[str, str]) -> dict[str, str]:
+        if any(len(key) > 80 or len(value) > 4_000 for key, value in answers.items()):
+            raise ValueError("Chaque réponse doit tenir dans 4 000 caractères et utiliser un identifiant court.")
+        return answers
+
+
 class LearningWorkspace:
     def __init__(self, base_dir: str | Path, *, corpus_root: str | Path | None = None):
         root = Path(base_dir)
@@ -86,6 +107,8 @@ class LearningWorkspace:
         self.quiz = QuizEngine(self.index, root / "quiz.sqlite3")
         self.exam = ExamEngine(self.quiz)
         self.practice = CasePracticeEngine(self.index, root / "practice.sqlite3")
+        self.lessons = LessonProgressStore(root / "lessons.sqlite3")
+        self.past_papers = load_papers()
         self.pdf_dir = root / "summaries"
 
     def close(self) -> None:
@@ -93,6 +116,7 @@ class LearningWorkspace:
         self.srs.close()
         self.quiz.close()
         self.practice.close()
+        self.lessons.close()
 
     def ingest(self, source_dir: str | None = None) -> dict[str, Any]:
         directory = Path(source_dir).expanduser() if source_dir else self.index.corpus_root
@@ -247,9 +271,113 @@ def create_learning_router(base_dir: str | Path, *, corpus_root: str | Path | No
         except ValueError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
 
+    async def lessons() -> dict[str, Any]:
+        progress = workspace.lessons.all()
+        values = lesson_payloads(progress)
+        return {
+            "lessons": values,
+            "review_queue": [
+                {"id": lesson["id"], "chapter": lesson["chapter"], "title": lesson["title"]}
+                for lesson in values if lesson["progress"].get("status") == "review"
+            ],
+            "local_only": True,
+        }
+
+    async def lesson_action(lesson_id: str, payload: LessonActionPayload) -> dict[str, Any]:
+        try:
+            state = workspace.lessons.decide(lesson_id, payload.action)
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        return {"progress": state, "local_only": True}
+
+    async def past_paper_index() -> dict[str, Any]:
+        papers = []
+        for paper in workspace.past_papers:
+            categorized = [classify_exam_question(question.id) for question in paper.questions]
+            papers.append({
+                "year": paper.year,
+                "paper_id": paper.paper_id,
+                "title": paper.title,
+                "duration_minutes": paper.duration_minutes,
+                "total_points": paper.points,
+                "question_count": len(paper.questions),
+                "core_count": sum(item["course_scope"] == "core" for item in categorized),
+                "related_count": sum(item["course_scope"] == "related" for item in categorized),
+                "outside_vc_scope_count": sum(item["course_scope"] == "outside_vc_scope" for item in categorized),
+                "unclassified_count": sum(item["course_scope"] == "unclassified" for item in categorized),
+            })
+        return {"papers": papers, "question_count": sum(item["question_count"] for item in papers), "local_only": True}
+
+    async def past_paper(year: int, chapter: str | None = None, scope: str = "all") -> dict[str, Any]:
+        if scope not in {"all", "course", "core", "related", "outside_vc_scope"}:
+            raise HTTPException(status_code=400, detail="Filtre d’annales inconnu.")
+        try:
+            paper = find_paper(year, workspace.past_papers)
+            result = paper_payload(paper, solutions=False)
+        except (InputError, ContentError) as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+        questions = []
+        for question in result["questions"]:
+            metadata = classify_exam_question(question["id"])
+            question.update(metadata)
+            selected_scope = metadata["course_scope"]
+            if chapter and metadata["course_chapter"] != chapter:
+                continue
+            if scope == "course" and selected_scope not in {"core", "related"}:
+                continue
+            if scope in {"core", "related", "outside_vc_scope"} and selected_scope != scope:
+                continue
+            questions.append(question)
+        result["questions"] = questions
+        result["selected_count"] = len(questions)
+        result["local_only"] = True
+        return result
+
+    async def past_paper_grade(year: int, payload: PastPaperGradePayload) -> dict[str, Any]:
+        try:
+            paper = find_paper(year, workspace.past_papers)
+            attempted = {
+                str(key).strip().upper(): value
+                for key, value in payload.answers.items()
+                if str(value).strip()
+            }
+            if not attempted:
+                raise InputError("Saisis au moins une réponse avant d’afficher le corrigé.")
+            result = grade_paper(paper, attempted)
+        except (InputError, ContentError) as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        # A one-question practice submission must not reveal the correction for
+        # every unanswered question in the paper.
+        submitted = set(attempted)
+        result["items"] = [
+            item for item in result["items"]
+            if str(item.get("question_id", "")).upper() in submitted
+            or str(item.get("parent_id", "")).upper() in submitted
+        ]
+        auto_items = [item for item in result["items"] if item["status"] != "self_assess"]
+        result["auto_points"] = round(sum(float(item.get("earned") or 0) for item in auto_items), 2)
+        result["auto_max"] = round(sum(float(item.get("max") or 0) for item in auto_items), 2)
+        result["auto_percent"] = (
+            round(100 * result["auto_points"] / result["auto_max"], 2)
+            if result["auto_max"] else None
+        )
+        result["self_assessment_points"] = round(sum(
+            float(item.get("max") or 0) for item in result["items"] if item["status"] == "self_assess"
+        ), 2)
+        result["attempted_item_count"] = len(result["items"])
+        result["local_only"] = True
+        return result
+
     for path, endpoint, methods in (
         ("/career/practice/cases", practice_cases, ["GET"]),
         ("/career/practice/cases/{case_id}/submit", practice_submit, ["POST"]),
+        ("/career/learning/lessons", lessons, ["GET"]),
+        ("/career/learning/lessons/{lesson_id}/action", lesson_action, ["POST"]),
+        ("/career/past-papers", past_paper_index, ["GET"]),
+        ("/career/past-papers/{year}", past_paper, ["GET"]),
+        ("/career/past-papers/{year}/grade", past_paper_grade, ["POST"]),
     ):
         router.add_api_route(path, endpoint, methods=methods)
         router.add_api_route("/api" + path, endpoint, methods=methods)
