@@ -1,0 +1,117 @@
+# SPEC-033 — Variantes traduites du dossier (EN/DE/ES)
+
+**Mission** : 68 · **Branche** : `agent/spec-033-translation-variants` · **Statut** : done
+
+## Livrés
+
+| Fichier | Rôle |
+|---|---|
+| `career/translation_variants.py` | Module principal : `detect_offer_lang()`, `build_variant()`, `LexiconGL`, `VariantReport` |
+| `career/lexicons/en.json` | Lexique FR → EN (41 termes) |
+| `career/lexicons/de.json` | Lexique FR → DE (41 termes) |
+| `career/lexicons/es.json` | Lexique FR → ES (41 termes) |
+| `tests/test_translation_variants.py` | 33 tests (détection, lexiques, variantes, déterminisme, garde-fous) |
+| `career/router.py` | 2 endpoints REST (`/api/career/translation-variants/detect`, `/build`) |
+
+## Contrats respectés
+
+- `VariantReport(offer_lang, mode, translated_fields, untranslated)` — dataclass immuable
+- `LexiconGL(lang, terms)` — dataclass immuable
+- `detect_offer_lang(text) → "en"|"de"|"es"|"fr"` — heuristique stopwords locale (0 réseau)
+- `build_variant(variant_id, target_lang, arena_available=False) → VariantReport`
+  - `mode="passthrough"` si `target_lang == "fr"`
+  - `mode="arena"` si `arena_available=True` (réserve SPEC-017)
+  - `mode="lexicon"` par défaut (hors-ligne)
+
+## Décisions
+
+1. **Pas de réseau sans arena** — le module ne fait jamais d'appel réseau. Le lexique statique couvre les 41 termes de variante (labels, sections, mots-clés, tons de lettre).
+2. **Heuristique stopwords** — détection de langue par comptage de mots vides, déterministe, sans modèle. Les textes mixtes sont résolus par majorité.
+3. **Fallback lexicon** — quand aucun terme du lexique ne couvre un champ, il apparaît dans `untranslated` (aucune invention).
+4. **Endpoint `/detect`** — retourne la langue détectée sans sauvegarder (idempotent, sans effet de bord).
+
+## Tests
+
+```
+pytest -q tests/test_translation_variants.py → 33 passed
+ruff check career/translation_variants.py career/router.py → All checks passed!
+git diff --check (fichiers mission) → propre
+```
+
+Couverture :
+- Détection langue : EN, DE, ES, FR, texte vide, texte court, mixte FR/EN (adversarial), texte absent (`None`)
+- Lexiques : chargement, validité JSON, immutabilité, traduction de termes clés
+- Variantes : 3 variantes × 3 langues (9 cas), mode passthrough, mode arena, déterminisme
+- Erreurs : variante inconnue, langue cible inconnue (`"it"`)
+
+## Limites
+
+- Arena (SPEC-017) non implémentée — le chemin `mode="arena"` existe mais redirige vers le lexique aujourd'hui (tous les champs sont repris ; aucun champ n'est laissé non traduit).
+- Le lexique couvre les termes de variante uniquement, pas le contenu complet du CV/lettre (le générateur de kit `application_studio.py` produit déjà du contenu multilingue via `_factual_sections` — ce module complète la couche variante).
+- Aucune donnée réelle n'a été utilisée — uniquement des fixtures synthétiques.
+
+## Suite — audit 26/10/2026 (smoke REST)
+
+Audit des endpoints REST : les routes `/api/career/translation-variants/detect`
+et `/build` répondaient systématiquement 422.
+
+Causes corrigées :
+1. Les modèles `TranslationDetectPayload` / `TranslationBuildPayload` étaient
+   imbriqués dans `create_career_router()` ; avec `from __future__ import
+   annotations`, FastAPI ne les résout pas comme Body et exige un query param
+   `payload`. Déplacés au niveau module (comme `ResetPayload`).
+2. `local()` applique `to_jsonable`, qui stringifie les dataclasses — le
+   `VariantReport` revenait en `str`. Le handler sérialise désormais via
+   `dataclasses.asdict`.
+
+Ajout : `test_rest_smoke_detect_and_build` (detect 200 + build 201, mode lexicon).
+Résultats : `pytest tests/test_translation_variants.py` → 31 passed ; ruff clean.
+
+## Suite — durcissement 27/10/2026
+
+Deux garde-fous ajoutés après revue :
+1. `detect_offer_lang()` retourne `"fr"` pour un texte absent (`None`) au lieu de
+   lever `AttributeError`, afin qu'une offre sans description ne casse pas la
+   pipeline.
+2. `build_variant()` rejette explicitement une langue cible hors
+   `en/de/es/fr` (`ValueError`) au lieu de produire un rapport vide.
+
+Tests ajoutés : `test_detect_none_text_defaults_to_french`,
+`test_build_variant_unknown_target_lang_raises`.
+Résultats : `pytest tests/test_translation_variants.py` → 33 passed (10,29 s) ;
+`ruff check` sur les fichiers mission → clean.
+
+Suite complète (27/10) : 3123 passed, 1 failed préexistant et hors périmètre
+(`tests/test_career_agent.py::test_local_storage_profile_preferences_and_persistence`,
+qui attend encore 6 familles alors que `JOB_FAMILIES` en compte 14 depuis le
+commit `cd0e5e8`). `ruff check .` signale 17 erreurs préexistantes dans
+`night_supervisor.py`, `design/**` et `come_ai_web.py`, aucun fichier de cette
+mission.
+
+## Suite — audit de complétude 29/10/2026
+
+Trois faiblesses corrigées :
+
+1. **Mode `arena` honnête** — `build_variant(..., arena_translator=...)` accepte
+   désormais un callable injecté par SPEC-017. `arena_available=True` sans
+   traducteur retombe sur le lexique (`mode="lexicon"`) : le module ne prétend
+   plus avoir traduit des champs qu'il n'a fait que recopier. Un traducteur qui
+   renvoie une chaîne vide alimente `untranslated` au lieu de laisser passer le
+   français.
+2. **Lexiques complets** — `quantitative` (mot-clé obligatoire de la variante
+   `markets`) manquait dans les 3 lexiques ; ajouté (`quantitative` /
+   `quantitativ` / `cuantitativo`). Un test vérifie désormais que **tous** les
+   champs des 3 variantes sont couverts en EN/DE/ES (`untranslated == []`).
+3. **Détection plus robuste** — tokenisation par expression régulière : les
+   élisions (`l'expérience`) et les traits d'union ne collent plus le mot vide à
+   son préfixe. Le test adversarial mixte FR/EN assert désormais la langue
+   majoritaire exacte (`en`, 4 stopwords EN contre 3 FR) au lieu d'accepter
+   `en` ou `fr`. `untranslated` est dédupliqué (ordre de première apparition).
+
+Tests ajoutés : élision française, arena avec traducteur, traduction vide,
+fallback sans traducteur, complétude des lexiques, déduplication.
+Résultats (29/10) : `pytest tests/test_translation_variants.py` → **36 passed** ;
+suite complète → **3126 passed, 1 failed préexistant hors périmètre** (le même
+`test_career_agent` 6 vs 14 familles) ; `ruff check` sur les fichiers mission →
+clean ; `ruff check .` → 17 erreurs préexistantes inchangées, aucune dans la
+mission.

@@ -1,0 +1,9 @@
+{
+  "banks": [
+    {"name": "BNP Paribas", "career_url": "https://group.bnpparibas/en/careers", "ats": "unknown"},
+    {"name": "Societe Generale", "career_url": "https://careers.societegenerale.com", "ats": "unknown"},
+    {"name": "Credit Agricole", "career_url": "https://www.credit-agricole.com/en/careers", "ats": "unknown"},
+    {"name": "HSBC", "career_url": "https://www.hsbc.com/careers", "ats": "unknown"},
+    {"name": "Goldman Sachs", "career_url": "https://www.goldmansachs.com/careers", "ats": "unknown"}
+  ]
+}

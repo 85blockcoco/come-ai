@@ -8,6 +8,7 @@ coverage. The live-browser journey is a separate integration check.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -22,6 +23,26 @@ from career.service import CareerService
 def test_blank_optional_fields_do_not_invent_empty_requirements() -> None:
     assert extract_requirements({}) == []
     assert extract_requirements({"languages_required": "", "eligibility_requirement": ""}) == []
+
+
+def test_unknown_sentinels_never_become_requirements_or_profile_evidence() -> None:
+    assert extract_requirements({
+        "eligibility_requirement": "unknown",
+        "languages_required": "not specified",
+        "role_level": "Internship",
+    }) == []
+    result = prepare_application(
+        {"eligibility": "unknown", "skills": "unknown"},
+        {},
+        {"requirements": "unknown", "eligibility_requirement": "unknown"},
+        intelligence={"requirements": [
+            {"id": "req-unknown", "text": "unknown", "source_field": "eligibility_requirement"},
+            {"id": "req-level", "text": "Internship", "source_field": "role_level"},
+        ]},
+    )
+    assert result["requirements"] == []
+    assert result["matched_elements"] == []
+    assert result["cv_action_plan"] == []
 
 
 def test_description_requirements_quote_source_and_stop_at_other_section() -> None:
@@ -128,6 +149,37 @@ assert.strictEqual(confirmed.children[0].children[1].className, "good");
     assert completed.returncode == 0, completed.stderr
 
 
+def test_application_kit_flow_requires_an_explicit_supported_language() -> None:
+    root = Path(__file__).resolve().parents[1]
+    js = (root / "career_static/career.js").read_text(encoding="utf-8")
+    html = (root / "career_static/index.html").read_text(encoding="utf-8")
+    function = js.split("async function startApplicationKitFlow(jobId, language, variant = \"\") {", 1)[1].split(
+        "\nasync function consumePendingKit()", 1
+    )[0]
+    script = r'''
+const assert = require("assert");
+let requestCount = 0;
+let lastMessage;
+const setMessage = (message, error = false) => { lastMessage = { message, error }; };
+const api = async (_path, options) => { requestCount += 1; return { ...JSON.parse(options.body), application: {}, draft: {} }; };
+const showKitInApplications = async () => {};
+async function startApplicationKitFlow(jobId, language, variant = "") {FUNCTION
+(async () => {
+  await startApplicationKitFlow("offer-synthetic", "", "markets");
+  assert.strictEqual(requestCount, 0, "aucune requête si la langue n'est pas choisie");
+  assert.strictEqual(lastMessage.error, true);
+  await startApplicationKitFlow("offer-synthetic", "en", "markets");
+  assert.strictEqual(requestCount, 1);
+})();
+'''.replace("FUNCTION", function)
+    completed = subprocess.run([_node(), "-e", script], text=True, capture_output=True, timeout=8)
+    assert completed.returncode == 0, completed.stderr
+    assert 'id="application-draft-language" required' in html
+    assert '<option value="">Choisir la langue du dossier…</option>' in html
+    assert 'kitLanguage.append(new Option("Choisir la langue du dossier…", ""))' in js
+    assert "kit.disabled = true" in js
+
+
 def test_stage_match_sort_keeps_nonconforming_offers_below_eligible_ones() -> None:
     source = (Path(__file__).resolve().parents[1] / "career_static/career.js").read_text()
     function = source.split("function stageMatchEligibilityRank(match) {", 1)[1].split(
@@ -165,6 +217,16 @@ def test_dashboard_quick_tools_expose_only_real_career_views() -> None:
     assert "Tous tes outils Career" in html
     assert 'data-focus-target="profile-document-file"' in html
     assert "focusTarget" in js
+
+
+def test_career_static_assets_are_versioned_for_release_cache_refresh() -> None:
+    html = (Path(__file__).resolve().parents[1] / "career_static/index.html").read_text(encoding="utf-8")
+    versions = re.findall(r'/career-static/(?:career\.css|cv_plan\.css|career\.js|cv_plan\.js)\?v=([^" ]+)', html)
+    assert len(versions) == 4
+    assert len(set(versions)) == 1, "les assets Career partagent la même version de cache"
+    assert re.fullmatch(r"codex-v3-\d{8}-rc\d+", versions[0])
+    for asset in ("career.css", "cv_plan.css", "career.js", "cv_plan.js"):
+        assert f"/career-static/{asset}?v={versions[0]}" in html
 
 
 @pytest.mark.parametrize("scenario", ["http-error", "source-error", "partial", "success"])

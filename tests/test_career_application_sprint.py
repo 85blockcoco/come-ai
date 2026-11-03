@@ -6,6 +6,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from career import models
 from career.application_sprint import build_application_sprint
 from career.service import CareerService
 from come_ai_web import create_app
@@ -222,6 +223,86 @@ def test_application_sprint_http_uses_real_local_service_path(tmp_path: Path) ->
         assert "probabilité" in payload["disclaimer"]
 
 
+def test_application_sprint_reuses_profile_and_cv_analysis_for_candidates(
+    tmp_path: Path, monkeypatch
+) -> None:
+    service = CareerService(tmp_path, curated_sources=())
+    service.update_stage_search(service.get_stage_search()["brief"])
+    service.update_profile(
+        {
+            "education": "MSc Finance",
+            "experience": "Analyst | Synthetic Bank — Automated 500+ reports.",
+            "skills": "Excel, Python, valuation",
+            "languages": "English C1",
+        }
+    )
+    for index in range(4):
+        service.import_job(
+            {
+                "company": f"Synthetic Bank {index}",
+                "title": "Corporate Finance Intern",
+                "job_family": "Corporate Finance",
+                "official_url": f"https://careers.example.test/sprint-cache-{index}",
+                "city": "London",
+                "country": "United Kingdom",
+                "employment_type": "Internship",
+                "start_date": "2027-01-04",
+                "end_date": "2027-07-04",
+                "duration_months": 6,
+                "requirements": "Financial modelling and valuation",
+                "languages_required": "English",
+                "source_status": "open",
+            }
+        )
+
+    calls = {"scoring_context": 0, "cv_analysis": 0, "get_job": 0}
+    scoring_context = service._scoring_context
+    cv_analysis = service._current_cv_analysis
+    get_job = service.get_job
+
+    def count_context():
+        calls["scoring_context"] += 1
+        return scoring_context()
+
+    def count_cv_analysis():
+        calls["cv_analysis"] += 1
+        return cv_analysis()
+
+    def count_get_job(*args, **kwargs):
+        calls["get_job"] += 1
+        return get_job(*args, **kwargs)
+
+    monkeypatch.setattr(service, "_scoring_context", count_context)
+    monkeypatch.setattr(service, "_current_cv_analysis", count_cv_analysis)
+    monkeypatch.setattr(service, "get_job", count_get_job)
+
+    result = service.get_application_sprint(limit=4)
+
+    assert len(result["queue"]) == 4
+    assert calls == {"scoring_context": 1, "cv_analysis": 1, "get_job": 0}
+
+
+def test_sprint_text_normalization_cache_is_short_lived_and_bounded(monkeypatch) -> None:
+    original = models._normalize_clean_text
+    normalized_inputs: list[str] = []
+
+    def count_normalizations(value: str) -> str:
+        normalized_inputs.append(value)
+        return original(value)
+
+    monkeypatch.setattr(models, "_normalize_clean_text", count_normalizations)
+    with models.scoped_normalized_text_cache():
+        assert models.normalized_text("Été") == "ete"
+        assert models.normalized_text("Été") == "ete"
+        long_value = "a" * 257
+        models.normalized_text(long_value)
+        models.normalized_text(long_value)
+
+    assert normalized_inputs == ["été", long_value, long_value]
+    assert models.normalized_text("Été") == "ete"
+    assert normalized_inputs == ["été", long_value, long_value, "été"]
+
+
 def test_application_sprint_ui_contract_is_present() -> None:
     root = Path(__file__).resolve().parents[1]
     html = (root / "career_static/index.html").read_text(encoding="utf-8")
@@ -234,6 +315,9 @@ def test_application_sprint_ui_contract_is_present() -> None:
     assert "Vérifications groupées" in js
     assert "Ouvrir la source officielle" in js
     assert "Aucun envoi automatique" in html
+    assert "exigences étayées par le profil ${item.coverage_percent} %" in js
+    assert "Télécharger ${documentLabel} en ${formatLabel}" in js
+    assert '`${label} du ${kind === "cv" ? "CV" : "la lettre de motivation"}`' not in js
 
 
 def test_cv_import_review_displays_local_structural_diagnostic() -> None:

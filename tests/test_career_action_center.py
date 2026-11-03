@@ -50,7 +50,6 @@ def test_generated_kit_and_interview_receive_higher_priority_actions() -> None:
                 tracking_stage="to_review",
                 application_id="app-kit",
                 kit_generated_at="2026-10-24T08:00:00+00:00",
-                kit_language="en",
                 readiness="prepare_now",
             ),
             _item(
@@ -59,7 +58,6 @@ def test_generated_kit_and_interview_receive_higher_priority_actions() -> None:
                 tracking_stage="interview",
                 application_id="app-interview",
                 kit_generated_at="2026-10-23T08:00:00+00:00",
-                kit_language="fr",
                 readiness="prepare_now",
             ),
         ]
@@ -75,7 +73,6 @@ def test_generated_kit_and_interview_receive_higher_priority_actions() -> None:
         "urgent_deadlines": 0,
         "passed_deadlines": 0,
         "sources_to_verify": 3,
-        "languages_to_confirm": 0,
     }
     assert payload["automatic_submission"] is False
     assert "jamais" in payload["disclaimer"]
@@ -225,26 +222,3 @@ def test_deadline_does_not_reopen_a_manually_submitted_application() -> None:
 
     assert submitted["next_action_code"] == "monitor_response"
     assert submitted["deadline_status"] == "passed"
-
-
-def test_generated_kit_exposes_its_language_or_requires_confirmation() -> None:
-    confirmed = project_pipeline_item(
-        _item(
-            kit_generated_at="2026-10-24T09:00:00+00:00",
-            kit_language="en",
-            readiness="prepare_now",
-        )
-    )
-    missing = project_pipeline_item(
-        _item(
-            kit_generated_at="2026-10-24T09:00:00+00:00",
-            kit_language="",
-            readiness="prepare_now",
-        )
-    )
-
-    assert confirmed["kit_language"] == "en"
-    assert confirmed["kit_language_label"] == "English"
-    assert confirmed["kit_language_status"] == "confirmed"
-    assert missing["kit_language_status"] == "to_confirm"
-    assert "langue" in missing["blockers"][-1].casefold()

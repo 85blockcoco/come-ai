@@ -1,0 +1,647 @@
+{
+  "schema_version": 1,
+  "paper_id": "edhec-vc-2025",
+  "year": 2025,
+  "title": "EDHEC Venture Capital — Final Exam 2025",
+  "duration_minutes": 90,
+  "language": "en",
+  "source": "docs/vc_study/VC final exam 2025 solutions.txt",
+  "notice": "Derived study pack: questions are condensed and paraphrased from the 2025 EDHEC VC past paper; numerical answers and worked solutions are reproduced.",
+  "sections": [
+    {
+      "id": "A",
+      "title": "Multiple choice questions",
+      "points": 15
+    },
+    {
+      "id": "B",
+      "title": "Calculation questions",
+      "points": 15
+    },
+    {
+      "id": "C",
+      "title": "Case studies",
+      "points": 30
+    }
+  ],
+  "questions": [
+    {
+      "id": "2025-A01",
+      "number": 1,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC03",
+      "prompt": "VC firms typically use staged financing in order to:",
+      "choices": [
+        {
+          "text": "Incentivize the entrepreneur to exert effort and reach predefined milestones."
+        },
+        {
+          "text": "Acquire information about the founder's true ability, reducing asymmetric information."
+        },
+        {
+          "text": "Keep the option to abandon ventures with low early returns."
+        },
+        {
+          "text": "All of the above."
+        }
+      ],
+      "answer": "D",
+      "solution": "Staged financing does all three: it creates milestone incentives, reveals information about founder ability, and preserves the option to abandon weak ventures."
+    },
+    {
+      "id": "2025-A02",
+      "number": 2,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC06",
+      "prompt": "Milestone-based contracting can create perverse incentives because:",
+      "choices": [
+        {
+          "text": "It lowers information asymmetry."
+        },
+        {
+          "text": "It reduces agency costs."
+        },
+        {
+          "text": "Entrepreneurs may distort effort to meet short-term measurable goals at the expense of long-term value."
+        },
+        {
+          "text": "Investors lose board control."
+        }
+      ],
+      "answer": "C",
+      "solution": "The contract rewards observable short-term milestones; the founder may game them instead of maximizing long-term value."
+    },
+    {
+      "id": "2025-A03",
+      "number": 3,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC03",
+      "prompt": "What is the primary difference between seed-stage and Series A funding rounds?",
+      "choices": [
+        {
+          "text": "Series A investors typically require board seats; seed investors do not."
+        },
+        {
+          "text": "Seed-stage focuses on scaling operations; Series A focuses on product-market fit."
+        },
+        {
+          "text": "Seed-stage builds and validates the product; Series A scales the business."
+        },
+        {
+          "text": "Series A rounds require higher equity stakes from founders than seed rounds."
+        }
+      ],
+      "answer": "C",
+      "solution": "Seed money validates the product and early traction; Series A funds repeatable go-to-market and scaling."
+    },
+    {
+      "id": "2025-A04",
+      "number": 4,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC01",
+      "prompt": "A cross-border VC chooses a common-law domicile primarily because:",
+      "choices": [
+        {
+          "text": "It lowers tax on carried interest."
+        },
+        {
+          "text": "It standardizes IFRS accounting."
+        },
+        {
+          "text": "Judicial precedent offers stronger enforcement of term-sheet rights and LP agreements."
+        },
+        {
+          "text": "It allows multiple carry classes."
+        }
+      ],
+      "answer": "C",
+      "solution": "Common-law jurisdictions rely on precedent, which investors see as more predictable and enforceable for complex contracts."
+    },
+    {
+      "id": "2025-A05",
+      "number": 5,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC05",
+      "prompt": "A stock-options pool is 'fully diluted' when:",
+      "choices": [
+        {
+          "text": "Subsequent funding rounds fully dilute the ownership stake attached to the pool."
+        },
+        {
+          "text": "All options are exercised and converted into common shares."
+        },
+        {
+          "text": "Employees do not exercise their options because these have become worthless."
+        },
+        {
+          "text": "None of the above."
+        }
+      ],
+      "answer": "B",
+      "solution": "Fully diluted means every option, warrant and convertible security is treated as already converted into common shares."
+    },
+    {
+      "id": "2025-A06",
+      "number": 6,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC04",
+      "prompt": "The key inputs of the venture-capital valuation model are:",
+      "choices": [
+        {
+          "text": "Investment, time-to-exit, exit value, hurdle rate."
+        },
+        {
+          "text": "Investment, time-to-exit, exit value, risk-free rate, risk premium."
+        },
+        {
+          "text": "Investment, number of rounds, exit value, hurdle rate."
+        },
+        {
+          "text": "Investment, number of rounds, exit value, risk-free rate, risk premium."
+        }
+      ],
+      "answer": "A",
+      "solution": "The VC method discounts the expected exit value at the hurdle rate over the time to exit, then solves for the required ownership."
+    },
+    {
+      "id": "2025-A07",
+      "number": 7,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC04",
+      "prompt": "In venture capital, pre-money valuation is:",
+      "choices": [
+        {
+          "text": "Always higher than post-money valuation."
+        },
+        {
+          "text": "Always lower than post-money valuation."
+        },
+        {
+          "text": "Lower than post-money valuation if the venture makes progress after investment."
+        },
+        {
+          "text": "Lower than post-money valuation if the entrepreneur negotiates a good deal."
+        }
+      ],
+      "answer": "B",
+      "solution": "By definition, post-money = pre-money + investment, so pre-money is always lower (for a positive investment)."
+    },
+    {
+      "id": "2025-A08",
+      "number": 8,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC06",
+      "prompt": "Why might a VC prefer a lower valuation with stronger protective provisions to a higher valuation with weak protections?",
+      "choices": [
+        {
+          "text": "It increases the founder's control."
+        },
+        {
+          "text": "It balances risk and expected return more effectively."
+        },
+        {
+          "text": "It avoids dilution in future rounds."
+        },
+        {
+          "text": "It reduces capital-gains taxation."
+        }
+      ],
+      "answer": "B",
+      "solution": "A lower price improves the VC's return, while protective terms limit downside; together they improve the risk-return trade-off."
+    },
+    {
+      "id": "2025-A09",
+      "number": 9,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC04",
+      "prompt": "In the VC method, which of the following would NOT affect the investor's required ownership?",
+      "choices": [
+        {
+          "text": "Expected exit value."
+        },
+        {
+          "text": "Time to exit."
+        },
+        {
+          "text": "Hurdle rate."
+        },
+        {
+          "text": "Liquidation preference."
+        }
+      ],
+      "answer": "D",
+      "solution": "Required ownership = I(1+h)^t / exit value. Liquidation preference changes the payoff split, not the ownership fraction."
+    },
+    {
+      "id": "2025-A10",
+      "number": 10,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC08",
+      "prompt": "What is the primary purpose of an anti-dilution clause in a term sheet?",
+      "choices": [
+        {
+          "text": "To prevent existing investor ownership from being diluted in future funding rounds."
+        },
+        {
+          "text": "To restrict the issuance of new shares to employees."
+        },
+        {
+          "text": "To limit the founders' ability to issue new equity."
+        },
+        {
+          "text": "To ensure debt obligations are paid before equity holders."
+        }
+      ],
+      "answer": "A",
+      "solution": "Anti-dilution adjusts the preferred conversion price in a down round, protecting the investor's effective ownership."
+    },
+    {
+      "id": "2025-A11",
+      "number": 11,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC06",
+      "prompt": "Which clause aligns founder and investor incentives by allowing founders to 'earn back' shares through continued effort?",
+      "choices": [
+        {
+          "text": "Pay-to-play."
+        },
+        {
+          "text": "Reverse vesting."
+        },
+        {
+          "text": "Drag-along."
+        },
+        {
+          "text": "Convertible note."
+        }
+      ],
+      "answer": "B",
+      "solution": "Reverse vesting means founders already own the shares, but unvested shares can be repurchased if they leave; continued service earns them back."
+    },
+    {
+      "id": "2025-A12",
+      "number": 12,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC06",
+      "prompt": "In a term sheet, pay-to-play provisions are designed to:",
+      "choices": [
+        {
+          "text": "Force existing investors to participate in later rounds to retain preferential rights."
+        },
+        {
+          "text": "Guarantee future investment opportunities to new investors."
+        },
+        {
+          "text": "Protect founders from dilution in future rounds."
+        },
+        {
+          "text": "Ensure anti-dilution adjustments always apply."
+        }
+      ],
+      "answer": "A",
+      "solution": "Pay-to-play converts non-participating preferred into common (or strips its preferences) if the investor does not fund its pro-rata share of a down round."
+    },
+    {
+      "id": "2025-A13",
+      "number": 13,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC17",
+      "prompt": "When comparing U.S. and continental-European VC contracts, which is most accurate?",
+      "choices": [
+        {
+          "text": "European term sheets rely more on protective provisions."
+        },
+        {
+          "text": "U.S. deals emphasize relationship-based monitoring."
+        },
+        {
+          "text": "U.S. contracts are more legalistic; European deals rely more on trust and staged financing."
+        },
+        {
+          "text": "No difference once English law governs both."
+        }
+      ],
+      "answer": "C",
+      "solution": "U.S. venture contracts are typically longer and more rule-based; continental European deals often rely more on relationship governance and staging."
+    },
+    {
+      "id": "2025-A14",
+      "number": 14,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC06",
+      "prompt": "A founder is terminated 'for cause' one year after a 4-year reverse-vesting agreement with a 12-month cliff. They held 4 million founder shares. How many shares remain theirs?",
+      "choices": [
+        {
+          "text": "1 million."
+        },
+        {
+          "text": "0."
+        },
+        {
+          "text": "3 million."
+        },
+        {
+          "text": "4 million."
+        }
+      ],
+      "answer": "A",
+      "solution": "The 12-month cliff vests 25% (1 million shares). The remaining 3 million are unvested and repurchased; the vested million stays with the founder."
+    },
+    {
+      "id": "2025-A15",
+      "number": 15,
+      "section": "A",
+      "points": 1,
+      "kind": "mcq",
+      "topic_id": "VC16",
+      "prompt": "A VC invests in a convertible note with both a discount and a valuation cap. The dual benefits are:",
+      "choices": [
+        {
+          "text": "Only the cap applies in up rounds."
+        },
+        {
+          "text": "Only the discount applies in down rounds."
+        },
+        {
+          "text": "The VC captures upside if valuation soars and protection if it rises modestly."
+        },
+        {
+          "text": "It prevents conversion to equity."
+        }
+      ],
+      "answer": "C",
+      "solution": "The investor converts at the lower of the discounted price and the cap price: the cap gives upside in a hot round, the discount gives a cushion in a moderate round."
+    },
+    {
+      "id": "2025-B16",
+      "number": 16,
+      "section": "B",
+      "points": 3,
+      "kind": "numeric",
+      "topic_id": "VC04",
+      "prompt": "Palooka Products is negotiating a VC term sheet to receive $5 million today. It expects an IPO in 5 years at an exit value of $50 million. The VC requires a 40% hurdle rate. What share of equity will the VC accept? (answer in %).",
+      "answer": "54",
+      "unit": "percent",
+      "tolerance": 1.0,
+      "solution": "CCM = 1.40^5 = 5.378. Post-money value = 50 / 5.378 = $9.297m. Required ownership = 5 / 9.297 = 53.8% ≈ 54%."
+    },
+    {
+      "id": "2025-B17",
+      "number": 17,
+      "section": "B",
+      "points": 3,
+      "kind": "case",
+      "topic_id": "VC05",
+      "prompt": "A startup has 5m founder shares. A VC invests $2m at an $8m post-money valuation and requires a 20% post-money option pool. Fill the cap table.",
+      "parts": [
+        {
+          "id": "2025-B17a",
+          "prompt": "How many shares are in the option pool (m)?",
+          "kind": "numeric",
+          "points": 1,
+          "answer": "1.8182",
+          "unit": "ratio",
+          "tolerance": 0.01,
+          "solution": "Investor fraction = 2/8 = 25%. Founders keep 100 - 25 - 20 = 55%. Total post-money shares = 5 / 0.55 = 9.0909m. Pool = 20% × 9.0909 = 1.8182m."
+        },
+        {
+          "id": "2025-B17b",
+          "prompt": "How many shares does the VC receive (m)?",
+          "kind": "numeric",
+          "points": 1,
+          "answer": "2.2727",
+          "unit": "ratio",
+          "tolerance": 0.01,
+          "solution": "VC shares = 25% × 9.0909 = 2.2727m. Check: 5.0000 + 1.8182 + 2.2727 = 9.0909m."
+        },
+        {
+          "id": "2025-B17c",
+          "prompt": "What percentage do the founders own after the round?",
+          "kind": "numeric",
+          "points": 1,
+          "answer": "55",
+          "unit": "percent",
+          "tolerance": 0.5,
+          "solution": "Founders = 100% - 25% (VC) - 20% (pool) = 55%."
+        }
+      ],
+      "solution": ""
+    },
+    {
+      "id": "2025-B18",
+      "number": 18,
+      "section": "B",
+      "points": 4,
+      "kind": "case",
+      "topic_id": "VC09",
+      "prompt": "Miller Venture Capital invested $5m in BST 8 years ago and received 1m convertible preferred shares (2 common shares each). After conversion BST has 15m shares; it will issue 3m new shares in the IPO.",
+      "parts": [
+        {
+          "id": "2025-B18a",
+          "prompt": "What fraction of BST's common shares will Miller own after the IPO? (in %)",
+          "kind": "numeric",
+          "points": 2,
+          "answer": "11",
+          "unit": "percent",
+          "tolerance": 0.5,
+          "solution": "Miller owns 1m × 2 = 2m common shares. Post-IPO shares = 15m + 3m = 18m. Ownership = 2/18 = 11.1%."
+        },
+        {
+          "id": "2025-B18b",
+          "prompt": "If the stock trades at $25 after the first day, what is Miller's IRR? (in %)",
+          "kind": "numeric",
+          "points": 2,
+          "answer": "33",
+          "unit": "percent",
+          "tolerance": 1.0,
+          "solution": "Proceeds = 2m × $25 = $50m. CCM = 50/5 = 10x. IRR = 10^(1/8) - 1 = 33.35% ≈ 33%."
+        }
+      ],
+      "solution": ""
+    },
+    {
+      "id": "2025-B19",
+      "number": 19,
+      "section": "B",
+      "points": 5,
+      "kind": "case",
+      "topic_id": "VC04",
+      "prompt": "A startup plans four rounds and expects a $6bn strategic acquisition in 7 years. Round data (investment, years to exit, target multiple): Seed $1m / 7y / 8x; Series A $25m / 6y / 5x; Series B $50m / 4y / 4x; Series C $200m / 2y / 3x. Compute the fully diluted ownership at exit.",
+      "parts": [
+        {
+          "id": "2025-B19a",
+          "prompt": "Seed post-money valuation ($m)?",
+          "kind": "numeric",
+          "points": 1,
+          "answer": "6.875",
+          "unit": "m_eur",
+          "tolerance": 0.01,
+          "solution": "Work backwards along the target-multiple ladder. Series C post = exit / 3 = 6000/3 = 2000; C pre = 2000 - 200 = 1800. Series B post = 1800/4 = 450; B pre = 400. Series A post = 400/5 = 80; A pre = 55. Seed post = 55/8 = 6.875; Seed pre = 5.875. Seed ownership = 1/6.875 = 14.545%."
+        },
+        {
+          "id": "2025-B19b",
+          "prompt": "Series A post-money valuation ($m)?",
+          "kind": "numeric",
+          "points": 1,
+          "answer": "80",
+          "unit": "m_eur",
+          "tolerance": 0.1,
+          "solution": "Series A invests $25m for 31.25% post-money: 25 / 0.3125 = $80m."
+        },
+        {
+          "id": "2025-B19c",
+          "prompt": "Series B post-money valuation ($m)?",
+          "kind": "numeric",
+          "points": 1,
+          "answer": "450",
+          "unit": "m_eur",
+          "tolerance": 0.5,
+          "solution": "Series B invests $50m for 11.11%: 50 / 0.1111 = $450m."
+        },
+        {
+          "id": "2025-B19d",
+          "prompt": "Series C post-money valuation ($m)?",
+          "kind": "numeric",
+          "points": 1,
+          "answer": "2000",
+          "unit": "m_eur",
+          "tolerance": 1.0,
+          "solution": "Series C invests $200m for 10%: 200 / 0.10 = $2,000m."
+        },
+        {
+          "id": "2025-B19e",
+          "prompt": "Founders' ownership at exit (in %)?",
+          "kind": "numeric",
+          "points": 1,
+          "answer": "47",
+          "unit": "percent",
+          "tolerance": 1.0,
+          "solution": "Founders = 100% × (1 - 14.545%) × (1 - 31.25%) × (1 - 11.11%) × (1 - 10%) = 47.0%."
+        },
+        {
+          "id": "2025-B19f",
+          "prompt": "Founders' exit proceeds ($m)?",
+          "kind": "numeric",
+          "points": 1,
+          "answer": "2820",
+          "unit": "m_eur",
+          "tolerance": 10.0,
+          "solution": "47.0% × $6,000m = $2,820m."
+        }
+      ],
+      "solution": ""
+    },
+    {
+      "id": "2025-C20",
+      "number": 20,
+      "section": "C",
+      "points": 15,
+      "kind": "case",
+      "topic_id": "VC07",
+      "prompt": "Butchered Data (BD) raised $300k in convertible notes (20% discount, converts at the next round ≥ $2m). Two term sheets: Alpha invests $4m at a $9m post-money, 25% option pool, 1x non-participating liquidation preference, broad-based weighted-average anti-dilution, founders get 2 of 3 board seats. Mega invests $6m at a $12m post-money, 15% pool, 1x participating preference capped at 2.5x, full-ratchet anti-dilution, Mega gets 2 of 3 board seats, CEO shares 25% vested with 36-month monthly repurchase.",
+      "parts": [
+        {
+          "id": "2025-C20a",
+          "prompt": "Compare the two term sheets from the founders' perspective: valuation/ownership, anti-dilution, option pool, vesting, board control. Which do you recommend and why?",
+          "kind": "open",
+          "points": 6,
+          "answer": "Mega on valuation/ownership and option pool; Alpha on anti-dilution, vesting and board control. Overall the founders should weigh Mega's higher founder ownership (31.9% vs 26.4%) against Alpha's much stronger governance and downside protection. A common answer is Mega if the founder is growth-confident, Alpha if control and down-round protection dominate.",
+          "unit": "ratio",
+          "tolerance": 0.0,
+          "solution": "Alpha: post $9m, price $1, 9m shares; VC 4m (44.4%), angel 0.375m (4.2%), pool 2.25m (25%), founders 26.4%. Mega: post $12m, price $1, 12m shares; VC 6m (50%), angel 0.375m (3.1%), pool 1.80m (15%), founders 31.9%. Mega gives more ownership and a smaller pool; Alpha gives broad-based weighted-average anti-dilution (softer than full ratchet), no forced vesting, and 2 founder board seats vs 1."
+        },
+        {
+          "id": "2025-C20b",
+          "prompt": "Compute each investor's payoff at exit values of $5m, $10m, $28m and $35m.",
+          "kind": "open",
+          "points": 5,
+          "answer": "Alpha (1x non-participating, 44.4%, LP $4m): $4m, $4.44m, $12.43m, $15.54m. Mega (1x participating, 50%, LP $6m, cap 2.5x = $15m): $5m, $8m, $15m, $17.5m.",
+          "unit": "ratio",
+          "tolerance": 0.0,
+          "solution": "Alpha: max(LP, 44.4% × exit) = max(4, 2.22)=4; max(4,4.44)=4.44; max(4,12.43)=12.43; max(4,15.54)=15.54. Mega: LP 6 then 50% of the remainder, capped at 15; if conversion is better, convert. Exit 5: min(5,6)=5. Exit 10: 6+0.5×4=8. Exit 28: 6+0.5×22=17 → cap 15. Exit 35: cap 15 vs conversion 17.5 → 17.5."
+        },
+        {
+          "id": "2025-C20c",
+          "prompt": "If BD goes with Mega and a Series B is priced at $0.90, how many common shares will Mega's preferred convert to under full ratchet (m)?",
+          "kind": "numeric",
+          "points": 4,
+          "answer": "6.67",
+          "unit": "ratio",
+          "tolerance": 0.05,
+          "solution": "Full ratchet cuts the conversion price from $1.00 to $0.90. Mega's 6m preferred shares convert into 6 / 0.90 = 6.667m common shares."
+        }
+      ],
+      "solution": ""
+    },
+    {
+      "id": "2025-C21",
+      "number": 21,
+      "section": "C",
+      "points": 15,
+      "kind": "case",
+      "topic_id": "VC04",
+      "prompt": "Magical Genie has two common-equity offers: VW invests $2m at a $5m post-money; XY invests $1m at a $3m pre-money. Founder Ali Baba owns 3m shares. After one year the company is sold for $10m, but it may need a second round: Scenario 1 needs $1m at $2/share (75% probability); Scenario 2 needs $2m at $0.25/share (25%).",
+      "parts": [
+        {
+          "id": "2025-C21a",
+          "prompt": "Initial round: compute pre-money, post-money, price per share, investor shares, total shares and founder ownership for each offer.",
+          "kind": "open",
+          "points": 4,
+          "answer": "VW: pre $3m, post $5m, price $1, investor 2m shares, total 5m, founder 60%. XY: pre $3m, post $4m, price $1, investor 1m shares, total 4m, founder 75%.",
+          "unit": "ratio",
+          "tolerance": 0.0,
+          "solution": "VW: post = 5, pre = 5 - 2 = 3, price = 3/3 = $1, investor = 2/1 = 2m, total = 5m, founder = 3/5 = 60%. XY: post = 3 + 1 = 4, price = 3/3 = $1, investor = 1/1 = 1m, total = 4m, founder = 3/4 = 75%."
+        },
+        {
+          "id": "2025-C21b",
+          "prompt": "Second round under each scenario: compute new shares and founder ownership.",
+          "kind": "open",
+          "points": 4,
+          "answer": "Scenario 1: VW unchanged at 60%; XY issues 0.5m at $2, total 4.5m, founder 66.7%. Scenario 2: VW issues 4m at $0.25, total 9m, founder 33.3%; XY issues 8m at $0.25, total 12m, founder 25%.",
+          "unit": "ratio",
+          "tolerance": 0.0,
+          "solution": "Scenario 1: VW needs 0; XY raises 1/2 = 0.5m shares → 3/4.5 = 66.7%. Scenario 2: VW raises 1/0.25 = 4m → 3/9 = 33.3%; XY raises 2/0.25 = 8m → 3/12 = 25%."
+        },
+        {
+          "id": "2025-C21c",
+          "prompt": "With Scenario 1 at 75% probability, compute each offer's expected founder wealth at a $10m exit and recommend one.",
+          "kind": "open",
+          "points": 4,
+          "answer": "VW: 75% × 60% + 25% × 33.3% = 53.33% → $5.333m. XY: 75% × 66.7% + 25% × 25% = 56.25% → $5.625m. Take XY.",
+          "unit": "ratio",
+          "tolerance": 0.0,
+          "solution": "Expected ownership: VW = 0.75×0.60 + 0.25×0.3333 = 0.5333; XY = 0.75×0.6667 + 0.25×0.25 = 0.5625. Expected wealth = ownership × $10m: VW $5.333m, XY $5.625m. XY wins by $0.292m, but the difference is small and depends on the probability estimate."
+        }
+      ],
+      "solution": ""
+    }
+  ]
+}

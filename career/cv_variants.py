@@ -135,6 +135,7 @@ JOB_FAMILY_TO_VARIANT = {
     "Sales & Trading": ["markets"],
     "Quantitative Research": ["markets"],
     "Corporate Finance / FP&A": ["corporate_finance"],
+    "Corporate Finance": ["corporate_finance"],
     "FP&A": ["corporate_finance"],
     "Financial Planning": ["corporate_finance"],
     "Treasury": ["corporate_finance"],

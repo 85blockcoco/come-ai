@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "pack_id": "cards-vc09",
+  "topic_id": "VC09",
+  "language": "fr",
+  "source_type": "original",
+  "license": "Contenu original NAGE",
+  "items": [
+    {
+      "kind": "card",
+      "id": "VC09-C001",
+      "topic_id": "VC09",
+      "question": "Qu'est-ce que l'IRR d'un fonds ou d'un investissement ?",
+      "answer": "Le taux d'actualisation qui annule la valeur actuelle nette des flux de trésorerie. C'est une mesure de rendement annualisée qui dépend fortement du timing des flux.",
+      "explanation": "Deux investissements avec le même MOIC peuvent avoir des IRR très différents si les durées diffèrent.",
+      "status": "active",
+      "tags": ["irr", "returns"]
+    },
+    {
+      "kind": "card",
+      "id": "VC09-C002",
+      "topic_id": "VC09",
+      "question": "Comment calcule-t-on le MOIC ?",
+      "answer": "MOIC = valeur totale reçue / capital investi. Il mesure le multiple brut, sans annualisation.",
+      "explanation": "Le MOIC est simple à comparer mais ne tient pas compte du temps.",
+      "status": "active",
+      "tags": ["moic", "returns"]
+    },
+    {
+      "kind": "card",
+      "id": "VC09-C003",
+      "topic_id": "VC09",
+      "question": "Que mesure le TVPI ?",
+      "answer": "TVPI = (distributions + valeur résiduelle) / contributions. Il mesure la valeur totale du fonds par rapport au capital appelé, distributions et actifs non vendus inclus.",
+      "explanation": "Le TVPI est un multiple de valeur totale, pas un taux de rendement.",
+      "status": "active",
+      "tags": ["tvpi", "returns"]
+    },
+    {
+      "kind": "card",
+      "id": "VC09-C004",
+      "topic_id": "VC09",
+      "question": "Que mesure le DPI ?",
+      "answer": "DPI = distributions / contributions. Il mesure le cash déjà rendu aux LPs par rapport au capital appelé, sans compter la valeur résiduelle.",
+      "explanation": "Un DPI élevé signifie que le fonds a déjà distribué du cash, pas seulement créé de la valeur théorique.",
+      "status": "active",
+      "tags": ["dpi", "returns"]
+    },
+    {
+      "kind": "card",
+      "id": "VC09-C005",
+      "topic_id": "VC09",
+      "question": "Que mesure le RVPI ?",
+      "answer": "RVPI = valeur résiduelle / contributions. Il mesure la part de valeur encore détenue dans le portefeuille, non distribuée.",
+      "explanation": "TVPI ≈ DPI + RVPI, aux arrondis près.",
+      "status": "active",
+      "tags": ["rvpi", "returns"]
+    },
+    {
+      "kind": "card",
+      "id": "VC09-C006",
+      "topic_id": "VC09",
+      "question": "Qu'est-ce que la J-curve d'un fonds de capital-risque ?",
+      "answer": "La forme typique des rendements dans le temps : les premières années affichent des rendements négatifs (frais, investissements, peu de sorties), puis la courbe remonte avec les exits.",
+      "explanation": "La J-curve explique pourquoi les IRR précoces d'un fonds sont souvent trompeurs.",
+      "status": "active",
+      "tags": ["j-curve", "fund"]
+    },
+    {
+      "kind": "card",
+      "id": "VC09-C007",
+      "topic_id": "VC09",
+      "question": "Quelle est la différence entre rendement brut et rendement net ?",
+      "answer": "Le rendement brut est avant frais et carry. Le rendement net est après management fees, carried interest et autres coûts supportés par les LPs.",
+      "explanation": "Les LPs comparent les fonds sur une base nette.",
+      "status": "active",
+      "tags": ["gross", "net"]
+    },
+    {
+      "kind": "card",
+      "id": "VC09-C008",
+      "topic_id": "VC09",
+      "question": "Qu'est-ce qu'un hurdle rate dans un fonds VC ?",
+      "answer": "Le seuil de rendement que le fonds doit atteindre avant que le GP ne perçoive du carried interest. Il est souvent exprimé en IRR ou en multiple.",
+      "explanation": "Le hurdle aligne le GP et les LPs sur une performance minimale.",
+      "status": "active",
+      "tags": ["hurdle", "carry"]
+    },
+    {
+      "kind": "card",
+      "id": "VC09-C009",
+      "topic_id": "VC09",
+      "question": "Comment calcule-t-on le carried interest avec un hurdle de 8 % ?",
+      "answer": "On applique d'abord le hurdle aux LPs, puis le carry (souvent 20 %) sur le surplus au-dessus du hurdle, selon la waterfall du fonds. Le calcul exact dépend du modèle (whole-fund ou deal-by-deal).",
+      "explanation": "La waterfall du fonds, pas seulement le taux de carry, détermine le montant réel.",
+      "status": "active",
+      "tags": ["carry", "hurdle"]
+    },
+    {
+      "kind": "card",
+      "id": "VC09-C010",
+      "topic_id": "VC09",
+      "question": "Un fonds a appelé 100 M€, distribué 60 M€ et détient 80 M€ de valeur résiduelle. Quels sont DPI, RVPI et TVPI ?",
+      "answer": "DPI = 60/100 = 0,60x. RVPI = 80/100 = 0,80x. TVPI = (60+80)/100 = 1,40x.",
+      "explanation": "Application directe des trois formules ; le TVPI est la somme des deux premiers multiples.",
+      "status": "active",
+      "tags": ["example", "returns"]
+    }
+  ]
+}

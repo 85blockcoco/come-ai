@@ -1,5 +1,18 @@
 # Spec Kit → OpenCode Go queue
 
+## État de consolidation (2026-10-25)
+
+Les quatre contributions Career de cette file sont déjà intégrées dans la candidate `codex/v3-stable-consolidation`; ce ne sont pas des missions OpenCode Go exécutées pendant cette session. Les modules et validations ciblés sont :
+
+| Mission | État dans la candidate | Preuve ciblée |
+|---|---|---|
+| OCG-SK-01 — Confiance des sources | Intégrée dans `career/source_trust.py` | `tests/test_source_trust.py` — 66 passés |
+| OCG-SK-02 — Dates et échéances | Intégrée dans `career/offer_dates.py` | `tests/test_offer_dates.py` — 270 passés |
+| OCG-SK-03 — Profil ↔ prérequis | Intégrée dans `career/requirements_fit.py` | `tests/test_requirements_fit.py` — 499 passés |
+| OCG-SK-04 — Couverture des sources | Intégrée dans `career/source_coverage.py` | `tests/test_source_coverage.py` — 30 passés |
+
+Ces validations sont synthétiques et hors ligne. Aucun CV personnel, modèle externe ou appel de source live n’a été utilisé. Aucun dispatch OpenCode Go n’a été effectué : cette session ne fournit pas d’outil OpenCode Go et le Dev Kit du dépôt ne déclare actuellement que les providers locaux Ollama et distants Gemini/OpenRouter avec contrôles de prix. La file reste comme plan de provenance, pas comme preuve d’exécutions déléguées.
+
 Use one isolated worktree per task from the reviewed release candidate.  Each
 agent must run the Spec Kit sequence `specify → plan → tasks → implement`, add
 tests before production code, commit its work, and report exact test commands.

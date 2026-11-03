@@ -22,12 +22,10 @@ from typing import Any, Callable, Iterator
 from ..discovery import DiscoveryPayload, PublicSourceError, source_html_to_text
 from ..countries import canonical_country_codes, country_from_source, split_location
 from ..models import clean_text, canonical_url
-from ..exploration import admit_offer, ranking_key
+from ..exploration import classify_internship, criteria_admit, ranking_key
+from ..offer_qualification import qualify_offer
+from ..stage_search import default_brief, score_brief_match, validate_brief
 from ..source_fields import attach_source_material
-from ..stage_search import default_brief, validate_brief
-
-from .cards import card_attributes, published_fields, time_attribute
-from .http import ssl_context
 
 
 _JT_BASE = "https://www.jobteaser.com"
@@ -107,16 +105,11 @@ class _JTJobParser(HTMLParser):
                 "contract_type": "",
                 "url": "",
                 "description": "",
-                "attributes": card_attributes(attrs),
             }
             self._depth = 1
         elif self._in_job_card:
             self._depth += 1
-            if tag == "time":
-                published = time_attribute(attrs)
-                if published:
-                    self._current.setdefault("attributes", {})["datetime"] = published
-            elif tag == "a" and attrs_dict.get("href"):
+            if tag == "a" and attrs_dict.get("href"):
                 href = attrs_dict["href"]
                 if "/jobs/" in href or "/offers/" in href:
                     self._current["url"] = urllib.parse.urljoin(_JT_BASE, href)
@@ -336,7 +329,7 @@ def _iter_raw_offers(
             if not job_id:
                 job_id = str(hash(official_url))[-12:]
 
-            yield attach_source_material({
+            job = {
                 "company": company,
                 "title": title,
                 "source_name": "jobteaser",
@@ -359,7 +352,14 @@ def _iter_raw_offers(
                 "languages_required": "",
                 "eligibility_requirement": "",
                 "description_original": description,
-            }, "jobteaser", published_fields(raw, raw.get("attributes")))
+            }
+            yield attach_source_material(
+                job,
+                "jobteaser",
+                {"title": title, "company": company, "location": location_text,
+                 "contract_type": contract_type, "url": url_raw},
+                description=description,
+            )
 
         if len(page_jobs) < 15:
             break
@@ -433,20 +433,32 @@ class JobTeaserConnector:
                 continue
 
             evaluated += 1
-            # The admission layer decides; the connector only transmits.
-            verdict = admit_offer(job, brief)
-            target = verdict["target_status"]
+            classification = classify_internship(job)
+            qualification = qualify_offer(
+                job,
+                allowed_contract_types=brief.get("contract_types"),
+                allowed_start_months=brief.get("start_months"),
+                required_start_date=brief.get("start_date"),
+                minimum_stage_duration_months=brief.get("minimum_stage_duration_months", 6),
+            ).to_dict()
+            job["qualification"] = qualification
+            target = qualification["target_status"]
             confirmed += int(target == "conforming")
             uncertain += int(target == "to_verify")
             excluded += int(target == "non_conforming")
-            if verdict["status"] == "excluded":
+            if target == "non_conforming":
                 continue
-            if verdict["status"] != "admitted":
+            if (not job.get("official_url") or
+                    (qualification["contract_type"] == "unknown" and not classification.get("evidence"))):
+                filtered += 1
+                continue
+            match = score_brief_match(brief, job)
+            if not criteria_admit(match, job, brief):
                 filtered += 1
                 continue
             relevant += 1
-            job = verdict["job"]
-            ranked.append((ranking_key(job, verdict["match"]), {"job": job, "match": verdict["match"]}))
+            job["internship_classification"] = classification
+            ranked.append((ranking_key(job, match), {"job": job, "match": match}))
 
         import heapq
         selected = heapq.nsmallest(self.max_results, ranked, key=lambda item: item[0])

@@ -68,6 +68,69 @@ def test_zero_personal_boards_http_explore_prepare_track_and_cache(tmp_path: Pat
         assert client.get(f"/api/career/applications/{application_id}").json()["stage"] == "to_prepare"
 
 
+def test_full_career_http_journey_explore_to_persisted_manual_kit(tmp_path: Path) -> None:
+    """Exercise the user-facing internship path over HTTP with synthetic data only."""
+    transport = SyntheticTransport()
+    service = CareerService(
+        tmp_path,
+        curated_sources=(SYNTHETIC_SOURCE,),
+        exploration_connectors={"greenhouse": GreenhouseJobBoardConnector(transport)},
+    )
+    app = create_app(base_dir=tmp_path, career_override=service)
+
+    with TestClient(app) as client:
+        criteria = client.put(
+            "/api/career/stage-search",
+            json={"domains": ["Corporate Finance"], "cities": ["London"]},
+        )
+        assert criteria.status_code == 200
+        report = client.post("/api/career/stage-search/explore", json={"force": False}).json()
+        match = report["matches"][0]
+        job_id = match["job"]["id"]
+        assert match["job"]["title"] == "Corporate Finance Intern"
+        assert match["internship"]["status"] == "confirmed"
+
+        profile = client.put(
+            "/api/career/profile",
+            json={
+                "display_name": "Synthetic Candidate",
+                "education": "MSc Finance",
+                "experience": "Built a financial model for a synthetic case study.",
+                "skills": "Excel, valuation",
+            },
+        )
+        assert profile.status_code == 200
+        prep = client.get(f"/api/career/jobs/{job_id}/prep").json()
+        assert prep["recommended_variant"] == "corporate_finance"
+
+        kit = client.post(
+            "/api/career/application-kits",
+            json={"job_id": job_id, "language": "en", "variant": "corporate_finance"},
+        )
+        assert kit.status_code == 200
+        payload = kit.json()
+        assert payload["automatic_submission"] is False
+        assert payload["draft"]["variant"] == "corporate_finance"
+        assert payload["draft"]["language"] == "en"
+
+        pipeline = client.get("/api/career/application-pipeline")
+        assert pipeline.status_code == 200
+        item = next(row for row in pipeline.json()["pipeline"] if row["job_id"] == job_id)
+        assert item["stage"] == "tracking_created"
+        assert item["tracking_stage"] == "to_review"
+        assert item["next_action_code"] == "review_kit"
+        assert item["source_trust_status"] == "to_verify"
+        assert pipeline.json()["automatic_submission"] is False
+
+        # Data survives a fresh service instance and no submission route was invoked.
+        reloaded = CareerService(tmp_path, curated_sources=())
+        persisted = reloaded.get_application_pipeline()
+        saved = next(row for row in persisted["pipeline"] if row["job_id"] == job_id)
+        assert saved["stage"] == "tracking_created"
+        assert saved["variant"] == "corporate_finance"
+        assert transport.calls == 1
+
+
 def test_job_summary_endpoint_returns_local_summary(tmp_path: Path) -> None:
     transport = SyntheticTransport()
     service = CareerService(tmp_path, curated_sources=(SYNTHETIC_SOURCE,),

@@ -1,0 +1,19 @@
+{
+  "entries": [
+    {
+      "decision_type": "offer_ranked",
+      "context": {"job_id": "job_001", "score": 0.82, "factors": ["location", "skills"]},
+      "outcome": {"rank": 1, "confidence": 0.9}
+    },
+    {
+      "decision_type": "followup_scheduled",
+      "context": {"job_id": "job_001", "reason": "no_reply_7d"},
+      "outcome": {"scheduled_at": "2026-02-01T10:00:00+00:00"}
+    },
+    {
+      "decision_type": "arena_verdict",
+      "context": {"job_id": "job_002"},
+      "outcome": {"verdict": "admit", "confidence": 0.75}
+    }
+  ]
+}

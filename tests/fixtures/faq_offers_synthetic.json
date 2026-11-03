@@ -1,0 +1,7 @@
+{
+  "offers": [
+    {"sector": "finance", "description": "stage finance excel reporting valorisation M&A"},
+    {"sector": "finance", "description": "stage corporate finance excel modélisation DCF"},
+    {"sector": "tech", "description": "stage développement python backend API"}
+  ]
+}

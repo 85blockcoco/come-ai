@@ -1,0 +1,241 @@
+{
+  "schema_version": 1,
+  "pack_id": "exams-core",
+  "topic_id": "VC04",
+  "language": "fr",
+  "source_type": "original",
+  "license": "Contenu original NAGE",
+  "items": [
+    {
+      "kind": "exam_question",
+      "id": "VC04-E001",
+      "topic_id": "VC04",
+      "question": "Une société vaut 12 M€ pre-money. Un investisseur injecte 3 M€. Quel est le post-money, en M€ ?",
+      "answer": "15",
+      "points": 5,
+      "format": "numeric",
+      "unit": "m_eur",
+      "tolerance": 0.01
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC04-E002",
+      "topic_id": "VC04",
+      "question": "Un tour affiche un post-money de 20 M€ pour un investissement de 5 M€. Quel est le pre-money, en M€ ?",
+      "answer": "15",
+      "points": 5,
+      "format": "numeric",
+      "unit": "m_eur",
+      "tolerance": 0.01
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC04-E003",
+      "topic_id": "VC04",
+      "question": "Un investisseur place 2 M€ dans un tour dont le post-money est de 10 M€. Quelle part du capital détient-il ?",
+      "answer": "20 %",
+      "points": 5,
+      "format": "mcq",
+      "choices": ["10 %", "20 %", "25 %", "80 %"]
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC04-E004",
+      "topic_id": "VC04",
+      "question": "Une société a 8 millions d'actions avant le tour et émet 2 millions d'actions nouvelles. Quelle part du post-money les nouvelles actions représentent-elles ?",
+      "answer": "20 %",
+      "points": 5,
+      "format": "mcq",
+      "choices": ["10 %", "20 %", "25 %", "80 %"]
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC04-E005",
+      "topic_id": "VC04",
+      "question": "Expliquez pourquoi le pre-money ne dépend pas du montant levé alors que la part de l'investisseur en dépend.",
+      "answer": "Le pre-money fixe la valeur de la société avant le cash ; le post-money ajoute l'investissement. La part de l'investisseur est l'investissement divisé par le post-money : elle augmente avec le montant levé à pre-money constant.",
+      "points": 5,
+      "format": "open",
+      "keywords": ["pre-money", "post-money", "investissement", "part"],
+      "min_keywords": 3,
+      "source_card_id": "VC04-C005"
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC05-E001",
+      "topic_id": "VC05",
+      "question": "Un fondateur détient 4 millions d'actions sur 10 millions d'actions fully diluted. Après une émission de 2 millions d'actions, quel est son pourcentage ?",
+      "answer": "33.33",
+      "points": 5,
+      "format": "numeric",
+      "unit": "percent",
+      "tolerance": 0.1
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC05-E002",
+      "topic_id": "VC05",
+      "question": "Une société lève 2 M€ sur un post-money de 10 M€. L'option pool demandé représente 15 % du post-money. Quel montant d'option pool cela crée-t-il, en M€ ?",
+      "answer": "1.5",
+      "points": 5,
+      "format": "numeric",
+      "unit": "m_eur",
+      "tolerance": 0.01
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC05-E003",
+      "topic_id": "VC05",
+      "question": "Quelle base inclut les options attribuées, les options réservées et les convertibles ?",
+      "answer": "Base fully diluted",
+      "points": 5,
+      "format": "mcq",
+      "choices": ["Actions émises", "Actions autorisées", "Base fully diluted", "Capital social libéré"]
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC05-E004",
+      "topic_id": "VC05",
+      "question": "Quand un option pool est créé avant le tour, qui supporte principalement la dilution ?",
+      "answer": "Les fondateurs existants",
+      "points": 5,
+      "format": "mcq",
+      "choices": ["L'investisseur entrant", "Les fondateurs existants", "Les créanciers", "Les clients"]
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC05-E005",
+      "topic_id": "VC05",
+      "question": "Expliquez la différence entre actions émises et base fully diluted, et pourquoi un investisseur raisonne en fully diluted.",
+      "answer": "Les actions émises existent réellement. La base fully diluted ajoute les options attribuées ou réservées et les convertibles. L'investisseur l'utilise pour mesurer sa propriété potentielle après dilution.",
+      "points": 5,
+      "format": "open",
+      "keywords": ["emises", "fully diluted", "options", "convertibles"],
+      "min_keywords": 3,
+      "source_card_id": "VC05-C002"
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC07-E001",
+      "topic_id": "VC07",
+      "question": "Un investisseur a investi 4 M€ avec une préférence 1x non participating et détient 30 % du capital. La sortie est de 10 M€. Combien reçoit-il, en M€ ?",
+      "answer": "4",
+      "points": 5,
+      "format": "numeric",
+      "unit": "m_eur",
+      "tolerance": 0.01
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC07-E002",
+      "topic_id": "VC07",
+      "question": "Un investisseur a investi 4 M€ avec une préférence 1x participating sans cap et détient 30 %. La sortie est de 20 M€. Combien reçoit-il, en M€ ?",
+      "answer": "8.8",
+      "points": 5,
+      "format": "numeric",
+      "unit": "m_eur",
+      "tolerance": 0.01
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC07-E003",
+      "topic_id": "VC07",
+      "question": "Que signifie une liquidation preference 1x non participating ?",
+      "answer": "L'investisseur récupère 1x son investissement puis ne participe pas au résidu",
+      "points": 5,
+      "format": "mcq",
+      "choices": [
+        "L'investisseur récupère 1x son investissement puis ne participe pas au résidu",
+        "L'investisseur récupère 1x puis participe au résidu sans cap",
+        "L'investisseur reçoit toujours 1 % de la sortie",
+        "L'investisseur perd sa préférence après un down round"
+      ]
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC07-E004",
+      "topic_id": "VC07",
+      "question": "Dans un waterfall avec plusieurs rangs, quel investisseur est servi en premier ?",
+      "answer": "Le plus senior",
+      "points": 5,
+      "format": "mcq",
+      "choices": ["Le plus junior", "Le plus senior", "Le fondateur", "Le détenteur d'options"]
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC07-E005",
+      "topic_id": "VC07",
+      "question": "Expliquez pourquoi une préférence participating peut réduire fortement le produit reçu par les fondateurs.",
+      "answer": "Avec une préférence participating, l'investisseur récupère d'abord sa préférence puis participe au résidu. Il capte donc une part du partage après remboursement, ce qui réduit le montant disponible pour les fondateurs.",
+      "points": 5,
+      "format": "open",
+      "keywords": ["participating", "preference", "residu", "fondateurs"],
+      "min_keywords": 3,
+      "source_card_id": "VC07-C003"
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC09-E001",
+      "topic_id": "VC09",
+      "question": "Un investissement de 10 M€ est revendu 30 M€. Quel est le MOIC ?",
+      "answer": "3",
+      "points": 5,
+      "format": "numeric",
+      "unit": "ratio",
+      "tolerance": 0.01
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC09-E002",
+      "topic_id": "VC09",
+      "question": "Un fonds a appelé 20 M€, distribué 15 M€ et détient 25 M€ de valeur résiduelle. Quel est le TVPI ?",
+      "answer": "2",
+      "points": 5,
+      "format": "numeric",
+      "unit": "ratio",
+      "tolerance": 0.01
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC09-E003",
+      "topic_id": "VC09",
+      "question": "Quelle formule correspond au DPI ?",
+      "answer": "Distributions / capital appelé",
+      "points": 5,
+      "format": "mcq",
+      "choices": [
+        "Distributions / capital appelé",
+        "Valeur résiduelle / capital appelé",
+        "(Distributions + valeur résiduelle) / capital appelé",
+        "Capital appelé / distributions"
+      ]
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC09-E004",
+      "topic_id": "VC09",
+      "question": "Que décrit la J-curve d'un fonds de capital-risque ?",
+      "answer": "Des rendements négatifs au début puis positifs à mesure que les sorties arrivent",
+      "points": 5,
+      "format": "mcq",
+      "choices": [
+        "Des rendements négatifs au début puis positifs à mesure que les sorties arrivent",
+        "Une croissance linéaire des frais de gestion",
+        "Une baisse définitive du DPI",
+        "Un carry calculé avant le hurdle"
+      ]
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC09-E005",
+      "topic_id": "VC09",
+      "question": "Expliquez la différence entre IRR et MOIC, et pourquoi les deux sont utiles.",
+      "answer": "Le MOIC mesure le multiple brut reçu sur le capital investi, sans tenir compte du temps. L'IRR annualise les flux et dépend fortement de leur timing. Les deux se complètent : un fort MOIC peut cacher un IRR faible si l'attente a été longue.",
+      "points": 5,
+      "format": "open",
+      "keywords": ["irr", "moic", "temps", "rendement"],
+      "min_keywords": 3,
+      "source_card_id": "VC09-C002"
+    }
+  ]
+}

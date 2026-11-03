@@ -188,7 +188,7 @@ def default_brief() -> dict[str, Any]:
         "require_known_location": False,
         "start_date": "",
         "duration_months": None,
-        "contract_types": ["stage", "cdd", "cdi", "vie"],
+        "contract_types": ["stage"],
         "start_months": [1, 2, 3],
         "minimum_stage_duration_months": 6,
         "education_preference": "bachelor_m1_then_m2",
@@ -316,7 +316,7 @@ def validate_brief(payload: Any) -> dict[str, Any]:
         if not 1 <= duration <= 24:
             raise UserFacingError("La durée recherchée doit être comprise entre 1 et 24 mois.")
     contract_types: list[str] = []
-    for item in _string_list(payload.get("contract_types", ["stage", "cdd", "cdi", "vie"]),
+    for item in _string_list(payload.get("contract_types", ["stage"]),
                              "Les types de contrat", max_items=4, max_length=20):
         canonical = item.strip().casefold()
         if canonical not in CONTRACT_TYPES:
@@ -414,7 +414,7 @@ def brief_is_configured(brief: dict[str, Any]) -> bool:
             clean_text(brief.get("duration_months")),
             clean_text(brief.get("study_level"), limit=120),
             brief.get("languages"),
-            brief.get("contract_types", ["stage", "cdd", "cdi", "vie"]) != ["stage", "cdd", "cdi", "vie"],
+            brief.get("contract_types", ["stage"]) != ["stage"],
             brief.get("start_months", [1, 2, 3]) != [1, 2, 3],
             brief.get("minimum_stage_duration_months", 6) != 6,
         ]
@@ -615,12 +615,32 @@ def score_brief_match(brief: dict[str, Any], job: dict[str, Any]) -> dict[str, A
         wanted_start = parse_date(start_text, "La date de début recherchée")
         job_start = parse_date(job.get("start_date"), "La date de début de l’offre")
         job_end = parse_date(job.get("end_date"), "La date de fin de l’offre")
+        start_fact = None
+        if not job_start:
+            # Use only explicit, uncontradicted source evidence. A month-level
+            # fact may meet an earliest-date criterion on day 1 of that month;
+            # it cannot establish a later day in the same month.
+            from .offer_dates import extract_offer_dates
+
+            facts = [fact for fact in extract_offer_dates(job) if fact.fact_type == "start"]
+            usable = [fact for fact in facts if not fact.contradictions and fact.confidence != "ambiguous"]
+            if len(usable) == 1:
+                start_fact = usable[0]
+                value = start_fact.value
+                if value.get("year") and value.get("month"):
+                    from datetime import date
+
+                    job_start = date(int(value["year"]), int(value["month"]), int(value.get("day") or 1))
         if job_start and wanted_start:
-            if job_start >= wanted_start:
+            if start_fact and start_fact.precision != "day" and job_start == wanted_start and wanted_start.day != 1:
+                components.append(_component("dates", 8, 15, status="review", reason=f"La source indique « {start_fact.quote} » : le jour exact reste à vérifier."))
+                unknowns.append("Jour exact de début non précisé par la source.")
+            elif job_start >= wanted_start:
+                reason = (f"Début annoncé selon la source : « {start_fact.quote} » (mois/année)." if start_fact else f"Début annoncé le {job_start.isoformat()}.")
                 components.append(
-                    _component("dates", 15, 15, status="match", reason=f"Début annoncé le {job_start.isoformat()}.")
+                    _component("dates", 15, 15, status="match", reason=reason)
                 )
-                reasons.append(f"Début annoncé le {job_start.isoformat()}.")
+                reasons.append(reason)
             elif job_end and job_end >= wanted_start:
                 components.append(
                     _component(
@@ -635,6 +655,10 @@ def score_brief_match(brief: dict[str, Any], job: dict[str, Any]) -> dict[str, A
                 components.append(
                     _component("dates", 0, 15, status="no_match", reason="Le stage se termine avant ta date de début.")
                 )
+        elif start_fact and not start_fact.value.get("year"):
+            reason = f"La source indique « {start_fact.quote} », sans année : début à vérifier."
+            components.append(_component("dates", 8, 15, status="review", reason=reason))
+            unknowns.append("Année de début non renseignée par la source.")
         elif job_end and wanted_start:
             status = "review" if job_end >= wanted_start else "no_match"
             points = 8 if status == "review" else 0
@@ -649,7 +673,7 @@ def score_brief_match(brief: dict[str, Any], job: dict[str, Any]) -> dict[str, A
             )
             if status != "review":
                 unknowns.append("La fin annoncée précède ta date de début.")
-        else:
+        elif not job_start and not job_end:
             components.append(
                 _component("dates", 0, 15, status="unknown", reason="Les dates du stage ne sont pas renseignées.")
             )

@@ -18,6 +18,8 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
 from career.application_prep import extract_requirements, prepare_application
+from career.offer_dates import extract_offer_dates
+from career.offer_qualification import qualify_offer
 from career.router import create_career_router
 from career.service import CareerService
 from career.stage_search import (
@@ -262,6 +264,98 @@ def test_official_url_is_conserved_verbatim_through_the_journey(tmp_path: Path) 
     assert prep["job"]["source_name"] == "manual"
 
 
+def test_job_prep_compares_offer_requirements_with_saved_profile_facts(tmp_path: Path) -> None:
+    service = CareerService(tmp_path)
+    service.update_profile({"education": "Master 2 en Finance", "skills": "Excel"})
+    job = service.import_job(
+        synthetic_job(
+            requirements="Master 2 en Finance requis. Maîtrise d’Excel obligatoire.",
+            languages_required="Anglais C1 préféré.",
+        )
+    )
+
+    prep = service.get_job_prep(job["id"])
+
+    fit = prep["requirements_fit"]
+    assert fit["fits"]
+    supported = [item for item in fit["fits"] if item["verdict"] == "supported"]
+    assert any("Master 2" in item["profile_evidence"] for item in supported)
+    assert any("Excel" in item["profile_evidence"] for item in supported)
+    assert fit["to_verify_count"] >= 1  # absence is never treated as incompatibility
+
+
+def test_cv_plan_coverage_never_counts_partial_or_insufficient_fit_as_supported(tmp_path: Path) -> None:
+    service = CareerService(tmp_path)
+    service.update_profile({
+        "education": "Master 1 Finance — synthetic profile",
+        "skills": "Excel modelling and valuation",
+        "languages": "English B2",
+    })
+    job = service.import_job(
+        synthetic_job(
+            requirements="Excel modelling and valuation are required.",
+            languages_required="English fluency required.",
+        )
+    )
+
+    prep = service.get_job_prep(job["id"])
+
+    fit = prep["requirements_fit"]
+    coverage = prep["cv_coverage"]
+    assert coverage["supported"] == fit["supported_count"]
+    assert coverage["to_verify"] == fit["to_verify_count"]
+    assert coverage["unsupported"] == fit["unsupported_count"]
+    assert coverage["contradicted"] == fit["contradicted_count"]
+    assert coverage["requirements_total"] == sum(
+        fit[key] for key in (
+            "supported_count", "to_verify_count", "unsupported_count", "contradicted_count"
+        )
+    )
+    unsupported_ids = {
+        item["requirement_id"] for item in fit["fits"]
+        if item["verdict"] in {"unsupported", "contradicted", "to_verify"}
+    }
+    plan_items = {
+        item.get("requirement_id"): item for item in prep["cv_action_plan"]
+    }
+    for requirement_id in unsupported_ids.intersection(plan_items):
+        assert plan_items[requirement_id]["status"] == "needs_evidence"
+        assert plan_items[requirement_id]["action_type"] == "do_not_overstate"
+        assert plan_items[requirement_id]["blocking_note"]
+
+
+def test_job_prep_carries_reconstructed_source_trust_and_temporal_evidence(tmp_path: Path) -> None:
+    service = CareerService(tmp_path)
+    payload = synthetic_job(
+        company="Synthetic Bank",
+        source_name="greenhouse",
+        source_id="synthetic-january-2027",
+        official_url="https://boards.greenhouse.io/synthetic-bank/jobs/synthetic-january-2027",
+        description_original="Synthetic internship starting January 2027 for six months.",
+        duration_months=6,
+    )
+    qualification = qualify_offer(
+        payload,
+        minimum_duration_months=1,
+        minimum_stage_duration_months=1,
+        allowed_contract_types=["internship"],
+        allowed_start_months=list(range(1, 13)),
+    ).to_dict()
+    qualification["temporal_facts"] = [fact.to_dict() for fact in extract_offer_dates(payload)]
+    payload["qualification"] = qualification
+    job = service.import_job(payload)
+
+    prep_job = service.get_job_prep(job["id"])["job"]
+
+    assert prep_job["official_source_trust"]["status"] == "verified"
+    assert prep_job["official_source_trust_label"] == "Source officielle vérifiée"
+    assert prep_job["source_verified"] is False  # URL trust does not verify offer content.
+    assert any(
+        fact["fact_type"] == "start" and fact["value"]["year"] == 2027
+        for fact in prep_job["qualification_facts"]["temporal_facts"]
+    )
+
+
 # --- 5. Offres indisponibles --------------------------------------------------
 
 
@@ -356,7 +450,7 @@ def test_requirements_extraction_is_bounded_and_source_faithful() -> None:
     items = extract_requirements(dict(synthetic_job(requirements="Exigence A.\nExigence B.\nExigence A.")))
     texts = [item["text"] for item in items]
     assert texts.count("Exigence A.") == 1
-    assert all(item["source"] in {"requirements", "languages_required", "eligibility_requirement", "role_level"} for item in items)
+    assert all(item["source"] in {"requirements", "languages_required", "eligibility_requirement"} for item in items)
 
 
 # --- 8. Comportement en l'absence de fournisseur IA ---------------------------
@@ -742,6 +836,31 @@ def test_dates_outside_the_window_are_visible_in_the_reason() -> None:
     assert "termine" in dates["reason"] or "avant" in dates["reason"]
 
 
+def test_matching_uses_source_quoted_start_month_when_structured_date_is_absent() -> None:
+    brief = validate_brief({"start_date": "2027-01-01"})
+    job = dict(synthetic_job(
+        start_date="",
+        description_original="Synthetic finance internship starting January 2027 for six months.",
+    ))
+    match = score_brief_match(brief, job)
+    dates = next(component for component in match["components"] if component["key"] == "dates")
+    assert dates["status"] == "match"
+    assert "January 2027" in dates["reason"]
+    assert not any("Dates non renseignées" in item for item in match["unknowns"])
+
+
+def test_matching_keeps_start_month_without_year_as_review() -> None:
+    brief = validate_brief({"start_date": "2027-01-01"})
+    job = dict(synthetic_job(
+        start_date="",
+        description_original="Synthetic finance internship starting in January for six months.",
+    ))
+    match = score_brief_match(brief, job)
+    dates = next(component for component in match["components"] if component["key"] == "dates")
+    assert dates["status"] in {"review", "unknown"}
+    assert "année" in dates["reason"].lower() or any("année" in item.lower() for item in match["unknowns"])
+
+
 def test_multi_domain_offer_lists_every_matched_domain() -> None:
     brief = validate_brief({"domains": ["Private Equity", "Transaction Services", "M&A"]})
     match = score_brief_match(
@@ -766,6 +885,8 @@ def test_first_open_starts_with_useful_finance_defaults_and_explains_itself(tmp_
     expected["excluded_countries"] = ["France"]
     expected["excluded_cities"] = ["Paris"]
     expected["require_known_location"] = True
+    expected["start_date"] = "2027-01-01"
+    expected["start_months"] = list(range(1, 13))
     assert payload["brief"] == expected
     assert payload["stored_brief_invalid"] is False
     assert payload["vocabulary"]["domains"], "le formulaire des domaines doit être renseignable"

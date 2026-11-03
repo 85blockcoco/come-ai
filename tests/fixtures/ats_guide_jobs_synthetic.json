@@ -1,0 +1,98 @@
+{
+  "greenhouse": {
+    "id": "job-synthetic-greenhouse",
+    "company": "Banque Synthétique",
+    "title": "Stagiaire M&A",
+    "source_name": "greenhouse",
+    "source_id": "synthetic-1001",
+    "official_url": "https://job-boards.greenhouse.io/banque-synthetique/jobs/4001001"
+  },
+  "lever": {
+    "id": "job-synthetic-lever",
+    "company": "Fonds Synthétique",
+    "title": "Stage Private Equity",
+    "source_name": "lever",
+    "source_id": "synthetic-1002",
+    "official_url": "https://jobs.lever.co/fonds-synthetique/abcd1234-synthetic"
+  },
+  "workday": {
+    "id": "job-synthetic-workday",
+    "company": "Groupe Synthétique",
+    "title": "Stage Finance",
+    "source_name": "workday",
+    "source_id": "synthetic-1003",
+    "official_url": "https://groupe-synthetique.wd3.myworkdayjobs.com/en-US/Careers/job/Paris/Stage-Finance_R1003"
+  },
+  "smartrecruiters": {
+    "id": "job-synthetic-smartrecruiters",
+    "company": "Cabinet Synthétique",
+    "title": "Stage Conseil",
+    "source_name": "smartrecruiters",
+    "source_id": "synthetic-1004",
+    "official_url": "https://jobs.smartrecruiters.com/CabinetSynthetique/74400001004-stage-conseil"
+  },
+  "recruitcrm": {
+    "id": "job-synthetic-recruitcrm",
+    "company": "Chasseur Synthétique",
+    "title": "Stage Analyse",
+    "source_name": "recruitcrm",
+    "source_id": "synthetic-1005",
+    "official_url": "https://chasseur-synthetique.recruitcrm.io/jobs/synthetic-1005-stage-analyse"
+  },
+  "breezy": {
+    "id": "job-synthetic-breezy",
+    "company": "Startup Synthétique",
+    "title": "Stage Data",
+    "source_name": "breezy",
+    "source_id": "synthetic-1006",
+    "official_url": "https://startup-synthetique.breezy.hr/p/synthetic-1006-stage-data"
+  },
+  "jobvite": {
+    "id": "job-synthetic-jobvite",
+    "company": "Industrie Synthétique",
+    "title": "Stage Contrôle de gestion",
+    "source_name": "jobvite",
+    "source_id": "synthetic-1007",
+    "official_url": "https://jobs.jobvite.com/industrie-synthetique/job/o1007"
+  },
+  "ashby": {
+    "id": "job-synthetic-ashby",
+    "company": "Scale-up Synthétique",
+    "title": "Stage Stratégie",
+    "source_name": "ashby",
+    "source_id": "synthetic-1008",
+    "official_url": "https://jobs.ashbyhq.com/scale-up-synthetique/00000000-1008-4000-8000-000000001008"
+  },
+  "ripplematch": {
+    "id": "job-synthetic-ripplematch",
+    "company": "Réseau Synthétique",
+    "title": "Stage Marketing",
+    "source_name": "ripplematch",
+    "source_id": "synthetic-1009",
+    "official_url": "https://ripplematch.com/jobs/synthetic-1009-stage-marketing"
+  },
+  "custom": {
+    "id": "job-synthetic-custom",
+    "company": "Employeur Synthétique",
+    "title": "Stage Généraliste",
+    "source_name": "custom",
+    "source_id": "synthetic-1010",
+    "official_url": "https://careers.employeur-synthetique.test/jobs/synthetic-1010"
+  },
+  "unknown": {
+    "id": "job-synthetic-unknown",
+    "company": "Site Inconnu Synthétique",
+    "title": "Stage Divers",
+    "source_name": "manual",
+    "source_id": "",
+    "official_url": "https://carrieres.exemple-synthetique.test/offres/synthetic-1011"
+  },
+  "source_only_greenhouse": {
+    "id": "job-synthetic-source-only",
+    "company": "Employeur Synthétique",
+    "title": "Stage Finance",
+    "source_name": "greenhouse",
+    "source_id": "synthetic-1012",
+    "official_url": "https://careers.employeur-synthetique.test/jobs/synthetic-1012"
+  }
+}

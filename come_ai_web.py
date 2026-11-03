@@ -30,6 +30,7 @@ from starlette.datastructures import UploadFile
 
 from career.profile_import import MAX_PROFILE_IMPORT_BYTES
 from career.router import CAREER_STATIC_DIR, create_career_router
+from academics.router import create_academics_router
 from career.service import CareerService
 from personal_memory import PersonalMemoryError, PersonalMemoryStore
 from memory_storage import MemoryStorageError, MemoryStorageService
@@ -59,6 +60,7 @@ from workspace_core import (
 
 WEB_STATIC_DIR = Path(__file__).resolve().parent / "web_static"
 V5_STATIC_DIR = Path(__file__).resolve().parent / "v5_static"
+DESKTOP_STATIC_DIR = Path(__file__).resolve().parent / "desktop_static"
 UPLOAD_CHUNK_SIZE = 1_024 * 1_024
 MAX_CHAT_CHARS = 12_000
 MAX_UPLOAD_FILES = 12
@@ -498,10 +500,52 @@ def create_app(
     async def homepage() -> FileResponse:
         return FileResponse(WEB_STATIC_DIR / "index.html", media_type="text/html; charset=utf-8")
 
+    @app.get("/app")
+    async def desktop_homepage() -> FileResponse:
+        return FileResponse(DESKTOP_STATIC_DIR / "index.html", media_type="text/html; charset=utf-8")
+
     @app.get("/v5")
     async def v5_homepage() -> FileResponse:
         """The new unified local shell; V3 remains available at `/`."""
         return FileResponse(V5_STATIC_DIR / "index.html", media_type="text/html; charset=utf-8")
+
+    @app.get("/api/app/missions")
+    async def app_missions() -> dict:
+        import json as _json
+        import os as _os
+        import subprocess as _sp
+        from pathlib import Path as _P
+        def snapshot():
+            try:
+                reg = _json.loads((_P(__file__).resolve().parent / "missions_registry.json").read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                return {"available": False, "counts": {}, "missions": [], "workers": 0, "load": 0.0}
+            missions = reg.get("missions", [])
+            counts = {}
+            for m in missions:
+                st = str(m.get("status", "unknown"))
+                counts[st] = counts.get(st, 0) + 1
+            try:
+                workers = _sp.run(["pgrep", "-f", "opencode run --auto"], capture_output=True, text=True, timeout=3).stdout.count("\n")
+            except Exception:
+                workers = 0
+            try:
+                load = round(_os.getloadavg()[0], 1)
+            except Exception:
+                load = 0.0
+            done = {str(m.get("id")) for m in missions if m.get("status") == "done"}
+            pending = []
+            for m in missions:
+                if m.get("status") == "done":
+                    continue
+                deps = [str(d) for d in m.get("dependencies", [])]
+                pending.append({"id": str(m.get("id")), "title": str(m.get("title", "")),
+                                "status": str(m.get("status", "")),
+                                "blocked_by": [d for d in deps if d not in done]})
+            return {"available": True, "counts": counts,
+                    "missions": sorted(pending, key=lambda x: int(x["id"]) if x["id"].isdigit() else 0),
+                    "workers": workers, "load": load}
+        return await run_in_threadpool(snapshot)
 
     @app.get("/api/health")
     async def health() -> dict[str, Any]:
@@ -886,11 +930,13 @@ def create_app(
         career_ai_generator = generate_career_application
 
     app.include_router(create_career_router(career, ai_generator=career_ai_generator))
+    app.include_router(create_academics_router())
     from devkit.router import create_developer_router
 
     app.include_router(create_developer_router(get_workshop))
     app.mount("/static", StaticFiles(directory=WEB_STATIC_DIR), name="static")
     app.mount("/v5-static", StaticFiles(directory=V5_STATIC_DIR), name="v5-static")
+    app.mount("/app-static", StaticFiles(directory=DESKTOP_STATIC_DIR), name="app-static")
     app.mount("/career-static", StaticFiles(directory=CAREER_STATIC_DIR), name="career-static")
     return app
 

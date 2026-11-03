@@ -5,4 +5,4 @@
 - [x] Pass the saved policy through stored matching and public connectors.
 - [x] Render and save the criteria in Career Explorer.
 - [x] Add offline unit and HTTP regression tests.
-- [ ] Run full suite and browser smoke test on the release candidate.
+- [x] Run full suite and browser smoke test on the release candidate.

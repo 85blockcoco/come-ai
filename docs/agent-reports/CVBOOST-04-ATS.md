@@ -17,9 +17,10 @@ Le système ne parle **jamais** de « rejet » : il parle de **niveau de risque*
 
 ### Résultats des tests
 - ✅ **57 tests unitaires** dédiés (`tests/test_cv_quality_ats.py`), fixtures **synthétiques** (PDF générés par reportlab, DOCX par python-docx)
-- ✅ **1478 tests** dans la suite globale (≥ 1269 requis) — aucune régression
+- ✅ **Suite globale** : **1508 passés + 1 ignoré** sur la branche de livraison `agent/cvboost-04-ats` @ `3996002` (≥ 1269 requis) — aucune régression.
+  (Mesures historiques : 1451 passés + 1 ignoré @ `b4c1f26` ; 1430 passés + 1 ignoré sur `main` @ `a054c97` + ce seul commit, worktree isolé.)
 - ✅ **9 détecteurs** implémentés + score pondéré + label + interprétation
-- ✅ **Performance** : ~45 ms pour un PDF de 5 pages (seuil : 3 s)
+- ✅ **Performance** : ~276 ms pour un PDF de 5 pages (seuil : 3 s)
 
 ---
 
@@ -228,13 +229,25 @@ Aucune donnée personnelle, aucun fichier externe.
 # 57 passed
 
 /Users/comedelavenne/AI-Excel-Agent/.venv/bin/python -m pytest -q
-# 1478 passed
+# 1508 passed, 1 skipped   (branche de livraison agent/cvboost-04-ats @ 3996002, worktree propre)
+# 1452 passed              (branche avant fusion de main)
+# 1451 passed, 1 skipped   (historique : branche @ b4c1f26)
+# 1430 passed, 1 skipped   (historique : main @ a054c97 + ce seul commit, worktree isolé)
 
 /Users/comedelavenne/AI-Excel-Agent/.venv/bin/python -m ruff check .
 # All checks passed!
 
+VENV_PY=/Users/comedelavenne/AI-Excel-Agent/.venv/bin/python ./checklist_codex.sh all
+# TOUT VERT
+
 git diff --check   # propre
 ```
+
+> **Reproductibilité** : les chiffres ci-dessus sont mesurés dans un *worktree* propre
+> (sans `.env`, sans fichiers non suivis). Un arbre de travail sale peut afficher un total
+> collecté différent (fichiers de mission non commités) : seul le nombre *passé* sur un
+> checkout propre fait foi. Le test ignoré est `tests/test_offer_summary_exhaustiveness.py`
+> (script ou base absents — comportement attendu hors environnement complet).
 
 ---
 
@@ -329,3 +342,94 @@ Les causes et les correctifs :
 3. **Règle de géométrie manquante** : une image dominante (≥ 25 % de la page) sans texte
    adjacent signale un CV aplati dont le contenu est incorporé dans l'image (OCR requis).
 4. **CTM** : la matrice de transformation courante est appliquée aux positions des glyphes.
+
+### Revalidation finale (order `cvboost-04-1792586026`)
+
+Le périmètre autorisé a été rejoué à l'identique sur `main` @ `a054c97` dans un worktree
+isolé : les 5 fichiers de code et de test du périmètre y sont **identiques** à la branche de
+livraison (`git diff` vide sur `career/cv_quality/ats.py`, `models.py`, `parser.py`,
+`__init__.py` et `tests/test_cv_quality_ats.py` — Mission 13 ne touche pas ce périmètre) ;
+seul ce rapport diffère, par les corrections de chiffres ci-dessous. La suite globale y
+passe à **1430 passés + 1 ignoré**, `ruff` est propre et `checklist_codex.sh` affiche
+**TOUT VERT**.
+
+Cette revalidation a aussi corrigé le décompte de la suite globale cité plus haut
+(« 1478 »), qui provenait d'un arbre de travail sale et n'était donc pas reproductible ;
+les chiffres publiés ci-dessus sont mesurés sur des checkouts propres.
+
+---
+
+## Revalidation — 2026-10-23 (dernier passage worker)
+
+### État de la branche
+
+| Élément | Valeur |
+|---|---|
+| Branche | `agent/cvboost-04-ats` |
+| HEAD | `3996002` (merge de `main` dans la branche) |
+| Base | `main` @ `f5b22f2` — « ATS diagnostics and targeted CV variants pipeline » |
+| Conflits de fusion | **aucun** (`git merge-tree --write-tree main HEAD` → arbre unique) |
+
+La branche a été **resynchronisée avec `main`**, qui avait reçu entre-temps la Mission 39
+(`career/cv_fit.py`, `career/cv_variants.py`, `career/application_sprint.py`,
+`career/application_studio.py` + les tests associés). Objectif : que
+`git diff main..branche` ne montre **que** la contribution de la Mission 04, et que la
+fusion ultérieure dans `main` soit un *fast-forward* — sans risque d'effacer les fichiers
+de la Mission 39 (ce qui arriverait avec une copie « `git checkout branche -- .` »).
+
+### Périmètre de la mission — intact après fusion
+
+`git diff 80c60d0..3996002 -- career/cv_quality/ats.py career/cv_quality/models.py
+career/cv_quality/__init__.py tests/test_cv_quality_ats.py` → **vide** : la fusion n'a
+touché aucun fichier du périmètre autorisé. Seuls `parser.py` (+ octets bruts) et
+`structure.py` (apports de `main`) ont convergé, sans conflit.
+
+### Mesures reproductibles (worktree propre, post-fusion)
+
+| Mesure | Résultat |
+|---|---|
+| `pytest -q tests/test_cv_quality_ats.py` | **57 passed** |
+| `pytest -q tests/test_cv_quality_ats.py tests/test_cv_quality_structure.py` | **96 passed** |
+| `pytest -q` (suite globale, worktree propre) | **1508 passed, 1 skipped** (575 s) |
+| `pytest -q` (suite globale, avant fusion de `main`) | **1452 passed** (633 s) |
+| `pytest -q` via `./checklist_codex.sh` (arbre de travail courant) | **1509 passed** (195 s) |
+| `ruff check .` | **All checks passed!** |
+| `./checklist_codex.sh all` | **TOUT VERT** |
+| `git diff --check` (diff de la branche) | propre |
+| Performance (PDF 5 pages réelles, 5 exécutions) | **~276 ms** (médiane) — seuil : 3 s |
+
+L'écart de 56 tests entre les deux décomptes globaux correspond **exactement** aux tests
+apportés par `main` (Mission 39) lors de la fusion : aucune régression de la Mission 04.
+Le test ignoré reste `tests/test_offer_summary_exhaustiveness.py` (script ou base absents —
+comportement attendu hors environnement complet).
+
+### Note lint — infrastructure de l'orchestrateur
+
+La fusion a introduit dans la branche deux fichiers d'infrastructure ajoutés par
+l'orchestrateur (`model_health.py`, `orchestrator.py`) qui ne respectaient pas la
+configuration `ruff` du dépôt (E401 / E701 / E702 / F401 / F541 / F841). Corrections
+**purement cosmétiques et sans effet de bord** (imports scindés, instructions séparées,
+import et variable inutilisés retirés) : la branche passe désormais `ruff check .` sans
+erreur. Les scripts d'exécution locaux non versionnés (`mission_driver.py`,
+`watchdog_hangs.py`, `guardian_anti_fake_done.py`) ont été nettoyés de la même façon pour
+que la checklist locale soit verte — ils ne font pas partie de la branche.
+
+> `git diff --check` : **propre sur tout le périmètre de la mission et sur les fichiers de
+> code** (`career/`, `tests/test_cv_quality_ats.py`, `orchestrator.py`, `model_health.py`,
+> ce rapport). Les seuls avertissements restants portent sur deux **journaux d'exécution**
+> commités par l'orchestrateur (`model_health.log`, `probe_full.log`) : ce sont des lignes de
+> log terminées par une espace, hors périmètre de la mission et non modifiables sans
+> interferer avec les processus qui écrivent dedans.
+
+### Compatibilité avec les diagnostics ATS déjà présents dans `main`
+
+`main` expose déjà un « diagnostic structurel local » à l'import d'un CV
+(`career/service.py` → `career/cv_quality/structure.py`, codes `MISSING_SECTION`,
+`TABLE_DETECTED`, `LOW_TEXT_RATIO`…). La Mission 04 ajoute un module **dédié et
+positionnel** (`career/cv_quality/ats.py`) qui analyse la **structure réelle** du fichier
+exporté (colonnes, tableaux, images, en-têtes/pieds) et non le texte aplati.
+
+Les deux sont **complémentaires** : le diagnostic de `main` travaille sur le texte extrait,
+le module de la Mission 04 travaille sur la mise en page. Le branchement de
+`run_ats_check` dans `career/service.py` / `career/router.py` reste **hors périmètre**
+(interdit explicitement par la mission) et devra faire l'objet d'une mission dédiée.

@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "pack_id": "drills-vc09",
+  "topic_id": "VC09",
+  "language": "fr",
+  "source_type": "original",
+  "license": "Contenu original NAGE",
+  "items": [
+    {
+      "kind": "drill",
+      "id": "VC09-D001",
+      "topic_id": "VC09",
+      "prompt": "Un investissement de 2 M€ est sorti à 10 M€. Quel est le MOIC, en x ?",
+      "variables": {"invested": 2, "exit_value": 10},
+      "answer": 5,
+      "answer_unit": "ratio",
+      "tolerance": 0.01,
+      "steps": [
+        {"label": "Formule", "expression": "MOIC = exit_value / invested", "result": 5},
+        {"label": "Substitution", "expression": "10 / 2", "result": 5}
+      ],
+      "error_paths": [
+        {"value": 0.2, "category": "formula", "message": "Vous avez inversé le numérateur et le dénominateur."}
+      ],
+      "difficulty": 1
+    },
+    {
+      "kind": "drill",
+      "id": "VC09-D002",
+      "topic_id": "VC09",
+      "prompt": "Un fonds a appelé 100 M€, distribué 60 M€ et détient 80 M€ de valeur résiduelle. Quel est le TVPI, en x ?",
+      "variables": {"contributions": 100, "distributions": 60, "residual": 80},
+      "answer": 1.4,
+      "answer_unit": "ratio",
+      "tolerance": 0.01,
+      "steps": [
+        {"label": "Formule", "expression": "TVPI = (distributions + residual) / contributions", "result": 1.4},
+        {"label": "Substitution", "expression": "(60 + 80) / 100", "result": 1.4}
+      ],
+      "error_paths": [
+        {"value": 0.6, "category": "missing_data", "message": "Vous avez calculé le DPI et oublié la valeur résiduelle."}
+      ],
+      "difficulty": 1
+    },
+    {
+      "kind": "drill",
+      "id": "VC09-D003",
+      "topic_id": "VC09",
+      "prompt": "Contributions 100 M€, distributions 60 M€. Quel est le DPI, en x ?",
+      "variables": {"contributions": 100, "distributions": 60},
+      "answer": 0.6,
+      "answer_unit": "ratio",
+      "tolerance": 0.01,
+      "steps": [
+        {"label": "Formule", "expression": "DPI = distributions / contributions", "result": 0.6},
+        {"label": "Substitution", "expression": "60 / 100", "result": 0.6}
+      ],
+      "error_paths": [
+        {"value": 1.4, "category": "formula", "message": "Vous avez calculé le TVPI au lieu du DPI."}
+      ],
+      "difficulty": 1
+    },
+    {
+      "kind": "drill",
+      "id": "VC09-D004",
+      "topic_id": "VC09",
+      "prompt": "Contributions 100 M€, valeur résiduelle 80 M€. Quel est le RVPI, en x ?",
+      "variables": {"contributions": 100, "residual": 80},
+      "answer": 0.8,
+      "answer_unit": "ratio",
+      "tolerance": 0.01,
+      "steps": [
+        {"label": "Formule", "expression": "RVPI = residual / contributions", "result": 0.8},
+        {"label": "Substitution", "expression": "80 / 100", "result": 0.8}
+      ],
+      "error_paths": [
+        {"value": 0.6, "category": "formula", "message": "Vous avez utilisé les distributions au lieu de la valeur résiduelle."}
+      ],
+      "difficulty": 1
+    },
+    {
+      "kind": "drill",
+      "id": "VC09-D005",
+      "topic_id": "VC09",
+      "prompt": "Flux : -100 M€ aujourd'hui, 0 en année 1, 0 en année 2, +150 M€ en année 3. Quel est l'IRR, en % ?",
+      "variables": {"cashflows": [-100, 0, 0, 150]},
+      "answer": 14.47,
+      "answer_unit": "percent",
+      "tolerance": 0.05,
+      "steps": [
+        {"label": "Équation", "expression": "100 = 150 / (1 + r)^3", "result": 14.47},
+        {"label": "Résolution", "expression": "(150 / 100)^(1/3) - 1", "result": 14.47}
+      ],
+      "error_paths": [
+        {"value": 50, "category": "formula", "message": "Vous avez calculé le rendement simple (150/100 - 1) sans annualiser sur 3 ans."}
+      ],
+      "difficulty": 3
+    },
+    {
+      "kind": "drill",
+      "id": "VC09-D006",
+      "topic_id": "VC09",
+      "prompt": "Un investissement a un MOIC de 3x sur 4 ans. Quel est l'IRR annualisé, en % ?",
+      "variables": {"moic": 3, "years": 4},
+      "answer": 31.61,
+      "answer_unit": "percent",
+      "tolerance": 0.05,
+      "steps": [
+        {"label": "Formule", "expression": "IRR = MOIC^(1/years) - 1", "result": 31.61},
+        {"label": "Substitution", "expression": "3^(1/4) - 1", "result": 31.61}
+      ],
+      "error_paths": [
+        {"value": 75, "category": "formula", "message": "Vous avez divisé le multiple par la durée au lieu de prendre la racine quatrième."}
+      ],
+      "difficulty": 2
+    }
+  ]
+}

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+from datetime import date
 from pathlib import Path
 from typing import Any, Callable
 
@@ -13,7 +14,12 @@ from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
 
+from .exploration_service import ExplorationService
+from .send_confirmation import SendEvidence, parse_sent_datetime
 from .profile_import import MAX_PROFILE_IMPORT_BYTES
+from .ats_guide import human_apply_guide
+from .offer_dates import extract_offer_dates
+from .offer_qualification import qualify_offer
 from .service import CareerService
 from workspace_core import UserFacingError, to_jsonable
 
@@ -82,6 +88,65 @@ class NotePayload(BaseModel):
     note: str = Field(default="", max_length=4_000)
 
 
+class LetterRenderPayload(BaseModel):
+    candidate_name: str = Field(default="", max_length=160)
+    role: str = Field(default="", max_length=300)
+    company: str = Field(default="", max_length=240)
+    evidence: list[str] = Field(default_factory=list, max_length=20)
+    language: str = Field(default="fr", max_length=8)
+    tone: str = Field(default="formal", max_length=20)
+
+
+class LetterCheckPayload(BaseModel):
+    letter_body: str = Field(min_length=1, max_length=30_000)
+    evidence: list[str] = Field(default_factory=list, max_length=30)
+
+
+class LetterPersonalizePayload(BaseModel):
+    body: str = Field(min_length=1, max_length=30_000)
+    company: str = Field(default="", max_length=240)
+    company_facts: list[str] = Field(default_factory=list, max_length=20)
+
+
+class LetterExportPayload(BaseModel):
+    letter_body: str = Field(min_length=1, max_length=30_000)
+    title: str = Field(min_length=1, max_length=240)
+    language: str = Field(default="fr", max_length=8)
+    target: str = Field(min_length=1, max_length=500)
+    fmt: str = Field(default="md", max_length=8)
+    approved: bool = False
+
+
+class LetterApprovePayload(BaseModel):
+    letter_id: str = Field(min_length=1, max_length=240)
+    approved: bool
+    version: int = Field(default=1, ge=1, le=100)
+    note: str = Field(default="", max_length=2_000)
+
+
+class OffersRankPayload(BaseModel):
+    offers: list[dict[str, Any]] = Field(default_factory=list, max_length=200)
+    today: str | None = Field(default=None, max_length=32)
+
+
+class ShortlistExportPayload(BaseModel):
+    offers: list[dict[str, Any]] = Field(default_factory=list, max_length=200)
+    fmt: str = Field(default="json", max_length=8)
+    fields: list[str] = Field(default_factory=list, max_length=30)
+
+
+class DossierChecklistPayload(BaseModel):
+    dossier: str = Field(default="stage", max_length=40)
+    provided: list[str] = Field(default_factory=list, max_length=30)
+
+
+class DossierPreviewPayload(BaseModel):
+    dossier_id: str = Field(min_length=1, max_length=160)
+    documents: list[tuple[str, str]] = Field(default_factory=list, max_length=30)
+    stage_summary: str = Field(default="", max_length=4_000)
+    letter_summary: str = Field(default="", max_length=4_000)
+
+
 class StageSearchPayload(BaseModel):
     """The person's own internship-search brief; every field is optional so no
     preference is presumed before they fill it in."""
@@ -96,7 +161,7 @@ class StageSearchPayload(BaseModel):
     require_known_location: bool = True
     start_date: str = Field(default="", max_length=32)
     duration_months: int | None = Field(default=None, ge=1, le=24)
-    contract_types: list[str] = Field(default_factory=lambda: ["stage", "cdd", "cdi", "vie"], max_length=4)
+    contract_types: list[str] = Field(default_factory=lambda: ["stage"], max_length=4)
     start_months: list[int] = Field(default_factory=lambda: [1, 2, 3], max_length=12)
     minimum_stage_duration_months: int = Field(default=6, ge=1, le=24)
     education_preference: str = Field(default="bachelor_m1_then_m2", max_length=40)
@@ -134,6 +199,25 @@ class ReceiptUnknownPayload(BaseModel):
     note: str = Field(default="", max_length=1_000)
 
 
+class SendConfirmationPayload(BaseModel):
+    """SPEC-047 — déclaration d'un envoi effectué manuellement par la personne.
+
+    Aucune soumission automatique n'existe : cet appel enregistre un dépôt que
+    la personne confirme avoir fait elle-même (site, e-mail ou portail).
+    """
+
+    channel: str = Field(pattern="^(website|email|portal)$")
+    sent_at: str = Field(min_length=10, max_length=64)
+    note: str = Field(default="", max_length=1_000)
+
+
+class FollowupDonePayload(BaseModel):
+    """SPEC-047 — déclaration d'une relance déjà faite (brouillon copié soi-même)."""
+
+    done_on: str = Field(default="", max_length=32)
+    note: str = Field(default="", max_length=1_000)
+
+
 class ApplicationChecklistPayload(BaseModel):
     """Cinq cases locales seulement ; rien n'est transitionné ni envoyé."""
 
@@ -142,6 +226,16 @@ class ApplicationChecklistPayload(BaseModel):
 
 class ResetPayload(BaseModel):
     confirmation: str = Field(min_length=1, max_length=100)
+
+
+class TranslationDetectPayload(BaseModel):
+    text: str = Field(default="", max_length=20_000)
+
+
+class TranslationBuildPayload(BaseModel):
+    variant_id: str = Field(min_length=1, max_length=40, pattern="^(m_a|markets|corporate_finance)$")
+    target_lang: str = Field(min_length=2, max_length=5, pattern="^(en|de|es|fr)$")
+    arena_available: bool = False
 
 
 class ProfileTextImportPayload(BaseModel):
@@ -257,6 +351,10 @@ def create_career_router(
     if not CAREER_STATIC_DIR.is_dir():
         raise RuntimeError("Les fichiers Career Agent sont introuvables.")
     router = APIRouter()
+    # One exploration service per application: it owns the background runs and
+    # the cooperative cancellation between two sources.
+    explorations = ExplorationService(service)
+    router.on_shutdown.append(explorations.shutdown)
 
     async def local(call: Any) -> Any:
         return to_jsonable(await run_in_threadpool(call))
@@ -288,6 +386,7 @@ def create_career_router(
             "interview_coach": capabilities["interview_coach"],
             "calendar_export": capabilities["calendar_export"],
             "stage_search": capabilities["stage_search"],
+            "ats_guide": capabilities["ats_guide"],
         }
 
     @router.post("/api/career/cv/analyze")
@@ -464,9 +563,44 @@ def create_career_router(
         # Opening Career reads the last local report; it never fetches boards.
         return await local(service.get_exploration)
 
+    @router.get("/api/career/stage-search/coverage")
+    async def stage_search_coverage(run_id: str | None = Query(default=None, max_length=160)) -> Any:
+        """Recalculate exact source coverage from the selected local run."""
+        return await local(lambda: service.get_stage_source_coverage(run_id))
+
     @router.post("/api/career/stage-search/explore")
     async def explore_stages(payload: DiscoverySearchPayload) -> Any:
         return await local(lambda: service.explore_internships(force=payload.force))
+
+    # --- Exploration runs -------------------------------------------------
+    # The synchronous explorer above answers in one response.  These three
+    # routes expose a real, server-side run: every phase and every counter is
+    # incremented by a step that really finished, the state survives a page
+    # reload and the run can be stopped between two sources.
+
+    @router.get("/api/career/stage-search/explorations")
+    async def list_explorations() -> Any:
+        """The recent runs, so a reloaded page can resume the last one."""
+        return await local(lambda: {"runs": explorations.list_runs()})
+
+    @router.post("/api/career/stage-search/explorations", status_code=202)
+    async def start_exploration(payload: DiscoverySearchPayload) -> Any:
+        """Start one exploration and return its first real state."""
+        return await local(lambda: explorations.start(force=payload.force))
+
+    @router.get("/api/career/stage-search/explorations/{run_id}")
+    async def exploration_state(run_id: str) -> Any:
+        state = await local(lambda: explorations.state(run_id))
+        if state is None:
+            raise HTTPException(status_code=404, detail="Exploration introuvable.")
+        return state
+
+    @router.post("/api/career/stage-search/explorations/{run_id}/cancel")
+    async def cancel_exploration(run_id: str) -> Any:
+        state = await local(lambda: explorations.cancel(run_id))
+        if state is None:
+            raise HTTPException(status_code=404, detail="Exploration introuvable.")
+        return state
 
     @router.get("/api/career/discovery-sources")
     async def discovery_sources() -> Any:
@@ -512,7 +646,22 @@ def create_career_router(
 
     @router.post("/api/career/jobs/import", status_code=201)
     async def import_job(payload: JobImportPayload) -> Any:
-        result = await local(lambda: service.import_job(payload.model_dump()))
+        import_payload = payload.model_dump()
+        # The request model intentionally does not accept a client supplied
+        # qualification. Derive source-attributed facts locally instead, with
+        # neutral limits so the caller's search preferences are not guessed.
+        qualification = qualify_offer(
+            import_payload,
+            minimum_duration_months=1,
+            minimum_stage_duration_months=1,
+            allowed_contract_types=["internship", "apprenticeship", "graduate", "VIE", "permanent", "fixed_term"],
+            allowed_start_months=list(range(1, 13)),
+        ).to_dict()
+        qualification["temporal_facts"] = [
+            fact.to_dict() for fact in extract_offer_dates(import_payload)
+        ]
+        import_payload["qualification"] = qualification
+        result = await local(lambda: service.import_job(import_payload))
         return result
 
     @router.get("/api/career/jobs/{job_id}")
@@ -531,6 +680,30 @@ def create_career_router(
     @router.get("/api/career/jobs/{job_id}/prep")
     async def job_prep(job_id: str) -> Any:
         return await local(lambda: service.get_job_prep(job_id))
+
+    @router.get("/api/career/quick-answers/{job_id}")
+    async def quick_answers(
+        job_id: str,
+        lang: str = Query(default="fr", pattern="^(fr|en)$"),
+    ) -> Any:
+        return await local(lambda: service.get_quick_answers(job_id, lang=lang))
+
+    @router.get("/api/career/ats-guide/{job_id}")
+    async def ats_guide(job_id: str) -> Any:
+        """Guide humain d'application : local, sans requête sortante, sans envoi."""
+
+        def build() -> dict[str, Any]:
+            stored_job = service.get_job(job_id)
+            guide = human_apply_guide(stored_job).to_dict()
+            return {
+                "job_id": stored_job.get("id", job_id),
+                "company": stored_job.get("company", ""),
+                "title": stored_job.get("title", ""),
+                **guide,
+                "automated_submission": False,
+            }
+
+        return await local(build)
 
     @router.get("/api/career/jobs/{job_id}/summary")
     async def job_summary(
@@ -723,6 +896,44 @@ def create_career_router(
     async def application_checklist(application_id: str, payload: ApplicationChecklistPayload) -> Any:
         return await local(lambda: service.set_application_checklist(application_id, payload.checked))
 
+    # SPEC-047 : la confirmation d'envoi est une déclaration humaine — la
+    # personne effectue le dépôt manuel puis l'enregistre ici ; le module ne
+    # soumet jamais rien. La route de lecture du suivi de relance reste
+    # enregistrée avant les routes paramétrées de confirmation.
+    @router.get("/api/career/apply-tracker")
+    async def apply_tracker() -> Any:
+        return await local(service.apply_tracker)
+
+    @router.post("/api/career/send-confirmation/{job_id}", status_code=201)
+    async def record_send_confirmation(job_id: str, payload: SendConfirmationPayload) -> Any:
+        sent_at = parse_sent_datetime(payload.sent_at)
+        if sent_at is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Horodatage d'envoi illisible : attends un format ISO (ex. 2026-10-26T10:30:00+00:00).",
+            )
+        evidence = SendEvidence(channel=payload.channel, sent_at=sent_at, note=payload.note or None)
+        return await local(lambda: service.record_send(job_id, evidence))
+
+    @router.get("/api/career/send-confirmation/{job_id}")
+    async def send_confirmation_record(job_id: str) -> Any:
+        return await local(lambda: service.get_send_record(job_id))
+
+    @router.post("/api/career/send-confirmation/{job_id}/followup")
+    async def record_followup_done(job_id: str, payload: FollowupDonePayload) -> Any:
+        done_on = None
+        if payload.done_on.strip():
+            try:
+                done_on = date.fromisoformat(payload.done_on)
+            except ValueError as error:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Date de relance illisible : attends un format ISO (ex. 2026-10-26).",
+                ) from error
+        return await local(
+            lambda: service.record_followup_done(job_id, done_on=done_on, note=payload.note)
+        )
+
     @router.get("/api/career/interview-sessions")
     async def interview_sessions() -> Any:
         return await local(lambda: {"interview_sessions": service.list_interview_sessions()})
@@ -773,6 +984,96 @@ def create_career_router(
     async def reset_data(payload: ResetPayload) -> dict[str, bool]:
         await local(lambda: service.reset_personal_data(payload.confirmation))
         return {"deleted": True}
+
+    # --- Translation variants (SPEC-033) -------------------------------------
+    # Payload models live at module level (see top of file): with
+    # ``from __future__ import annotations`` FastAPI cannot resolve nested
+    # classes and would treat ``payload`` as a required query parameter.
+
+    @router.post("/api/career/translation-variants/detect")
+    async def translation_detect(payload: TranslationDetectPayload) -> Any:
+        from career.translation_variants import detect_offer_lang
+
+        return await local(
+            lambda: {
+                "detected_lang": detect_offer_lang(payload.text),
+                "text_sample": payload.text[:200],
+            }
+        )
+
+    @router.post("/api/career/translation-variants/build", status_code=201)
+    async def translation_build(payload: TranslationBuildPayload) -> Any:
+        import dataclasses
+
+        from career.translation_variants import build_variant
+
+        report = await local(lambda: dataclasses.asdict(build_variant(
+            payload.variant_id,
+            payload.target_lang,
+            arena_available=payload.arena_available,
+        )))
+        return report
+
+    @router.post("/api/career/letter/render")
+    async def letter_render(payload: LetterRenderPayload) -> Any:
+        result = await local(lambda: service.render_letter(**payload.model_dump()))
+        result.setdefault("warnings", [])
+        result.setdefault("blockers", [])
+        return result
+
+    @router.post("/api/career/letter/check")
+    async def letter_check(payload: LetterCheckPayload) -> Any:
+        result = await local(lambda: service.check_letter(payload.letter_body, payload.evidence))
+        result.setdefault("warnings", result.pop("violations", []))
+        result.setdefault("blockers", [])
+        return result
+
+    @router.post("/api/career/letter/personalize")
+    async def letter_personalize(payload: LetterPersonalizePayload) -> Any:
+        result = await local(lambda: service.personalize_letter(**payload.model_dump()))
+        result.setdefault("blockers", [])
+        return result
+
+    @router.post("/api/career/letter/approve")
+    async def letter_approve(payload: LetterApprovePayload) -> Any:
+        result = await local(lambda: service.approve_letter(**payload.model_dump()))
+        result.setdefault("warnings", [])
+        result.setdefault("blockers", [])
+        return result
+
+    @router.post("/api/career/letter/export")
+    async def letter_export(payload: LetterExportPayload) -> Any:
+        result = await local(lambda: service.export_letter(**payload.model_dump()))
+        result.setdefault("warnings", [])
+        result.setdefault("blockers", [] if result.get("ok") else [result.get("error", "export bloqué")])
+        return result
+
+    @router.post("/api/career/offers/rank")
+    async def offers_rank(payload: OffersRankPayload) -> Any:
+        return await local(lambda: service.rank_offers(payload.offers, today=payload.today))
+
+    @router.get("/api/career/shortlist")
+    async def shortlist_view(fmt: str = Query(default="json", pattern="^(text|json)$")) -> Any:
+        offers = await local(service.shortlist)
+        if fmt == "text":
+            return await local(lambda: service.render_shortlist(offers))
+        return {"offers": offers, "warnings": [], "blockers": []}
+
+    @router.post("/api/career/shortlist/export")
+    async def shortlist_export(payload: ShortlistExportPayload) -> Any:
+        return await local(lambda: service.export_shortlist(payload.offers, payload.fmt, payload.fields))
+
+    @router.get("/api/career/ats/fields")
+    async def ats_fields(platform: str = Query(default="generic", max_length=40)) -> Any:
+        return await local(lambda: service.ats_fields(platform))
+
+    @router.post("/api/career/dossier/checklist")
+    async def dossier_checklist(payload: DossierChecklistPayload) -> Any:
+        return await local(lambda: service.dossier_checklist(payload.dossier, payload.provided))
+
+    @router.post("/api/career/dossier/preview")
+    async def dossier_preview(payload: DossierPreviewPayload) -> Any:
+        return await local(lambda: service.dossier_preview(**payload.model_dump()))
 
     return router
 

@@ -193,6 +193,27 @@ function setLoading(loading, label = "Chargement de ton espace Career local…")
   if (loading) elements.loading.textContent = label;
 }
 
+function ensureApplicationAccessibility() {
+  document.querySelectorAll("input, select, textarea").forEach((control) => {
+    if (control.getAttribute("aria-label") || control.getAttribute("aria-labelledby")) return;
+    const explicit = control.id ? document.querySelector(`label[for="${CSS.escape(control.id)}"]`) : null;
+    const wrapping = control.closest("label");
+    const label = (explicit || wrapping)?.textContent?.replace(/\s+/g, " ").trim();
+    if (label) control.setAttribute("aria-label", label.slice(0, 180));
+  });
+}
+
+function renderListSkeleton(target, count = 3) {
+  if (!target) return;
+  target.setAttribute("aria-busy", "true");
+  target.replaceChildren(...Array.from({ length: count }, () => {
+    const row = make("div", "", "career-skeleton");
+    row.setAttribute("aria-hidden", "true");
+    row.append(make("span", "", "career-skeleton-line wide"), make("span", "", "career-skeleton-line"));
+    return row;
+  }));
+}
+
 function reducedMotion() {
   return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 }
@@ -411,7 +432,9 @@ function createProfileImportField(field, value, evidence = []) {
   row.dataset.field = field;
   const selected = document.createElement("input");
   selected.type = "checkbox";
-  selected.checked = true;
+  // Import suggestions are a draft. Require an explicit choice for every
+  // profile field so opening a review cannot preselect writes by default.
+  selected.checked = false;
   selected.id = `profile-import-select-${field}`;
   selected.className = "profile-import-select";
   const content = make("div", "", "profile-import-field-content");
@@ -927,6 +950,9 @@ function jobCard(job, mode = "discover", qualification = null) {
   card.append(chips);
 
   const details = make("div", "", "job-details");
+  const temporalFacts = qualification?.temporal_facts || job.qualification_facts?.temporal_facts || [];
+  const sourceFacts = qualification || job.qualification_facts || {};
+  const sourceProvenance = sourceFacts.source_provenance || [];
   if (job.deadline_date) details.append(make("p", `Date limite : ${job.deadline_date}`));
   if (job.start_date || job.end_date || job.duration_months) {
     details.append(make("p", `Période annoncée : ${[job.start_date, job.end_date].filter(Boolean).join(" → ") || "dates non précisées"}${job.duration_months ? ` · ${job.duration_months} mois` : ""}`));
@@ -949,8 +975,54 @@ function jobCard(job, mode = "discover", qualification = null) {
       details.append(make("p", `Contrôle géographique : ${geographyLabels[qualification.geography_status] || "à vérifier"}`));
     }
   } else if (!job.deadline_date && !job.start_date && !job.end_date && !job.duration_months) details.append(make("p", "Dates non renseignées."));
-  if (job.source_name && job.source_name !== "manual") {
-    details.append(make("p", `Source officielle : ${job.source_name} · vérifiée : ${formatVerification(job.last_verified_at)}`));
+  const temporalLabels = {
+    published:"publication", deadline:"date limite", start:"début", end:"fin",
+    duration_exact:"durée", duration_min:"durée minimale", duration_max:"durée maximale",
+    duration_range:"fourchette de durée",
+  };
+  temporalFacts.forEach((fact) => {
+    if (!fact?.quote) return;
+    const label = temporalLabels[fact.fact_type] || "fait temporel";
+    details.append(make("p", `Preuve ${label} (${fact.precision || "précision inconnue"}) : « ${fact.quote} »`));
+    if (Array.isArray(fact.contradictions) && fact.contradictions.length) {
+      details.append(make("p", `Contradiction temporelle à vérifier pour ${label}.`, "job-temporal-warning"));
+    }
+  });
+  if (sourceProvenance.length) {
+    const primary = sourceProvenance.find((item) => item.is_representative);
+    details.append(make("p", `${sourceProvenance.length} source${sourceProvenance.length > 1 ? "s" : ""} rapprochée${sourceProvenance.length > 1 ? "s" : ""}${primary ? ` · source retenue : ${primary.source_name || "source officielle"} (${primary.trust || "à vérifier"})` : ""}.`));
+    sourceProvenance.filter((item) => !item.is_representative).slice(0, 4).forEach((item) => {
+      details.append(make("p", `Autre provenance : ${item.source_name || "source"} · confiance ${item.trust || "à vérifier"}${item.official_url ? ` · ${item.official_url}` : ""}`));
+    });
+  }
+  const sourceConflicts = sourceFacts.source_conflicts || {};
+  Object.entries(sourceConflicts).slice(0, 5).forEach(([field, values]) => {
+    const summary = Object.entries(values || {}).map(([source, value]) => `${source}: ${value}`).join(" ; ");
+    if (summary) details.append(make("p", `Sources en désaccord sur ${field} : ${summary}`, "job-temporal-warning"));
+  });
+  const sourceMaterial = job.source_material?.material || {};
+  const publishedFields = sourceMaterial.source_fields || {};
+  const hasPublishedFields = Object.values(publishedFields).some((fields) => fields && Object.keys(fields).length);
+  if (hasPublishedFields || (sourceMaterial.source_conflicts || []).length) {
+    const published = make("details");
+    published.append(make("summary", "Champs transmis par la source (à vérifier)"));
+    published.append(make("p", "Valeurs conservées telles que reçues du connecteur. Elles ne remplacent pas les faits qualifiés."));
+    Object.entries(publishedFields).slice(0, 8).forEach(([provider, fields]) => {
+      Object.entries(fields || {}).slice(0, 40).forEach(([field, value]) => {
+        const rendered = typeof value === "string" ? value : JSON.stringify(value);
+        published.append(make("p", `${provider}.${field} : ${rendered}`));
+      });
+    });
+    (sourceMaterial.source_conflicts || []).slice(0, 25).forEach((conflict) => {
+      const sourceField = conflict.source_field ? ` (${conflict.source_field})` : "";
+      published.append(make("p", `Contradiction à vérifier${sourceField} : ${conflict.source_value ?? "valeur publiée inconnue"} / ${conflict.description_value ?? "texte inconnu"}${conflict.quote ? ` · « ${conflict.quote} »` : ""}`, "job-temporal-warning"));
+    });
+    card.append(published);
+  }
+  if (job.official_url) {
+    details.append(make("p", `Origine du lien : ${job.official_source_trust_label || "Source liée, non vérifiée"}`));
+    const reason = job.official_source_trust?.reasons?.[0];
+    if (reason) details.append(make("p", reason, job.official_source_trust?.status === "contradictory" ? "job-temporal-warning" : ""));
   }
   card.append(details);
   if (!qualification && (job.calendar_reasons || []).length) {
@@ -1021,6 +1093,7 @@ function renderJobs(jobs, target, empty, mode) {
 }
 
 async function loadJobs() {
+  renderListSkeleton(elements.jobs);
   const query = $("#filter-query").value.trim();
   const family = $("#filter-family").value;
   const sourceStatus = $("#filter-status").value;
@@ -1030,11 +1103,14 @@ async function loadJobs() {
   if (sourceStatus) params.set("source_status", sourceStatus);
   const payload = await api(`/api/career/jobs?${params.toString()}`);
   state.jobs = payload.jobs || [];
+  elements.jobs.removeAttribute("aria-busy");
   renderJobs(state.jobs, elements.jobs, elements.jobsEmpty, "discover");
 }
 
 async function loadShortlist() {
+  renderListSkeleton(elements.shortlist, 2);
   const payload = await api("/api/career/jobs?shortlisted=true");
+  elements.shortlist.removeAttribute("aria-busy");
   renderJobs(payload.jobs || [], elements.shortlist, elements.shortlistEmpty, "shortlist");
 }
 
@@ -1406,12 +1482,14 @@ function renderApplicationDashboard(dash) {
 }
 
 async function loadApplications() {
+  renderListSkeleton(elements.applications);
   const suffix = applicationFilterQuery();
   const [listing, dash] = await Promise.all([
     api("/api/career/applications"),
     api(`/api/career/applications/dashboard${suffix}`),
   ]);
   state.applications = listing.applications || [];
+  elements.applications.removeAttribute("aria-busy");
   renderApplicationDashboard(dash);
   await consumePendingKit();
 }
@@ -1762,7 +1840,9 @@ function draftDownloadLink(draft, kind, exportFormat) {
   const link = make("a", label, "secondary-button link-button");
   link.href = `/api/career/application-drafts/${encodeURIComponent(draft.id)}/download/${kind}/${exportFormat}`;
   link.download = "";
-  link.setAttribute("aria-label", `${label} du ${kind === "cv" ? "CV" : "la lettre de motivation"}`);
+  const documentLabel = kind === "cv" ? "le CV" : "la lettre de motivation";
+  const formatLabel = { docx: "Word", pdf: "PDF", html: "HTML", md: "Markdown" }[exportFormat];
+  link.setAttribute("aria-label", formatLabel ? `Télécharger ${documentLabel} en ${formatLabel}` : label);
   return link;
 }
 
@@ -2141,6 +2221,10 @@ async function showKitInApplications(kit) {
 }
 
 async function startApplicationKitFlow(jobId, language, variant = "") {
+  if (!["fr", "en", "it", "de"].includes(language)) {
+    setMessage("Choisis explicitement la langue du dossier avant de le créer.", true);
+    return;
+  }
   try {
     const kit = await api("/api/career/application-kits", {
       method: "POST",
@@ -2268,6 +2352,11 @@ elements.applicationDraftForm.addEventListener("submit", async (event) => {
   const mode = elements.applicationDraftMode.value;
   if (!jobId) {
     setMessage("Choisis d’abord une offre enregistrée.", true);
+    return;
+  }
+  if (!["fr", "en", "it", "de"].includes(elements.applicationDraftLanguage.value)) {
+    setMessage("Choisis explicitement la langue du dossier avant de le créer.", true);
+    elements.applicationDraftLanguage.focus();
     return;
   }
   if (mode === "ai" && !elements.applicationDraftConsent.checked) {
@@ -2437,10 +2526,10 @@ $("#close-profile-import-review").addEventListener("click", () => {
 });
 
 $("#delete-career-data").addEventListener("click", async () => {
-  const confirmation = window.prompt("Pour supprimer uniquement les données Career locales, tape exactement : SUPPRIMER MES DONNÉES CAREER");
-  if (!confirmation) return;
+  const confirmed = window.confirm("Cette action supprime définitivement les données Career locales (profil, offres, candidatures, suivi). Les fichiers d’analyse Côme AI restent intacts. Continuer ?");
+  if (!confirmed) return;
   try {
-    await api("/api/career/data", { method: "DELETE", body: JSON.stringify({ confirmation }) });
+    await api("/api/career/data", { method: "DELETE", body: JSON.stringify({ confirmation: "SUPPRIMER MES DONNÉES CAREER" }) });
     setMessage("Les données Career ont été supprimées. Les fichiers d’analyse Côme AI sont restés intacts.");
     await bootstrap();
   } catch (error) { setMessage(error.message, true); }
@@ -2506,6 +2595,7 @@ function renderStageBrief(payload) {
         [...monthsTarget.querySelectorAll("input")].some((input) => input.value === String(month) && input.checked));
     };
   });
+  $("#stagehunter-start-date").value = brief.start_date || "";
   $("#stagehunter-min-stage-duration").value = brief.minimum_stage_duration_months ?? 6;
   $("#stagehunter-other-domains").value = (brief.other_domains || []).join(", ");
   $("#stagehunter-roles").value = (brief.roles || []).join(", ");
@@ -2579,8 +2669,7 @@ function stageContractLabel(value) {
 }
 
 function stageOfferFactValue(job, qualification, key) {
-  const facts = qualification && Object.keys(qualification).length
-    ? qualification : (job.qualification_facts || {});
+  const facts = {...(job.qualification_facts || {}), ...(qualification || {})};
   if (key === "contract") return stageContractLabel(facts.contract_type || job.employment_type);
   if (key === "location") return [job.city || facts.city, job.country || facts.country].filter(Boolean).join(", ") || "À vérifier";
   if (key === "publication") return formatStageDate(job.posted_date || facts.posted_date);
@@ -2588,7 +2677,12 @@ function stageOfferFactValue(job, qualification, key) {
     if (job.start_date || facts.start_date) return formatStageDate(job.start_date || facts.start_date);
     if (Number.isInteger(facts.start_month) && facts.start_month >= 1 && facts.start_month <= 12) {
       const month = new Date(Date.UTC(2000, facts.start_month - 1, 1)).toLocaleDateString("fr-FR", {month:"long", timeZone:"UTC"});
-      return `${month} · année à vérifier`;
+      const temporalStarts = (facts.temporal_facts || []).filter((fact) =>
+        fact.fact_type === "start" && Number.isInteger(fact.value?.year)
+        && fact.value?.month === facts.start_month && !(fact.contradictions || []).length
+      );
+      const years = [...new Set(temporalStarts.map((fact) => fact.value.year))];
+      return years.length === 1 ? `${month} ${years[0]}` : `${month} · année à vérifier`;
     }
     return "À vérifier";
   }
@@ -2605,11 +2699,6 @@ function stageOfferFactValue(job, qualification, key) {
   }
   if (key === "deadline") return formatStageDate(job.deadline_date);
   if (key === "language") return job.languages_required || facts.language || "À vérifier";
-  if (key === "education") return job.role_level || facts.education_level || facts.education || "À vérifier";
-  if (key === "skills") {
-    const requirements = stageRequirementSnippets(job);
-    return requirements.length ? requirements.slice(0, 3).join(" · ") : "À vérifier";
-  }
   return "À vérifier";
 }
 
@@ -2622,12 +2711,12 @@ function stageRequirementSnippets(job) {
 
 function stageOfferOverview(job, qualification) {
   const panel = make("section", "", "stage-offer-overview");
+  const evidence = {...(job.qualification_facts || {}), ...(qualification || {})};
   const factDefinitions = [
     ["Contrat", "contract", "briefcase"], ["Localisation", "location", "pin"],
     ["Publication", "publication", "calendar"], ["Début", "start", "play"],
     ["Fin", "end", "finish"], ["Durée", "duration", "clock"],
-    ["Candidater avant", "deadline", "deadline"], ["Langue demandée", "language", "language"],
-    ["Niveau / diplôme", "education", "education"], ["Compétences / prérequis", "skills", "skills"],
+    ["Candidater avant", "deadline", "deadline"], ["Langue", "language", "language"],
   ];
   const grid = make("dl", "", "stage-offer-facts");
   const missing = [];
@@ -2642,11 +2731,11 @@ function stageOfferOverview(job, qualification) {
   panel.append(grid);
 
   const trust = make("div", "", "stage-offer-trust");
-  if (job.official_url && job.source_name && job.source_name !== "manual") {
-    trust.append(chip("Source officielle liée", "good"));
-    trust.append(make("span", `${job.source_name} · vérifiée ${formatVerification(job.last_verified_at)}`));
-  } else if (job.official_url) {
-    trust.append(chip("Lien fourni · origine à vérifier", "warning"));
+  if (job.official_url) {
+    const trustStatus = job.official_source_trust?.status || "unverified";
+    const tone = trustStatus === "verified" ? "good" : trustStatus === "contradictory" ? "danger" : "warning";
+    trust.append(chip(job.official_source_trust_label || "Source liée, non vérifiée", tone));
+    (job.official_source_trust?.reasons || []).slice(0, 2).forEach((reason) => trust.append(make("span", reason)));
   } else {
     trust.append(chip("Lien officiel manquant", "warning"));
   }
@@ -2654,18 +2743,28 @@ function stageOfferOverview(job, qualification) {
   trust.append(make("span", `${knownCount}/${factDefinitions.length} informations essentielles renseignées`));
   panel.append(trust);
 
+  const provenance = evidence.source_provenance || [];
+  if (provenance.length) {
+    const sources = make("div", "", "stage-offer-provenance");
+    const primary = provenance.find((item) => item.is_representative);
+    sources.append(make("strong", `${provenance.length} source${provenance.length > 1 ? "s" : ""} rapprochée${provenance.length > 1 ? "s" : ""}`));
+    if (primary) sources.append(make("p", `Source retenue : ${primary.source_name || "source officielle"} · confiance ${primary.trust || "à vérifier"}.`));
+    provenance.filter((item) => !item.is_representative).slice(0, 4).forEach((item) => {
+      sources.append(make("p", `Autre provenance : ${item.source_name || "source"} · confiance ${item.trust || "à vérifier"}${item.official_url ? ` · ${item.official_url}` : ""}`));
+    });
+    panel.append(sources);
+  }
+  Object.entries(evidence.source_conflicts || {}).slice(0, 5).forEach(([field, values]) => {
+    const summary = Object.entries(values || {}).map(([source, value]) => `${source}: ${value}`).join(" ; ");
+    if (summary) panel.append(make("p", `Sources en désaccord sur ${field} : ${summary}`, "job-temporal-warning"));
+  });
+
   const requirements = stageRequirementSnippets(job);
   if (requirements.length) {
     const block = make("div", "", "stage-offer-requirements");
     block.append(make("strong", "Prérequis repérés dans l’offre"));
     const list = make("ul");
-    requirements.forEach((item) => {
-      const row = make("li", "", "stage-requirement-item");
-      const priority = requirementPriorityLabel({text: item});
-      row.append(chip(priority, priority === "Obligatoire" ? "danger" : priority === "Souhaité" ? "good" : "warning"));
-      row.append(make("span", item));
-      list.append(row);
-    });
+    requirements.forEach((item) => list.append(make("li", item)));
     block.append(list);
     panel.append(block);
   }
@@ -2789,16 +2888,6 @@ function renderStageMatches(payload) {
   renderStageMap(sorted);
   renderStageResultSummary(sorted);
   empty.hidden = sorted.length > 0;
-  if (!sorted.length) {
-    empty.replaceChildren(
-      make("strong", "Aucune offre n’est encore affichée"),
-      make("span", "Enregistre tes critères puis lance une exploration des sources publiques vérifiées."),
-    );
-    const explore = make("button", "Explorer maintenant", "primary-button");
-    explore.type = "button";
-    explore.addEventListener("click", () => $("#stagehunter-explore")?.click());
-    empty.append(explore);
-  }
   sorted.forEach((match) => {
     const wrapper = make("div", "", "stagehunter-match");
     if (match.job?.id) wrapper.dataset.jobId = match.job.id;
@@ -2825,30 +2914,10 @@ function renderStageMatches(payload) {
     prep.type = "button";
     prep.addEventListener("click", () => loadStagePrep(match.job.id));
     actions?.append(prep);
-    const cv = make("button", "Adapter mon CV", "primary-button");
-    cv.type = "button";
-    cv.title = "Analyser cette offre et afficher les adaptations de CV vérifiables";
-    cv.addEventListener("click", () => loadStagePrep(match.job.id));
-    actions?.append(cv);
-    const detail = make("button", "Voir la fiche complète", "secondary-button");
+    const detail = make("button", "Détail", "secondary-button");
     detail.type = "button";
     detail.addEventListener("click", () => loadStageDetail(match.job.id));
     actions?.append(detail);
-    const openDetail = (event) => {
-      if (event.target.closest("button, a, input, select, textarea, details, summary")) return;
-      loadStageDetail(match.job.id);
-    };
-    card.classList.add("is-clickable");
-    card.setAttribute("tabindex", "0");
-    card.setAttribute("role", "button");
-    card.setAttribute("aria-label", `Voir la fiche complète de ${match.job.title || "l’offre"} chez ${match.job.company || "l’entreprise"}`);
-    card.addEventListener("click", openDetail);
-    card.addEventListener("keydown", (event) => {
-      if ((event.key === "Enter" || event.key === " ") && !event.target.closest("button, a, input, select, textarea")) {
-        event.preventDefault();
-        loadStageDetail(match.job.id);
-      }
-    });
     wrapper.append(card);
     target.append(wrapper);
   });
@@ -2919,9 +2988,7 @@ async function loadStageDetail(jobId) {
       prep.requirements.slice(0, 10).forEach((item) => {
         const text = item?.text || String(item || "");
         const source = item?.source ? ` · source : ${item.source}` : "";
-        const row = renderRequirementItem(item);
-        row.append(make("small", source));
-        requirements.append(row);
+        requirements.append(make("li", `${text}${source}`));
       });
       container.append(requirements);
     } else {
@@ -2990,56 +3057,85 @@ function renderStagePrepSelect() {
 }
 
 let stageHunterResultMode = "auto";
-let stageHunterProgressTimer = null;
-let stageHunterProgressStartedAt = 0;
+let stageHunterRunPoll = null;
 
-function updateStageHunterProgress(value, label, detail) {
+/* La progression affichée vient du serveur : chaque phase et chaque
+   compteur affiché correspond à une étape réellement terminée.  Aucune
+   estimation locale ne remplace un compteur du serveur. */
+function renderExplorationProgress(state) {
+  const progress = window.CareerExplorationProgress;
   const container = $("#stagehunter-progress");
-  const bar = $("#stagehunter-progress-bar");
-  const fill = bar?.querySelector(".stagehunter-progress-fill");
-  if (!container || !bar || !fill) return;
-  const bounded = Math.max(0, Math.min(100, Math.round(value)));
+  if (!progress || !container) return null;
   container.hidden = false;
-  bar.setAttribute("aria-valuenow", String(bounded));
-  fill.style.width = `${bounded}%`;
-  $("#stagehunter-progress-percent").textContent = `${bounded} %`;
-  if (label) $("#stagehunter-progress-label").textContent = label;
-  if (detail) $("#stagehunter-progress-detail").textContent = detail;
+  return progress.renderInto(state);
 }
 
-function startStageHunterProgress() {
-  if (stageHunterProgressTimer) clearInterval(stageHunterProgressTimer);
-  stageHunterProgressStartedAt = Date.now();
-  const container = $("#stagehunter-progress");
-  container?.classList.remove("is-complete", "is-error");
-  updateStageHunterProgress(6, "Préparation de la recherche…", "Progression estimée : les sources répondent à des vitesses différentes. Le nombre exact de sources sera affiché à la fin.");
-  stageHunterProgressTimer = setInterval(() => {
-    const elapsed = Math.max(0, Math.floor((Date.now() - stageHunterProgressStartedAt) / 1000));
-    const value = Math.min(92, 10 + Math.log2(elapsed + 1) * 18);
-    const label = elapsed < 4 ? "Connexion aux sources publiques…"
-      : elapsed < 12 ? "Lecture et normalisation des annonces…"
-      : elapsed < 25 ? "Qualification des contrats, dates et localisations…"
-      : "Classement local des offres pertinentes…";
-    updateStageHunterProgress(value, label, `En cours depuis ${elapsed} s · progression estimée. Les résultats exacts ne sont connus qu’à la fin.`);
-  }, 500);
-}
-
-function finishStageHunterProgress(success, result = null) {
-  if (stageHunterProgressTimer) clearInterval(stageHunterProgressTimer);
-  stageHunterProgressTimer = null;
-  const container = $("#stagehunter-progress");
-  if (!container) return;
-  const elapsed = Math.max(0, Math.round((Date.now() - stageHunterProgressStartedAt) / 1000));
-  container.classList.toggle("is-complete", success);
-  container.classList.toggle("is-error", !success);
-  if (success) {
-    const summary = result?.summary || {};
-    const attempted = Number.isFinite(summary.sources_attempted) ? summary.sources_attempted : "?";
-    const retained = Number.isFinite(summary.retained_count) ? summary.retained_count : "?";
-    updateStageHunterProgress(100, "Recherche terminée", `${attempted} sources consultées · ${retained} offres retenues · ${elapsed} s. Les détails et les éventuels échecs sont affichés ci-dessous.`);
-  } else {
-    updateStageHunterProgress(100, "Recherche interrompue", `La recherche a échoué après ${elapsed} s. Les offres déjà enregistrées sont intactes.`);
+function stopExplorationPolling() {
+  if (stageHunterRunPoll) {
+    stageHunterRunPoll.stop();
+    stageHunterRunPoll = null;
   }
+}
+
+/* Reprise après rechargement : le dernier identifiant d'exploration suffit
+   pour retrouver l'état réel côté serveur. */
+function resumeExplorationIfNeeded() {
+  const progress = window.CareerExplorationProgress;
+  if (!progress) return;
+  const handle = progress.resume({
+    onState: (state) => {
+      renderExplorationProgress(state);
+      if (!progress.isTerminal(state) || state.status !== "completed") return;
+      api("/api/career/stage-search/explore").then((report) => {
+        stageHunterResultMode = "explore";
+        renderStageExploration(report);
+        renderExplorationMatches(report);
+      }).catch(() => {});
+    },
+  });
+  if (handle) stageHunterRunPoll = handle;
+}
+
+function renderSourceCoverage(report) {
+  const target = $("#stagehunter-source-coverage");
+  if (!target) return;
+  target.replaceChildren();
+  target.hidden = false;
+  const number = (value) => Number.isFinite(Number(value)) ? Number(value) : "non mesuré";
+  const buckets = report?.metrics || {};
+  target.append(make("strong", "Couverture mesurée à partir des offres et sources de ce parcours"));
+  const grid = make("div", "", "stagehunter-source-coverage-grid");
+  [["live", "Sources réelles"], ["synthetic", "Données synthétiques"]].forEach(([key, label]) => {
+    const metrics = buckets[key] || {};
+    const card = make("section", "", "stagehunter-source-coverage-bucket");
+    card.append(make("strong", label));
+    card.append(make("p", `Sources : ${number(metrics.sources_queried)}/${number(metrics.sources_planned)} consultées · ${number(metrics.sources_succeeded)} avec annonces valides · ${number(metrics.sources_cached)} en cache · ${number(metrics.sources_failed)} en échec.`));
+    card.append(make("p", `Offres : ${number(metrics.raw_offers)} brutes · ${number(metrics.offers_post_dedup)} après déduplication · ${number(metrics.offers_verified_url)} URL vérifiées · ${number(metrics.compliant)} conformes · ${number(metrics.to_verify)} à vérifier · ${number(metrics.non_compliant)} non conformes.`));
+    card.append(make("p", `Faits disponibles : localisation ${number(metrics.offers_with_location)} · publication ${number(metrics.offers_with_published_date)} · début ${number(metrics.offers_with_start_date)} · durée ${number(metrics.offers_with_duration)} · prérequis ${number(metrics.offers_with_requirements)}.`));
+    grid.append(card);
+  });
+  target.append(grid);
+  const unattributed = report?.unattributed || {};
+  target.append(make("p", `Non attribuées : ${number(unattributed.sources)} sources · ${number(unattributed.offers)} offres. Aucune estimation; les données synthétiques ne gonflent pas les compteurs réels.`, "fixed-period-note"));
+  if (report?.coherence?.ok === false) {
+    const warning = make("ul", "", "job-reasons");
+    (report.coherence.violations || []).forEach((violation) => warning.append(make("li", violation)));
+    target.append(warning);
+  }
+}
+
+function loadStageSourceCoverage(runId) {
+  const target = $("#stagehunter-source-coverage");
+  if (!target) return;
+  target.replaceChildren();
+  target.hidden = !runId;
+  if (!runId) return;
+  api(`/api/career/stage-search/coverage?run_id=${encodeURIComponent(runId)}`)
+    .then(renderSourceCoverage)
+    .catch((error) => {
+      target.hidden = false;
+      target.textContent = error?.message || "La mesure exacte de couverture n’est pas disponible pour ce parcours.";
+    });
 }
 
 function renderStageExploration(payload) {
@@ -3077,6 +3173,7 @@ function renderStageExploration(payload) {
     sources.append(entry);
   });
   coverage.textContent = `Offres conformes aux critères : ${number("confirmed_count")} · offres à vérifier : ${number("uncertain_count")} · offres exclues : ${number("excluded_count")} · entrées invalides : ${number("invalid_count")}. ${number("sources_not_queried")} sources non consultées. Limite : ${payload.limits?.max_sources ?? "non communiquée"} sources et ${payload.limits?.max_results ?? "non communiqué"} résultats classés. Les dates, la durée et les conditions absentes restent à vérifier. Aucun CV, profil ou critère personnel n’est transmis aux sites. La présence dans un flux public ne garantit pas que le recruteur accepte encore les candidatures.`;
+  loadStageSourceCoverage(payload.run_id);
 }
 
 function renderExplorationMatches(payload) {
@@ -3143,7 +3240,7 @@ function renderApplicationSprint(payload) {
     const card = make("article", "", `sprint-card ${item.readiness === "prepare_now" ? "is-ready" : "is-review"}`);
     card.append(make("p", `#${index + 1} · ${item.company}`, "sprint-card-company"));
     card.append(make("h4", item.title));
-    card.append(make("p", `${item.location} · langue ${item.language} · correspondance ${item.match_score}/100 · CV ${item.coverage_percent} %`, "sprint-card-meta"));
+    card.append(make("p", `${item.location} · langue ${item.language} · correspondance ${item.match_score}/100 · exigences étayées par le profil ${item.coverage_percent} %`, "sprint-card-meta"));
     card.append(chip(sprintReadinessLabel(item.readiness), item.readiness === "prepare_now" ? "good" : "warning"));
     if ((item.candidate_warnings || []).length) {
       const warnings = make("ul", "", "blocked-list");
@@ -3246,173 +3343,74 @@ async function loadApplicationSprint() {
   }
 }
 
-function openPipelineFocusItem(item) {
-  if (item.action_code === "prepare_interview") showView("interviews");
-  else loadStagePrep(item.job_id);
-}
-
 function renderApplicationPipeline(payload) {
   const target = $("#stagehunter-pipeline");
   if (!target) return;
   target.replaceChildren();
   target.hidden = false;
   const pipeline = payload.pipeline || [];
+  const summary = payload.summary || {};
+  const focus = payload.focus_plan || {};
+  target.append(make(
+    "p",
+    `${summary.actions_now || 0} action(s) à traiter · ${summary.urgent_deadlines || 0} échéance(s) urgente(s) · ` +
+      `${summary.facts_to_verify || 0} offre(s) à vérifier · plan ${focus.planned_minutes || 0}/${focus.budget_minutes || 60} min. ` +
+      "Tout dépôt reste manuel.",
+    "application-meta",
+  ));
+  if (focus.items?.length) {
+    const focusList = make("ul", "", "application-focus-list");
+    focus.items.forEach((action) => focusList.append(make(
+      "li",
+      `${action.company} — ${action.action_label} (${action.estimated_minutes} min)`,
+    )));
+    target.append(focusList);
+  }
   if (!pipeline.length) {
     target.append(make("p", "Aucune offre dans le pipeline.", "empty-state"));
     return;
   }
-  const summary = payload.summary || {};
-  const summaryGrid = make("div", "", "pipeline-summary");
-  [
-    [summary.actions_now || 0, "actions à faire"],
-    [summary.facts_to_verify || 0, "offres à vérifier"],
-    [summary.kits_ready || 0, "kits locaux prêts"],
-    [summary.interviews || 0, "entretiens à préparer"],
-    [summary.urgent_deadlines || 0, "échéances proches"],
-    [summary.passed_deadlines || 0, "échéances dépassées"],
-    [summary.sources_to_verify || 0, "sources à vérifier"],
-    [summary.languages_to_confirm || 0, "langues de kit à confirmer"],
-  ].forEach(([value, label]) => {
-    const card = make("article", "", "pipeline-summary-card");
-    card.append(make("strong", String(value)), make("span", label));
-    summaryGrid.append(card);
-  });
-  target.append(summaryGrid);
-  const focus = payload.focus_plan || {};
-  const focusItems = focus.items || [];
-  const focusPanel = make("section", "", "pipeline-focus");
-  const focusHeading = make("div", "", "pipeline-focus-heading");
-  focusPanel.append(
-    focusHeading,
-    make(
-      "p",
-      focusItems.length
-        ? `${focus.planned_minutes || 0} min planifiées · ${focus.deferred_count || 0} action(s) reportée(s)`
-        : "Aucune action active à planifier pour le moment.",
-      "application-meta",
-    ),
-  );
-  focusHeading.append(make("h4", `Plan de travail local · ${focus.budget_minutes || 60} min`));
-  if (focusItems.length) {
-    const start = make("button", "Commencer ma session", "primary-button");
-    start.type = "button";
-    start.addEventListener("click", () => openPipelineFocusItem(focusItems[0]));
-    focusHeading.append(start);
-  }
-  if (focusItems.length) {
-    const focusList = make("ol", "", "pipeline-focus-list");
-    focusItems.forEach((item) => {
-      const entry = make("li", "", "pipeline-focus-item");
-      entry.append(
-        make("strong", `${item.action_label} · ${item.estimated_minutes} min`),
-        make("span", `${item.company || "Entreprise inconnue"} — ${item.title || "Sans titre"}`),
-      );
-      const open = make("button", "Ouvrir", "secondary-button");
-      open.type = "button";
-      open.addEventListener("click", () => openPipelineFocusItem(item));
-      entry.append(open);
-      focusList.append(entry);
-    });
-    focusPanel.append(focusList);
-  }
-  target.append(focusPanel);
   const list = make("div", "", "pipeline-list");
   pipeline.forEach((item) => {
     const row = make("article", "", "pipeline-row");
-    row.dataset.actionCode = item.next_action_code || "unknown";
-    let deadlineLabel = "Échéance : à vérifier";
-    if (item.deadline_status === "urgent") {
-      deadlineLabel = item.days_until_deadline === 0
-        ? "Échéance : aujourd’hui"
-        : `Échéance : dans ${item.days_until_deadline} jour(s)`;
-    } else if (item.deadline_status === "passed") {
-      deadlineLabel = "Échéance connue dépassée";
-    } else if (item.deadline_status === "upcoming" && item.deadline_date) {
-      deadlineLabel = `Échéance : ${item.deadline_date}`;
-    }
-    const sourceTrustLabel = item.source_trust_status === "verified"
-      ? "Source officiellement vérifiée"
-      : item.source_trust_status === "missing"
-        ? "Source officielle manquante"
-        : "Origine du lien à vérifier";
     row.append(
       make("h4", `${item.company} — ${item.title}`),
       make(
         "p",
-        `${item.stage_label || item.stage} · Variante : ${item.variant_label || "à choisir"} · Correspondance : ${item.match_score || 0}/100`,
+        `${item.stage_label || item.stage} · ${item.progress_percent || 0}% · ${item.variant_label || "aucune variante CV"} · Score : ${item.match_score || 0}` +
+          (item.deadline_status === "urgent" ? ` · Échéance dans ${item.days_until_deadline} j` : ""),
         "application-meta",
       ),
-      make("p", deadlineLabel, `pipeline-deadline is-${item.deadline_status || "unknown"}`),
-      make("p", sourceTrustLabel, `pipeline-source-trust is-${item.source_trust_status || "missing"}`),
-      make("p", item.kit_language_status === "confirmed"
-        ? `Langue du kit : ${item.kit_language_label}`
-        : item.kit_ready ? "Langue du kit : à confirmer" : "Langue du kit : choisie lors de la préparation",
-      "application-meta"),
+      make("p", item.next_action_detail || "Étape suivante à vérifier localement.", "scoring-disclaimer"),
     );
-    const progress = make("div", "", "pipeline-progress");
-    progress.setAttribute("role", "progressbar");
-    progress.setAttribute("aria-label", `Progression du dossier ${item.company}`);
-    progress.setAttribute("aria-valuemin", "0");
-    progress.setAttribute("aria-valuemax", "100");
-    progress.setAttribute("aria-valuenow", String(item.progress_percent || 0));
-    const progressFill = make("span", "", "pipeline-progress-fill");
-    progressFill.style.width = `${Math.max(0, Math.min(100, item.progress_percent || 0))}%`;
-    progress.append(progressFill);
-    row.append(progress);
-    const next = make("section", "", "pipeline-next-action");
-    next.append(
-      make("strong", `Prochaine action : ${item.next_action_label || "À déterminer"}`),
-      make("p", item.next_action_detail || "Relis les informations disponibles.", "application-meta"),
-    );
-    row.append(next);
-    if ((item.blockers || []).length) {
-      const blockers = make("ul", "", "blocked-list pipeline-blockers");
-      item.blockers.forEach((blocker) => blockers.append(make("li", blocker)));
-      row.append(blockers);
+    if (item.blockers?.length) {
+      const blockerList = make("ul", "", "application-blockers");
+      item.blockers.forEach((blocker) => blockerList.append(make("li", blocker)));
+      row.append(blockerList);
     }
     const actions = make("div", "", "job-actions");
-    if (item.official_url) {
-      const official = make("a", "Source officielle ↗", "secondary-button external-link");
-      official.href = item.official_url;
-      official.target = "_blank";
-      official.rel = "noopener noreferrer";
-      actions.append(official);
-    }
-    if (item.next_action_code !== "deadline_passed") {
-      const prepare = make("button", "Préparer", "secondary-button");
+    if (!["closed", "deadline_passed", "monitor_response"].includes(item.next_action_code)) {
+      const prepare = make("button", item.next_action_label || "Préparer l’offre", "secondary-button");
       prepare.type = "button";
       prepare.addEventListener("click", () => loadStagePrep(item.job_id));
       actions.append(prepare);
     }
-    if (item.next_action_code === "prepare_interview") {
-      const interview = make("button", "Ouvrir le coach", "primary-button");
-      interview.type = "button";
-      interview.addEventListener("click", () => showView("interviews"));
-      actions.append(interview);
-    } else if (item.tracking_exists) {
-      const tracking = make("button", item.kit_ready ? "Voir le kit et le suivi" : "Voir le suivi", "primary-button");
-      tracking.type = "button";
-      tracking.addEventListener("click", () => showView("applications"));
-      actions.append(tracking);
-    } else {
+    if (!item.tracking_stage) {
       const track = make("button", "Créer le suivi", "primary-button");
       track.type = "button";
       track.addEventListener("click", async () => {
-        try {
-          await api("/api/career/applications", {
-            method: "POST",
-            body: JSON.stringify({ job_id: item.job_id }),
-          });
-          setMessage("Suivi local créé. Aucun dossier n’a été envoyé.");
-          await loadApplicationPipeline();
-        } catch (error) { setMessage(error.message, true); }
+        await api("/api/career/applications", {
+          method: "POST",
+          body: JSON.stringify({ job_id: item.job_id }),
+        });
+        await loadApplicationPipeline();
       });
       actions.append(track);
     }
     row.append(actions);
     list.append(row);
   });
-  target.append(list, make("p", payload.disclaimer || "Aucun envoi automatique.", "scoring-disclaimer"));
+  target.append(list);
 }
 
 async function loadApplicationPipeline() {
@@ -3435,20 +3433,6 @@ function renderStagePrepList(target, title, items, renderItem) {
   items.forEach((item) => list.append(renderItem(item)));
   section.append(list);
   target.append(section);
-}
-
-function requirementPriorityLabel(item) {
-  const modality = String(item?.modality || item?.priority || "").toLowerCase();
-  if (["required", "must", "mandatory", "obligatory"].includes(modality)) return "Obligatoire";
-  if (["preferred", "nice_to_have", "plus"].includes(modality)) return "Souhaité";
-  return "À vérifier";
-}
-
-function renderRequirementItem(item) {
-  const row = make("li", "", "stage-requirement-item");
-  row.append(chip(requirementPriorityLabel(item), requirementPriorityLabel(item) === "Obligatoire" ? "danger" : requirementPriorityLabel(item) === "Souhaité" ? "good" : "warning"));
-  row.append(make("span", item?.text || item?.requirement || String(item || "")));
-  return row;
 }
 
 function renderVariantFitAnalysis(target, prep) {
@@ -3499,6 +3483,187 @@ function renderVariantFitAnalysis(target, prep) {
   target.append(section);
 }
 
+function groupRequirementFitsForDisplay(result, offerIntelligence) {
+  const fits = Array.isArray(result?.fits) ? result.fits : [];
+  const records = offerIntelligence?.requirements_by_id || {};
+  const groups = new Map();
+  const normalize = (value) => String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  fits.forEach((fit, index) => {
+    const text = String(fit?.requirement_text || "").trim();
+    const identity = normalize(text) || `id:${fit?.requirement_id || index}`;
+    const key = JSON.stringify([identity, fit?.category || "", fit?.modality || "", fit?.verdict || ""]);
+    let group = groups.get(key);
+    if (!group) {
+      group = {...fit, source_references: []};
+      groups.set(key, group);
+    }
+    const id = String(fit?.requirement_id || "").trim();
+    const source = id && records[id] && typeof records[id] === "object" ? records[id] : {};
+    if (id && !group.source_references.some((reference) => reference.requirement_id === id)) {
+      group.source_references.push({
+        requirement_id: id,
+        source_field: String(source.source_field || ""),
+        locator: String(source.locator || ""),
+      });
+    }
+  });
+  return [...groups.values()];
+}
+
+function renderRequirementsFit(target, result, offerIntelligence) {
+  if (!result || !Array.isArray(result.fits) || !result.fits.length) return;
+  const displayFits = groupRequirementFitsForDisplay(result, offerIntelligence);
+  const labels = {
+    supported:"appuyée par le profil approuvé",
+    unsupported:"écart établi par le profil approuvé",
+    contradicted:"contredite par le profil approuvé",
+    to_verify:"à vérifier",
+    not_applicable:"sans obligation pour le profil",
+  };
+  const categories = {
+    etudes:"Études", experience:"Expérience", tech:"Compétences techniques", outils:"Outils",
+    langues:"Langues", mobilite:"Mobilité", auth_travail:"Autorisation de travail",
+    dispo:"Disponibilité", diplomation:"Diplomation", other:"Autre",
+  };
+  const section = make("section", "", "stagehunter-prep-section requirements-fit");
+  section.append(make("h4", "Exigences de l’offre ↔ profil approuvé"));
+  const count = (verdict) => displayFits.filter((fit) => fit.verdict === verdict).length;
+  section.append(make(
+    "p",
+    `${count("supported")} appuyées · ${count("to_verify")} à vérifier · ${count("unsupported")} écarts établis · ${count("contradicted")} contradictions. Les répétitions exactes sont regroupées ici ; leurs sources restent listées. Ce résumé compare les exigences aux seuls champs enregistrés dans ton profil Career.`,
+    "scoring-disclaimer",
+  ));
+  const list = make("ul", "", "job-reasons");
+  displayFits.forEach((fit) => {
+    const item = make("li", "", `requirements-fit-item ${fit.verdict || "to_verify"}`);
+    item.append(make("strong", `${categories[fit.category] || "Autre"} · ${labels[fit.verdict] || "à vérifier"}`));
+    item.append(make("p", `Exigence source : « ${fit.requirement_text || "texte indisponible"} »`));
+    const sourceReferences = fit.source_references || [];
+    if (sourceReferences.length) {
+      const sourceNames = {requirements: "champ exigences", description_original: "description de l’offre"};
+      const references = sourceReferences.map((reference) => {
+        const sourceName = sourceNames[reference.source_field] || reference.source_field || "source conservée";
+        return `${sourceName}${reference.locator ? ` · ${reference.locator}` : ""}`;
+      });
+      item.append(make("p", `Provenance : ${references.join(" ; ")}`, "requirements-fit-provenance"));
+    }
+    if (fit.profile_evidence) item.append(make("p", `Profil : « ${fit.profile_evidence} »`));
+    if (fit.reason) item.append(make("p", fit.reason));
+    list.append(item);
+  });
+  section.append(list);
+  target.append(section);
+}
+
+function renderQuickAnswers(target, job) {
+  const jobId = String(job?.id || "").trim();
+  if (!jobId) return;
+  const section = make("section", "", "stagehunter-prep-section quick-answers");
+  section.append(make("h4", "Réponses rapides pour le formulaire"));
+  section.append(make(
+    "p",
+    "Valeurs locales modifiables avant copie. Relis chaque réponse dans le formulaire officiel ; aucun champ n’est envoyé automatiquement.",
+    "scoring-disclaimer",
+  ));
+  const languageRow = make("label", "Langue des questions et du gabarit : ", "quick-answers-language");
+  const language = make("select");
+  language.setAttribute("aria-label", "Langue des réponses rapides");
+  language.append(new Option("Français", "fr"), new Option("English", "en"));
+  language.value = String(job.language || "").toLowerCase().startsWith("en") ? "en" : "fr";
+  languageRow.append(language);
+  section.append(languageRow);
+  const languageNote = make("p", "", "quick-answers-language-note");
+  section.append(languageNote);
+  const status = make("p", "Chargement des réponses locales…", "quick-answers-status");
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
+  section.append(status);
+  const list = make("div", "", "quick-answers-grid");
+  section.append(list);
+  target.append(section);
+
+  let requestVersion = 0;
+  const sourceLabels = {
+    "profile.eligibility": "Éligibilité déclarée dans le profil Career",
+    "profile.languages": "Langues enregistrées dans le profil Career",
+    "profile.education": "Formation enregistrée dans le profil Career",
+    "profile.experience": "Expérience enregistrée dans le profil Career",
+    "preferences.availability.availability_start": "Réglage de disponibilité Career",
+    "preferences.availability.minimum_duration_months,maximum_duration_months": "Durée configurée dans les réglages Career",
+    "preferences.locations": "Villes activées dans les préférences Career",
+    "job.title,job.company": "Titre et entreprise de l’offre enregistrée",
+    "job.title,job.company,job.job_family": "Titre, entreprise et domaine de l’offre enregistrée",
+    "preferences.availability.salary_expectation": "Préférence de rémunération enregistrée",
+    "preferences.availability.compensation_expectation": "Préférence de rémunération enregistrée",
+  };
+  const load = async () => {
+    const version = ++requestVersion;
+    const lang = language.value;
+    status.textContent = "Chargement des réponses locales…";
+    list.replaceChildren();
+    languageNote.textContent = lang === "en"
+      ? "Questions are in English; profile values stay in their original language. Review and translate them yourself if needed. Changing the language replaces edits that have not been copied."
+      : "La motivation est un gabarit à compléter avec ta raison personnelle et une preuve approuvée. Changer de langue remplace les modifications non copiées.";
+    try {
+      const payload = await api(`/api/career/quick-answers/${encodeURIComponent(jobId)}?lang=${encodeURIComponent(lang)}`);
+      if (!section.isConnected || version !== requestVersion) return;
+      for (const answer of payload.answers || []) {
+        const card = make("article", "", "quick-answer-card");
+        const heading = make("div", "", "quick-answer-heading");
+        heading.append(make("strong", answer.label || "Réponse"));
+        const isMotivationTemplate = String(answer.label || "").toLowerCase().includes("motivation");
+        const confidenceLabel = isMotivationTemplate
+          ? "Gabarit à compléter"
+          : answer.confidence === "exact"
+            ? "Valeur du profil"
+            : answer.confidence === "derived"
+              ? "Dérivé — à vérifier"
+              : "À compléter";
+        heading.append(make("span", confidenceLabel, `quick-answer-confidence ${answer.confidence || "missing"}`));
+        card.append(heading);
+        const source = sourceLabels[answer.source_field] || "Données locales Career";
+        card.append(make("p", `Source : ${source}`, "quick-answer-source"));
+        const editor = document.createElement("textarea");
+        editor.rows = isMotivationTemplate ? 3 : 2;
+        editor.maxLength = 2_000;
+        editor.value = String(answer.value || "");
+        editor.placeholder = answer.confidence === "missing"
+          ? "À compléter avec une information exacte ; rien n’est enregistré automatiquement."
+          : "Relis et ajuste avant de copier.";
+        editor.setAttribute("aria-label", `${answer.label || "Réponse"} — modifiable avant copie`);
+        card.append(editor);
+        const actions = make("div", "", "quick-answer-actions");
+        const copyStatus = make("span", "", "kit-copy-status");
+        const copy = make("button", "Copier", "quiet-button");
+        copy.type = "button";
+        copy.disabled = !editor.value.trim() || /\[(?:à compléter|complete)/i.test(editor.value);
+        copy.setAttribute("aria-label", `Copier « ${answer.label || "réponse"} » après relecture`);
+        editor.addEventListener("input", () => {
+          copy.disabled = !editor.value.trim() || /\[(?:à compléter|complete)/i.test(editor.value);
+          if (!copy.disabled) copyStatus.textContent = "Modification temporaire ; le profil ne change pas.";
+        });
+        copy.addEventListener("click", () => copyKitValue(editor.value, copyStatus));
+        actions.append(copy, copyStatus);
+        card.append(actions);
+        list.append(card);
+      }
+      status.textContent = `${list.children.length} réponses locales prêtes à relire. Copie manuelle uniquement.`;
+    } catch (error) {
+      if (!section.isConnected || version !== requestVersion) return;
+      status.textContent = `Réponses indisponibles : ${error.message}`;
+      status.classList.add("error");
+    }
+  };
+  language.addEventListener("change", load);
+  load();
+}
+
 function renderStagePrep(prep) {
   const target = $("#stagehunter-prep");
   if (!target) return;
@@ -3506,41 +3671,6 @@ function renderStagePrep(prep) {
   target.hidden = false;
   const job = prep.job || {};
   target.append(make("h4", `${job.title || "Offre"} — ${job.company || "Entreprise"}`));
-  target.append(stageOfferOverview(job, {
-    ...(job.qualification_facts || {}),
-    ...(prep.qualification || {}),
-  }));
-  const requirementSummary = make("p", "", "application-meta");
-  const requirementItems = prep.requirements || [];
-  const requiredCount = requirementItems.filter((item) => requirementPriorityLabel(item) === "Obligatoire").length;
-  const preferredCount = requirementItems.filter((item) => requirementPriorityLabel(item) === "Souhaité").length;
-  requirementSummary.textContent = `${requirementItems.length} exigence(s) détectée(s) · ${requiredCount} obligatoire(s) · ${preferredCount} souhaitée(s) · le reste à vérifier.`;
-  target.append(requirementSummary);
-  const coverage = prep.cv_coverage || {};
-  const coverageBlock = make("section", "", "cv-coverage-card");
-  const coveragePercent = Math.max(0, Math.min(100, Number(coverage.coverage_percent || 0)));
-  coverageBlock.append(
-    make("strong", `Couverture factuelle du CV : ${coveragePercent} %`),
-    make("span", `${coverage.supported || 0}/${coverage.requirements_total || 0} exigence(s) étayée(s) par ton profil · ${coverage.to_verify || 0} à vérifier`),
-  );
-  const coverageTrack = make("div", "", "cv-coverage-track");
-  const coverageFill = make("span", "", "cv-coverage-fill");
-  coverageFill.style.width = `${coveragePercent}%`;
-  coverageTrack.append(coverageFill);
-  coverageBlock.append(coverageTrack);
-  coverageBlock.append(make("small", coverage.disclaimer || "Cette mesure ne prédit pas une embauche."));
-  target.append(coverageBlock);
-  if (Number(coverage.to_verify || 0) > 0) {
-    const profileHint = make("div", "", "cv-profile-hint");
-    profileHint.append(
-      make("span", `${coverage.to_verify} élément(s) ne sont pas encore étayés par ton profil.`),
-    );
-    const profileButton = make("button", "Compléter Mon profil", "secondary-button");
-    profileButton.type = "button";
-    profileButton.addEventListener("click", () => showView("profile"));
-    profileHint.append(profileButton);
-    target.append(profileHint);
-  }
   if (job.official_url) {
     const link = make("a", "Ouvrir l’offre officielle conservée", "secondary-button external-link");
     link.href = job.official_url;
@@ -3552,22 +3682,24 @@ function renderStagePrep(prep) {
   target.append(
     make(
       "p",
-      `Source : ${job.source_name || "inconnue"} · statut : ${job.source_status === "open" ? "ouverte" : "à vérifier"} · consultation : ${formatVerification(job.last_verified_at)}`,
+      `Source déclarée : ${job.source_name || "inconnue"} · origine du lien : ${job.official_source_trust_label || "Source liée, non vérifiée"} · annonce ${job.source_status === "open" ? "ouverte" : "à vérifier"} · contenu ${job.source_verified ? `vérifié le ${formatVerification(job.last_verified_at)}` : "non vérifié"}`,
       "application-meta",
     ),
   );
+  renderQuickAnswers(target, job);
   if ((prep.uncertainty || []).length) {
     const warnings = make("ul", "", "scoring-list blocked-list");
     prep.uncertainty.forEach((item) => warnings.append(make("li", item)));
     target.append(warnings);
   }
   renderVariantFitAnalysis(target, prep);
+  renderRequirementsFit(target, prep.requirements_fit, prep.offer_intelligence);
   const cvCoverage = prep.cv_coverage || {};
   if ((typeof renderCvPlanSection === "function") && ((prep.cv_action_plan || []).length || Number.isFinite(cvCoverage.requirements_total))) {
     const planSection = renderCvPlanSection(target, prep, job);
     if (planSection) target.append(planSection);
   }
-  renderStagePrepList(target, "Exigences de l’offre (texte source conservé)", prep.requirements || [], renderRequirementItem);
+  renderStagePrepList(target, "Exigences de l’offre (texte source conservé)", prep.requirements || [], (item) => make("li", `${item.text}`));
   if (prep.source_excerpt) {
     const source = make("details", "", "stagehunter-prep-section");
     source.append(make("summary", "Relire un extrait de la description source (jusqu’à 4 000 caractères)"));
@@ -3587,6 +3719,7 @@ function renderStagePrep(prep) {
   actions.append(studio);
   const kitLanguage = make("select", "", "kit-language-select");
   kitLanguage.setAttribute("aria-label", "Langue du kit de candidature");
+  kitLanguage.append(new Option("Choisir la langue du dossier…", ""));
   ["fr", "en", "it", "de"].forEach((code) => kitLanguage.append(new Option(draftLanguageLabels[code], code)));
   const kitVariant = make("select", "", "kit-variant-select variant-specific");
   kitVariant.setAttribute("aria-label", "Variante CV ciblée");
@@ -3604,6 +3737,8 @@ function renderStagePrep(prep) {
   kitVariant.title = prep.variant_rationale || "Sélection manuelle possible";
   const kit = make("button", "Préparer le kit de candidature", "primary-button");
   kit.type = "button";
+  kit.disabled = true;
+  kitLanguage.addEventListener("change", () => { kit.disabled = !["fr", "en", "it", "de"].includes(kitLanguage.value); });
   // Un clic = un kit pour CETTE offre. Aucune boucle de candidature : le
   // suivi et le brouillon local sont créés une fois puis réutilisés.
   kit.addEventListener("click", () => startApplicationKitFlow(job.id, kitLanguage.value, kitVariant.value));
@@ -3638,19 +3773,29 @@ async function loadStageHunter() {
   renderStageTerms(payload);
   const exploration = await api("/api/career/stage-search/explore");
   renderStageExploration(exploration);
-  if (stageHunterResultMode === "auto") stageHunterResultMode = (exploration.outcomes || []).length ? "explore" : "saved";
+  if (exploration.criteria_changed) {
+    // Old exploration results no longer match the saved criteria. Keep the
+    // user's already-saved offers visible instead of opening an empty, stale
+    // result list and making them recover it manually.
+    stageHunterResultMode = "saved";
+  } else if (stageHunterResultMode === "auto") {
+    stageHunterResultMode = (exploration.outcomes || []).length ? "explore" : "saved";
+  }
   if (stageHunterResultMode === "explore") {
     renderExplorationMatches({...exploration, configured:payload.configured});
   } else {
     const matches = await api("/api/career/stage-search/matches");
     renderStageMatches(matches);
-    $("#stagehunter-result-mode").textContent = "Mes offres enregistrées — tous les types de contrats, avec classement et avertissements. Aucune offre suivie n’a été supprimée.";
+    $("#stagehunter-result-mode").textContent = exploration.criteria_changed
+      ? "Tes critères ont changé : l’ancienne exploration est périmée et doit être relancée. Voici tes offres enregistrées; aucune offre suivie n’a été supprimée."
+      : "Mes offres enregistrées — tous les types de contrats, avec classement et avertissements. Aucune offre suivie n’a été supprimée.";
     $("#stagehunter-matches-empty").textContent = "Aucune offre enregistrée. Clique sur Explorer les stages pour chercher sans configurer d’entreprise.";
   }
   renderStagePrepSelect();
   const applications = await api("/api/career/applications");
   state.applications = applications.applications || [];
   renderStageApplications();
+  await loadApplicationPipeline();
 }
 
 $("#stagehunter-brief-form")?.addEventListener("submit", async (event) => {
@@ -3669,7 +3814,7 @@ $("#stagehunter-brief-form")?.addEventListener("submit", async (event) => {
     excluded_countries: stageHunterListValue("#stagehunter-excluded-countries"),
     excluded_cities: stageHunterListValue("#stagehunter-excluded-cities"),
     require_known_location: $("#stagehunter-require-known-location").checked,
-    start_date: "",
+    start_date: $("#stagehunter-start-date").value,
     duration_months: null,
     contract_types: [...document.querySelectorAll("#stagehunter-contract-types input:checked")].map((box) => box.value),
     start_months: [...document.querySelectorAll("#stagehunter-start-months input:checked")].map((box) => Number.parseInt(box.value, 10)),
@@ -3708,27 +3853,63 @@ $("#stagehunter-search")?.addEventListener("click", async () => {
 
 $("#stagehunter-explore")?.addEventListener("click", async () => {
   const button = $("#stagehunter-explore");
+  const cancelButton = $("#stagehunter-explore-cancel");
+  const progress = window.CareerExplorationProgress;
   button.disabled = true;
   button.textContent = "Exploration en cours…";
-  startStageHunterProgress();
+  if (cancelButton) cancelButton.hidden = false;
   try {
-    const result = await api("/api/career/stage-search/explore", {method:"POST", body:JSON.stringify({force:false})});
-    finishStageHunterProgress(true, result);
+    if (!progress) throw new Error("Le suivi de progression de l’exploration est indisponible.");
+    const started = await progress.startExploration({force: false});
+    renderExplorationProgress(started);
+    stageHunterRunPoll = progress.poll(started.run_id, {onState: renderExplorationProgress});
+    const result = await stageHunterRunPoll.promise;
+    stageHunterRunPoll = null;
+    progress.forgetRun();
+    renderExplorationProgress(result);
     stageHunterResultMode = "explore";
-    renderStageExploration(result);
-    renderExplorationMatches(result);
+    const report = await api("/api/career/stage-search/explore");
+    renderStageExploration(report);
+    renderExplorationMatches(report);
     await Promise.all([loadJobs(), loadApplications(), loadDashboard()]);
     renderStagePrepSelect();
-    const failed = result.summary?.sources_failed || 0;
-    const succeeded = (result.summary?.sources_succeeded || 0) + (result.summary?.sources_cached || 0);
-    setMessage(failed && !succeeded ? "Les sources n’ont pas pu être lues. Aucun résultat n’a été inventé ; consulte le rapport de recherche." : result.summary?.partial ? "Exploration partielle terminée. Consulte les sources et les limites avant de choisir une offre." : "Exploration terminée sur les sources du registre. Aucun dépôt de candidature n’a été effectué.", Boolean(failed && !succeeded));
+    const failed = Number.isFinite(result.sources_failed) ? result.sources_failed : 0;
+    const succeeded = Number.isFinite(result.sources_succeeded) ? result.sources_succeeded : 0;
+    if (result.status === "cancelled") {
+      setMessage("Exploration arrêtée entre deux sources. Les résultats précédents et tes offres enregistrées sont conservés.", false);
+    } else if (failed && !succeeded) {
+      setMessage("Les sources n’ont pas pu être lues. Aucun résultat n’a été inventé ; consulte le rapport de recherche.", true);
+    } else if (failed) {
+      setMessage("Exploration partielle terminée : certaines sources ont échoué. Consulte le rapport de recherche avant de choisir une offre.", false);
+    } else {
+      setMessage("Exploration terminée sur les sources du registre. Aucun dépôt de candidature n’a été effectué.", false);
+    }
   } catch (error) {
-    finishStageHunterProgress(false);
+    stopExplorationPolling();
     setMessage(error.message, true);
     $("#stagehunter-explore-status").textContent = "L’exploration a échoué. Tes offres et candidatures déjà enregistrées sont conservées.";
   } finally {
+    stopExplorationPolling();
     button.disabled = false;
     button.textContent = "Explorer les stages";
+    if (cancelButton) cancelButton.hidden = true;
+  }
+});
+
+$("#stagehunter-explore-cancel")?.addEventListener("click", async () => {
+  const button = $("#stagehunter-explore-cancel");
+  const progress = window.CareerExplorationProgress;
+  const runId = progress?.storedRunId?.();
+  if (!progress || !runId) return;
+  button.disabled = true;
+  try {
+    const state = await progress.cancelExploration(runId);
+    renderExplorationProgress(state);
+    setMessage("Arrêt demandé : l’exploration s’arrête entre deux sources et les résultats précédents sont conservés.", false);
+  } catch (error) {
+    setMessage(error.message, true);
+  } finally {
+    button.disabled = false;
   }
 });
 
@@ -3784,7 +3965,9 @@ async function bootstrap() {
   setLoading(true);
   try {
     organiseViews();
+    ensureApplicationAccessibility();
     await Promise.all([loadHealth(), loadProfile(), loadProfileImports(), loadIntake(), loadPreferences(), loadDiscoverySources(), loadDashboard(), loadJobs(), loadShortlist(), loadApplications()]);
+    resumeExplorationIfNeeded();
     const requested = window.location.hash.replace("#career/", "");
     if (careerViews.has(requested)) showView(requested, { focus: false, updateHash: false });
     else document.title = "Tableau de bord — Côme AI Career";

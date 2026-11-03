@@ -1,0 +1,92 @@
+# Note OpenCode → Codex — NAGE NEXT 100 (31/10)
+
+## Contexte
+Côme autorise 100 missions pour faire évoluer NAGE (sources internationales, qualification,
+classement, profil, CV, lettres, dossier, entretiens, fiabilité IA, recettes).
+
+## Coordination
+- Codex développe le nouveau Spec Kit dans :
+  `/Users/comedelavenne/Documents/Codex/2026-10-25/codex-op-ration-v3-stable-consolidation/candidate`
+  Branche : `codex/nage-consolidation-20261030`
+- **Ne modifie jamais ce worktree, ni /Users/comedelavenne/NAGE-release.**
+- Réservé à Codex pendant l'intégration : `devkit/**`, `desktop_static/**` et leurs tests.
+- OpenCode prend le backend `career/**` et l'orchestration.
+- Ne pas modifier `main`. Ne pas remplacer de travail non commité.
+
+## Backlog
+Voir `docs/NAGE_NEXT_100_BACKLOG.md` (10 lots × 10 missions) et `missions_next100.json`.
+
+## Lots réservés (I, J)
+Pour les lots I et J, OpenCode reste hors des fichiers réservés à Codex. Les missions qui
+nécessitent ces fichiers sont marquées « attente coordination ».
+
+## 4 premières missions lancées (indépendantes, haute valeur)
+1. A01 — Connecteur UK (sources internationales finance)
+2. B05 — Niveau diplôme requis (BBA/Bac+4/M2/MBA) — filtre clé utilisateur
+3. C07 — Filtre par type de stage finance (M&A, CIB, corp fin)
+4. D04 — Registre de preuves (fondation pour CV factuel)
+
+Branches : `agent/n100-A01-uk-sources`, `agent/n100-B05-degree-level`,
+`agent/n100-C07-finance-family`, `agent/n100-D04-evidence-registry`.
+
+## Règles rappelées
+- Modèles coût nul vérifié uniquement (beam-free, mimo-v2.6-flash-free, deepseek-v4.1-flash-free).
+- Max 2 tentatives par mission, puis consigner la cause et avancer.
+- Pas de suite complète en parallèle. Tests ciblés uniquement.
+- Preuve obligatoire : branche sur origin + tests verts avant "done".
+- SHA, tests et conflits transmis à Codex à chaque lot validé.
+
+## Livraisons OpenCode au 01/11 (mise à jour)
+
+Branche principale backend : `agent/spec-033-translation-variants`.
+Tous les modules sous `career/` avec tests ciblés verts (ruff clean) :
+
+| Lot | Missions | SHA dernier commit |
+|---|---|---|
+| I (fiabilité IA) | I01, I02, I03, I04, I06, **I07, I08, I09** (nouveau) | `cb7915c` |
+| F (lettres) | **F02–F06** multilingue/ton/personnalisation/vérif/score | `0abdf12` |
+| F (lettres) | **F07–F10** export/templates/approu humaine/rapport | `b8e18ef` |
+| J | J08 profiling, J09 error monitoring | `1e9f51d`, `e5381f4` |
+| C/A/B/D | C05 rationale, H02 STAR, H05 relances, UK/DE/ES/US, durée, géo, contrat, VC parser, profil | `9a075b3` et antérieurs |
+
+Restes côté OpenCode : E07–E10, C03/C08/C09, I10, D05/D06/D08/D09.
+Restes côté Codex (fichiers UI) : J02–J05, J10. Voir prompt reçu séparément.
+Total : 87/87 v1 done, 61→ **70/100** N100 done après ce lot F.
+
+## ➡️ PROMPT CODEX PRÊT À LANCER (01/11)
+
+**Lire impérativement `docs/agent_missions/N100_UI_CODEX_PROMPT.md`** (mission N100-UI-CX1) :
+6 missions U1–U6 = câblage REST des 24 modules OpenCode (lettres, shortlist, dossier)
++ UI lot J. C'est LÀ que se trouve le travail — pas dans missions_next100.json.
+
+Mise à jour du total backend : passe 5 livrée (A06, D06, D09, G06, G07, G08, H10, J06, J07,
+C10) → SHA `90ccadf`. **91/100 N100 done** (registre `missions_next100.json` à jour).
+
+## VERIFICATION FLUX N100-U1 (01/11) — DONE ✅
+
+- Branche `codex/n100-u1` sur origin, SHA **bb6cae8** — concordant, base `9631045`.
+- Diff inspecté (4 fichiers, +144) : routes letter/render|check|personalize|approve|export
+  dans `career/router.py` L994-1023 + wrappers `career/service.py`.
+- Tests ciblés REJOUÉS par OpenCode : `2 passed in 3.07s` (TestClient HTTP réel,
+  incl. blocage export DOCX/PDF sans approbation).
+- **Codex → démarrer U2** (routes shortlist C08/C09/C10).
+
+##Push convention (lesson aprendue)
+OpenCode pousse désormais exclusivement via :
+  `git push origin HEAD:refs/heads/agent/n100-carrier-20261101`
+et vérifie par `git ls-remote origin agent/n100-carrier-20261101` avant tout "done".
+## CONSOLIDÉE CODEX + CLI + RECETTE (02/11) — 99/100 ✅
+
+- Candidate `codex/n100-consolidated-20261101` @ **a9f8226** (base 99a2069) :
+  U2 shortlist/urgence/export, U3 ATS/dossier, U4 atelier lettre, U5 a11y,
+  U7 routes académiques bornées, durcissement approbation/export.
+- Revue OpenCode : diff complet inspecté, **34 tests rejoués deux fois**
+  (candidate puis merge) = 34 passed, ruff + node + diff-check verts.
+- Intégration carrier : merge **0aa7224**, dédup U2 **bd07d64**, board **9806f9e**.
+- CLI immédiat : `nage.py` (finance, maths, budget `~/.nage/`, plan du jour,
+  brief, recherche, méthode devoirs) + `tests/test_nage_cli.py` (8 verts).
+- Recette J10 : **42 passed in 14.14s**, routes vérifiées en direct 8765/8766,
+  rapport `docs/agent-reports/N100-J10-RECIPE.md`.
+- Guide utilisateur : `docs/USER_GUIDE_V2.md`.
+- Registre N100 : **99/100**. Seule **J04 (PWA hors-ligne)** reste ouverte :
+  non pertinente sans serveur local, décision humaine.

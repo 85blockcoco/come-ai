@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "pack_id": "cards-vc03",
+  "topic_id": "VC03",
+  "language": "fr",
+  "source_type": "original",
+  "license": "Contenu original NAGE",
+  "items": [
+    {
+      "kind": "card",
+      "id": "VC03-C001",
+      "topic_id": "VC03",
+      "question": "Quelle est la différence entre un tour pre-seed et un tour seed ?",
+      "answer": "Le pre-seed finance la validation initiale (équipe, prototype, premières interviews) avec des montants plus faibles et un risque plus élevé. Le seed finance le lancement commercial naissant (premiers clients, première version scalable) avec des montants plus importants et une traction à démontrer.",
+      "explanation": "La frontière dépend du marché et du pays, mais l'usage distingue validation vs début de traction.",
+      "status": "active",
+      "tags": ["stages", "seed"]
+    },
+    {
+      "kind": "card",
+      "id": "VC03-C002",
+      "topic_id": "VC03",
+      "question": "À quoi sert principalement un tour Series A ?",
+      "answer": "À financer le passage d'une traction initiale à un modèle de croissance répétable : équipe commerciale, produit, opérations et premiers marchés, avec des objectifs de croissance et de rentabilité unitaire.",
+      "explanation": "Le Series A n'est pas seulement un montant : c'est une étape de professionnalisation de la croissance.",
+      "status": "active",
+      "tags": ["stages", "series-a"]
+    },
+    {
+      "kind": "card",
+      "id": "VC03-C003",
+      "topic_id": "VC03",
+      "question": "Qu'est-ce qu'une convertible note en financement startup ?",
+      "answer": "C'est une dette convertie en actions lors d'un tour futur, avec un taux d'intérêt, une maturité, un cap de valorisation et parfois une décote. Elle reporte la négociation de la valorisation.",
+      "explanation": "L'investisseur prête d'abord, puis devient actionnaire selon les conditions prévues.",
+      "status": "active",
+      "tags": ["instruments", "convertible-note"]
+    },
+    {
+      "kind": "card",
+      "id": "VC03-C004",
+      "topic_id": "VC03",
+      "question": "Qu'est-ce qu'un SAFE ?",
+      "answer": "Un Simple Agreement for Future Equity : un contrat qui donne droit à des actions lors d'un futur tour, sans intérêt ni maturité, généralement avec un cap et/ou une décote. Ce n'est pas une dette au sens strict.",
+      "explanation": "Le SAFE est plus simple qu'une convertible note mais reste un instrument à documenter précisément.",
+      "status": "active",
+      "tags": ["instruments", "safe"]
+    },
+    {
+      "kind": "card",
+      "id": "VC03-C005",
+      "topic_id": "VC03",
+      "question": "Qu'est-ce qu'un bridge round ?",
+      "answer": "Un financement court entre deux tours, destiné à prolonger la trésorerie jusqu'à un événement (nouveau tour, rentabilité, sortie). Il peut prendre la forme de dette, de convertible ou d'actions.",
+      "explanation": "Le bridge est souvent un signal de tension : il faut vérifier les conditions et l'usage des fonds.",
+      "status": "active",
+      "tags": ["stages", "bridge"]
+    },
+    {
+      "kind": "card",
+      "id": "VC03-C006",
+      "topic_id": "VC03",
+      "question": "Qu'est-ce qu'un term sheet ?",
+      "answer": "Un document non contraignant (sauf clauses explicitement contraignantes) qui fixe les termes principaux d'un investissement : montant, valorisation, instruments, droits, gouvernance et conditions de closing.",
+      "explanation": "Il sert de base à la documentation juridique finale ; les termes économiques et de contrôle doivent être lus ensemble.",
+      "status": "active",
+      "tags": ["term-sheet", "process"]
+    },
+    {
+      "kind": "card",
+      "id": "VC03-C007",
+      "topic_id": "VC03",
+      "question": "Pourquoi chaque tour dilue-t-il les actionnaires existants ?",
+      "answer": "Parce que de nouvelles actions sont émises en échange du financement. La dilution dépend du montant levé et de la valorisation pre-money : plus la valorisation est basse pour un montant donné, plus la dilution est forte.",
+      "explanation": "La dilution n'est pas mauvaise en soi si la valeur de la participation augmente.",
+      "status": "active",
+      "tags": ["dilution", "stages"]
+    },
+    {
+      "kind": "card",
+      "id": "VC03-C008",
+      "topic_id": "VC03",
+      "question": "Quelle est la différence entre une émission primaire et une cession secondaire ?",
+      "answer": "L'émission primaire crée de nouvelles actions et apporte de l'argent à la société. La cession secondaire transfère des actions existantes entre actionnaires : l'argent va au vendeur, pas à la société.",
+      "explanation": "Un tour peut combiner les deux ; il faut distinguer l'argent qui finance l'entreprise de celui qui liquéfie un actionnaire.",
+      "status": "active",
+      "tags": ["primary", "secondary"]
+    },
+    {
+      "kind": "card",
+      "id": "VC03-C009",
+      "topic_id": "VC03",
+      "question": "Qu'est-ce qu'un droit de pro-rata ?",
+      "answer": "Le droit pour un investisseur de participer à un futur tour pour maintenir sa participation, généralement au prorata de sa détention. Il peut être exercé ou cédé selon les clauses.",
+      "explanation": "Le pro-rata protège contre la dilution mais oblige à remobiliser du capital.",
+      "status": "active",
+      "tags": ["rights", "pro-rata"]
+    },
+    {
+      "kind": "card",
+      "id": "VC03-C010",
+      "topic_id": "VC03",
+      "question": "Qu'est-ce qu'un down round ?",
+      "answer": "Un tour réalisé à une valorisation pre-money inférieure à celle du tour précédent. Il déclenche souvent des clauses anti-dilution et envoie un signal de difficulté.",
+      "explanation": "Le down round n'est pas seulement une mauvaise nouvelle : il modifie la cap table et les incitations.",
+      "status": "active",
+      "tags": ["down-round", "stages"]
+    }
+  ]
+}

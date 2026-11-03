@@ -92,6 +92,22 @@ def test_jobteaser_maps_synthetic_postings_to_common_contract(fixtures):
         assert job["employment_type"] in {"Internship", "Stage"}
 
 
+def test_jobteaser_preserves_published_fields_and_contract_conflict(fixtures):
+    posting = dict(fixtures["jobteaser"][0])
+    posting["description"] = "<p>Permanent contract opportunity for a finance internship.</p>"
+    connector = JobTeaserConnector(
+        fetch=FixtureFetch([build_jobteaser_html([posting])]),
+        clock=lambda: "2026-10-20T01:00:00Z",
+    )
+    result = connector.discover_internships(source("jobteaser"), selection_brief=default_brief())
+    job = result.jobs[0]
+    fields = job["source_fields"]["jobteaser"]
+    assert fields["contract_type"] == "Internship"
+    assert fields["location"] == "London, UK"
+    assert fields["url"] == posting["url"]
+    assert any(item["kind"] == "contract" for item in job["source_conflicts"])
+
+
 def test_jobteaser_refuses_until_valid_source(fixtures):
     connector = JobTeaserConnector()
     unverified = {"provider": "jobteaser", "company": "Synthetic Finance", "board_token": "synthetic-board"}

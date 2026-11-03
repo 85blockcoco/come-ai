@@ -6,6 +6,8 @@ logs/
 career_data/
 memory_data/
 state/
+.nage/
+vc_data/
 .devkit/
 .local-ai/
 

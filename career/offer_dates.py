@@ -257,10 +257,7 @@ _MONTH_TO_YEAR: dict[str, str] = {
     "es": r"(?:\s+de\s+|\s*,\s*|\s+)",
 }
 
-# Ordinal suffix of a day ("1er", "1st", "1º", "1°").  The word-like
-# suffixes end on a letter and need a word boundary; the symbol-like
-# ones ("º", "ª", "°") have no boundary after them.
-_DAY_ORDINAL = r"(?:(?:\s*(?:er|ère|st|nd|rd|th)\b)|(?:\s*[ºª°]))?"
+_DAY_ORDINAL = r"(?:\s*(?:er|ère|º|ª|st|nd|rd|th))?"
 
 _CONTEXT_PHRASES: dict[str, dict[str, tuple[str, ...]]] = {
     "en": {
@@ -286,8 +283,7 @@ _CONTEXT_PHRASES: dict[str, dict[str, tuple[str, ...]]] = {
         ),
         "end": (
             r"\bend of (?:the )?(?:contract|internship|placement|period|assignment|programme|program)\b",
-            r"\bcontract ends?\b", r"\bending (?:on|of|in)\b",
-            r"\bends?\s+(?:on|by|in|from)\b",
+            r"\bcontract ends?\b", r"\bending (?:on|of)\b", r"\bends?\s+(?:on|by)\b",
             r"\bend date\b", r"\buntil the end of\b",
         ),
     },
@@ -295,7 +291,7 @@ _CONTEXT_PHRASES: dict[str, dict[str, tuple[str, ...]]] = {
         "published": (
             r"\bdate de publication\b", r"\bmis en ligne le\b",
             r"\bpubli(?:e|é|ée|es|ées)\s+le\b",
-            r"\bpublication\b", r"\bpost(?:é|ée|és|ées)\s+le\b",
+            r"\bpublication\b", r"\bpost(?:e|é|ée|ées?)\s+le\b",
             r"\bannonc(?:e|é|ée|ées?)\s+le\b",
         ),
         "deadline": (
@@ -315,8 +311,7 @@ _CONTEXT_PHRASES: dict[str, dict[str, tuple[str, ...]]] = {
         "end": (
             r"\bfin (?:de|du|des|de la|de l['’]) (?:contrat|stage|mission)\b",
             r"\bdate de fin\b",
-            r"\bse (?:termine|ach[èe]ve) (?:le|en|d[èe]s)\b", r"\btermine (?:le|en)\b",
-            r"\bjusqu['’]au\b",
+            r"\bse (?:termine|ach[èe]ve) le\b", r"\btermine le\b", r"\bjusqu['’]au\b",
             r"\bfin\s+le\b",
         ),
     },
@@ -331,13 +326,12 @@ _CONTEXT_PHRASES: dict[str, dict[str, tuple[str, ...]]] = {
             r"\bbewerbbar bis\b", r"\bantrag bis\b", r"\bfrist\b",
         ),
         "start": (
-            r"\bstartdatum\b", r"\bstart(?:et|en)?\s+(?:am|ab|im|in)\b", r"\bab dem\b",
+            r"\bstartdatum\b", r"\bstart(?:et|en)?\s+(?:am|ab|in)\b", r"\bab dem\b",
             r"\beintritt\b", r"\bwir starten\b", r"\bbeginn(?:end|t|nt|e|es)?\b",
             r"\bverf[üu]gbar ab\b",
         ),
         "end": (
-            r"\bvertragsende\b", r"\bendet (?:am|im|zum)\b", r"\bende (?:am|im|zum)\b",
-            r"\bl[äa]uft ab\b",
+            r"\bvertragsende\b", r"\bendet am\b", r"\bende am\b", r"\bl[äa]uft ab\b",
             r"\bbis zum\b", r"\bende\b",
         ),
     },
@@ -353,13 +347,10 @@ _CONTEXT_PHRASES: dict[str, dict[str, tuple[str, ...]]] = {
         ),
         "start": (
             r"\bdata di inizio\b", r"\ba partire dal\b", r"\binizio attivit[àa]\b",
-            r"\bcomm[ée]incia (?:il|dal)\b", r"\binizio\b", r"\binizia\b",
-            r"\bcomincia\b", r"\bdal\b",
+            r"\bcomm[ée]incia (?:il|dal)\b", r"\binizio\b", r"\binizia\b", r"\bdal\b",
         ),
         "end": (
-            r"\bdata di fine\b", r"\bfine del\b", r"\bfine di\b",
-            r"\btermine (?:il|del|in)\b", r"\btermina (?:il|in|nel)\b",
-            r"\bfinisce (?:il|in|nel)\b",
+            r"\bdata di fine\b", r"\bfine del\b", r"\bfine di\b", r"\btermine (?:il|del)\b",
             r"\bfino al\b", r"\bfine\b",
         ),
     },
@@ -377,11 +368,9 @@ _CONTEXT_PHRASES: dict[str, dict[str, tuple[str, ...]]] = {
         "start": (
             r"\bfecha de inicio\b", r"\ba partir de\b", r"\bdisponible (?:el|a partir|desde)\b",
             r"\bdesde el\b", r"\binicio\b", r"\bcomienzo\b", r"\bempieza\b",
-            r"\bcomienza(?:ndo|r[áa]ndo)?\b",
         ),
         "end": (
-            r"\bfecha de fin\b", r"\bfin de (?:contrato|pr[áa]ctica)\b",
-            r"\btermina (?:el|en)\b", r"\bfinaliza (?:el|en)\b",
+            r"\bfecha de fin\b", r"\bfin de (?:contrato|pr[áa]ctica)\b", r"\btermina el\b",
             r"\bhasta el\b", r"\bfin\b",
         ),
     },
@@ -438,11 +427,11 @@ _DURATION_LEFT: dict[str, str] = {
         r"(?:\s+(?:von|of|de|di|del|d['’]))?\s*[:\-–]?\s*$"
     ),
     "it": (
-        r"\b(?:durata|dura|durano|contratti?|stage|tirocini|period[oi]|periodi|assunzione|"
+        r"\b(?:durata|contratti?|stage|tirocini|period[oi]|periodi|assunzione|"
         r"programma|tra|per|un|una)\b(?:\s+(?:di|da|in|a|tra))?\s*[:\-–]?\s*$"
     ),
     "es": (
-        r"\b(?:duraci[óo]n|dura|duran|contratos?|stage|pasant[íi]as?|becas?|periodo|per[íi]odo|"
+        r"\b(?:duraci[óo]n|contratos?|stage|pasant[íi]as?|becas?|periodo|per[íi]odo|"
         r"programa|empleo|entre|para|un|una)\b(?:\s+(?:de|del|di|in|para|entre))?\s*[:\-–]?\s*$"
     ),
 }
@@ -620,15 +609,6 @@ class _Candidate:
 
 
 @dataclass(frozen=True)
-class _Marker:
-    """A context marker found before a date expression."""
-
-    start: int
-    end: int
-    fact_type: str
-
-
-@dataclass(frozen=True)
 class _Vocab:
     """Compiled vocabulary of one language."""
 
@@ -686,9 +666,9 @@ def _build_vocab(code: str) -> _Vocab:
     month_connector = _MONTH_RANGE_CONNECTORS[code]
 
     date_pattern = re.compile(
-        rf"(?P<d1>\d{{1,2}})(?!\d){_DAY_ORDINAL}{day_to_month}(?P<m1>{month_alt})\b"
+        rf"(?P<d1>\d{{1,2}}){_DAY_ORDINAL}\b{day_to_month}(?P<m1>{month_alt})\b"
         rf"(?:{month_to_year}(?P<y1>(?:19|20)\d{{2}}))?"
-        rf"|(?P<m2>{month_alt})\b\s+(?P<d2>\d{{1,2}})(?!\d){_DAY_ORDINAL}(?:\s*,)?"
+        rf"|(?P<m2>{month_alt})\b\s+(?P<d2>\d{{1,2}}){_DAY_ORDINAL}\b(?:\s*,)?"
         rf"(?:{month_to_year}(?P<y2>(?:19|20)\d{{2}}))?"
         rf"|(?P<m3>{month_alt})\b"
         rf"(?:{month_to_year}(?P<y3>(?:19|20)\d{{2}}))?",
@@ -964,87 +944,25 @@ def _nearest_context(text: str, position: int, vocab: _Vocab) -> tuple[int, int,
 
     Returns the absolute ``(start, end, fact_type)`` of the marker.
     """
-    markers = _context_markers(text, position, vocab)
-    if not markers:
-        return None
-    marker = _best_marker(markers, position)
-    return marker.start, marker.end, marker.fact_type
-
-
-def _context_markers(text: str, position: int, vocab: _Vocab) -> list[_Marker]:
-    """Every context marker that may introduce the date at ``position``."""
     window_start = max(0, position - _CONTEXT_WINDOW)
     window = text[window_start:position]
-    markers: list[_Marker] = []
+    best: tuple[tuple[int, int, int], int, int, str] | None = None
     for fact_type, pattern in vocab.contexts.items():
         for match in pattern.finditer(window):
-            end = window_start + match.end()
-            if position - end > _MAX_CONTEXT_GAP:
+            gap = position - (window_start + match.end())
+            if gap > _MAX_CONTEXT_GAP:
                 continue
             between = window[match.end():]
             if _SENTENCE_BREAK.search(between):
                 continue
             if vocab.blocker.search(between):
                 continue
-            markers.append(_Marker(window_start + match.start(), end, fact_type))
-    return markers
-
-
-def _cluster_markers(markers: list[_Marker]) -> list[list[_Marker]]:
-    """Group the markers that overlap: they describe the same phrase.
-
-    ``"Postular hasta el"`` contains both the deadline marker
-    ``"postular hasta"`` and the end marker ``"hasta el"``: they are one
-    phrase, and the longer (more specific) marker carries its meaning.
-    """
-    parent = list(range(len(markers)))
-
-    def find(index: int) -> int:
-        while parent[index] != index:
-            parent[index] = parent[parent[index]]
-            index = parent[index]
-        return index
-
-    for i, left in enumerate(markers):
-        for j in range(i + 1, len(markers)):
-            right = markers[j]
-            if left.start < right.end and right.start < left.end:
-                root_i, root_j = find(i), find(j)
-                if root_i != root_j:
-                    parent[root_j] = root_i
-    groups: dict[int, list[_Marker]] = {}
-    for index, marker in enumerate(markers):
-        groups.setdefault(find(index), []).append(marker)
-    return list(groups.values())
-
-
-def _best_marker(markers: list[_Marker], position: int) -> _Marker:
-    """The marker that governs the date at ``position``.
-
-    Overlapping markers are merged into one phrase; the phrase is led by its
-    longest marker (the most specific one) and reaches up to the end of the
-    last marker it contains.  The phrase closest to the date wins.
-    """
-    best: tuple[tuple[int, int, int], _Marker] | None = None
-    for group in _cluster_markers(markers):
-        representative = min(
-            group,
-            key=lambda marker: (
-                -(marker.end - marker.start),
-                _PRIORITY[marker.fact_type],
-                marker.start,
-            ),
-        )
-        reach = max(marker.end for marker in group)
-        key = (
-            position - reach,
-            -(representative.end - representative.start),
-            _PRIORITY[representative.fact_type],
-        )
-        if best is None or key < best[0]:
-            best = (key, representative)
-    assert best is not None
-    return best[1]
+            key = (gap, -(match.end() - match.start()), _PRIORITY[fact_type])
+            if best is None or key < best[0]:
+                best = (key, window_start + match.start(), window_start + match.end(), fact_type)
+    if best is None:
+        return None
+    return best[1], best[2], best[3]
 
 
 def _is_application_start(text: str, marker_start: int) -> bool:
@@ -1195,10 +1113,6 @@ def _duration_is_usable(text: str, start: int, end: int, vocab: _Vocab, *, is_ra
     right = text[end:end + _RIGHT_WINDOW]
     if vocab.experience_left.search(left) or vocab.experience_right.search(right):
         return False
-    if is_range and vocab.range_prefix.search(left):
-        # "from 3 to 6 months": the prefix introduces the interval, it
-        # does not turn the bound into a relative delay.
-        return True
     if vocab.relative_left.search(left) or vocab.relative_right.search(right):
         return False
     if vocab.duration_min.search(left) or vocab.duration_max.search(left):

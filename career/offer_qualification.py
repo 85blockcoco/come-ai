@@ -206,6 +206,7 @@ def geo_score_for(country: Any, *, preferred_countries: Any = None,
 
 def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
                   required_start_month: int | None = None,
+                  required_start_date: str | None = None,
                   allowed_contract_types: list[str] | tuple[str, ...] | None = None,
                   allowed_start_months: list[int] | tuple[int, ...] | None = None,
                   minimum_stage_duration_months: int | None = None,
@@ -238,6 +239,12 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
         allowed_start_months = [required_start_month] if required_start_month is not None else [1, 2, 3]
     if any(type(month) is not int or not 1 <= month <= 12 for month in allowed_start_months):
         raise ValueError("allowed start months must be integers from 1 to 12")
+    earliest_start: date | None = None
+    if required_start_date:
+        try:
+            earliest_start = date.fromisoformat(clean_text(required_start_date, limit=32))
+        except ValueError as error:
+            raise ValueError("required start date must use YYYY-MM-DD") from error
     if allowed_contract_types is None:
         allowed_contract_types = ["stage", "cdd", "cdi", "vie"]
     aliases = {"stage": "internship", "cdd": "fixed_term", "cdi": "permanent", "vie": "VIE"}
@@ -325,6 +332,26 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
         missing.append("mois de début")
     elif "start_month" not in evidence:
         evidence["start_month"] = FactEvidence(start_month, "source_field:start_date", start_date or "")
+
+    observed_start: date | None = parsed_start
+    if observed_start is None and evidence.get("start_month") and evidence.get("start_year"):
+        try:
+            observed_start = date(
+                int(evidence["start_year"].value),
+                int(evidence["start_month"].value),
+                1,
+            )
+        except (TypeError, ValueError):
+            observed_start = None
+    start_date_conflict_reason = None
+    if earliest_start is not None:
+        if observed_start is not None and observed_start < earliest_start:
+            start_date_conflict_reason = (
+                f"Le début annoncé ({observed_start.isoformat()}) est avant la date minimale recherchée "
+                f"({earliest_start.isoformat()})."
+            )
+        elif observed_start is None:
+            missing.append("année de début")
 
     low = offer.get("duration_min_months")
     high = offer.get("duration_max_months")
@@ -443,10 +470,15 @@ def qualify_offer(offer: dict[str, Any], *, minimum_duration_months: int = 6,
 
     reasons: list[str] = []
     target_status = "to_verify"
+    if start_date_conflict_reason:
+        target_status = "non_conforming"
+        reasons.append(start_date_conflict_reason)
     if clean_text(offer.get("source_status"), limit=40).casefold() == "closed" or \
             clean_text(offer.get("deadline_status"), limit=40).casefold() == "closed":
         target_status = "non_conforming"
         reasons.append("La source indique que l’offre est clôturée.")
+    if earliest_start is not None and observed_start is not None and observed_start < earliest_start:
+        target_status = "non_conforming"
     deadline = clean_text(offer.get("deadline_date"), limit=32)
     if deadline and target_status != "non_conforming":
         try:

@@ -37,12 +37,12 @@ conflict detection and the precision/recall evaluation of the second.
 
 from __future__ import annotations
 
-import hashlib
 import re
 import unicodedata
 import urllib.parse
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from functools import lru_cache
 from typing import Any, Callable, Mapping, Sequence
 
 #: A job record is the plain dictionary produced by the connectors.
@@ -105,6 +105,7 @@ USER_SIDE_FIELDS: frozenset[str] = USER_SCORE_FIELDS | USER_STATE_FIELDS
 # Text helpers
 # ---------------------------------------------------------------------------
 
+@lru_cache(maxsize=2_048)
 def _strip_accents(text: str) -> str:
     """Remove diacritics without changing the rest of the string."""
     return "".join(
@@ -174,6 +175,24 @@ def canonicalize_url(url: str) -> str:
     raw = _clean_text(url, 2_000)
     if not raw:
         return ""
+    # ATS connectors usually provide already-canonical HTTPS URLs. Return
+    # those directly without the comparatively expensive URL parser; unusual
+    # schemes, ports, query strings and fragments still use the full path.
+    if raw.startswith("https://") and "?" not in raw and "#" not in raw:
+        remainder = raw[8:]
+        slash = remainder.find("/")
+        hostname = remainder if slash < 0 else remainder[:slash]
+        path = "/" if slash < 0 else remainder[slash:]
+        if (
+            hostname
+            and hostname.isascii()
+            and hostname == hostname.lower()
+            and not hostname.startswith("www.")
+            and all(character.isalnum() or character in ".-" for character in hostname)
+            and (path == "/" or (not path.endswith("/") and "//" not in path))
+            and all(character.isalnum() or character in "/-._~%:@!$&'()*+,;=" for character in path)
+        ):
+            return raw if slash >= 0 else raw + "/"
     parsed = urllib.parse.urlsplit(raw)
     if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
         return raw
@@ -274,7 +293,12 @@ def company_canonical(name: Any) -> str:
     ``GmbH``, ``AG``, ``SRL``, ``SpA``, ``BV``, ``NV``, ``PLC``, ``Group``,
     ``Groupe``…) removed as whole words.
     """
-    text = _strip_accents(_company_text(name)).lower()
+    return _company_canonical_from_text(_company_text(name))
+
+
+@lru_cache(maxsize=8192)
+def _company_canonical_from_text(company_text: str) -> str:
+    text = _strip_accents(company_text).lower()
     text = _squash(re.sub(r"[^\w\s]", " ", text))
     if not text:
         return ""
@@ -430,16 +454,27 @@ def _raw_title_text(title: Any) -> str:
     """Return the lower-cased, accent-free title, punctuation preserved."""
     if isinstance(title, Mapping):
         title = title.get("title", "")
-    return _strip_accents(_clean_text(title, 300)).lower().replace("’", "'")
+    return _raw_title_text_from_value(_clean_text(title, 300))
+
+
+@lru_cache(maxsize=8192)
+def _raw_title_text_from_value(value: str) -> str:
+    return _strip_accents(value).lower().replace("’", "'")
 
 
 def _title_base(title: Any) -> str:
     """Return the lower-cased, accent-free title, punctuation turned into spaces."""
-    text = _strip_title_noise(_raw_title_text(title))
+    return _title_base_from_raw(_raw_title_text(title))
+
+
+@lru_cache(maxsize=8192)
+def _title_base_from_raw(raw: str) -> str:
+    text = _strip_title_noise(raw)
     text = re.sub(r"[^\w\s]", " ", text)
     return _squash(text)
 
 
+@lru_cache(maxsize=8192)
 def _title_canonical_from_base(base: str) -> str:
     """Return the canonical title of an already normalised title."""
     text = base
@@ -461,6 +496,7 @@ def title_canonical(title: Any) -> str:
     return _title_canonical_from_base(_title_base(title))
 
 
+@lru_cache(maxsize=8192)
 def _title_concept_from_raw(raw: str) -> str:
     """Return the business concept of an already normalised title.
 
@@ -632,6 +668,7 @@ def _specific_tokens(canonical_title: str) -> set[str]:
     }
 
 
+@lru_cache(maxsize=8192)
 def _digit_signature(title: str) -> str:
     """Return the digits carried by a title ("2027", "h1 2027"…).
 
@@ -855,7 +892,12 @@ def _canonical_city(city: Any) -> str:
     Only the city itself identifies the place: the rest never contradicts
     another source, so it is dropped instead of becoming a false conflict.
     """
-    raw = _strip_accents(_clean_text(city, 120)).lower()
+    return _canonical_city_text(_clean_text(city, 120))
+
+
+@lru_cache(maxsize=8192)
+def _canonical_city_text(city_text: str) -> str:
+    raw = _strip_accents(city_text).lower()
     raw = re.sub(r"\([^)]*\)", " ", raw)
     raw = re.sub(r"[|/]+", " ", raw)
     candidates: list[str] = []
@@ -885,7 +927,12 @@ def _canonical_country(country: Any) -> str:
     prefix, because a prefix never equals the real code of another country
     (``"Nederland"`` is not ``"ne"``).
     """
-    text = _strip_accents(_clean_text(country, 120)).lower()
+    return _canonical_country_text(_clean_text(country, 120))
+
+
+@lru_cache(maxsize=8192)
+def _canonical_country_text(country_text: str) -> str:
+    text = _strip_accents(country_text).lower()
     text = re.sub(r"\([^)]*\)", " ", text)
     text = re.sub(r"[^\w\s]", " ", text)
     text = _squash(text)
@@ -1025,6 +1072,7 @@ MANUAL_SOURCES = frozenset({"", "manual", "import manuel", "import", "unknown"})
 EMPLOYER_SOURCES = frozenset({"employer_sites", "employer_official", "employer", "careers_page"})
 
 
+@lru_cache(maxsize=256)
 def _source_key(source_name: str) -> str:
     """Return the comparable key of a source name."""
     lowered = _clean_text(source_name, 80).lower()
@@ -1123,7 +1171,10 @@ def _parse_timestamp(raw: Any) -> float | None:
 def _freshness(job: Mapping[str, Any]) -> float:
     """Return the freshness of a record (0.0 when no date is known)."""
     for field_name in FRESHNESS_FIELDS:
-        parsed = _parse_timestamp(job.get(field_name, ""))
+        value = job.get(field_name, "")
+        if value is None or (isinstance(value, str) and not value):
+            continue
+        parsed = _parse_timestamp(value)
         if parsed is not None:
             return parsed
     return 0.0
@@ -1151,7 +1202,6 @@ class _Record:
     digits: str
     freshness: float
     trust: str
-    identity: str
 
     @property
     def priority(self) -> int:
@@ -1177,20 +1227,6 @@ def _external_identity(job: Mapping[str, Any], source_name: str, source_id: str)
     return "", ""
 
 
-def _record_identity(record: _Record) -> str:
-    """Return a stable identity of a record (used in the audit report)."""
-    if record.external_id:
-        return f"ext:{record.external_id}"
-    if record.source_id:
-        return f"source:{record.source_name}:{record.source_id}"
-    if record.canonical_url:
-        return f"url:{record.canonical_url}"
-    digest = hashlib.sha1(
-        f"{record.company}|{record.title}|{record.city}".encode("utf-8")
-    ).hexdigest()[:16]
-    return f"hash:{digest}"
-
-
 def _build_record(index: int, job: Mapping[str, Any]) -> _Record:
     """Build the deduplication record of a job dictionary."""
     source_name = _clean_text(job.get("source_name"), 80)
@@ -1199,7 +1235,8 @@ def _build_record(index: int, job: Mapping[str, Any]) -> _Record:
     raw_title = _clean_text(job.get("title"), 300)
     base = _title_base(raw_title)
     declared_level = _declared_role_level(job)
-    record = _Record(
+    canonical_title = _title_canonical_from_base(base)
+    return _Record(
         index=index,
         job=job,
         source_name=source_name,
@@ -1210,17 +1247,15 @@ def _build_record(index: int, job: Mapping[str, Any]) -> _Record:
         apply_url=canonicalize_url(job.get("apply_url") or ""),
         company=company_canonical(job.get("company")),
         raw_title=raw_title,
-        title=_title_canonical_from_base(base),
+        title=canonical_title,
         concept=_title_concept_from_raw(_raw_title_text(raw_title)),
         level=declared_level or _role_level_from_base(base),
         city=_canonical_city(job.get("city")),
         country=_canonical_country(job.get("country")),
-        digits=_digit_signature(_title_canonical_from_base(base)),
+        digits=_digit_signature(canonical_title),
         freshness=_freshness(job),
         trust=_record_trust(job),
-        identity="",
     )
-    return replace(record, identity=_record_identity(record))
 
 
 # ---------------------------------------------------------------------------
@@ -1392,7 +1427,11 @@ def _match_records(
 
     # 6. Identifiers and links: they prove the two records describe the
     #    same posting.  A contradiction on the city or on the dates stays
-    #    visible in the group, it does not refuse the merge.
+    #    visible in the group, it does not refuse the merge.  The clustering
+    #    pre-pass separately avoids collapsing two different IDs on one board.
+    # Distinct identifiers from the same board are distinct postings.  A
+    # board often publishes several editions of the same internship title;
+    # title/company/location similarity alone must not collapse them.
     proofs: list[str] = []
     if shared_external_id or shared_source_id:
         proofs.append(REASON_EXTERNAL_ID)
@@ -1607,24 +1646,35 @@ def _cluster_records(
                     records[right].city, records[right].country,
                 ):
                     continue
+                if (
+                    records[left].source_name
+                    and _source_key(records[left].source_name) == _source_key(records[right].source_name)
+                    and records[left].source_id and records[right].source_id
+                    and records[left].source_id != records[right].source_id
+                ):
+                    continue
                 merge(left, right, "identical_title")
-        for left, right in _candidate_pairs(indexes, records):
-            if union.find(left) == union.find(right):
-                continue
-            if records[left].title == records[right].title:
-                # Already handled by the pre-pass above.
-                continue
-            if not _same_location(
-                records[left].city, records[left].country,
-                records[right].city, records[right].country,
-            ):
-                continue
-            if not _titles_can_match(records[left], records[right]):
-                continue
-            decision = _match_records(records[left], records[right], text_similarity)
-            if not decision["matches"]:
-                continue
-            merge(left, right, decision["reasons"][0])
+        # The exact-title pre-pass above has already resolved every pair when
+        # this bucket contains only one canonical title. Building blocking
+        # postings in that case repeats work without adding any candidates.
+        if len(by_title) > 1:
+            for left, right in _candidate_pairs(indexes, records):
+                if union.find(left) == union.find(right):
+                    continue
+                if records[left].title == records[right].title:
+                    # Already handled by the pre-pass above.
+                    continue
+                if not _same_location(
+                    records[left].city, records[left].country,
+                    records[right].city, records[right].country,
+                ):
+                    continue
+                if not _titles_can_match(records[left], records[right]):
+                    continue
+                decision = _match_records(records[left], records[right], text_similarity)
+                if not decision["matches"]:
+                    continue
+                merge(left, right, decision["reasons"][0])
 
     clusters: dict[int, list[int]] = {}
     for record in records:
@@ -1679,6 +1729,21 @@ def _record_weight(record: Mapping[str, Any]) -> tuple[int, int, float, int, int
     verified = 1 if record.get("source_verified") else 0
     completeness = _record_completeness(record)
     return (trust, tier, freshness, priority, verified, completeness)
+
+
+def _built_record_weight(record: _Record) -> tuple[int, int, float, int, int, int]:
+    """Elect a built record using facts already computed during normalization."""
+    tier = _source_tier(record.source_name, record.job)
+    verified = 1 if record.job.get("source_verified") else 0
+    completeness = _record_completeness(record.job)
+    return (
+        TRUST_RANK.get(record.trust, TRUST_RANK["missing"]),
+        tier,
+        record.freshness,
+        record.priority,
+        verified,
+        completeness,
+    )
 
 
 def choose_best(records: Sequence[Mapping[str, Any]]) -> Mapping[str, Any]:
@@ -1767,8 +1832,8 @@ def _build_groups(
     groups: list[dict[str, Any]] = []
     for indexes in clusters:
         members = [records[index] for index in indexes]
-        best = choose_best([member.job for member in members])
-        best_record = next(member for member in members if member.job is best)
+        best_record = max(members, key=_built_record_weight)
+        best = best_record.job
         provenances = [
             _provenance(member.job, member.priority, member.index == best_record.index)
             for member in members
@@ -1782,19 +1847,13 @@ def _build_groups(
             if name and name not in merged_from:
                 merged_from.append(name)
         cluster_reasons: list[str] = []
+        # ``merge`` records the reason at the moment a pair joins the union.
+        # Re-evaluating every pair here was quadratic inside each cluster and
+        # could produce a different audit under expensive similarity hooks.
         for index in indexes:
             for reason in reasons.get(index, []):
                 if reason not in cluster_reasons:
                     cluster_reasons.append(reason)
-        for left_index in indexes:
-            for right_index in indexes:
-                if left_index >= right_index:
-                    continue
-                decision = _match_records(records[left_index], records[right_index], text_similarity)
-                if decision["matches"]:
-                    for reason in decision["reasons"]:
-                        if reason not in cluster_reasons:
-                            cluster_reasons.append(reason)
         groups.append({
             "dedup_id": _dedup_id(best),
             "merged": len(members) > 1,
