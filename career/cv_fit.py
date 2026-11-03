@@ -373,16 +373,6 @@ def derive_pipeline_stage(job_id: str, context: Any) -> PipelineStage:
     selected = context.get("selected_variant") or {}
     sprint = context.get("sprint_queue") or []
     jobs = context.get("jobs") or {}
-def derive_pipeline_stage(job_id: str, context: Any) -> PipelineStage:
-    """Derive the furthest evidenced stage without writing pipeline state."""
-
-    context = context if isinstance(context, dict) else {}
-    applications = context.get("applications") or []
-    drafts = context.get("application_drafts") or []
-    prep_cache = context.get("prep_cache") or set()
-    selected = context.get("selected_variant") or {}
-    sprint = context.get("sprint_queue") or []
-    jobs = context.get("jobs") or {}
     application_job_ids = context.get("application_job_ids")
     has_application = (
         job_id in application_job_ids
@@ -401,22 +391,6 @@ def derive_pipeline_stage(job_id: str, context: Any) -> PipelineStage:
     if has_application and has_draft:
         return PipelineStage.TRACKING_CREATED
     if has_draft:
-        return PipelineStage.KIT_GENERATED
-    if job_id in prep_cache and selected.get(job_id):
-        return PipelineStage.VARIANT_SELECTED
-    if job_id in prep_cache:
-        return PipelineStage.PREP_ANALYZED
-    sprint_job_ids = context.get("sprint_job_ids")
-    if (
-        job_id in sprint_job_ids
-        if isinstance(sprint_job_ids, (set, frozenset))
-        else any(_text(item.get("job_id")) == job_id for item in sprint)
-    ):
-        return PipelineStage.SPRINT_QUEUED
-    job = jobs.get(job_id) if isinstance(jobs, dict) else None
-    if isinstance(job, dict) and job.get("qualification_facts_json"):
-        return PipelineStage.QUALIFIED
-    return PipelineStage.DISCOVERED
         return PipelineStage.KIT_GENERATED
     if job_id in prep_cache and selected.get(job_id):
         return PipelineStage.VARIANT_SELECTED
