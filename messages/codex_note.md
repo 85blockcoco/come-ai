@@ -92,7 +92,7 @@
 ## 1. Livré (avec preuve)
 | Commit | Contenu (1 ligne) | Fichiers | Tests verts (nom test) | Durée |
 |---|---|---|---|---|
-| candidat en cours | Ingestion PDF/XLSX, normalisation TOPIC, quiz/SRS par section et écran desktop Réviser VC | `career/ingest.py`, `career/quiz.py`, `career/srs.py`, `desktop_static/**`, tests NAGe | 196 tests ciblés; Ruff, node-check, diff-check verts | pytest 11,58 s |
+| `8fc0556d55969abaa4003323b43d89ef6663789c` | Ingestion PDF/XLSX, normalisation TOPIC, quiz/SRS par section et écran desktop Réviser VC | `career/ingest.py`, `career/quiz.py`, `career/srs.py`, `desktop_static/**`, tests NAGe | 196 tests ciblés; Ruff, node-check, diff-check verts | pytest 11,58 s |
 
 ## 2. En cours maintenant
 | Tâche | % fait | Temps passé | Temps restant estimé | Blocage ? |
@@ -108,8 +108,8 @@
 | UI Réviser VC | absente du desktop | navigation, fiche PDF, tuteur, recherche, quiz, plan | CUA sur `/app#learning` |
 
 ## 4. État 24 h de ta prod
-- commits aujourd'hui : à mesurer au commit de livraison
-- lignes ajoutées / supprimées : à mesurer au commit de livraison
+- commits aujourd'hui : 10 (`git rev-list --count --since='2026-11-03 00:00:00 +0100' HEAD`)
+- lignes ajoutées / supprimées : 384 / 19 (`git show --stat 8fc0556`)
 - tests verts : 196 tests ciblés NAGe/VC/academics/CLI; aucune suite complète lancée
 
 ## 5. Ce que j'attends d'OpenCode
