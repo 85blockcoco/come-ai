@@ -41,4 +41,4 @@ Le corpus local actuellement indexé contient 29/29 fichiers (26 PDF et 3 classe
 
 ## Publication
 
-Cette livraison est destinée à la branche candidate uniquement. `main` et `/Users/comedelavenne/NAGE-release` ne sont pas modifiés. Le SHA du commit et la vérification distante seront ajoutés au rapport après le commit et le push.
+Cette livraison est destinée à la branche candidate uniquement. `main` et `/Users/comedelavenne/NAGE-release` ne sont pas modifiés. Commit publié : `689115099fd16f01e0c49847d3b0d7eb05de1895`; la référence distante `origin/codex/vc-mastery-20261103` a été vérifiée sur le même SHA.
