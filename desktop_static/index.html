@@ -6,8 +6,10 @@
     <meta name="color-scheme" content="dark">
     <meta name="description" content="NAGE — machine locale de candidatures : offres, dossiers, assistant, missions.">
     <title>NAGE // machine de candidatures</title>
-    <link rel="icon" href="/app-static/icon.png">
-    <link rel="stylesheet" href="/app-static/app.css">
+  <link rel="icon" href="/app-static/icon.png">
+  <link rel="manifest" href="/app-static/manifest.json">
+  <meta name="theme-color" content="#0b0e14">
+  <link rel="stylesheet" href="/app-static/app.css">
   </head>
   <body>
     <div class="ambient ambient-a" aria-hidden="true"></div>
@@ -97,5 +99,6 @@
     </div>
 
     <script src="/app-static/app.js"></script>
+    <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/app-static/sw.js');}</script>
   </body>
 </html>

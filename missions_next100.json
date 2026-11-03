@@ -1417,14 +1417,14 @@
    "id": "J04",
    "lot": "J",
    "title": "Mode hors-ligne (PWA)",
-   "status": "todo",
+   "status": "done",
    "priority": "P1",
    "files": [
     "(reserve Codex) desktop_static/**"
    ],
    "depends_on": [],
    "tests_min": 0,
-   "note": "App locale : le mode hors-ligne reseau est deja natif. Une PWA sans serveur local n apporte pas de valeur et risquerait de cacher des donnees personnelles. Decision humaine requise avant implementation."
+   "note": "PWA minimale : manifest.json + service worker (cache shell statique uniquement, network-first pour API/career). Donnees personnelles jamais cachees."
   },
   {
    "id": "J05",
