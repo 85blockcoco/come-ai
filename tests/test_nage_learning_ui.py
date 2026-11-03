@@ -19,6 +19,7 @@ def test_desktop_learning_surface_is_wired_to_local_learning_routes() -> None:
         '"/career/coverage"', '"/career/exam/start"', '"/career/exam/submit"',
         '"/career/srs/review"', 'rating', 'Générer / compléter les cartes',
         'Progression vers la maîtrise', 'Télécharger la fiche PDF', 'plan/pdf',
+        'Notions du sujet 2025 vues en quiz', 'questions distinctes', 'exam_objectives',
         'examTimer', 'Encore', 'Difficile', 'Facile', '"/career/ingest"',
         'Réessayer l’import local', 'Couverture des supports',
         'Voir l’extrait', 'cite.excerpt',

@@ -11,7 +11,7 @@ Audit du document local `VC final exam 2025 solutions.pdf` (8 pages), comparé a
 
 Ce sujet est un repère historique : il décrit un examen de 90 minutes et 60 points, mais ne prouve pas que l’épreuve à venir aura la même forme. Il ne justifie aucune promesse de note.
 
-Le précédent rapport de maîtrise VC décrit 29 sources locales, 1 499 unités avec texte et deux unités sans texte. Ces chiffres sont rapportés comme l’état de l’index lors de ce contrôle précédent; cette mission n’a pas ouvert ni modifié la base locale d’apprentissage. Le nombre d’unités indexées ne suffit pas à démontrer une couverture des notions.
+Une nouvelle extraction isolée du dossier de cours, sans ouvrir ni modifier la base locale d’apprentissage, a trouvé **29 fichiers (26 PDF, 3 XLSX)**. Le parseur courant a accepté 28 fichiers : **1 013 pages/feuilles et 997 unités indexées**. Un PDF de 56 MiB dépasse la limite courante de 50 MiB; il n’a donc pas été inclus. Un examen PEVC 2024 numérisé compte 14 pages, mais son texte extrait est vide. Sa couverture contient un identifiant étudiant : elle n’a pas été recopiée, OCRisée ni ajoutée au dépôt. Un PDF de rapport supplémentaire contient aussi une page sans texte extractible. Le précédent rapport annonçant 29/29 fichiers, 1 501 pages/feuilles et 1 499 unités textuelles n’est pas reproductible avec cette extraction; sa base locale n’a pas été consultée.
 
 ## Barème observé
 
@@ -21,6 +21,8 @@ Le précédent rapport de maîtrise VC décrit 29 sources locales, 1 499 unités
 | B — Calculs | Q16: 3; Q17: 3; Q18: 4; Q19: 5 | 15 | Résultats finaux et certaines étapes de calcul. Aucun barème détaillé de points partiels par étape n’est fourni. |
 | C — Cas | Q20: 15; Q21: 15 | 30 | Tableaux et conclusions attendues. Les points de chaque sous-partie et une grille analytique de crédit partiel ne sont pas indiqués. |
 | **Total** |  | **60** | L’épreuve est à dominante calcul/cas : 45/60 points ne sont pas des QCM. |
+
+La matrice ci-dessous décrit l’état de couverture audité au SHA `9ae3927`; le lot 2 est présenté séparément après elle.
 
 ## Matrice des 21 questions
 
@@ -50,20 +52,32 @@ Le précédent rapport de maîtrise VC décrit 29 sources locales, 1 499 unités
 
 ## Lecture produit à partir du code
 
-- `career/quiz.py` contient 15 questions de départ réparties 2/2/7/2/2 sur Topic 1–5. Il n’existe pas d’identifiant d’objectif d’examen reliant ces questions à Q1–Q21. La maîtrise dépend du nombre de tentatives et du score; elle ne prouve donc pas la couverture de chaque notion testée.
+- Avant le lot 2, `career/quiz.py` contenait 15 questions de départ réparties 2/2/7/2/2 sur Topic 1–5, sans identifiant d’objectif d’examen.
 - `career/exam.py` crée un examen à choix multiples depuis la banque de quiz, calcule `bonnes réponses / total` et produit des corrections avec explications/citations. Il n’accepte pas de réponse libre, n’attribue pas de points partiels et ne représente pas le barème 15/15/30 de 2025.
 - L’interface envoie actuellement six questions pour 30 minutes (`desktop_static/app.js`). Le sujet de référence faisait 90 minutes pour 60 points. Cette différence doit être visible pour l’étudiant afin qu’un petit quiz ne soit pas présenté comme une simulation fidèle.
 
+## Lot 2 — couverture de quiz alignée au sujet passé
+
+Implémenté sur la branche candidate; les validations ont été rejouées après le dernier changement de code. Le SHA de publication sera ajouté après le commit/push :
+
+- La banque passe à **34 questions** réparties Topic 1–5 : 4/2/15/9/4.
+- **27 identifiants d’objectifs** relient les notions du sujet 2025 et les sous-étapes d’exercices aux questions d’entraînement. Chaque question taguée garde une explication et une recherche de citation locale.
+- L’API de quiz renvoie ces références. Le tableau de bord donne une couverture séparée « notions du sujet 2025 vues en quiz »; l’interface précise que cela ne signifie ni maîtrise ni simulation des cas libres.
+- La maîtrise compte désormais les questions distinctes de la banque actuelle auxquelles l’étudiant a répondu, avec le seuil de justesse de 80 %. Répéter une seule réponse ne suffit pas à valider un chapitre. Les questions encore jamais vues passent avant les répétitions.
+- La base SQLite existante migre la colonne des tags avec valeur vide par défaut; un test vérifie que les lignes précédentes sont conservées.
+- Un index temporaire du corpus autorisé a servi **34/34 questions avec une citation contenant source et page**. Cette mesure prouve la disponibilité d’une citation, pas encore la pertinence de chaque extrait ni l’exhaustivité des pages non indexées.
+- Tests ciblés rejoués : **17 passed en 2,85 s** (`tests/test_nage_learning.py`, `tests/test_nage_learning_ui.py`); Ruff ciblé : `All checks passed`; `node --check desktop_static/app.js` et `git diff --check` : réussite.
+
 ## Prochaines missions, dans l’ordre
 
-1. **Matrice de couverture exploitable** : donner à chaque notion une clé stable (ex. `VC25-Q14`), ses prérequis, ses pages de source et son statut dans quiz/exercices. Faire porter la maîtrise sur les objectifs effectivement vus, pas uniquement sur un compteur de tentatives. Test d’acceptation : chaque Q1–Q21 a un objectif relié à une source et à au moins une activité, ou est explicitement marqué non couvert.
-2. **Exercices chiffrés de la partie B** : commencer par Q16–Q19; réponses par étapes avec unités, formules et validation de calculs intermédiaires. N’attribuer des points partiels qu’avec un barème défini et identifié comme pédagogique si le corrigé officiel ne le donne pas.
-3. **Cas de la partie C** : exercices guidés Q20 et Q21 avec scénarios séparés, tableau de résultats et explications. Distinguer clairement la grille officielle, quand elle existe, d’une grille d’entraînement conçue par NAGe.
-4. **Recette d’apprentissage réelle** : rejouer du début à la fin sur un profil de test vierge; vérifier citations, points faibles, ordre des étapes, minuterie, correction et persistance après redémarrage. Valider ensuite l’instance démarrée par le lanceur bureau avant de parler de livraison finale.
+1. **Réponses libres et barème pédagogique** : mettre en pratique Q16–Q19 par étapes, avec unités/formules et validation des calculs intermédiaires. Ne parler de points partiels que pour une grille clairement identifiée comme pédagogique, car le corrigé officiel ne donne pas de barème détaillé.
+2. **Cas de la partie C** : transformer Q20 et Q21 en cas guidés avec scénarios séparés, tableau de payoffs et comparaison justifiée. Garder distincte la grille officielle de la grille d’entraînement NAGe.
+3. **Audit des unités non extraites** : déterminer si le rapport de 56 MiB contient des notions utiles, définir une prise en charge bornée sans retirer la limite de taille, et examiner les pages scannées sans traiter l’identifiant de couverture comme contenu pédagogique. Tester les OCR sur une copie temporaire locale, jamais dans le dépôt.
+4. **Recette d’apprentissage réelle** : vérifier citations pertinentes, points faibles, ordre des étapes, minuterie, correction et persistance après redémarrage sur un profil de test vierge; puis vérifier l’instance lancée par l’icône du bureau.
 
 ## Limites établies
 
-- L’exhaustivité pédagogique de toutes les pages, tableaux, formules et images du corpus n’est pas prouvée par cet audit du sujet 2025. Les unités sans texte rapportées dans l’audit précédent exigent une inspection visuelle/OCR ciblée.
+- L’exhaustivité pédagogique de toutes les pages, tableaux, formules et images du corpus n’est pas prouvée. Le rapport de 56 MiB et les 14 pages scannées restent hors de l’index texte de cette extraction.
 - Le corrigé ne fournit pas de grille explicite de points par étape pour Q16–Q21. Une correction détaillée peut être construite à partir des étapes visibles, mais le crédit partiel doit être étiqueté « barème pédagogique NAGe » tant qu’un barème officiel n’est pas disponible.
 - Le sujet 2025 n’est pas une garantie du sujet futur; il sert de base d’entraînement empirique, pas de promesse de couverture de tout ce qui peut tomber.
 - Aucun fichier de cours, classeur original, base de progression locale ou correction n’a été modifié. Aucun contenu personnel n’est ajouté au dépôt.

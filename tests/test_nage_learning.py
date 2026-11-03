@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import json
+import sqlite3
 from datetime import date, datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 
@@ -14,7 +15,7 @@ from career.exam import ExamEngine
 from career.ingest import CorpusIndex
 from career.learning_router import create_learning_router
 from career.plan import build_plan
-from career.quiz import QuizEngine
+from career.quiz import QuizEngine, _QUESTION_BANK
 from career.srs import SRSStore
 from career.summary import build_summary, export_plan_pdf, export_summary_pdf
 from career.tutor import TutorEngine
@@ -29,6 +30,25 @@ def _pdf(path: Path) -> None:
     document.drawString(60, 780, "TOPIC 4 — Term sheets")
     document.drawString(60, 750, "A term sheet describes valuation, governance and liquidation preference.")
     document.save()
+
+
+def _exam_bank_fixture(corpus: Path) -> None:
+    (corpus / "Topic_3_exam_bank.pdf.txt").write_text(
+        "=== PAGE 1 ===\n"
+        "TOPIC 3 VC valuation. VC ownership 54% CCM 1.4^5 5.378 post-money valuation 9.297. "
+        "CCM 13.8 IRR 13.8^(1/5) 69%. Startup 5m founder shares VC invests 2m 8m post-money valuation "
+        "20% post-money options pool founders 55%. Miller Venture Capital 5 million investment 8 years "
+        "1 million convertible preferred 2 common shares 15 million shares IPO 3 million 11%. "
+        "Miller 2m common shares stock $25 50m cash on cash 10x IRR 8 years 33%. "
+        "Fully diluted stock options assumed converted common shares. Venture capital valuation model "
+        "investment time to exit exit value hurdle rate. Pre-money valuation lower than post-money "
+        "investment. Venture capital method required ownership liquidation preference exit value time hurdle. "
+        "Series C pre-money 1800 Series B target multiple 4 post-money 450. Series C 2000 exit 6000 founders "
+        "fully diluted ownership 47 percent. Magical Genie founder expected ownership expected final wealth "
+        "VW XY scenario probability 75% 5.625 5.333. XY founder expected ownership 56.25 percent scenario "
+        "one 75 percent VC final exam 2025.",
+        encoding="utf-8",
+    )
 
 
 def test_ingestion_preserves_page_section_and_local_manifest(tmp_path: Path) -> None:
@@ -150,17 +170,109 @@ def test_quiz_exposes_unique_cited_options_and_answer_feedback(tmp_path: Path) -
     index = CorpusIndex(tmp_path / "index.sqlite3", corpus_root=corpus)
     index.ingest_directory()
     quiz = QuizEngine(index, tmp_path / "quiz.sqlite3")
+    first_question = quiz.next_question("TOPIC 3")
+    assert first_question is not None
+    quiz.answer(first_question.question_id, first_question.correct_index)
     question = quiz.next_question("TOPIC 3")
     assert question is not None
     assert len(question.options) == len(set(question.options)) == 4
     assert "correct_index" not in question.public()
+    assert question.public()["exam_tags"] == ["VC25-Q16"]
     assert question.citation["source"] == "vc-course.pdf"
     result = quiz.answer(question.question_id, question.correct_index)
     assert result["correct"] is True
     assert result["mastery"]["mastered"] is False
-    assert result["mastery"]["attempts_required"] == 7
+    assert result["mastery"]["attempts_required"] == len(_QUESTION_BANK["TOPIC 3"])
+    assert result["exam_tags"] == ["VC25-Q16"]
     assert result["correct_answer"] == question.options[question.correct_index]
     assert result["explanation"]
+    quiz.close()
+    index.close()
+
+
+def test_quiz_bank_maps_all_2025_exam_objectives() -> None:
+    tags = {tag for seeds in _QUESTION_BANK.values() for seed in seeds for tag in seed.exam_tags}
+    expected = {
+        *(f"VC25-Q{number:02d}" for number in range(1, 18)),
+        "VC25-Q17-SHARES",
+        "VC25-Q18-OWNERSHIP",
+        "VC25-Q18-IRR",
+        "VC25-Q19-ROUND-VALUATION",
+        "VC25-Q19-EXIT-OWNERSHIP",
+        "VC25-Q20-A",
+        "VC25-Q20-B",
+        "VC25-Q20-C",
+        "VC25-Q21-WEALTH",
+        "VC25-Q21-OWNERSHIP",
+    }
+    assert tags == expected
+    assert all(seed.citation_query and seed.explanation for seeds in _QUESTION_BANK.values() for seed in seeds)
+
+
+def test_quiz_mastery_requires_distinct_current_questions_and_reports_exam_coverage(tmp_path: Path) -> None:
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    _pdf(corpus / "vc-course.pdf")
+    _exam_bank_fixture(corpus)
+    index = CorpusIndex(tmp_path / "index.sqlite3", corpus_root=corpus)
+    index.ingest_directory()
+    quiz = QuizEngine(index, tmp_path / "quiz.sqlite3")
+
+    first = quiz.next_question("TOPIC 3")
+    assert first is not None
+    required = len(_QUESTION_BANK["TOPIC 3"])
+    for _ in range(required):
+        quiz.answer(first.question_id, first.correct_index)
+    repeated = quiz.mastery("TOPIC 3")
+    assert repeated["attempts"] == required
+    assert repeated["covered"] == 1
+    assert repeated["mastered"] is False
+
+    next_question = quiz.next_question("TOPIC 3")
+    assert next_question is not None
+    assert next_question.prompt != first.prompt
+    quiz.answer(next_question.question_id, next_question.correct_index)
+    assert quiz.mastery("TOPIC 3")["covered"] == 2
+
+    while quiz.mastery("TOPIC 3")["covered"] < required:
+        question = quiz.next_question("TOPIC 3")
+        assert question is not None
+        quiz.answer(question.question_id, question.correct_index)
+    mastery = quiz.mastery("TOPIC 3")
+    assert mastery["covered"] == required
+    assert mastery["mastered"] is True
+    dashboard = quiz.dashboard(["TOPIC 3"])
+    assert dashboard["exam_objectives"]["covered"] > 0
+    assert dashboard["exam_objectives"]["total"] == len({tag for seed in _QUESTION_BANK["TOPIC 3"] for tag in seed.exam_tags})
+    quiz.close()
+    index.close()
+
+
+def test_quiz_schema_migrates_legacy_questions_without_losing_rows(tmp_path: Path) -> None:
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    _pdf(corpus / "vc-course.pdf")
+    index = CorpusIndex(tmp_path / "index.sqlite3", corpus_root=corpus)
+    legacy_db = tmp_path / "legacy-quiz.sqlite3"
+    connection = sqlite3.connect(legacy_db)
+    connection.execute("""CREATE TABLE quiz_questions (
+        question_id TEXT PRIMARY KEY, chapter TEXT NOT NULL, prompt TEXT NOT NULL, options_json TEXT NOT NULL,
+        correct_index INTEGER NOT NULL, difficulty TEXT NOT NULL, citation_json TEXT NOT NULL
+    )""")
+    connection.execute("INSERT INTO quiz_questions VALUES(?,?,?,?,?,?,?)", ("legacy", "TOPIC 3", "legacy prompt", "[]", 0, "foundation", "{}"))
+    connection.execute("""CREATE TABLE quiz_attempts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, question_id TEXT NOT NULL, chapter TEXT NOT NULL,
+        correct INTEGER NOT NULL, difficulty TEXT NOT NULL
+    )""")
+    connection.commit()
+    connection.close()
+
+    quiz = QuizEngine(index, legacy_db)
+    columns = {row[1] for row in quiz._conn.execute("PRAGMA table_info(quiz_questions)")}
+    legacy = quiz._conn.execute("SELECT * FROM quiz_questions WHERE question_id='legacy'").fetchone()
+    assert {"explanation", "exam_tags_json"}.issubset(columns)
+    assert legacy["prompt"] == "legacy prompt"
+    assert legacy["exam_tags_json"] == "[]"
     quiz.close()
     index.close()
 
@@ -225,6 +337,7 @@ def test_exam_saves_answers_enforces_membership_and_returns_idempotent_correctio
     corpus = tmp_path / "corpus"
     corpus.mkdir()
     _pdf(corpus / "vc-course.pdf")
+    _exam_bank_fixture(corpus)
     (corpus / "Topic_3_calculations.pdf.txt").write_text(
         "=== PAGE 1 ===\nVC method post-money valuation ownership. A 13.8x CCM over five years implies an IRR of about 69 percent. A 40 percent hurdle rate uses 1.4 to the power of five.",
         encoding="utf-8",
@@ -233,7 +346,7 @@ def test_exam_saves_answers_enforces_membership_and_returns_idempotent_correctio
     index.ingest_directory()
     quiz = QuizEngine(index, tmp_path / "quiz.sqlite3")
     engine = ExamEngine(quiz)
-    for attempt in range(7):
+    for attempt in range(len(_QUESTION_BANK["TOPIC 3"])):
         practice = quiz.next_question("TOPIC 3", sequence=attempt)
         assert practice is not None
         quiz.answer(practice.question_id, practice.correct_index)
@@ -253,7 +366,7 @@ def test_exam_saves_answers_enforces_membership_and_returns_idempotent_correctio
     assert engine.stats()["last_score"] == 1.0
     repeated = engine.submit(exam["exam_id"])
     assert repeated["score"] == 1.0
-    assert repeated["corrections"][0]["citation"]["source"] in {"vc-course.pdf", "Topic_3_calculations.pdf"}
+    assert repeated["corrections"][0]["citation"]["source"] in {"vc-course.pdf", "Topic_3_calculations.pdf", "Topic_3_exam_bank.pdf"}
     expired = engine.start(size=1, chapters=["TOPIC 3"], duration_minutes=5)
     expired_question = expired["questions"][0]
     quiz._conn.execute("UPDATE exam_sessions SET expires_at='2000-01-01T00:00:00+00:00' WHERE exam_id=?", (expired["exam_id"],))

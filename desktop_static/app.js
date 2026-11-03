@@ -550,9 +550,10 @@
     const revisionProgress = cardsTotal ? Math.min(100, Math.round(cardsReviewed / cardsTotal * 100)) : 0;
     const understoodKey = `nage-learning-understood:${l.selectedChapter}`;
     const understood = localStorage.getItem(understoodKey) === "true";
-    const exerciseTarget = Math.max(1, Number(selectedProgress.attempts_required || 5));
+    const exerciseTarget = Math.max(1, Number(selectedProgress.coverage_required || selectedProgress.attempts_required || 5));
+    const exerciseCovered = Number(selectedProgress.covered ?? selectedProgress.attempts ?? 0);
     const exerciseAttempts = Number(selectedProgress.attempts || 0);
-    const exerciseProgress = Math.min(100, Math.round(exerciseAttempts / exerciseTarget * 100));
+    const exerciseProgress = Math.min(100, Math.round(exerciseCovered / exerciseTarget * 100));
     const totalChapters = Number(d.total_count || learningTopics.length);
     const masteredChapters = Number(d.mastered_count || 0);
     const examReadiness = totalChapters ? Math.round(masteredChapters / totalChapters * 100) : 0;
@@ -568,7 +569,7 @@
       el("div", { class: "learning-step-grid" }, ...[
         { title: "1. Réviser", progress: revisionProgress, detail: cardsTotal ? `${cardsReviewed}/${cardsTotal} cartes de ce chapitre notées.` : "Génère des cartes sourcées pour commencer.", label: "Voir les cartes", target: "study-revision" },
         { title: "2. Apprendre", progress: understood ? 100 : 0, detail: "Lis la fiche du cours, demande une explication, puis fais ton auto-évaluation.", label: understood ? "À revoir" : "J’ai compris", toggle: true },
-        { title: "3. S’exercer", progress: exerciseProgress, detail: `${Math.min(exerciseAttempts, exerciseTarget)}/${exerciseTarget} questions du chapitre · ${Number(selectedProgress.correct || 0)}/${exerciseAttempts || 0} justes.`, label: "Commencer un quiz", target: "study-exercises" },
+        { title: "3. S’exercer", progress: exerciseProgress, detail: `${Math.min(exerciseCovered, exerciseTarget)}/${exerciseTarget} questions distinctes vues · ${Number(selectedProgress.correct || 0)}/${exerciseAttempts || 0} justes.`, label: "Commencer un quiz", target: "study-exercises" },
         { title: "4. Examen blanc", progress: examProgress, detail: completedExams ? `Examen(s) terminé(s) : ${completedExams} · dernier score ${Math.round(Number(d.exam?.last_score || 0) * 100)}%.` : `${masteredChapters}/${totalChapters} chapitres à 80 % pour déverrouiller l’examen complet.`, label: completedExams ? "Revoir l’examen" : "Voir les conditions", target: "study-exam" },
       ].map((step, index) => el("article", { class: "learning-step", "data-current": String(index === currentStep), "aria-current": index === currentStep ? "step" : null },
         el("div", { class: "learning-step-head" }, el("strong", {}, step.title), el("span", {}, `${step.progress}%`)),
@@ -587,16 +588,24 @@
     });
     const notionCards = (d.notions || []).map((item) => {
       const accuracy = item.score_percent ?? Math.round((item.score || 0) * 100);
-      const required = Math.max(1, Number(item.attempts_required || 2));
-      const value = Math.round(accuracy * Math.min(1, Number(item.attempts || 0) / required));
+      const required = Math.max(1, Number(item.coverage_required || item.attempts_required || 2));
+      const covered = Number(item.covered ?? item.attempts ?? 0);
+      const value = Math.round(accuracy * Math.min(1, covered / required));
       return el("article", { class: "learning-chapter" },
         el("div", { class: "learning-chapter-head" }, el("strong", {}, item.chapter), el("b", {}, `${value}%`)),
         el("progress", { max: "100", value: String(value), "aria-label": `Progression vers la maîtrise ${item.chapter}` }),
         el("div", { class: "learning-chapter-foot" }, el("span", {}, `${item.correct || 0}/${item.attempts || 0} justes · ${accuracy}%`), el("span", { class: item.mastered ? "status-good" : "status-low" }, item.mastered ? "Maîtrisé" : "À renforcer")),
-        el("small", {}, `${item.attempts || 0}/${required} quiz · ${item.due || 0} cartes dues · ${item.total || 0} créées`));
+        el("small", {}, `${covered}/${required} questions distinctes · ${item.attempts || 0} réponses · ${item.due || 0} cartes dues`));
     });
     const coverage = l.coverage || {};
     const coveragePct = Math.round(Number(coverage.source_coverage || 0) * 100);
+    const examObjectives = d.exam_objectives || {};
+    const examObjectivesPct = Math.max(0, Math.min(100, Number(examObjectives.percent || 0)));
+    const examObjectivePanel = el("div", { class: "card coverage-panel" },
+      el("div", { class: "coverage-head" }, el("strong", {}, "Notions du sujet 2025 vues en quiz"), el("span", { class: "hint" }, `${examObjectives.covered || 0}/${examObjectives.total || 0}`)),
+      el("progress", { max: "100", value: String(examObjectivesPct), "aria-label": "Notions repérées du sujet VC 2025 vues en quiz" }),
+      el("small", {}, "Il s’agit d’un suivi de couverture du sujet historique, pas d’une maîtrise ni d’une simulation des cas libres."),
+      (examObjectives.missing_ids || []).length ? el("details", { class: "coverage-details" }, el("summary", {}, "Voir les objectifs encore à pratiquer"), el("p", {}, examObjectives.missing_ids.map((tag) => tag.replace("VC25-Q", "Q")).join(" · "))) : null);
     const citationDetails = (cite) => cite ? el("details", { class: "citation-details" }, el("summary", {}, `Voir l’extrait · ${cite.source || "cours"} · p.${cite.page ?? "—"}`), el("p", {}, cite.excerpt || "Extrait indisponible dans le corpus indexé.")) : null;
     const summary = l.summary
       ? el("div", { class: "learning-summary" },
@@ -639,7 +648,7 @@
         el("button", { class: "primary-btn", type: "button", disabled: l.examSubmitting, onclick: submitLearningExam }, l.examSubmitting ? "Correction…" : "Terminer et corriger"));
     } else {
       exam = el("section", { class: "exam-panel" }, el("div", { class: "section-title" }, el("h2", {}, "Simulateur d’examen"), el("span", { class: "hint" }, "seuil de maîtrise : 80%")),
-        l.exam?.status === "blocked" ? el("div", { class: "exam-gate" }, el("p", {}, l.exam.reason), ...(l.exam.gate?.missing || []).map((item) => el("p", {}, `${item.chapter} · ${Math.round(item.score * 100)}% · ${item.attempts}/${item.attempts_required} quiz corrigés`))) : el("p", {}, "Six questions sourcées, avec un accent sur la valorisation et les calculs, correction détaillée et chapitres à retravailler."),
+        l.exam?.status === "blocked" ? el("div", { class: "exam-gate" }, el("p", {}, l.exam.reason), ...(l.exam.gate?.missing || []).map((item) => el("p", {}, `${item.chapter} · ${Math.round(item.score * 100)}% · ${item.covered || 0}/${item.coverage_required || item.attempts_required} questions distinctes vues`))) : el("p", {}, "Six questions sourcées, avec un accent sur la valorisation et les calculs, correction détaillée et chapitres à retravailler."),
         el("button", { class: "primary-btn", type: "button", disabled: l.examBusy, onclick: startLearningExam }, l.examBusy ? "Préparation…" : "Lancer l’examen blanc"));
     }
     exam.id = "study-exam";
@@ -654,6 +663,7 @@
       learningPath,
       el("div", { class: "card coverage-panel" }, el("div", { class: "coverage-head" }, el("strong", {}, "Couverture des supports"), el("span", { class: coveragePct === 100 ? "status-good" : "status-low" }, coverage.inventory_available ? `${coverage.indexed_sources}/${coverage.expected_sources} fichiers · ${coveragePct}%` : "Inventaire source indisponible")), el("progress", { max: "100", value: String(coveragePct), "aria-label": "Couverture des fichiers de cours" }), el("small", {}, `${num(coverage.covered_content_units || 0)}/${num(coverage.expected_content_units || 0)} pages ou feuilles indexées · local uniquement`), el("details", { class: "coverage-details" }, el("summary", {}, "Voir les fichiers du corpus"), el("ul", {}, ...(coverage.sources || []).map((source) => el("li", { class: source.text_available ? "coverage-ok" : "coverage-missing" }, `${source.text_available ? "✓" : "!"} ${source.name} · ${num(source.indexed_units)}/${num(source.expected_content_units)} unités`))))),
       el("div", { class: "learning-toolbar card" }, select, el("span", { class: "chip green" }, `${d.mastered_count || 0}/${d.total_count || 5} chapitres maîtrisés`), el("span", { class: "chip amber" }, `${d.cards_due ?? l.due.length} cartes dues`), el("a", { class: "ghost-btn", href: "/career/plan", target: "_blank", rel: "noopener" }, "Plan détaillé ↗"), el("a", { class: "ghost-btn", href: "/career/plan/pdf", target: "_blank", rel: "noopener" }, "Plan PDF ↗")),
+      examObjectivePanel,
       el("div", { class: "card padded chapter-dashboard" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Progression vers la maîtrise"), el("span", { class: "hint" }, `justesse moyenne observée ${score}%`)), el("div", { class: "chapter-progress-grid" }, ...notionCards)),
       revisionPanel,
       learningPanel,
