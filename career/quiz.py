@@ -54,10 +54,12 @@ class QuizEngine:
         self._conn.close()
 
     def _mastery_row(self, chapter: str) -> tuple[int, int]:
+        chapter = self._canonical_chapter(chapter)
         row = self._conn.execute("SELECT COUNT(*) total, SUM(correct) correct FROM quiz_attempts WHERE chapter = ?", (chapter,)).fetchone()
         return int(row["total"] or 0), int(row["correct"] or 0)
 
     def mastery(self, chapter: str) -> dict[str, Any]:
+        chapter = self._canonical_chapter(chapter)
         total, correct = self._mastery_row(chapter)
         return {"chapter": chapter, "attempts": total, "correct": correct, "score": round(correct / total, 4) if total else 0.0, "mastered": bool(total and correct / total >= 0.8)}
 
@@ -70,16 +72,20 @@ class QuizEngine:
         value = re.split(r"(?<=[.!?])\s+|\n+", text.strip())[0].strip()
         return value[:600]
 
+    @staticmethod
+    def _canonical_chapter(chapter: str) -> str:
+        match = re.match(r"^\s*topic\s*(\d+)\b", str(chapter), re.IGNORECASE)
+        return f"TOPIC {match.group(1)}" if match else str(chapter).strip()
+
     def next_question(self, chapter: str, *, difficulty: str | None = None) -> QuizQuestion | None:
-        chapter = str(chapter or "").strip()
+        chapter = self._canonical_chapter(str(chapter or "").strip())
         if not chapter:
             return None
         chosen_difficulty = difficulty or self.difficulty(chapter)
-        chunks = self.index.search(chapter, limit=8, section=chapter)
-        if chapter.lower().startswith(("topic ", "chapter ", "section ")) and not chunks:
+        section_hits = self.index.search(chapter, limit=8, section=chapter)
+        if chapter.lower().startswith(("topic ", "chapter ", "section ")) and not section_hits:
             return None
-        if not chunks:
-            chunks = self.index.search(chapter, limit=8)
+        chunks = self.index.search(chapter, limit=8)
         if not chunks:
             return None
         attempts = self._conn.execute("SELECT COUNT(*) FROM quiz_attempts WHERE chapter = ?", (chapter,)).fetchone()[0]

@@ -3,7 +3,7 @@
 ## Livraison
 
 - Branche : `agent/nage-learn-pipeline`
-- Commit de fonctionnalité avant ajout du rapport : `e88692d2a7edf837096734366e9e7279f7cb7bbd` ; le SHA final est transmis dans le handoff avec ce rapport.
+- Commits de livraison précédents : `ecc11507f9489e3130ce93d1507ad510de03605b` (pipeline) et `4c0d18efb05fc98dc9e8fef9dcac29ae3b8b77ff` (canonicalisation des notions) ; le SHA final de cette branche est transmis dans le handoff.
 - Périmètre : `career/**` (pipeline hors ligne) et intégration minimale du routeur dans `come_ai_web.py`.
 - Aucun PDF, classeur, document personnel ou corpus privé n’est ajouté à Git.
 

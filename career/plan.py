@@ -22,7 +22,9 @@ def build_plan(quiz: QuizEngine, *, today: date | None = None, until: date | Non
     end = until or start + timedelta(days=max(0, 4 - start.weekday()))
     if end < start:
         end = start
-    mastery = {item["chapter"]: item for item in quiz.all_mastery(VC_CHAPTERS)}
+    # QuizEngine canonicalizes ``TOPIC N`` and the long display labels used by
+    # the mastery brief to the same persisted notion key.
+    mastery = {chapter: quiz.mastery(chapter) for chapter in VC_CHAPTERS}
     pending = [chapter for chapter in PRIORITY_ORDER if not mastery[chapter]["mastered"]]
     days = (end - start).days + 1
     sessions: list[dict[str, Any]] = []
