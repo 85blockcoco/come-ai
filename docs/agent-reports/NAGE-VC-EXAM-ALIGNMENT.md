@@ -101,6 +101,8 @@ Livré sur `codex/vc-mastery-20261103` par `8a4c1aae5477878c8cb18db6d18a7d4d242c
 
 ## Lot 4 — exercices guidés Q20/Q21
 
+Commit de code : `7e8981f5bf578b9f8bf16fb532db22b9a54eb56c` sur `codex/vc-mastery-20261103`; la référence distante a été vérifiée sur ce SHA avant la mise à jour documentaire.
+
 La candidate ajoute les six sous-parties du cas 2025 : comparaison des deux term sheets, payoffs Alpha/Mega, full ratchet, offre initiale VW/XY, tours de financement selon les scénarios et valeur espérée. Les champs Q20a sont des choix Alpha/Mega; les autres champs restent des réponses numériques. Une réponse ne peut pas exposer le corrigé avant sa soumission et les résultats restent enregistrés localement.
 
 Les points partiels sont explicitement pédagogiques : Q20a/b/c = 4/8/3 points et Q21a/b/c = 3/9/3 points. Chaque question conserve son total officiel de 15 points. Le corrigé de 2025 ne précise pas la répartition officielle entre sous-parties; ces sous-scores ne sont donc pas présentés comme le barème de l’enseignant.

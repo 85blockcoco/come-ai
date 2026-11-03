@@ -57,6 +57,8 @@ Le code et l’interface sont publiés dans `8a4c1aae5477878c8cb18db6d18a7d4d242
 
 ## Livraison du lot 4 — cas d’examen Q20/Q21
 
+Commit de code : `7e8981f5bf578b9f8bf16fb532db22b9a54eb56c` sur la branche candidate; cette référence distante a été vérifiée. Le rapport détaillé est dans `NAGE-VC-EXAM-ALIGNMENT.md`.
+
 Les six sous-parties de la section C du sujet 2025 sont maintenant entraînables dans l’interface : choix comparés de term sheets, tableaux de payoff, full ratchet, offres initiales, tours de financement selon les scénarios et richesse espérée. Q20a accepte Alpha/Mega dans des menus; les autres réponses sont numériques. Le corrigé est caché avant soumission, les tentatives restent locales et la correction donne la réponse attendue avec son raisonnement.
 
 Le crédit partiel est marqué comme indicatif : Q20a/b/c attribuent 4/8/3 points et Q21a/b/c 3/9/3, soit 15 points par question. Le corrigé ne publie pas de distribution officielle entre sous-parties.
