@@ -14,6 +14,10 @@ const state = {
   memoryIndexTimer: null,
   memoryIndexBusy: false,
   memoryAvailable: false,
+  vcSession: null,
+  vcRevealed: false,
+  vcExam: null,
+  vcExamTimer: null,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -28,6 +32,8 @@ const elements = {
   documentsSelectedName: $("documentsSelectedName"), documentsSelectedMeta: $("documentsSelectedMeta"),
   projectForm: $("projectForm"), projectName: $("projectName"), projectList: $("projectList"), memoryHealth: $("memoryHealth"), memorySelectedFile: $("memorySelectedFile"), indexSelected: $("indexSelected"), cancelMemoryIndex: $("cancelMemoryIndex"), memorySearchForm: $("memorySearchForm"), memorySearchInput: $("memorySearchInput"), memoryActionStatus: $("memoryActionStatus"), memoryResults: $("memoryResults"), refreshMemory: $("refreshMemory"), sourceList: $("sourceList"), emptySources: $("emptySources"),
   storageLibrarySize: $("storageLibrarySize"), storageFiles: $("storageFiles"), storageFreeSpace: $("storageFreeSpace"), storageIndexing: $("storageIndexing"), storageLocation: $("storageLocation"), storageIndexSize: $("storageIndexSize"), storageBackupStatus: $("storageBackupStatus"), storageQueueStatus: $("storageQueueStatus"), storageLargestFiles: $("storageLargestFiles"), emptyLargestFiles: $("emptyLargestFiles"), refreshStorage: $("refreshStorage"),
+  vcStatus: $("vcStatus"), vcCoverage: $("vcCoverage"), vcDue: $("vcDue"), vcCards: $("vcCards"), vcUntested: $("vcUntested"), vcStartForm: $("vcStartForm"), vcMinutes: $("vcMinutes"), vcMode: $("vcMode"), vcStartButton: $("vcStartButton"), vcActionStatus: $("vcActionStatus"), vcSessionMeta: $("vcSessionMeta"), vcCard: $("vcCard"), vcCardTopic: $("vcCardTopic"), vcQuestion: $("vcQuestion"), vcAnswer: $("vcAnswer"), vcAnswerText: $("vcAnswerText"), vcExplanation: $("vcExplanation"), vcReveal: $("vcReveal"), vcGrades: $("vcGrades"), vcPlan: $("vcPlan"), vcEmptyPlan: $("vcEmptyPlan"), vcRadar: $("vcRadar"), vcEmptyRadar: $("vcEmptyRadar"), vcRefresh: $("vcRefresh"),
+  vcExamStartForm: $("vcExamStartForm"), vcExamQuestions: $("vcExamQuestions"), vcExamMinutes: $("vcExamMinutes"), vcExamTimer: $("vcExamTimer"), vcExamQuestionsList: $("vcExamQuestionsList"), vcExamSubmit: $("vcExamSubmit"), vcExamResult: $("vcExamResult"),
 };
 
 async function api(path, options = {}) {
@@ -48,8 +54,8 @@ function formatSize(value) { const kb = Number(value || 0); return kb >= 1024 ? 
 function formatBytes(value) { const bytes = Number(value || 0); if (!Number.isFinite(bytes) || bytes <= 0) return "0 o"; const units = ["o", "Ko", "Mo", "Go", "To"]; const step = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1); const amount = bytes / (1024 ** step); return `${amount >= 10 || step === 0 ? amount.toFixed(0) : amount.toFixed(1)} ${units[step]}`; }
 function text(node, value) { node.textContent = value == null ? "" : String(value); }
 
-const viewTargets = new Set(["assistantView", "documentsView", "memoryView", "settingsView", "developerView"]);
-const viewLabels = { assistantView: "Assistant", documentsView: "Documents & Finance", memoryView: "Mémoire & stockage", settingsView: "Réglages", developerView: "Atelier Développeur" };
+const viewTargets = new Set(["assistantView", "documentsView", "vcView", "memoryView", "settingsView", "developerView"]);
+const viewLabels = { assistantView: "Assistant", documentsView: "Documents & Finance", vcView: "Réviser VC", memoryView: "Mémoire & stockage", settingsView: "Réglages", developerView: "Atelier Développeur" };
 let internalHashChange = false;
 
 function requestedHashView() {
@@ -61,6 +67,7 @@ function activateView(id, updateHash = true) {
   document.querySelectorAll(".view").forEach((view) => { view.hidden = view.id !== id; view.classList.toggle("active", view.id === id); });
   document.querySelectorAll(".nav-item[data-view-target]").forEach((button) => { const active = button.dataset.viewTarget === id; button.classList.toggle("active", active); if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current"); });
   if (id === "memoryView") { refreshMemory(); refreshStorage(); }
+  if (id === "vcView") { refreshVc(); }
   document.title = `${viewLabels[id] || id} — Côme AI V5`;
   if (updateHash && window.location.hash !== `#v5/${id}`) {
     internalHashChange = true;
@@ -413,6 +420,204 @@ async function refreshMemory(includeStorage = true) {
   } catch (error) { text(elements.memoryHealth, error.message); }
 }
 
+function vcPercent(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? `${Math.round(number * 100)} %` : "—";
+}
+
+function renderVcSession(session) {
+  state.vcSession = session || null;
+  state.vcRevealed = false;
+  const current = session && session.current;
+  elements.vcCard.hidden = !current;
+  elements.vcAnswer.hidden = true;
+  elements.vcGrades.hidden = true;
+  elements.vcReveal.hidden = !current;
+  if (!session) {
+    text(elements.vcSessionMeta, "Aucune session");
+    elements.vcSessionMeta.className = "status-pill neutral";
+    return;
+  }
+  text(elements.vcSessionMeta, `${session.done || 0} / ${session.total || 0}`);
+  elements.vcSessionMeta.className = `status-pill ${session.status === "completed" ? "ready" : "neutral"}`;
+  if (!current) {
+    text(elements.vcActionStatus, "Session terminée : le plan est mis à jour avec tes réponses.");
+    return;
+  }
+  text(elements.vcCardTopic, current.topic_id || "Question");
+  text(elements.vcQuestion, current.question);
+  text(elements.vcActionStatus, `Carte ${Number(session.cursor || 0) + 1} sur ${session.total}. Réponds mentalement avant de révéler.`);
+}
+
+function renderVcRadar(records) {
+  elements.vcRadar.replaceChildren();
+  const topics = Array.isArray(records) ? records : [];
+  elements.vcEmptyRadar.hidden = topics.length > 0;
+  for (const record of topics.slice().sort((a, b) => {
+    const order = { fragile: 0, developing: 1, untested: 2, solid: 3 };
+    return (order[a.status] ?? 9) - (order[b.status] ?? 9) || String(a.topic_id).localeCompare(String(b.topic_id));
+  })) {
+    const row = document.createElement("div"); row.className = "source-row";
+    const content = document.createElement("div");
+    const title = document.createElement("strong"); title.textContent = `${record.topic_id} · ${record.title || "Topic"}`;
+    const meta = document.createElement("small");
+    const accuracy = record.accuracy == null ? "non testé" : `${Math.round(Number(record.accuracy) * 100)} % correct`;
+    meta.textContent = `${record.status || "untested"} · ${accuracy} · ${record.attempts || 0} tentative(s)`;
+    content.append(title, meta);
+    const tag = document.createElement("span"); tag.textContent = record.due_cards ? `${record.due_cards} due(s)` : "";
+    row.append(content, tag); elements.vcRadar.append(row);
+  }
+}
+
+function renderVcPlan(plan) {
+  elements.vcPlan.replaceChildren();
+  const activities = plan && Array.isArray(plan.activities) ? plan.activities : [];
+  elements.vcEmptyPlan.hidden = activities.length > 0;
+  for (const activity of activities) {
+    const item = document.createElement("li"); item.className = "plan-item";
+    const title = document.createElement("strong"); title.textContent = `${activity.minutes} min · ${activity.kind}`;
+    const detail = document.createElement("span"); detail.textContent = `${activity.topic_id || activity.ref_id} — ${activity.reason || "priorité recommandée"}`;
+    item.append(title, detail); elements.vcPlan.append(item);
+  }
+}
+
+async function refreshVc() {
+  try {
+    const [status, radar, plan] = await Promise.all([
+      api("/api/academics/vc/status"),
+      api("/api/academics/vc/radar"),
+      api("/api/academics/vc/plan?minutes=60"),
+    ]);
+    if (status.blockers && status.blockers.length) throw new Error(status.blockers.join(" "));
+    const coverage = status.coverage || {};
+    text(elements.vcStatus, status.warnings && status.warnings.length ? status.warnings.join(" ") : "Données locales · aucune réponse envoyée");
+    text(elements.vcCoverage, `${coverage.covered_topics || 0} / ${coverage.total_topics || 0}`);
+    text(elements.vcDue, status.due_cards || 0);
+    text(elements.vcCards, status.content ? status.content.cards : 0);
+    text(elements.vcUntested, (coverage.untested || []).length);
+    renderVcSession(status.session);
+    renderVcRadar(radar.topics || []);
+    renderVcPlan(plan.plan);
+  } catch (error) {
+    text(elements.vcStatus, error.message);
+    text(elements.vcActionStatus, "Le coach VC est temporairement indisponible : réessaie dans un instant.");
+  }
+}
+
+async function startVcSession(event) {
+  event.preventDefault();
+  elements.vcStartButton.disabled = true;
+  text(elements.vcActionStatus, "Préparation de ta session locale…");
+  try {
+    const data = await api("/api/academics/vc/session", { method: "POST", body: JSON.stringify({ minutes: Number(elements.vcMinutes.value), mode: elements.vcMode.value }) });
+    if (data.blockers && data.blockers.length) throw new Error(data.blockers.join(" "));
+    renderVcSession(data.session);
+  } catch (error) { text(elements.vcActionStatus, error.message); }
+  finally { elements.vcStartButton.disabled = false; }
+}
+
+async function revealVcCard() {
+  if (!state.vcSession || !state.vcSession.session_id) return;
+  elements.vcReveal.disabled = true;
+  try {
+    const data = await api(`/api/academics/vc/session/${encodeURIComponent(state.vcSession.session_id)}/reveal`, { method: "POST" });
+    if (data.blockers && data.blockers.length) throw new Error(data.blockers.join(" "));
+    const current = data.session && data.session.current;
+    if (!current) return;
+    state.vcRevealed = true;
+    text(elements.vcAnswerText, current.answer);
+    text(elements.vcExplanation, current.explanation || "");
+    elements.vcAnswer.hidden = false; elements.vcGrades.hidden = false; elements.vcReveal.hidden = true;
+    text(elements.vcActionStatus, "Compare ta réponse à la correction, puis choisis le niveau qui décrit vraiment ta maîtrise.");
+  } catch (error) { text(elements.vcActionStatus, error.message); }
+  finally { elements.vcReveal.disabled = false; }
+}
+
+async function gradeVcCard(grade) {
+  if (!state.vcSession || !state.vcSession.session_id || !state.vcRevealed) return;
+  elements.vcGrades.querySelectorAll("button").forEach((button) => { button.disabled = true; });
+  try {
+    const data = await api(`/api/academics/vc/session/${encodeURIComponent(state.vcSession.session_id)}/grade`, { method: "POST", body: JSON.stringify({ grade }) });
+    if (data.blockers && data.blockers.length) throw new Error(data.blockers.join(" "));
+    renderVcSession(data.session);
+    await refreshVc();
+  } catch (error) { text(elements.vcActionStatus, error.message); }
+  finally { elements.vcGrades.querySelectorAll("button").forEach((button) => { button.disabled = false; }); }
+}
+
+function renderVcExam(exam) {
+  state.vcExam = exam || null;
+  elements.vcExamQuestionsList.replaceChildren();
+  elements.vcExamResult.hidden = true; elements.vcExamResult.replaceChildren();
+  if (!exam) {
+    elements.vcExamSubmit.hidden = true;
+    text(elements.vcExamTimer, "Pas d’examen actif");
+    return;
+  }
+  elements.vcExamSubmit.hidden = false;
+  for (const [index, question] of (exam.questions || []).entries()) {
+    const card = document.createElement("article"); card.className = "vc-exam-question";
+    const label = document.createElement("strong"); label.textContent = `${index + 1}. ${question.topic_id} · ${question.points} pt${question.points > 1 ? "s" : ""}`;
+    const prompt = document.createElement("p"); prompt.textContent = question.question;
+    let input;
+    if (question.format === "mcq" && Array.isArray(question.choices)) {
+      input = document.createElement("select");
+      const empty = document.createElement("option"); empty.value = ""; empty.textContent = "Choisir une réponse"; input.append(empty);
+      question.choices.forEach((choice, choiceIndex) => { const option = document.createElement("option"); option.value = String.fromCharCode(65 + choiceIndex); option.textContent = `${String.fromCharCode(65 + choiceIndex)}. ${choice}`; input.append(option); });
+    } else {
+      input = document.createElement("textarea"); input.rows = 3; input.placeholder = "Écris ton raisonnement ou ton résultat…";
+    }
+    input.dataset.examQuestionId = question.question_id; input.setAttribute("aria-label", `Réponse à la question ${index + 1}`);
+    card.append(label, prompt, input); elements.vcExamQuestionsList.append(card);
+  }
+  updateVcExamTimer();
+}
+
+function updateVcExamTimer() {
+  if (!state.vcExam) return;
+  const seconds = Math.max(0, Number(state.vcExam.remaining_seconds || 0));
+  const minutes = Math.floor(seconds / 60); const rest = String(seconds % 60).padStart(2, "0");
+  text(elements.vcExamTimer, `${minutes}:${rest}`);
+  elements.vcExamTimer.className = `status-pill ${seconds <= 60 ? "warn" : "neutral"}`;
+}
+
+async function startVcExam(event) {
+  event.preventDefault();
+  const button = elements.vcExamStartForm.querySelector("button[type=submit]"); button.disabled = true;
+  try {
+    const data = await api("/api/academics/vc/exam", { method: "POST", body: JSON.stringify({ questions: Number(elements.vcExamQuestions.value), minutes: Number(elements.vcExamMinutes.value), seed: 7, new: true }) });
+    if (data.blockers && data.blockers.length) throw new Error(data.blockers.join(" "));
+    renderVcExam(data.exam);
+    clearInterval(state.vcExamTimer);
+    state.vcExamTimer = setInterval(() => {
+      if (!state.vcExam) return;
+      state.vcExam.remaining_seconds = Math.max(0, Number(state.vcExam.remaining_seconds || 0) - 1); updateVcExamTimer();
+      if (state.vcExam.remaining_seconds <= 0) { clearInterval(state.vcExamTimer); submitVcExam(); }
+    }, 1000);
+  } catch (error) { text(elements.vcStatus, error.message); }
+  finally { button.disabled = false; }
+}
+
+async function submitVcExam() {
+  if (!state.vcExam) return;
+  elements.vcExamSubmit.disabled = true; clearInterval(state.vcExamTimer);
+  try {
+    const inputs = [...elements.vcExamQuestionsList.querySelectorAll("[data-exam-question-id]")];
+    for (const input of inputs) {
+      await api(`/api/academics/vc/exam/${encodeURIComponent(state.vcExam.exam_id)}/answer`, { method: "POST", body: JSON.stringify({ question_id: input.dataset.examQuestionId, answer: input.value || "" }) });
+    }
+    const data = await api(`/api/academics/vc/exam/${encodeURIComponent(state.vcExam.exam_id)}/submit`, { method: "POST", body: JSON.stringify({}) });
+    if (data.blockers && data.blockers.length) throw new Error(data.blockers.join(" "));
+    const result = data.result || {};
+    elements.vcExamResult.replaceChildren();
+    const heading = document.createElement("strong"); heading.textContent = `Score simulé : ${Math.round(Number(result.score || 0) * 100)} / 100`;
+    const detail = document.createElement("p"); detail.textContent = `${result.points_earned || 0} / ${result.points_total || 0} points · ${result.weak_topics && result.weak_topics.length ? `À retravailler : ${result.weak_topics.join(", ")}` : "Aucun topic sous le seuil."}`;
+    elements.vcExamResult.append(heading, detail); elements.vcExamResult.hidden = false; elements.vcExamSubmit.hidden = true; state.vcExam = null; text(elements.vcExamTimer, "Examen corrigé");
+    await refreshVc();
+  } catch (error) { text(elements.vcStatus, error.message); }
+  finally { elements.vcExamSubmit.disabled = false; }
+}
+
 document.querySelectorAll(".nav-item[data-view-target]").forEach((button) => button.addEventListener("click", () => activateView(button.dataset.viewTarget)));
 document.querySelectorAll(".suggestion").forEach((button) => button.addEventListener("click", () => { elements.message.value = button.dataset.prompt || ""; elements.message.focus(); }));
 document.querySelectorAll(".doc-action").forEach((button) => button.addEventListener("click", () => { const file = selectedFile(); if (!file) { activateView("assistantView"); addMessage("error", "Sélectionne un document avant de lancer cette action."); return; } const action = button.dataset.action; if (action === "inspect") startTask("Inspecte complètement le fichier sélectionné."); if (action === "analyze") startTask("Analyse financière en profondeur le fichier sélectionné."); if (action === "report") { activateView("assistantView"); elements.message.value = "Analyse le fichier sélectionné et crée un rapport."; elements.allowWrite.focus(); } }));
@@ -430,6 +635,12 @@ elements.projectForm.addEventListener("submit", async (event) => { event.prevent
 elements.memorySearchForm.addEventListener("submit", async (event) => { event.preventDefault(); const query = elements.memorySearchInput.value.trim(); if (!query) return; text(elements.memoryActionStatus, "Recherche locale en cours…"); try { const params = new URLSearchParams({ q: query }); if (state.selectedProjectId) params.set("project_id", state.selectedProjectId); const data = await api(`/api/v5/memory/search?${params}`); renderMemoryResults(data.results || []); text(elements.memoryActionStatus, `${data.count || 0} passage(s) retrouvé(s).${data.note ? ` ${data.note}` : ""}`); } catch (error) { text(elements.memoryActionStatus, error.message); } });
 elements.refreshMemory.addEventListener("click", refreshMemory);
 elements.refreshStorage.addEventListener("click", refreshStorage);
+elements.vcStartForm.addEventListener("submit", startVcSession);
+elements.vcReveal.addEventListener("click", revealVcCard);
+elements.vcGrades.querySelectorAll("[data-vc-grade]").forEach((button) => button.addEventListener("click", () => gradeVcCard(button.dataset.vcGrade)));
+elements.vcRefresh.addEventListener("click", refreshVc);
+elements.vcExamStartForm.addEventListener("submit", startVcExam);
+elements.vcExamSubmit.addEventListener("click", submitVcExam);
 
 window.addEventListener("hashchange", () => {
   if (internalHashChange) {

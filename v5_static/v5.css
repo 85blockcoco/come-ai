@@ -148,6 +148,19 @@ textarea:focus, input:focus { border-color: #6399dc; box-shadow: 0 0 0 3px rgba(
 .plan-list li.error::before, .plan-list li.cancelled::before { content: "×"; background: var(--red); }
 .plan-list strong { display: block; color: #40546f; font-size: 11px; }
 .plan-list small { display: block; margin-top: 2px; color: var(--muted); }
+.vc-grid { align-items: start; }
+.vc-card { max-width: none; margin-top: 16px; }
+.vc-card > p:not(.message-label) { font-size: 17px; line-height: 1.55; color: #203650; }
+.vc-answer { margin-top: 14px; padding: 13px; background: #f1f8f5; border: 1px solid #cfe8dc; border-radius: 10px; }
+.vc-answer strong { color: #216847; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+.vc-answer p { margin: 7px 0 0; }
+.vc-actions { justify-content: space-between; }
+.vc-grades { display: flex; flex-wrap: wrap; gap: 7px; }
+.vc-exam-panel { margin-top: 17px; }
+.vc-exam-questions { display: grid; gap: 12px; margin-top: 16px; }
+.vc-exam-question { padding: 13px; background: #fafcfe; border: 1px solid #e2e9f0; border-radius: 10px; }
+.vc-exam-question strong { display: block; margin-bottom: 8px; color: #40546f; font-size: 12px; }
+.vc-exam-question textarea { width: 100%; min-height: 64px; resize: vertical; }
 .citations { padding-top: 14px; margin-top: 13px; border-top: 1px solid var(--line); }
 .citations h3 { margin-bottom: 8px; }
 .citation-card { padding: 8px; margin-bottom: 7px; background: #fbfaf5; border: 1px solid #f0e4c9; border-radius: 9px; }

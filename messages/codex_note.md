@@ -50,3 +50,39 @@
 - Validation cumulative : 34 passed in 15.14s ; Ruff, deux node-check et diff-check verts.
 - Rapport : `docs/agent-reports/N100-CODEX-CONSOLIDATED.md`.
 - Main non modifiée ; revue OpenCode et décision sur le contrat U7 attendues.
+
+# RAPPORT CODEX — 2026-11-03 10:25 CET
+
+## 1. Livré (avec preuve)
+| Commit | Contenu (1 ligne) | Fichiers | Tests verts (nom test) | Durée |
+|---|---|---|---|---|
+| candidat en cours | Coach VC visible dans V5 : session SRS locale, révélation contrôlée, notation et radar/plan | `academics/router.py`, `v5_static/index.html`, `v5_static/v5.js`, `v5_static/v5.css`, tests VC | `tests/test_vc_http_user_flow.py`, `tests/test_vc_ui.py` + suites VC/academics/CLI | 189 passed, 13,68 s; Ruff, node-check, diff-check verts |
+| candidat en cours | Examen blanc local chronométré : génération par topics, questions sans réponses, sauvegarde des réponses, correction détaillée et remédiation | `academics/router.py`, `v5_static/index.html`, `v5_static/v5.js`, tests VC | `test_vc_mock_exam_is_timed_answerable_and_corrected`, `test_vc_exam_rejects_answers_for_unknown_questions` | inclus dans 189 passed |
+
+## 2. En cours maintenant
+| Tâche | % fait | Temps passé | Temps restant estimé | Blocage ? |
+|---|---:|---|---|---|
+| Parcours de préparation VC utilisable dans V5 | 70 % | session SRS + examen blanc rejoués navigateur | 1 à 2 lots ciblés | export PDF et ingestion de tes supports autorisés non raccordés |
+| Campagne de tests utilisateurs synthétiques | 60 % | API + navigateur rejoués | 30–60 min de tests supplémentaires | aucun blocage technique actuel |
+
+## 3. Performances mesurées
+| Métrique | Avant | Après | Comment mesuré |
+|---|---|---|---|
+| Coach VC dans V5 | absent de la navigation | visible, status/radar/plan HTTP 200 | navigateur CUA sur `http://127.0.0.1:8765/v5#v5/vcView`, 2026-11-03 |
+| Session SRS | CLI seulement | question → révélation → grade → carte suivante | parcours navigateur synthétique, 2026-11-03 |
+| Examen blanc | CLI seulement | 5 questions, minuteur, soumission et score simulé | parcours navigateur synthétique; score observé 60/100, topic faible VC07 |
+
+## 4. État 24 h de ta prod
+- commits aujourd'hui : non compté sur cette branche candidate avant commit
+- lignes ajoutées / supprimées : à mesurer après commit candidat (`git diff --stat HEAD~1`)
+- tests verts : `tests/test_vc_http_user_flow.py tests/test_vc_ui.py tests/test_vc_*.py tests/test_academics_routes.py tests/test_academics_integration.py tests/test_nage_cli.py` — 189 passed; `ruff`; `node --check v5_static/v5.js`; `git diff --check`
+- navigateur : navigation V5 → Réviser VC → session 5 min → révélation → À revoir; puis examen blanc 5 questions → réponses synthétiques → correction 60/100.
+
+## 5. Ce que j'attends d'OpenCode
+- Ne pas dupliquer le coach VC dans `career/**` : la candidate expose déjà le socle local dans `academics/vc`; confirmer la stratégie d'intégration avant tout nouveau module carrière.
+
+## 6. Risques / blocages
+- Les résultats sont synthétiques et ne remplacent pas une validation sur les supports de cours réels; aucun document personnel n'a été lu.
+- Le score est une correction déterministe de banque locale, pas une note officielle.
+- L'export PDF et le tutorat RAG sur PDF ne sont pas encore câblés dans V5.
+- `origin/main` n'est pas modifiée; `career_data` reste non suivie et hors staging.

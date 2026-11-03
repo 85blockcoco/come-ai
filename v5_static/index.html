@@ -21,6 +21,7 @@
         <nav class="main-nav" aria-label="Espaces de travail">
           <button class="nav-item active" type="button" data-view-target="assistantView" aria-current="page">Assistant</button>
           <button class="nav-item" type="button" data-view-target="documentsView">Documents &amp; Finance</button>
+          <button class="nav-item" type="button" data-view-target="vcView">Réviser VC</button>
           <button class="nav-item" type="button" data-view-target="memoryView">Mémoire &amp; stockage</button>
           <a class="nav-item nav-link" href="/career">Career</a>
           <button class="nav-item" type="button" data-view-target="settingsView">Réglages</button>
@@ -217,6 +218,58 @@
           </section>
         </section>
 
+        <section id="vcView" class="view" aria-labelledby="vcTitle" hidden>
+          <div class="section-intro split-intro">
+            <div>
+              <p class="eyebrow">COACH LOCAL · VENTURE CAPITAL</p>
+              <h1 id="vcTitle">Progresser jusqu’à vendredi, une carte à la fois.</h1>
+              <p>Un parcours court et mesurable : réponds sans regarder, révèle la correction, puis indique ton niveau de confiance. Tes résultats restent sur ce Mac.</p>
+            </div>
+            <div class="memory-health" id="vcStatus" role="status" aria-live="polite">Chargement de ta progression…</div>
+          </div>
+          <div class="storage-metrics" aria-label="Résumé de progression Venture Capital">
+            <article class="storage-metric"><span id="vcCoverage">—</span><small>topics couverts</small></article>
+            <article class="storage-metric"><span id="vcDue">—</span><small>cartes dues</small></article>
+            <article class="storage-metric"><span id="vcCards">—</span><small>cartes disponibles</small></article>
+            <article class="storage-metric"><span id="vcUntested">—</span><small>topics à tester</small></article>
+          </div>
+          <div class="workspace-grid vc-grid">
+            <section class="panel" aria-labelledby="vcSessionTitle">
+              <div class="panel-heading"><div><p class="eyebrow">SESSION ACTIVE</p><h2 id="vcSessionTitle">Révision guidée</h2></div><span id="vcSessionMeta" class="status-pill neutral">Aucune session</span></div>
+              <form id="vcStartForm" class="inline-form">
+                <label for="vcMinutes">Durée<select id="vcMinutes"><option value="5">5 min</option><option value="10" selected>10 min</option><option value="20">20 min</option><option value="45">45 min</option></select></label>
+                <label for="vcMode">Objectif<select id="vcMode"><option value="quick" selected>Rappel rapide</option><option value="long">Consolidation</option><option value="exam_eve">Veille d’examen</option></select></label>
+                <button id="vcStartButton" class="primary-button" type="submit">Commencer</button>
+              </form>
+              <p id="vcActionStatus" class="quiet-status" role="status" aria-live="polite">Choisis une durée : Côme te donnera d’abord la question, jamais la réponse.</p>
+              <article id="vcCard" class="message assistant-message vc-card" hidden>
+                <p class="message-label" id="vcCardTopic">Question</p>
+                <p id="vcQuestion"></p>
+                <div id="vcAnswer" class="vc-answer" hidden><strong>Correction</strong><p id="vcAnswerText"></p><p id="vcExplanation" class="quiet-status"></p></div>
+                <div class="developer-actions vc-actions"><button id="vcReveal" class="secondary-button" type="button">Révéler la correction</button><div id="vcGrades" class="vc-grades" hidden><button class="text-button danger" type="button" data-vc-grade="again">À revoir</button><button class="text-button" type="button" data-vc-grade="hard">Difficile</button><button class="secondary-button" type="button" data-vc-grade="good">Bien</button><button class="primary-button" type="button" data-vc-grade="easy">Facile</button></div></div>
+              </article>
+            </section>
+            <aside class="panel" aria-labelledby="vcPlanTitle">
+              <div class="panel-heading"><div><p class="eyebrow">PROCHAINS EFFORTS</p><h2 id="vcPlanTitle">Plan de bataille</h2></div><button id="vcRefresh" class="text-button" type="button">Actualiser</button></div>
+              <div id="vcPlan" class="plan-list" aria-live="polite"></div>
+              <p id="vcEmptyPlan" class="empty-state compact">Le plan se calcule à partir de tes réponses.</p>
+            </aside>
+          </div>
+          <section class="panel vc-exam-panel" aria-labelledby="vcExamTitle">
+            <div class="panel-heading"><div><p class="eyebrow">ENTRAÎNEMENT CHRONOMÉTRÉ</p><h2 id="vcExamTitle">Examen blanc</h2></div><span id="vcExamTimer" class="status-pill neutral">Pas d’examen actif</span></div>
+            <p class="quiet-status">Un sujet synthétique, corrigé par critères transparents. Les réponses restent locales et aucune note officielle n’est prétendue.</p>
+            <form id="vcExamStartForm" class="inline-form"><label for="vcExamQuestions">Questions<select id="vcExamQuestions"><option value="5" selected>5</option><option value="10">10</option><option value="20">20</option></select></label><label for="vcExamMinutes">Durée<select id="vcExamMinutes"><option value="10" selected>10 min</option><option value="20">20 min</option><option value="30">30 min</option></select></label><button class="secondary-button" type="submit">Démarrer l’examen</button></form>
+            <div id="vcExamQuestionsList" class="vc-exam-questions" aria-live="polite"></div>
+            <div class="developer-actions"><button id="vcExamSubmit" class="primary-button" type="button" hidden>Soumettre et corriger</button></div>
+            <div id="vcExamResult" class="vc-answer" hidden aria-live="polite"></div>
+          </section>
+          <section class="panel" aria-labelledby="vcRadarTitle">
+            <div class="panel-heading"><div><p class="eyebrow">RADAR DE MAÎTRISE</p><h2 id="vcRadarTitle">Ce qui mérite ton attention</h2></div></div>
+            <div id="vcRadar" class="source-list" aria-live="polite"></div>
+            <p id="vcEmptyRadar" class="empty-state compact">Aucune donnée de progression pour le moment.</p>
+          </section>
+        </section>
+
         <section id="settingsView" class="view" aria-labelledby="settingsTitle" hidden>
           <div class="section-intro"><p class="eyebrow">CONFIGURATION TRANSPARENTE</p><h1 id="settingsTitle">Réglages &amp; limites</h1><p>Les modes externes restent séparés du noyau local. Côme AI n’envoie rien au cloud automatiquement.</p></div>
           <div class="settings-grid">
@@ -308,7 +361,7 @@
         </section>
       </main>
     </div>
-    <script src="/v5-static/v5.js" defer></script>
+    <script src="/v5-static/v5.js?vc=20261103-exam1" defer></script>
     <script src="/v5-static/devkit.js?v=rc5" defer></script>
     <script src="/v5-static/evolution.js?v=rc4" defer></script>
   </body>
