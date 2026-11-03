@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 
+from .case_practice import CasePracticeEngine
 from .exam import ExamEngine
 from .ingest import CorpusError, CorpusIndex, DEFAULT_CORPUS_ROOT
 from .plan import VC_CHAPTERS, build_plan
@@ -70,6 +71,11 @@ class ExamSubmitPayload(BaseModel):
     exam_id: str = Field(min_length=16, max_length=64)
 
 
+class CasePracticePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    answers: dict[str, str | int | float | None] = Field(max_length=20)
+
+
 class LearningWorkspace:
     def __init__(self, base_dir: str | Path, *, corpus_root: str | Path | None = None):
         root = Path(base_dir)
@@ -79,12 +85,14 @@ class LearningWorkspace:
         self.srs = SRSStore(root / "srs.sqlite3")
         self.quiz = QuizEngine(self.index, root / "quiz.sqlite3")
         self.exam = ExamEngine(self.quiz)
+        self.practice = CasePracticeEngine(self.index, root / "practice.sqlite3")
         self.pdf_dir = root / "summaries"
 
     def close(self) -> None:
         self.index.close()
         self.srs.close()
         self.quiz.close()
+        self.practice.close()
 
     def ingest(self, source_dir: str | None = None) -> dict[str, Any]:
         directory = Path(source_dir).expanduser() if source_dir else self.index.corpus_root
@@ -227,6 +235,24 @@ def create_learning_router(base_dir: str | Path, *, corpus_root: str | Path | No
             return await run_in_threadpool(workspace.exam.submit, payload.exam_id)
         except (KeyError, ValueError) as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
+
+    async def practice_cases() -> dict[str, Any]:
+        return await run_in_threadpool(workspace.practice.list_cases)
+
+    async def practice_submit(case_id: str, payload: CasePracticePayload) -> dict[str, Any]:
+        try:
+            return await run_in_threadpool(workspace.practice.submit, case_id, payload.answers)
+        except KeyError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+
+    for path, endpoint, methods in (
+        ("/career/practice/cases", practice_cases, ["GET"]),
+        ("/career/practice/cases/{case_id}/submit", practice_submit, ["POST"]),
+    ):
+        router.add_api_route(path, endpoint, methods=methods)
+        router.add_api_route("/api" + path, endpoint, methods=methods)
 
     async def dashboard() -> dict[str, Any]:
         result = await run_in_threadpool(workspace.quiz.dashboard, VC_CHAPTERS)

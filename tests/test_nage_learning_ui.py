@@ -20,6 +20,8 @@ def test_desktop_learning_surface_is_wired_to_local_learning_routes() -> None:
         '"/career/srs/review"', 'rating', 'Générer / compléter les cartes',
         'Progression vers la maîtrise', 'Télécharger la fiche PDF', 'plan/pdf',
         'Notions du sujet 2025 vues en quiz', 'questions distinctes', 'exam_objectives',
+        '"/career/practice/cases"', '/career/practice/cases/${encodeURIComponent(l.practiceCaseId)}/submit',
+        'Calculs au format de l’épreuve', 'Corriger mes calculs', 'barème partiel pédagogique',
         'examTimer', 'Encore', 'Difficile', 'Facile', '"/career/ingest"',
         'Réessayer l’import local', 'Couverture des supports',
         'Voir l’extrait', 'cite.excerpt',
@@ -30,3 +32,4 @@ def test_desktop_learning_surface_is_wired_to_local_learning_routes() -> None:
     assert "url.pathname.startsWith('/career/summary/')" in service_worker
     assert ':root[data-style="study"]' in css
     assert ".learning-step-grid" in css
+    assert ".case-practice" in css

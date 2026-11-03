@@ -21,6 +21,7 @@
       selectedChapter: "TOPIC 3", summary: null, summaryLoading: false, quiz: null, tutor: null,
       quizFeedback: null, srsRevealed: false, srsBusy: false, exam: null, examResult: null,
       examBusy: false, examSubmitting: false, tutorMode: "explanation",
+      practiceCases: [], practiceCaseId: "VC25-Q16", practiceAnswers: {}, practiceResult: null, practiceBusy: false,
       search: [], searchQuery: "", busy: false,
     },
     filter: "",
@@ -121,9 +122,10 @@
           const ingestion = await learningIngestPromise;
           manifest = ingestion.manifest || await api("/career/manifest");
         }
-        const [coverage, chapters, dashboard, plan, due] = await Promise.all([
+        const [coverage, chapters, dashboard, plan, due, practice] = await Promise.all([
           api("/career/coverage"), api("/career/chapters"), api("/career/learning/dashboard"),
           api("/career/plan"), api(`/career/srs/due?limit=8&chapter=${encodeURIComponent(learning.selectedChapter)}`),
+          api("/career/practice/cases"),
         ]);
         learning.manifest = manifest;
         learning.coverage = coverage;
@@ -132,6 +134,12 @@
         learning.plan = plan;
         learning.due = due.cards || [];
         learning.srsStats = due.stats || null;
+        learning.practiceCases = practice.cases || [];
+        if (!learning.practiceCases.some((item) => item.case_id === learning.practiceCaseId)) {
+          learning.practiceCaseId = learning.practiceCases[0]?.case_id || "";
+          learning.practiceAnswers = {};
+          learning.practiceResult = null;
+        }
         return learning;
       } catch (error) {
         learning.error = error.message;
@@ -618,6 +626,49 @@
       : el("div", { class: "learning-quiz" }, el("div", { class: "section-title no-gap" }, el("h3", {}, "Quiz progressif"), el("span", { class: "hint" }, "correction sourcée")),
           l.quizFeedback ? el("div", { class: l.quizFeedback.correct ? "quiz-feedback is-correct" : "quiz-feedback is-wrong", role: "status" }, el("strong", {}, l.quizFeedback.correct ? "Bonne réponse" : "À revoir"), el("p", {}, l.quizFeedback.correct_answer), el("p", {}, l.quizFeedback.explanation), citationDetails(l.quizFeedback.citation), el("button", { class: "primary-btn", type: "button", onclick: loadLearningQuiz }, "Question suivante"))
             : el("div", {}, el("p", {}, "Une question à la fois : réponds, lis la correction, puis retente."), el("button", { class: "primary-btn", type: "button", onclick: loadLearningQuiz }, "Lancer une question")));
+    const practiceCase = l.practiceCases.find((item) => item.case_id === l.practiceCaseId) || l.practiceCases[0];
+    if (practiceCase && practiceCase.case_id !== l.practiceCaseId) l.practiceCaseId = practiceCase.case_id;
+    const practiceSelect = el("select", { class: "learning-select", "aria-label": "Exercice chiffré du sujet passé" },
+      ...l.practiceCases.map((item) => el("option", { value: item.case_id, selected: item.case_id === practiceCase?.case_id }, `${item.exam_question} · ${item.title}`)));
+    practiceSelect.addEventListener("change", () => {
+      l.practiceCaseId = practiceSelect.value;
+      l.practiceAnswers = {};
+      l.practiceResult = null;
+      renderLearning();
+    });
+    const practiceForm = el("form", { class: "practice-form" });
+    if (practiceCase) {
+      const groups = [...new Set(practiceCase.steps.map((step) => step.group))];
+      for (const group of groups) {
+        const fields = practiceCase.steps.filter((step) => step.group === group).map((step) => {
+          const input = el("input", {
+            type: "text", inputmode: "decimal", autocomplete: "off", spellcheck: "false",
+            value: l.practiceAnswers[step.step_id] || "", "aria-label": `${step.label}, en ${step.unit}`,
+            oninput: (event) => { l.practiceAnswers[step.step_id] = event.target.value; },
+          });
+          return el("label", { class: "practice-step" },
+            el("span", {}, el("strong", {}, step.label), el("small", {}, `${step.points} pt · ${step.unit}`)), input);
+        });
+        practiceForm.append(el("fieldset", { class: "practice-group" }, el("legend", {}, group), ...fields));
+      }
+      practiceForm.append(el("button", { class: "primary-btn", type: "submit", disabled: l.practiceBusy }, l.practiceBusy ? "Correction…" : "Corriger mes calculs"));
+      practiceForm.addEventListener("submit", submitLearningCase);
+    }
+    const practiceResult = l.practiceResult
+      ? el("div", { class: "practice-result", role: "status" },
+          el("div", { class: "practice-result-head" }, el("strong", {}, `Résultat : ${l.practiceResult.score} / ${l.practiceResult.max_score} points`), el("span", {}, `${l.practiceResult.percent}%`)),
+          el("p", { class: "practice-rubric-note" }, l.practiceResult.rubric),
+          ...l.practiceResult.steps.map((step) => el("article", { class: `practice-feedback ${step.correct ? "is-correct" : "is-wrong"}` },
+            el("div", { class: "practice-feedback-head" }, el("strong", {}, step.label), el("span", {}, `${step.awarded} / ${step.points} pt`)),
+            el("p", {}, step.valid_number ? `Ta réponse : ${step.entered} ${step.unit}` : "Aucun nombre exploitable saisi."),
+            el("p", {}, `Réponse attendue : ${step.expected_display}`),
+            el("p", {}, step.explanation))),
+          ...(l.practiceResult.citations || []).map(citationDetails)) : null;
+    const guidedPractice = el("section", { class: "case-practice", "aria-label": "Exercices chiffrés de l’examen passé" },
+      el("div", { class: "case-practice-head" }, el("div", {}, el("h3", {}, "Calculs au format de l’épreuve"), el("p", {}, "Travaille les questions 16 à 19 avec des étapes explicites et un barème partiel pédagogique.")), practiceSelect),
+      practiceCase ? el("div", { class: "case-practice-prompt" }, el("strong", {}, `${practiceCase.exam_question} · ${practiceCase.max_score} points`), el("p", {}, practiceCase.prompt), el("small", {}, `Tentatives : ${practiceCase.stats.attempts} · meilleur score : ${practiceCase.stats.best_score == null ? "—" : `${practiceCase.stats.best_score}/${practiceCase.stats.max_score}`}`), ...(practiceCase.citations || []).map(citationDetails)) : el("p", { class: "note" }, "Aucun exercice disponible."),
+      practiceForm,
+      practiceResult);
     const card = l.due[0];
     const srs = card
       ? el("div", { class: "srs-card" }, el("p", { class: "srs-card-question" }, card.question), l.srsRevealed
@@ -657,7 +708,7 @@
       el("div", { class: "card padded" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Étape 2 · Apprendre avec le cours"), el("span", { class: "hint" }, l.selectedChapter)), summary, el("button", { class: "ghost-btn", type: "button", onclick: loadLearningSummary }, "Actualiser la fiche")),
       el("div", { class: "card padded" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Tuteur du cours"), el("span", { class: "hint" }, "réponses bornées au chapitre sélectionné")), tutorForm, tutor));
     const searchPanel = el("div", { class: "card padded" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Recherche dans le cours"), el("span", { class: "hint" }, "tous les supports")), searchForm, searchResults);
-    const exercisePanel = el("div", { class: "card padded learning-exercise", id: "study-exercises" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Étape 3 · Exercices progressifs"), el("span", { class: "hint" }, l.quiz?.difficulty || "correction sourcée")), quiz);
+    const exercisePanel = el("div", { class: "card padded learning-exercise", id: "study-exercises" }, el("div", { class: "section-title no-gap" }, el("h2", {}, "Étape 3 · Exercices progressifs"), el("span", { class: "hint" }, l.quiz?.difficulty || "correction sourcée")), quiz, guidedPractice);
     host.replaceChildren(
       el("div", { class: "card learning-hero" }, el("div", {}, el("h2", {}, "Objectif : arriver prêt à l’examen."), el("p", {}, `${l.manifest.documents?.length || 0} sources locales indexées · ${num(l.manifest.pages || 0)} pages / feuilles · aucune réponse hors corpus.`)), el("div", { class: "learning-score" }, el("b", {}, `${score}%`), el("small", {}, "justesse moyenne observée"))),
       learningPath,
@@ -688,6 +739,26 @@
     const l = state.learning;
     try { const data = await api("/career/quiz/next", { method: "POST", body: JSON.stringify({ chapter: l.selectedChapter }) }); l.quiz = data.question; l.quizFeedback = null; renderLearning(); }
     catch (error) { alert(`Quiz indisponible : ${error.message}`); }
+  }
+
+  async function submitLearningCase(event) {
+    event.preventDefault();
+    const l = state.learning;
+    if (!l.practiceCaseId || l.practiceBusy) return;
+    l.practiceBusy = true;
+    renderLearning();
+    try {
+      l.practiceResult = await api(`/career/practice/cases/${encodeURIComponent(l.practiceCaseId)}/submit`, {
+        method: "POST", body: JSON.stringify({ answers: l.practiceAnswers }),
+      });
+      try { await loaders.learning(); } catch (error) { console.error("CASE_PRACTICE_REFRESH_FAIL", error.message); }
+    } catch (error) {
+      console.error("CASE_PRACTICE_FAIL", error.message);
+      alert(`Correction indisponible : ${error.message}`);
+    } finally {
+      l.practiceBusy = false;
+      renderLearning();
+    }
   }
 
   async function answerLearningQuiz(index) {
