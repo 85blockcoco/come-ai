@@ -301,6 +301,34 @@
       "allowed_numbers": [5, 10, 15, 20, 400],
       "difficulty": 4,
       "source_ref": "Team project 2027.pdf"
+    },
+    {
+      "kind": "case",
+      "id": "WB-SKYPI-01",
+      "topic_id": "VC04",
+      "title": "Sky-pi: comparable multiples and staged VCM",
+      "context": "Workbook-derived exercise. Sky-pi projects 120 million revenue and 20 million EBITDA in 2030. Five comparable companies produce a median forward revenue multiple of 2.1868x. The founders compare one upfront 18 million round at a 10x MOIC with staged rounds of 3 million now at 2x and 15 million next year at 5x.",
+      "facts": [
+        {"id": "median_multiple", "label": "Median revenue multiple", "value": 2.1868, "unit": "x"},
+        {"id": "exit_value", "label": "Median revenue-based exit value", "value": 262.41, "unit": "$m"},
+        {"id": "single_pre", "label": "Single-round pre-money", "value": 8.24, "unit": "$m"},
+        {"id": "staged_pre", "label": "Staged first-round pre-money", "value": 15.74, "unit": "$m"},
+        {"id": "staged_founders", "label": "Staged founder ownership at exit", "value": 62.86, "unit": "%"}
+      ],
+      "questions": [
+        {"id": "q1", "prompt": "Use the median revenue multiple to estimate the exit value.", "criteria": [
+          {"id": "q1-c1", "label": "Median multiple is approximately 2.1868x", "weight": 0.2, "required_keywords": ["median"], "expected_numbers": [{"value": 2.1868, "tolerance": 0.01}], "model_answer": "The median forward revenue multiple is approximately 2.1868x."},
+          {"id": "q1-c2", "label": "Exit value is approximately 262.41", "weight": 0.3, "required_keywords": ["exit"], "expected_numbers": [{"value": 262.41, "tolerance": 0.2}], "model_answer": "120 x 2.1868 = approximately 262.41 million."}
+        ]},
+        {"id": "q2", "prompt": "Compare the single-round and staged financing outcomes for pre-money valuation and founder ownership at exit.", "criteria": [
+          {"id": "q2-c1", "label": "Staged pre-money is about 15.74 versus 8.24 single-round", "weight": 0.25, "required_keywords": ["pre-money"], "expected_numbers": [{"value": 15.74, "tolerance": 0.2}, {"value": 8.24, "tolerance": 0.2}], "model_answer": "The first staged round has about 15.74 million pre-money versus 8.24 million for the upfront round."},
+          {"id": "q2-c2", "label": "Staged founder ownership is about 62.86%", "weight": 0.25, "required_keywords": ["founder"], "expected_numbers": [{"value": 62.86, "tolerance": 0.2}], "model_answer": "Staging preserves approximately 62.86% founder ownership at exit in the workbook convention."}
+        ]}
+      ],
+      "model_answer": "The median revenue method gives a 262.41 million exit; staged financing improves the first-round pre-money and preserves more founder ownership under the workbook assumptions.",
+      "allowed_numbers": [2, 2.1868, 3, 5, 8.24, 10, 15, 15.74, 18, 20, 120, 62.86, 262.41],
+      "difficulty": 4,
+      "source_ref": "Class assignments - solutions.xlsx / 3. Sky-pi"
     }
   ]
 }

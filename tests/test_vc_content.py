@@ -63,7 +63,7 @@ def test_every_case_has_questions_and_normalized_weights() -> None:
 def test_workbook_cases_keep_explicit_provenance() -> None:
     content = load_content()
     workbook_cases = [case for case in content.cases if case.source_type == "workbook_derived"]
-    assert len(workbook_cases) == 11
+    assert len(workbook_cases) == 12
     assert all(case.source_ref.strip() for case in workbook_cases)
     assert {case.topic_id for case in workbook_cases} >= {"VC03", "VC04", "VC05", "VC07", "VC13", "VC14", "VC16"}
 

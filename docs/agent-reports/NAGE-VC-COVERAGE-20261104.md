@@ -6,7 +6,7 @@ The local authorised course folder contains 29 non-hidden files: 26 PDFs and 3 X
 
 The indexed study library contains 20 PDFs and 2,381,571 extracted characters. `7017_69368.pdf` is a 14-page scan with seven printed exam pages and seven blank reverse sides; visual comparison confirms that its seven exam pages duplicate the 2024 paper already represented by `paper_2024.json`. `Team project 2027.pdf` is a two-page pitchbook brief; it is now represented by a rubric-based case rather than being treated as a single-answer exam. The machine-readable decisions are recorded in `academics/vc/content/supplementary_sources.json`.
 
-The primary course maps the five lecture decks to 5 chapters and 28 lessons. The application content pack contains 21 topics, 189 active cards, 44 static drills, 15 graded cases (including 11 workbook-derived/rubric cases), 32 deterministic mock questions and past-paper packs for 2023, 2024 and 2025.
+The primary course maps the five lecture decks to 5 chapters and 28 lessons. The application content pack contains 21 topics, 189 active cards, 44 static drills, 16 graded cases (including 12 workbook-derived/rubric cases), 32 deterministic mock questions and past-paper packs for 2023, 2024 and 2025.
 
 ## Coverage by topic
 
@@ -15,7 +15,7 @@ The primary course maps the five lecture decks to 5 chapters and 28 lessons. The
 | VC01 ecosystem | 8 | generated | 0 | 3 | 4 | partial |
 | VC02 fund economics | 8 | 0 | 0 | 0 | 2 | thin |
 | VC03 stages/instruments | 10 | generated | 3 | 4 | 7 | full |
-| VC04 valuation/ownership | 10 | 11 + generated | 3 | 10 | 13 | full |
+| VC04 valuation/ownership | 10 | 11 + generated | 4 | 10 | 13 | full |
 | VC05 cap table/option pool | 10 | 6 + generated | 3 | 9 | 3 | full |
 | VC06 term sheet | 8 | 0 | 0 | 6 | 5 | partial |
 | VC07 liquidation/waterfall | 10 | 8 + generated | 2 | 7 | 2 | full |
@@ -62,7 +62,7 @@ The workbook audit identified the exercise families that needed a dedicated
 in-app graded representation. They are now covered by `cases_workbooks.json`:
 staged-financing survival and expected profit (PhD student), risk-sensitive
 term-sheet choice (TriplexGo and TrafalgarTech), cap tables and staged rounds
-(Aliboy), venture-capital method and comparables (NextBigThing), common equity
+(Aliboy), venture-capital method and comparables (NextBigThing and Sky-pi), common equity
 versus convertible note (Hadupower), expected founder wealth and option-pool
 dilution (Docklane), seed/VC ownership (Vale), IPO pricing, greenshoe and
 underpricing (Meridian), Venture Evaluation Matrix weighted scoring, and the
