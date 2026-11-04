@@ -92,6 +92,7 @@ class CourseStateRequest(BaseModel):
 class CourseQuizRequest(BaseModel):
     lesson_id: str = Field(max_length=80)
     answers: dict[str, str] = Field(default_factory=dict, max_length=10)
+    variant_id: str | None = Field(default=None, max_length=100)
 
 
 def create_course_router(store: VcStore | None = None, *, source_root: Path | None = None) -> APIRouter:
@@ -162,6 +163,18 @@ def create_course_router(store: VcStore | None = None, *, source_root: Path | No
     def submit_course_quiz(payload: CourseQuizRequest) -> dict[str, Any]:
         lesson = lesson_or_404(payload.lesson_id)
         questions = lesson["quiz"]
+        if payload.variant_id:
+            from .variants import lesson_variant
+
+            prefix = f"lesson-{payload.lesson_id}-"
+            try:
+                seed = int(payload.variant_id.removeprefix(prefix))
+            except ValueError as error:
+                raise HTTPException(status_code=400, detail="Unknown lesson variant.") from error
+            generated = lesson_variant(lesson, seed)
+            if generated["variant_id"] != payload.variant_id:
+                raise HTTPException(status_code=400, detail="Unknown lesson variant.")
+            questions = generated["quiz"]
         expected_ids = {question["id"] for question in questions}
         if set(payload.answers) - expected_ids:
             raise HTTPException(status_code=400, detail="Unknown checkpoint question.")
@@ -201,6 +214,14 @@ def create_course_router(store: VcStore | None = None, *, source_root: Path | No
                 {"lesson_id": payload.lesson_id, "score": score, "answers": payload.answers, "results": results, "submitted_at": now_iso()}
             )
         return {"score": score, "passed": score >= 80, "results": results, "progress": _progress_payload(target)}
+
+    @router.get("/api/vc/course/lesson/{lesson_id}/variant")
+    def course_lesson_variant(lesson_id: str, seed: int | None = None) -> dict[str, Any]:
+        lesson = lesson_or_404(lesson_id)
+        from .variants import lesson_variant
+
+        chosen_seed = seed if seed is not None else int.from_bytes(os.urandom(4), "big")
+        return lesson_variant(lesson, chosen_seed)
 
     @router.get("/api/vc/course/library")
     def course_library() -> dict[str, Any]:

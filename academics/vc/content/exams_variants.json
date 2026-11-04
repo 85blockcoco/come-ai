@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "pack_id": "exams-fresh-variants",
+  "topic_id": "VC03",
+  "language": "en",
+  "source_type": "synthetic_practice",
+  "license": "Original NAGE content",
+  "items": [
+    {
+      "kind": "exam_question",
+      "id": "VC03-V001",
+      "topic_id": "VC03",
+      "question": "A startup burns €75k per month and needs 14 months to reach its next milestone. What funding need should it plan for, in €k?",
+      "answer": "1050",
+      "points": 5,
+      "format": "numeric",
+      "unit": "k_eur",
+      "tolerance": 0.01
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC03-V002",
+      "topic_id": "VC03",
+      "question": "Which financing instrument is most consistent with a first institutional round after early traction?",
+      "answer": "Series A",
+      "points": 5,
+      "format": "mcq",
+      "choices": ["Pre-seed", "Series A", "Buyout debt", "Liquidation preference"]
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC05-V001",
+      "topic_id": "VC05",
+      "question": "Founders own 82% before a round. A new investor receives 15% of post-money equity. What percentage do the founders retain?",
+      "answer": "69.7",
+      "points": 5,
+      "format": "numeric",
+      "unit": "percent",
+      "tolerance": 0.11
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC05-V002",
+      "topic_id": "VC05",
+      "question": "Why is repeated dilution multiplicative rather than a simple subtraction of percentage points?",
+      "answer": "Each new round applies to the stake that remains after earlier rounds; the remaining ownership is multiplied by each retention factor.",
+      "points": 5,
+      "format": "open",
+      "keywords": ["each", "round", "remaining", "multiplied", "retention"],
+      "min_keywords": 3
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC09-V001",
+      "topic_id": "VC09",
+      "question": "An investor receives €3.6m after investing €1.2m. What is the MOIC?",
+      "answer": "3",
+      "points": 5,
+      "format": "numeric",
+      "unit": "ratio",
+      "tolerance": 0.01
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC07-V001",
+      "topic_id": "VC07",
+      "question": "A non-participating preferred investor may choose between its liquidation preference and conversion into ordinary shares. What should be compared?",
+      "answer": "The contractual preference payout and the value of the investor's pro-rata ordinary shares.",
+      "points": 5,
+      "format": "open",
+      "keywords": ["preference", "conversion", "ordinary", "shares"],
+      "min_keywords": 3
+    }
+  ]
+}

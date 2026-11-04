@@ -1,6 +1,6 @@
 /* A local reading and practice workspace. No model call is made by this module. */
 "use strict";
-const vcStudio = { ready: false, loading: false, course: null, progress: null, lessonId: null, library: [], source: null };
+const vcStudio = { ready: false, loading: false, course: null, progress: null, lessonId: null, lessonVariant: null, library: [], source: null };
 const vcNode = (id) => document.getElementById(id);
 const vcAllLessons = () => (vcStudio.course?.chapters || []).flatMap((chapter) => chapter.lessons);
 function vcMessage(message) { const node = vcNode("vcStatusMessage"); node.textContent = message; node.hidden = !message; }
@@ -69,16 +69,24 @@ function vcRenderLesson() {
   const chapter = vcStudio.course.chapters.find((item) => item.id === lesson.chapter_id);
   const index = lessons.indexOf(lesson);
   const state = vcStudio.progress.lessons[lesson.id] || {};
-  const questions = lesson.quiz.map((question, i) => `<fieldset class="vc-check-question"><legend><span>${i + 1}</span>${revEsc(question.prompt)}</legend>${question.kind === "mcq" ? `<div class="vc-mcq-options">${question.choices.map((choice, j) => `<label><input type="radio" name="${revEsc(question.id)}" value="${j}" required><span class="vc-choice-letter" aria-hidden="true">${String.fromCharCode(65 + j)}</span><span class="vc-choice-text">${revEsc(choice)}</span></label>`).join("")}</div>` : `<label class="vc-number-answer"><input name="${revEsc(question.id)}" inputmode="decimal" autocomplete="off" placeholder="Your answer" required><span>${revEsc(question.unit || "")}</span></label>`}</fieldset>`).join("");
+  const variant = vcStudio.lessonVariant?.lesson_id === lesson.id ? vcStudio.lessonVariant : null;
+  const practice = variant || lesson;
+  const questions = practice.quiz.map((question, i) => `<fieldset class="vc-check-question"><legend><span>${i + 1}</span>${revEsc(question.prompt)}</legend>${question.kind === "mcq" ? `<div class="vc-mcq-options">${question.choices.map((choice, j) => `<label><input type="radio" name="${revEsc(question.id)}" value="${j}" required><span class="vc-choice-letter" aria-hidden="true">${String.fromCharCode(65 + j)}</span><span class="vc-choice-text">${revEsc(choice)}</span></label>`).join("")}</div>` : `<label class="vc-number-answer"><input name="${revEsc(question.id)}" inputmode="decimal" autocomplete="off" placeholder="Your answer" required><span>${revEsc(question.unit || "")}</span></label>`}</fieldset>`).join("");
+  const example = practice.example || lesson.example;
   vcNode("vcLesson").innerHTML = `<div class="vc-lesson-topline"><span>CHAPTER ${vcStudio.course.chapters.indexOf(chapter) + 1} · LESSON ${index + 1} OF ${lessons.length}</span><button type="button" class="vc-quiet-button" data-print-lesson>Print lesson</button></div><h2 class="vc-lesson-title" tabindex="-1">${revEsc(lesson.title)}</h2><p class="vc-lesson-objective">${revEsc(lesson.why)}</p><div class="vc-lesson-meta"><span>About ${lesson.minutes} min</span><button type="button" data-open-lesson-source>Course pp. ${lesson.pages[0]}–${lesson.pages[1]} ↗</button>${state.last_score != null ? `<span>Last checkpoint: ${state.last_score}%</span>` : ""}</div>
     <section id="vcCoreExplanation" class="vc-lesson-section"><p class="vc-mini-label">FIRST, UNDERSTAND THE IDEA</p>${lesson.explain.map((paragraph) => `<p>${revEsc(paragraph)}</p>`).join("")}${vcDiagram(lesson.diagram)}${lesson.formula ? `<div class="vc-formula"><span>THE RELATIONSHIP TO REMEMBER</span><p>${revEsc(lesson.formula)}</p></div>` : ""}<h3>What to take away</h3><ul class="vc-takeaways">${lesson.key_points.map((point) => `<li>${revEsc(point)}</li>`).join("")}</ul></section>
-    <section class="vc-worked-example"><div class="vc-example-heading"><span class="vc-example-symbol" aria-hidden="true">↗</span><div><p class="vc-mini-label">SEE IT IN ACTION</p><h3>${revEsc(lesson.example.label)}</h3></div></div><p>${revEsc(lesson.example.context)}</p><ol>${lesson.example.steps.map((step) => `<li>${revEsc(step)}</li>`).join("")}</ol><div class="vc-example-result"><b>The result</b><span>${revEsc(lesson.example.result)}</span></div></section>
+    <section class="vc-worked-example"><div class="vc-example-heading"><span class="vc-example-symbol" aria-hidden="true">↗</span><div><p class="vc-mini-label">SEE IT IN ACTION</p><h3>${revEsc(example.label)}</h3></div><button type="button" class="vc-quiet-button" data-new-lesson-variant>New numbers</button></div><p>${revEsc(example.context)}</p><ol>${example.steps.map((step) => `<li>${revEsc(step)}</li>`).join("")}</ol><div class="vc-example-result"><b>The result</b><span>${revEsc(example.result)}</span></div></section>
     <aside class="vc-trap"><b>A trap to avoid</b><p>${revEsc(lesson.trap)}</p></aside>
     <section class="vc-checkpoint" id="vcCurrentCheckpoint"><p class="vc-mini-label">NOW, TRY WITHOUT LOOKING BACK</p><h3>Your two-question checkpoint</h3><p>Use your own reasoning first. The correction explains the method after you submit.</p><form id="vcCheckpointForm">${questions}<button class="vc-primary" type="submit">Check my understanding</button></form><div id="vcCheckpointResult" class="vc-checkpoint-result" hidden></div></section>
     <section class="vc-lesson-finish"><h3>What would help you next?</h3><div class="vc-finish-actions"><button id="vcMarkRead" class="vc-primary" type="button">${state.read_at ? "✓ Studied" : "I've studied this lesson"}</button><button id="vcPracticeLesson" class="vc-secondary" type="button">Practise this concept</button><button id="vcReviewLesson" class="vc-secondary" type="button" aria-pressed="${!!state.review_later}">${state.review_later ? "✓ In my review list" : "Add to review list"}</button></div><div class="vc-extra-actions"><button id="vcAskLesson" class="vc-quiet-button" type="button">I need another explanation</button><button id="vcMorePractice" class="vc-quiet-button" type="button">More exercises & past papers →</button></div></section>
     <footer class="vc-lesson-footer"><button id="vcPreviousLesson" type="button" class="vc-quiet-button" ${index === 0 ? "disabled" : ""}>← Previous lesson</button><span>${index + 1} / ${lessons.length}</span><button id="vcNextLesson" type="button" class="vc-quiet-button" ${index === lessons.length - 1 ? "disabled" : ""}>Next lesson →</button></footer>`;
   vcNode("vcLesson").querySelector("[data-open-lesson-source]").addEventListener("click", () => vcOpenSource(chapter.source_id, chapter.filename, lesson.pages[0]));
   vcNode("vcLesson").querySelector("[data-print-lesson]").addEventListener("click", () => window.print());
+  vcNode("vcLesson").querySelector("[data-new-lesson-variant]").addEventListener("click", async () => {
+    await vcLoadLessonVariant(lesson.id);
+    vcRenderLesson();
+    vcMessage("Fresh numbers loaded. Same method, new calculation.");
+  });
   vcNode("vcMarkRead").addEventListener("click", async () => { const alreadyRead = !!vcStudio.progress.lessons[lesson.id]?.read_at; if (await vcSetLessonState(alreadyRead ? "unread" : "read")) { vcNode("vcMarkRead").textContent = alreadyRead ? "I've studied this lesson" : "✓ Studied"; vcMessage(alreadyRead ? "Study mark removed. Your checkpoint score is unchanged." : "Lesson marked as studied. Your checkpoint score is tracked separately."); } });
   vcNode("vcReviewLesson").addEventListener("click", async () => {
     const action = vcStudio.progress.lessons[lesson.id]?.review_later ? "clear-review" : "revisit";
@@ -94,11 +102,23 @@ function vcRenderLesson() {
 async function vcOpenLesson(id, scroll = false) {
   if (!vcAllLessons().some((lesson) => lesson.id === id)) return;
   vcStudio.lessonId = id;
+  vcStudio.lessonVariant = null;
   revSelectTab("revCourse");
   vcRenderContents(); vcRenderLesson();
   if (window.matchMedia("(max-width: 760px)").matches) { vcNode("vcContentsBody").classList.remove("expanded"); vcNode("vcToggleContents").setAttribute("aria-expanded", "false"); }
   if (scroll) { vcNode("vcLesson").scrollIntoView({ block: "start", behavior: "smooth" }); vcNode("vcLesson").querySelector("h2").focus({ preventScroll: true }); }
+  await vcLoadLessonVariant(id);
+  vcRenderLesson();
   await vcSetLessonState("opened");
+}
+async function vcLoadLessonVariant(id) {
+  try {
+    const seed = Math.floor(Math.random() * 2_000_000_000);
+    const data = await revApi(`/api/vc/course/lesson/${encodeURIComponent(id)}/variant?seed=${seed}`);
+    vcStudio.lessonVariant = { ...data, lesson_id: id };
+  } catch (_) {
+    vcStudio.lessonVariant = null;
+  }
 }
 async function vcSetLessonState(action) {
   try {
@@ -115,7 +135,7 @@ async function vcSubmitCheckpoint(event) {
   const answers = Object.fromEntries(new FormData(form).entries());
   submit.disabled = true;
   try {
-    const result = await revApi("/api/vc/course/quiz", { method: "POST", body: JSON.stringify({ lesson_id: lessonId, answers }) });
+    const result = await revApi("/api/vc/course/quiz", { method: "POST", body: JSON.stringify({ lesson_id: lessonId, answers, variant_id: vcStudio.lessonVariant?.lesson_id === lessonId ? vcStudio.lessonVariant.variant_id : null }) });
     vcMessage("");
     vcStudio.progress = result.progress; vcRefreshProgress();
     if (vcStudio.lessonId !== lessonId) return;
@@ -191,6 +211,7 @@ window.initVcStudio = async function () {
     vcStudio.course = data.course; vcStudio.progress = data.progress;
     vcStudio.lessonId = data.progress.last_lesson && vcAllLessons().some((lesson) => lesson.id === data.progress.last_lesson) ? data.progress.last_lesson : vcAllLessons()[0].id;
     vcStudio.ready = true; vcRefreshProgress(); vcRenderLesson();
+    await vcLoadLessonVariant(vcStudio.lessonId); vcRenderLesson();
     vcNode("vcLessonSearch").addEventListener("input", vcRenderContents);
     vcNode("vcOnlyReview").addEventListener("change", vcRenderContents);
     vcNode("vcOpenLibrary").addEventListener("click", vcOpenLibrary);

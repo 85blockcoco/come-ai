@@ -32,6 +32,7 @@ from .pastpapers import find_paper, grade_paper, load_papers, paper_payload
 from .scheduler import answer_session, session_payload, start_session
 from .storage import VcStore
 from .keychain import KeychainError
+from .variants import generated_drill, variant_seed
 
 
 def _keychain_environment() -> dict[str, str]:
@@ -377,6 +378,9 @@ def create_vc_router(
     @router.post("/api/vc/drill/draw")
     def vc_drill_draw(payload: DrillDrawRequest) -> dict[str, Any]:
         content = get_content()
+        fresh = generated_drill(payload.topic_id, payload.seed if payload.seed is not None else 0)
+        if fresh is not None:
+            return {"drill": drill_payload(fresh), "source": "generated_variant"}
         drill = _wrap(
             random_drill,
             content.drills,
@@ -392,7 +396,13 @@ def create_vc_router(
         try:
             drill = content.drill(payload.drill_id)
         except ContentError as error:
-            raise HTTPException(status_code=400, detail=str(error)) from error
+            seed = variant_seed(payload.drill_id)
+            if seed is None:
+                raise HTTPException(status_code=400, detail=str(error)) from error
+            topic_id = "VC03" if payload.drill_id.startswith("variant-vc03-") else "VC05"
+            drill = generated_drill(topic_id, seed)
+            if drill is None:
+                raise HTTPException(status_code=400, detail="Unknown drill variant.") from error
         result = grade_drill(drill, payload.answer)
         given = result.get("given")
         given_value = given.get("value") if isinstance(given, dict) else None
