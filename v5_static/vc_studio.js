@@ -147,9 +147,13 @@ function vcRenderLesson() {
     const buttonLabel = event.currentTarget.textContent;
     event.currentTarget.disabled = true;
     event.currentTarget.textContent = "Tutor is checking…";
+    answer.hidden = false;
+    answer.innerHTML = '<p class="vc-tutor-pending"><span class="vc-pending-dot" aria-hidden="true"></span> Gemini is checking your reasoning against the course…</p>';
+    vcMessage("Gemini is checking your answer…");
     try {
       const prompt = `Correct this student's ${kind === "method" ? "calculation method" : "exam-trap reasoning"} for the Venture Capital lesson "${lesson.title}". Return the first line exactly as SCORE: NN% (an indicative pedagogical score, not an official grade), then give: 1) what is correct, 2) what is missing or wrong, 3) the corrected method in concise English. Use only the course concepts provided to you.`;
-      const payload = await revApi("/api/vc/tutor", { method: "POST", body: JSON.stringify({ message: prompt, mode: "correct", topic_id: lesson.topic_ids?.[0] || null, student_answer: value }) });
+      const request = revApi("/api/vc/tutor", { method: "POST", body: JSON.stringify({ message: prompt, mode: "correct", topic_id: lesson.topic_ids?.[0] || null, student_answer: value }) });
+      const payload = await Promise.race([request, new Promise((_, reject) => setTimeout(() => reject(new Error("Gemini took too long to respond. Try again; your answer is still in the box.")), 20000))]);
       const match = String(payload.text || "").match(/SCORE\s*:\s*(\d{1,3})\s*%/i);
       const score = match ? Math.min(100, Number(match[1])) : null;
       const scoreHtml = score == null ? "" : `<div class="vc-text-score"><strong>${score}%</strong><span>indicative tutor assessment</span></div>`;
@@ -159,9 +163,9 @@ function vcRenderLesson() {
     } catch (_) {
       const result = vcFreeTextFeedback(value, scoring[kind].terms, scoring[kind].correction);
       const missing = result.missing.length ? `<p><b>Still to include:</b> ${revEsc(result.missing.join(", "))}</p>` : "<p><b>Key concepts detected.</b> Now verify the units and interpretation.</p>";
-      answer.innerHTML = `<div class="vc-text-score"><strong>${result.score}%</strong><span>offline concept coverage</span></div>${missing}<p><b>Correction:</b> ${revEsc(result.correction)}</p><small>Gemini was unavailable; this is a local fallback, not an official exam grade.</small>`;
+      answer.innerHTML = `<div class="vc-text-score"><strong>${result.score}%</strong><span>offline concept coverage</span></div><p class="vc-tutor-error">Gemini could not return a correction this time.</p>${missing}<p><b>Course correction:</b> ${revEsc(result.correction)}</p><small>This is a local fallback, not an official exam grade. Try the tutor again when the connection is available.</small>`;
       answer.hidden = false;
-      event.currentTarget.textContent = "✓ Checked offline";
+      event.currentTarget.textContent = "Try Gemini again";
     } finally { event.currentTarget.disabled = false; if (!answer.hidden) vcMessage(""); else event.currentTarget.textContent = buttonLabel; }
   }));
 }
