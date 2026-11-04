@@ -3,7 +3,7 @@
 const vcStudio = { ready: false, loading: false, course: null, progress: null, lessonId: null, lessonVariant: null, library: [], source: null };
 const vcNode = (id) => document.getElementById(id);
 const vcAllLessons = () => (vcStudio.course?.chapters || []).flatMap((chapter) => chapter.lessons);
-function vcMessage(message) { const node = vcNode("vcStatusMessage"); node.textContent = message; node.hidden = !message; }
+function vcMessage(message) { const node = vcNode("vcStatusMessage"); if (!node) return; node.textContent = message; node.hidden = !message; }
 function vcStored(key, fallback) { try { return localStorage.getItem(key) ?? fallback; } catch (_) { return fallback; } }
 function vcSave(key, value) { try { localStorage.setItem(key, value); } catch (_) { /* optional preference storage */ } }
 
@@ -142,14 +142,15 @@ function vcRenderLesson() {
   });
   const scoring = { method: { terms: methodTerms, correction: formula }, trap: { terms: trapTerms, correction: lesson.trap } };
   vcNode("vcLesson").querySelectorAll("[data-extra-score-button]").forEach((button) => button.addEventListener("click", async (event) => {
-    const kind = event.currentTarget.dataset.extraScoreButton;
+    const clickedButton = event.currentTarget;
+    const kind = clickedButton.dataset.extraScoreButton;
     const input = vcNode("vcLesson").querySelector(`[data-extra-input="${kind}"]`);
     const answer = vcNode("vcLesson").querySelector(`[data-extra-answer="${kind}"]`);
     const value = input?.value.trim() || "";
     if (!value) { vcMessage("Write your answer before checking it."); input?.focus(); return; }
-    const buttonLabel = event.currentTarget.textContent;
-    event.currentTarget.disabled = true;
-    event.currentTarget.textContent = "Tutor is checking…";
+    const buttonLabel = clickedButton.textContent;
+    clickedButton.disabled = true;
+    clickedButton.textContent = "Tutor is checking…";
     const progress = vcNode("vcLesson").querySelector(`[data-extra-progress="${kind}"]`);
     const progressLabel = progress?.querySelector(".vc-progress-label");
     if (progress) { progress.hidden = false; progress.classList.add("active"); }
@@ -167,18 +168,16 @@ function vcRenderLesson() {
       const scoreHtml = score == null ? "" : `<div class="vc-text-score"><strong>${score}%</strong><span>indicative tutor assessment</span></div>`;
       answer.innerHTML = `${scoreHtml}<div class="vc-tutor-correction">${typeof revMarkdown === "function" ? revMarkdown(payload.text) : revEsc(payload.text || "No correction returned.")}</div><small>${payload.source === "ai" ? "Gemini tutor correction, grounded in the course context." : "Tutor unavailable: local course correction shown as a fallback."}</small>`;
       answer.hidden = false;
-      event.currentTarget.textContent = "✓ Checked by tutor";
+      clickedButton.textContent = "✓ Checked by tutor";
       if (progress) { progress.classList.remove("active"); progress.classList.add("done"); }
       if (progressLabel) progressLabel.textContent = "Correction ready";
     } catch (error) {
-      const result = vcFreeTextFeedback(value, scoring[kind].terms, scoring[kind].correction);
-      const missing = result.missing.length ? `<p><b>Still to include:</b> ${revEsc(result.missing.join(", "))}</p>` : "<p><b>Key concepts detected.</b> Now verify the units and interpretation.</p>";
-      answer.innerHTML = `<div class="vc-text-score"><strong>${result.score}%</strong><span>offline concept coverage</span></div><p class="vc-tutor-error">Gemini could not return a correction this time: ${revEsc(error.message || "request failed")}</p>${missing}<p><b>Course correction:</b> ${revEsc(result.correction)}</p><small>This is a local fallback, not an official exam grade. Try the tutor again when the connection is available.</small>`;
+      answer.innerHTML = `<p class="vc-tutor-error">Gemini could not return a correction this time: ${revEsc(error.message || "request failed")}</p><p><b>Course reference:</b> ${revEsc(scoring[kind].correction)}</p><small>No score was calculated. Try Gemini again when the connection is available.</small>`;
       answer.hidden = false;
-      event.currentTarget.textContent = "Try Gemini again";
+      clickedButton.textContent = "Try Gemini again";
       if (progress) { progress.classList.remove("active"); progress.classList.add("error"); }
       if (progressLabel) progressLabel.textContent = "Gemini unavailable — try again";
-    } finally { event.currentTarget.disabled = false; if (!answer.hidden) vcMessage(""); else event.currentTarget.textContent = buttonLabel; }
+    } finally { clickedButton.disabled = false; if (!answer.hidden) vcMessage(""); else clickedButton.textContent = buttonLabel; }
   }));
 }
 async function vcOpenLesson(id, scroll = false) {
