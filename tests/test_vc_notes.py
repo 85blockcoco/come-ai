@@ -191,7 +191,7 @@ def test_approval_requires_an_answer_for_a_completer(tmp_path: Path) -> None:
         item for item in result["proposals"] if item["status"] == "a_completer"
     )
 
-    with pytest.raises(InputError, match="à compléter"):
+    with pytest.raises(InputError, match="to be completed"):
         approve_proposal(store, proposal["proposal_id"])
 
     card = approve_proposal(
@@ -236,7 +236,7 @@ def test_rejection_persists_and_prevents_reintroduction(tmp_path: Path) -> None:
     }
     assert statuses["rejected"] == "rejected"
 
-    with pytest.raises(InputError, match="rejetée"):
+    with pytest.raises(InputError, match="rejected"):
         approve_proposal(store, proposal["proposal_id"])
 
 
@@ -269,7 +269,7 @@ def test_changed_source_is_flagged_and_requires_replace(tmp_path: Path) -> None:
     )
     old_source = first["source"]
 
-    with pytest.raises(InputError, match="changé"):
+    with pytest.raises(InputError, match="changed"):
         ingest_notes(
             store,
             "Pre-money : définition remplacée du pre-money avant le cash.\n",
@@ -334,7 +334,7 @@ def test_non_utf8_and_unsupported_files_are_rejected(tmp_path: Path) -> None:
 
     unsupported = tmp_path / "notes.docx"
     unsupported.write_text("contenu", encoding="utf-8")
-    with pytest.raises(InputError, match="non supporté"):
+    with pytest.raises(InputError, match="Unsupported notes format"):
         ingest_file(store, unsupported, topic_id="VC04")
 
     empty = tmp_path / "empty.md"

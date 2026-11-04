@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "pack_id": "cards-vc01",
+  "topic_id": "VC01",
+  "language": "en",
+  "source_type": "original",
+  "license": "Original NAGE content",
+  "items": [
+    {
+      "kind": "card",
+      "id": "VC01-C001",
+      "topic_id": "VC01",
+      "question": "What is venture capital?",
+      "answer": "A form of private equity financing provided to early-stage, high-potential startups in exchange for equity.",
+      "explanation": "VC supports innovation and growth, accepting high risk for high return.",
+      "status": "active",
+      "tags": ["venture capital", "definition"]
+    },
+    {
+      "kind": "card",
+      "id": "VC01-C002",
+      "topic_id": "VC01",
+      "question": "Who are the main players in the VC ecosystem?",
+      "answer": "Entrepreneurs, venture capitalists (GPs), limited partners (LPs), angel investors, and advisors.",
+      "explanation": "Each plays a distinct role in funding and supporting startups.",
+      "status": "active",
+      "tags": ["ecosystem", "players"]
+    },
+    {
+      "kind": "card",
+      "id": "VC01-C003",
+      "topic_id": "VC01",
+      "question": "What is a general partner (GP)?",
+      "answer": "The manager of a VC fund who makes investment decisions and manages portfolio companies.",
+      "explanation": "The GP earns management fees and carried interest.",
+      "status": "active",
+      "tags": ["GP", "fund"]
+    },
+    {
+      "kind": "card",
+      "id": "VC01-C004",
+      "topic_id": "VC01",
+      "question": "What is a limited partner (LP)?",
+      "answer": "An investor in a VC fund (e.g. pension fund, endowment, family office) that provides capital but does not manage investments.",
+      "explanation": "LPs are passive investors with limited liability.",
+      "status": "active",
+      "tags": ["LP", "investor"]
+    },
+    {
+      "kind": "card",
+      "id": "VC01-C005",
+      "topic_id": "VC01",
+      "question": "What is an angel investor?",
+      "answer": "A high-net-worth individual who invests personal capital in very early-stage startups, often before VC funds.",
+      "explanation": "Angels often provide mentorship and small cheques.",
+      "status": "active",
+      "tags": ["angel", "seed"]
+    },
+    {
+      "kind": "card",
+      "id": "VC01-C006",
+      "topic_id": "VC01",
+      "question": "What is the difference between VC and private equity buyout?",
+      "answer": "VC invests in early-stage, high-growth startups for minority stakes; buyout acquires mature companies, often with debt, for control.",
+      "explanation": "They differ in stage, risk and ownership.",
+      "status": "active",
+      "tags": ["VC", "buyout"]
+    },
+    {
+      "kind": "card",
+      "id": "VC01-C007",
+      "topic_id": "VC01",
+      "question": "What is a startup incubator?",
+      "answer": "An organization that supports very early-stage startups with workspace, mentorship and small funding in exchange for equity.",
+      "explanation": "Incubators help founders validate ideas before raising VC.",
+      "status": "active",
+      "tags": ["incubator", "ecosystem"]
+    },
+    {
+      "kind": "card",
+      "id": "VC01-C008",
+      "topic_id": "VC01",
+      "question": "What is an accelerator?",
+      "answer": "A fixed-term program providing seed funding, mentorship and networking in exchange for equity, culminating in a demo day.",
+      "explanation": "Accelerators compress the early stage into a few months.",
+      "status": "active",
+      "tags": ["accelerator", "ecosystem"]
+    }
+  ]
+}

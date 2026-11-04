@@ -41,9 +41,9 @@ def test_each_criterion_is_evaluated_separately() -> None:
     attempt = evaluate_case(
         case,
         {
-            "q1": "Post-money 10 M€, investisseur 20 %.",
-            "q2": "2 millions d'actions nouvelles.",
-            "q3": "Le runway se raccourcit et un bridge peut diluer.",
+            "q1": "Post-money 10 M€, investor 20%.",
+            "q2": "2 million new shares.",
+            "q3": "The runway shortens and a bridge may dilute further.",
         },
     )
     assert attempt.score == pytest.approx(1.0)
@@ -54,7 +54,7 @@ def test_each_criterion_is_evaluated_separately() -> None:
 
 def test_partial_answer_uses_weighted_sum() -> None:
     case = load_content().case("VC03-CASE01")
-    attempt = evaluate_case(case, {"q1": "Post-money 10 M€, investisseur 20 %."})
+    attempt = evaluate_case(case, {"q1": "Post-money 10 M€, investor 20%."})
     assert attempt.score == pytest.approx(0.5)
     assert sum(item["earned"] for item in attempt.criteria_results) == pytest.approx(0.5)
     assert attempt.score == pytest.approx(
@@ -68,20 +68,22 @@ def test_empty_and_partial_answers_are_honest() -> None:
     assert empty.score == 0.0
     assert all(not item["matched"] for item in empty.criteria_results)
 
-    partial = evaluate_case(case, {"q1": "Post-money 30 M€, investisseur 20 %."})
+    partial = evaluate_case(case, {"q1": "Post-money 30 M€, investor 20%."})
     assert partial.score == pytest.approx(0.4)
 
 
-def test_unsupported_number_is_flagged_without_changing_score() -> None:
+def test_unsupported_number_is_flagged_and_penalizes_the_score() -> None:
     case = load_content().case("VC03-CASE01")
     answers = {
-        "q1": "Post-money 10 M€, investisseur 20 %.",
-        "q2": "2 millions d'actions nouvelles.",
-        "q3": "Le runway se raccourcit et un bridge peut diluer.",
+        "q1": "Post-money 10 M€, investor 20%.",
+        "q2": "2 million new shares.",
+        "q3": "The runway shortens and a bridge may dilute further.",
     }
     clean = evaluate_case(case, answers)
-    polluted = evaluate_case(case, {**answers, "q2": "2 millions d'actions, soit 42 M€."})
-    assert clean.score == polluted.score == pytest.approx(1.0)
+    polluted = evaluate_case(case, {**answers, "q2": "2 million shares, i.e. 42 M€."})
+    assert clean.score == pytest.approx(1.0)
+    assert polluted.score == pytest.approx(0.875)
+    assert polluted.score < clean.score
     assert 42.0 in polluted.unsupported_numbers
     assert 42.0 not in clean.unsupported_numbers
 
@@ -220,4 +222,4 @@ def test_text_helpers() -> None:
     assert normalize_text("Préférence  de LIQUIDATION") == "preference de liquidation"
     assert extract_numbers("10 M€ et 2,5 %") == [10.0, 2.5]
     case = load_content().case("VC07-CASE04")
-    assert unsupported_numbers(case, "A reçoit 5,5 M€ et B reçoit 2,9 M€") == []
+    assert unsupported_numbers(case, "A receives 5.5 M€ and B receives 2.9 M€") == []

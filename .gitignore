@@ -1,5 +1,7 @@
 # Secrets et données privées de l'espace de travail
 .env
+.env.*
+!.env.example
 data/
 output/
 logs/
@@ -19,8 +21,31 @@ __pycache__/
 .pytest_cache/
 *.part
 
+# Supports de cours privés et artefacts VC (jamais versionnés)
+docs/vc_study/
+_vc_courses/
+_vc_temp/
+vc_exam_data/
+vc_exam_static/
+vc_night_build.log
+*.pid
+
 # Environnement virtuel local
 .venv/
 messages/
 messages/result.json
 artifacts/
+
+# Artifacts de runtime orchestrator (jamais versionnés)
+*.log
+*.out
+*.bak
+*.bak[0-9]*
+test_output.txt
+messages/queue/
+messages/results/
+messages/inflight/
+messages/*.bak.json
+
+# Legacy local VC data stays outside version control.
+/vc/

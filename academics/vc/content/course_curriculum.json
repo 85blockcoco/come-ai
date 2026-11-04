@@ -1,0 +1,1775 @@
+{
+  "schema_version": 1,
+  "title": "Venture Capital",
+  "language": "en",
+  "description": "An English learning path grounded in the five EDHEC lecture decks. Worked practice examples are educational adaptations; the original slides remain available alongside every lesson.",
+  "chapters": [
+    {
+      "id": "foundations",
+      "title": "The VC ecosystem",
+      "filename": "Topic 1 Introduction to venture capital and the VC ecosystem.pdf",
+      "pages": 49,
+      "lessons": [
+        {
+          "id": "vc-foundations",
+          "title": "What venture capital actually does",
+          "pages": [
+            1,
+            6
+          ],
+          "topic_ids": [
+            "VC01",
+            "VC03"
+          ],
+          "minutes": 7,
+          "why": "Explain why an innovative startup needs a different investor from a mature business.",
+          "explain": [
+            "Venture capital finances young, scalable companies under substantial uncertainty. A startup may still be building its product, validating customer demand or searching for a repeatable business model. Lack of reliable cash flow and collateral makes ordinary bank lending difficult.",
+            "The course distinguishes VC, growth equity and buyouts by business maturity, ownership and value creation. A minority stake does not imply passive ownership: a VC may mentor founders, sit on the board and negotiate protective rights."
+          ],
+          "key_points": [
+            "Startup: innovation, scalability, uncertainty, constrained resources and iterative learning.",
+            "VC: minority equity with substantial involvement and a high risk of failure.",
+            "Growth equity supports a more established model; buyouts normally seek control.",
+            "A few exceptional successes can dominate portfolio returns: the power-law pattern."
+          ],
+          "formula": "",
+          "diagram": "funding",
+          "example": {
+            "label": "Worked practice example",
+            "context": "A fund invests $1m in each of ten startups. Nine investments return nothing; one returns $25m. Ignore fees and timing.",
+            "steps": [
+              "Total invested = 10 × $1m = $10m.",
+              "Total proceeds = $25m.",
+              "Portfolio MOIC = $25m / $10m."
+            ],
+            "result": "2.5x before fees; one success can carry a portfolio."
+          },
+          "trap": "A forecast missed is not the same event as the company being liquidated.",
+          "quiz": [
+            {
+              "kind": "mcq",
+              "prompt": "Which investment most closely fits VC?",
+              "choices": [
+                "A controlling acquisition of a mature cash-generating company",
+                "A minority investment in a scalable startup with uncertain cash flows",
+                "A government bond purchase"
+              ],
+              "answer": "1",
+              "explanation": "VC backs young scalable businesses, usually with a minority equity position.",
+              "id": "vc-foundations-q1"
+            },
+            {
+              "kind": "numeric",
+              "prompt": "What is the portfolio MOIC in the worked example?",
+              "answer": 2.5,
+              "unit": "x",
+              "tolerance": 0.01,
+              "explanation": "25 / 10 = 2.5x.",
+              "id": "vc-foundations-q2"
+            }
+          ],
+          "chapter_id": "foundations",
+          "source_filename": "Topic 1 Introduction to venture capital and the VC ecosystem.pdf"
+        },
+        {
+          "id": "ecosystem",
+          "title": "Benefits, risks and the ecosystem",
+          "pages": [
+            7,
+            23
+          ],
+          "topic_ids": [
+            "VC01",
+            "VC17"
+          ],
+          "minutes": 7,
+          "why": "Explain the interests of founders, financial VCs, corporate VCs and fund investors.",
+          "explain": [
+            "Founders receive capital, expertise, networks and credibility, but fundraising takes time and can create a mismatch over strategy or exit expectations. Financial VCs seek investment returns; corporate VCs may also seek technology, ecosystem access and an acquisition pipeline.",
+            "LPs may seek return enhancement, diversification or a mission objective. These benefits come with illiquidity, uncertain timing and selection risk. Historical charts in the slides describe particular samples and dates; they are not guaranteed forecasts."
+          ],
+          "key_points": [
+            "Separate founder, VC and LP incentives when analysing a case.",
+            "Distinguish strategic corporate VC from a purely financial mandate.",
+            "Assess technology, market and people risks, as well as funding and timing.",
+            "Use the original charts on pp. 7–9 and 18–20 for the course evidence and their dates."
+          ],
+          "formula": "",
+          "diagram": "",
+          "example": {
+            "label": "Worked practice example",
+            "context": "A corporate investor values access to technology; a financial VC wants an exit within its fund life.",
+            "steps": [
+              "Identify the corporate strategic objective.",
+              "Identify the financial return and timing objective.",
+              "Explain a potential conflict if the corporate investor blocks a sale to a competitor."
+            ],
+            "result": "Both investors may fund the same startup while valuing different outcomes."
+          },
+          "trap": "Diversification does not make illiquid VC investments risk-free.",
+          "quiz": [
+            {
+              "kind": "mcq",
+              "prompt": "Which objective is especially associated with corporate VC?",
+              "choices": [
+                "Technology scouting and strategic learning",
+                "A guarantee of immediate liquidity",
+                "Avoiding all involvement in the company"
+              ],
+              "answer": "0",
+              "explanation": "The course identifies innovation scouting and strategic ecosystem benefits for CVC.",
+              "id": "ecosystem-q1"
+            },
+            {
+              "kind": "mcq",
+              "prompt": "Which statement about historical VC charts is sound?",
+              "choices": [
+                "They guarantee the same returns for the next fund",
+                "Their sample, period and measurement basis matter",
+                "They eliminate selection risk"
+              ],
+              "answer": "1",
+              "explanation": "Historical evidence must be interpreted with its period, sample and definitions.",
+              "id": "ecosystem-q2"
+            }
+          ],
+          "chapter_id": "foundations",
+          "source_filename": "Topic 1 Introduction to venture capital and the VC ecosystem.pdf"
+        },
+        {
+          "id": "financing-stages",
+          "title": "Stages, milestones and dilution",
+          "pages": [
+            24,
+            29
+          ],
+          "topic_ids": [
+            "VC03",
+            "VC05"
+          ],
+          "minutes": 7,
+          "why": "Connect the funding need to the next milestone and track dilution across rounds.",
+          "explain": [
+            "Pre-seed supports exploration and feasibility; seed and early rounds support validation and commercialisation; later rounds finance scale. The relevant investor and instrument change as the company develops. Staged financing releases funding around progress and new information.",
+            "Capital raised must be consistent with expected cash burn and the time needed to reach the next milestone. Each equity round then dilutes existing owners. Repeated dilution is multiplicative, even when valuation rises."
+          ],
+          "key_points": [
+            "Start with the milestone, burn rate and required runway.",
+            "Identify the funding sources suitable for the stage.",
+            "A new investor fraction is measured against post-money value.",
+            "Apply each later-round dilution factor to the stake remaining from earlier rounds."
+          ],
+          "formula": "Funding need = monthly cash burn × months; F_after = F_before × (1 − new investor fraction)",
+          "diagram": "dilution",
+          "example": {
+            "label": "Worked practice example",
+            "context": "Founders own 85% before a seed round. The company burns €60k per month, needs 12 months, and gives the seed investor 18% of post-round equity.",
+            "steps": [
+              "Funding need = €60k × 12 = €720k.",
+              "Existing owners retain 1 − 18% = 82% of their previous stake.",
+              "Founders after the round = 85% × 82%."
+            ],
+            "result": "€720k funding and 69.7% founder ownership."
+          },
+          "trap": "Subtracting 18 percentage points from 85% would be wrong: dilution is proportional.",
+          "quiz": [
+            {
+              "kind": "numeric",
+              "prompt": "At €60k monthly burn, how many €th are needed for 12 months?",
+              "answer": 720,
+              "unit": "€th",
+              "tolerance": 0.01,
+              "explanation": "60 × 12 = 720 €th.",
+              "id": "financing-stages-q1"
+            },
+            {
+              "kind": "numeric",
+              "prompt": "What percentage do the founders retain after the round?",
+              "answer": 69.7,
+              "unit": "%",
+              "tolerance": 0.01,
+              "explanation": "85% × (1 − 18%) = 69.7%.",
+              "id": "financing-stages-q2"
+            }
+          ],
+          "chapter_id": "foundations",
+          "source_filename": "Topic 1 Introduction to venture capital and the VC ecosystem.pdf"
+        },
+        {
+          "id": "investor-types",
+          "title": "Incubators, accelerators, VC firms and funds",
+          "pages": [
+            30,
+            34
+          ],
+          "topic_ids": [
+            "VC01",
+            "VC02"
+          ],
+          "minutes": 7,
+          "why": "Choose a plausible source of financing and distinguish a fund from its manager.",
+          "explain": [
+            "An incubator usually helps an early idea develop over a flexible period; an accelerator normally runs a short, structured programme for a company with an MVP or early traction. Programme terms vary: compare funding, equity cost, mentoring and access to investors.",
+            "A VC firm manages investment funds. Its focus, people and networks affect sourcing and support. The course compares lean VC partnerships with larger PE organisations, and contrasts the stage, number of portfolio firms, instruments and governance of VC, growth and buyout funds."
+          ],
+          "key_points": [
+            "Check stage fit before approaching an investor.",
+            "Assess what support is actually offered for the equity requested.",
+            "Distinguish firm/manager, fund, portfolio company and LP.",
+            "Treat the slide ticket-size and fund-size ranges as course examples, not universal rules."
+          ],
+          "formula": "",
+          "diagram": "",
+          "example": {
+            "label": "Worked practice example",
+            "context": "A pre-product founder needs mentoring and a place to experiment. Another company has an MVP and needs a concentrated programme leading to investor pitches.",
+            "steps": [
+              "The first need is closer to an incubator’s role.",
+              "The second need is closer to an accelerator’s role.",
+              "For each, compare programme terms and the team’s actual fit."
+            ],
+            "result": "Choose by development need and investor fit, not by the label alone."
+          },
+          "trap": "An accelerator is not simply a smaller buyout fund.",
+          "quiz": [
+            {
+              "kind": "mcq",
+              "prompt": "Which programme is usually shorter and more structured?",
+              "choices": [
+                "An accelerator",
+                "An unlimited-life incubator programme",
+                "A buyout holding company"
+              ],
+              "answer": "0",
+              "explanation": "The course contrasts a fixed accelerator programme with a more flexible incubation period.",
+              "id": "investor-types-q1"
+            },
+            {
+              "kind": "mcq",
+              "prompt": "Which statement is correct?",
+              "choices": [
+                "The VC firm and every fund it manages are the same entity",
+                "A VC firm can manage several investment funds",
+                "Portfolio companies are the LPs of the fund"
+              ],
+              "answer": "1",
+              "explanation": "The manager, its investment funds and their portfolio companies have distinct roles.",
+              "id": "investor-types-q2"
+            }
+          ],
+          "chapter_id": "foundations",
+          "source_filename": "Topic 1 Introduction to venture capital and the VC ecosystem.pdf"
+        },
+        {
+          "id": "fund-performance",
+          "title": "Measure fund performance without mixing metrics",
+          "pages": [
+            35,
+            41
+          ],
+          "topic_ids": [
+            "VC02",
+            "VC09"
+          ],
+          "minutes": 7,
+          "why": "Compute fund multiples and distinguish realised returns, residual value and timing.",
+          "explain": [
+            "MOIC compares total value with invested capital. At fund level, DPI counts distributions already returned, RVPI counts remaining NAV and TVPI combines both. PIC measures the fraction of committed capital drawn. A high TVPI can therefore include a large unrealised component.",
+            "IRR incorporates the timing of cash flows. Gross returns are before relevant fees, expenses and carry; net returns are what remain for investors under the stated convention. Two funds with the same multiple need not have the same IRR. The fundraising charts on pp. 36–41 add stage, investor, sector and geography context."
+          ],
+          "key_points": [
+            "DPI = distributions / paid-in capital.",
+            "RVPI = NAV / paid-in capital; TVPI = DPI + RVPI.",
+            "PIC = paid-in capital / committed capital.",
+            "State the gross/net convention and the dates before interpreting IRR."
+          ],
+          "formula": "DPI = D / PICash; RVPI = NAV / PICash; TVPI = DPI + RVPI",
+          "diagram": "",
+          "example": {
+            "label": "Worked practice example",
+            "context": "LPs commit €20m and pay in €10m. The fund has distributed €6m and holds €9m NAV.",
+            "steps": [
+              "DPI = 6 / 10 = 0.6x.",
+              "RVPI = 9 / 10 = 0.9x.",
+              "TVPI = 0.6 + 0.9 = 1.5x; PIC = 10 / 20 = 50%."
+            ],
+            "result": "1.5x total value, of which only 0.6x has been distributed."
+          },
+          "trap": "TVPI is not cash returned; that is DPI.",
+          "quiz": [
+            {
+              "kind": "numeric",
+              "prompt": "With distributions 6, NAV 9 and paid-in capital 10, what is TVPI?",
+              "answer": 1.5,
+              "unit": "x",
+              "tolerance": 0.01,
+              "explanation": "(6 + 9) / 10 = 1.5x.",
+              "id": "fund-performance-q1"
+            },
+            {
+              "kind": "numeric",
+              "prompt": "With paid-in capital 10 and commitments 20, what is PIC?",
+              "answer": 50,
+              "unit": "%",
+              "tolerance": 0.01,
+              "explanation": "10 / 20 = 50%.",
+              "id": "fund-performance-q2"
+            }
+          ],
+          "chapter_id": "foundations",
+          "source_filename": "Topic 1 Introduction to venture capital and the VC ecosystem.pdf"
+        },
+        {
+          "id": "investment-process",
+          "title": "Deal sourcing, FIRE and FUEL",
+          "pages": [
+            42,
+            49
+          ],
+          "topic_ids": [
+            "VC10",
+            "VC18"
+          ],
+          "minutes": 7,
+          "why": "Explain the investment relationship from mutual fit to exit.",
+          "explain": [
+            "The investment process includes sourcing, due diligence and valuation, negotiating the deal, hands-on support, follow-on financing and exit. Lead investors commonly set commercial terms and perform substantial diligence; followers join a syndicated deal after those terms are developed.",
+            "FIRE structures the relationship as Fit, Invest, Ride, Exit. FUEL asks founders to examine Fundamental identity, Underlying motivations, Expertise and Leadership style. These frameworks turn a vague notion of investor quality into questions about incentives and practical support."
+          ],
+          "key_points": [
+            "Deal fit includes stage, sector, geography, ticket size and fund constraints.",
+            "Diligence should run in both directions: founders should take investor references.",
+            "A lead and followers have different responsibilities in a syndicate.",
+            "Read the course’s geography and holding-period charts with the appropriate sample."
+          ],
+          "formula": "",
+          "diagram": "process",
+          "example": {
+            "label": "Worked practice example",
+            "context": "A founder receives the highest valuation from an investor whose fund is near the end of its life, while the startup needs years of product development.",
+            "steps": [
+              "Identify the mismatch in timing.",
+              "Use FUEL to examine identity and motivation.",
+              "Compare expertise, follow-on capacity and working style before choosing."
+            ],
+            "result": "The highest headline valuation need not produce the best long-term partner."
+          },
+          "trap": "FIRE describes a relationship process; it is not a valuation formula.",
+          "quiz": [
+            {
+              "kind": "mcq",
+              "prompt": "Which sequence matches FIRE?",
+              "choices": [
+                "Fit, Invest, Ride, Exit",
+                "Forecast, Interest, Revenue, Equity",
+                "Fund, IPO, Return, Earnings"
+              ],
+              "answer": "0",
+              "explanation": "FIRE describes the relationship from mutual fit through investment and collaboration to exit.",
+              "id": "investment-process-q1"
+            },
+            {
+              "kind": "mcq",
+              "prompt": "Which diligence question should a founder ask?",
+              "choices": [
+                "Only the headline valuation matters",
+                "What do prior portfolio founders say about this investor?",
+                "Whether all other investors have identical preferences"
+              ],
+              "answer": "1",
+              "explanation": "The slides recommend mutual diligence and references from previously backed founders.",
+              "id": "investment-process-q2"
+            }
+          ],
+          "chapter_id": "foundations",
+          "source_filename": "Topic 1 Introduction to venture capital and the VC ecosystem.pdf"
+        }
+      ]
+    },
+    {
+      "id": "evaluation",
+      "title": "Evaluating a startup",
+      "filename": "Topic 2 Evaluating startups(1).pdf",
+      "pages": 36,
+      "lessons": [
+        {
+          "id": "selection",
+          "title": "Team, business model and investment selection",
+          "pages": [
+            1,
+            6
+          ],
+          "topic_ids": [
+            "VC10",
+            "VC18"
+          ],
+          "minutes": 7,
+          "why": "Move from liking a pitch to testing the investment case.",
+          "explain": [
+            "Startup selection is difficult because financial history is limited and uncertainty is substantial. The Gompers study discussed in class emphasises the team, while also considering business model, product, market, valuation, ability to add value and portfolio fit. Importance varies across investors and stages.",
+            "An assessment should distinguish a claimed strength from evidence. Relevant evidence can include founder references, technical validation, customer feedback and a realistic commercial plan. A promising company can still be a poor investment at the wrong valuation or terms."
+          ],
+          "key_points": [
+            "Evaluate ability, motivation, cohesion and complementary skills in the team.",
+            "Separate business quality from investment attractiveness at a given price.",
+            "Record uncertainty rather than quietly assuming a claim is true.",
+            "Use the study tables on pp. 3–6 to understand evidence and variation, not certainty."
+          ],
+          "formula": "",
+          "diagram": "",
+          "example": {
+            "label": "Worked practice example",
+            "context": "A founder claims a huge addressable market and strong technology, but has no commercial lead and no customer interviews.",
+            "steps": [
+              "List the claimed strengths.",
+              "Identify the evidence gaps in demand and customer access.",
+              "Propose interviews and a commercial hiring plan before investment."
+            ],
+            "result": "Translate the pitch into testable hypotheses."
+          },
+          "trap": "A large market estimate is not evidence that this startup can acquire customers.",
+          "quiz": [
+            {
+              "kind": "mcq",
+              "prompt": "What is the most useful next step after an untested demand claim?",
+              "choices": [
+                "Assume the entire market will buy",
+                "Gather direct customer evidence",
+                "Ignore the team"
+              ],
+              "answer": "1",
+              "explanation": "Primary market evidence can test customer need and willingness to pay.",
+              "id": "selection-q1"
+            },
+            {
+              "kind": "mcq",
+              "prompt": "Can a strong company still be a poor investment?",
+              "choices": [
+                "Yes, if price, terms or investor fit are unfavourable",
+                "No, company quality determines every investment outcome",
+                "Only after an IPO"
+              ],
+              "answer": "0",
+              "explanation": "The final decision also considers valuation, deal terms and portfolio fit.",
+              "id": "selection-q2"
+            }
+          ],
+          "chapter_id": "evaluation",
+          "source_filename": "Topic 2 Evaluating startups(1).pdf"
+        },
+        {
+          "id": "evaluation-matrix",
+          "title": "The venture evaluation matrix",
+          "pages": [
+            7,
+            13
+          ],
+          "topic_ids": [
+            "VC10",
+            "VC14",
+            "VC18"
+          ],
+          "minutes": 7,
+          "why": "Use all nine cells of the matrix and link them to market, technology and people risks.",
+          "explain": [
+            "The matrix crosses customer, company and entrepreneur with three layers. Value proposition asks about need, solution and team. Industry asks about market, competition and network. Strategy asks about sales, production and organisation. Together they test whether the venture can create, scale and capture value.",
+            "Use the matrix to support a continue, pivot or abandon decision. A pivot changes a weak component while preserving what works; an unresolved fatal flaw can justify abandoning the venture. VCs use it for screening and diligence, then combine its results with valuation, terms and portfolio fit."
+          ],
+          "key_points": [
+            "Need, solution, team: can value be created?",
+            "Market, competition, network: can the business achieve scale?",
+            "Sales, production, organisation: can value be captured?",
+            "Tie every major assumption to evidence, a forecast input and a risk."
+          ],
+          "formula": "",
+          "diagram": "matrix",
+          "example": {
+            "label": "Worked practice example",
+            "context": "A solar product meets a real customer need, but a manufacturing partner is missing and the founders lack operations experience.",
+            "steps": [
+              "Need belongs to the value-proposition layer.",
+              "Manufacturing readiness belongs to production.",
+              "The skills gap affects team and organisation; design specific validation and hiring milestones."
+            ],
+            "result": "The matrix exposes links between commercial, technical and people assumptions."
+          },
+          "trap": "TAM, SAM and SOM are different scopes; SOM is not the entire global market.",
+          "quiz": [
+            {
+              "kind": "mcq",
+              "prompt": "Which trio forms the strategy layer?",
+              "choices": [
+                "Need, solution, team",
+                "Market, competition, network",
+                "Sales, production, organisation"
+              ],
+              "answer": "2",
+              "explanation": "The strategy layer concerns capturing value through sales, production and organisation.",
+              "id": "evaluation-matrix-q1"
+            },
+            {
+              "kind": "mcq",
+              "prompt": "A serious but fixable route-to-market weakness most naturally supports which decision?",
+              "choices": [
+                "Automatically abandon every part of the venture",
+                "Consider a pivot while preserving validated strengths",
+                "Declare the entire plan risk-free"
+              ],
+              "answer": "1",
+              "explanation": "A pivot adjusts weak elements without discarding strengths already validated.",
+              "id": "evaluation-matrix-q2"
+            }
+          ],
+          "chapter_id": "evaluation",
+          "source_filename": "Topic 2 Evaluating startups(1).pdf"
+        },
+        {
+          "id": "workhorse",
+          "title": "Workhorse: connect the matrix to a real case",
+          "pages": [
+            14,
+            18
+          ],
+          "topic_ids": [
+            "VC10",
+            "VC14",
+            "VC18"
+          ],
+          "minutes": 7,
+          "why": "Explain what evidence would change your investment decision.",
+          "explain": [
+            "Workhorse develops portable solar generators for outdoor and off-grid use. Its technical founders, product designs and university connections are assets, but a commercial proposition also needs willingness to pay, defensibility, distribution, manufacturing and organisational capacity.",
+            "The course explicitly connects the evaluation matrix to financial projections. Customer interviews affect adoption and units; pricing evidence affects realised price and gross margin; supplier quotes affect COGS, CAPEX and inventory; team and IP evidence affect payroll, launch timing and costs."
+          ],
+          "key_points": [
+            "Identify the fact, assumption, evidence source and financial consequence.",
+            "Do not turn a technical advantage into an unsupported commercial conclusion.",
+            "Compare channels, competitors and customer price sensitivity.",
+            "Explain why the next milestone reduces a named uncertainty."
+          ],
+          "formula": "",
+          "diagram": "",
+          "example": {
+            "label": "Worked practice example",
+            "context": "Assume supplier quotations increase estimated battery costs by $10 per unit and planned sales are 5,000 units.",
+            "steps": [
+              "The production assumption changes unit COGS.",
+              "Additional COGS = $10 × 5,000.",
+              "All else equal, gross profit falls by the same amount."
+            ],
+            "result": "$50,000 less gross profit; revisit margin, funding and price assumptions."
+          },
+          "trap": "The additional cost is a cash requirement as well as a margin issue, subject to payment timing.",
+          "quiz": [
+            {
+              "kind": "numeric",
+              "prompt": "What additional COGS follows from $10 extra cost on 5,000 units?",
+              "answer": 50000,
+              "unit": "$",
+              "tolerance": 0.01,
+              "explanation": "10 × 5,000 = $50,000.",
+              "id": "workhorse-q1"
+            },
+            {
+              "kind": "mcq",
+              "prompt": "Which evidence best validates a production-cost assumption?",
+              "choices": [
+                "A slogan in the pitch deck",
+                "Supplier quotations and tested production yields",
+                "The size of the global energy market alone"
+              ],
+              "answer": "1",
+              "explanation": "The course links production evidence to COGS, CAPEX and inventory projections.",
+              "id": "workhorse-q2"
+            }
+          ],
+          "chapter_id": "evaluation",
+          "source_filename": "Topic 2 Evaluating startups(1).pdf"
+        },
+        {
+          "id": "revenue-plan",
+          "title": "Milestones and credible revenue forecasts",
+          "pages": [
+            19,
+            26
+          ],
+          "topic_ids": [
+            "VC14",
+            "VC15"
+          ],
+          "minutes": 7,
+          "why": "Build revenue assumptions that agree with both the market and operating capacity.",
+          "explain": [
+            "A financial plan translates the business plan into revenue, cost, investment and financing assumptions. It is inherently uncertain, quickly outdated and often optimistic. The forecast should therefore show its assumptions and milestones, with greater detail near term.",
+            "Top-down revenue begins with a reachable market and plausible share. Bottom-up revenue starts with units or operating capacity and net realised prices. Cross-check both, including retailer margins, discounts and timing. Milestones connect operating progress to valuation and the next funding round."
+          ],
+          "key_points": [
+            "Use primary research, secondary sources and startup history for different assumptions.",
+            "Forecast near-term monthly detail and later periods more broadly where appropriate.",
+            "Separate retail price from the revenue actually retained after channel margins.",
+            "A top-down/bottom-up mismatch is a question to resolve, not a figure to average blindly."
+          ],
+          "formula": "Revenue = units × net realised price; net price = retail price × (1 − channel margin)",
+          "diagram": "",
+          "example": {
+            "label": "Worked practice example",
+            "context": "A $100m market, 5% market share and 40% channel margin imply net revenue. Bottom-up capacity is 10,000 units at a $300 net price.",
+            "steps": [
+              "Top-down retail sales = $100m × 5% = $5m.",
+              "Net revenue = $5m × 60% = $3m.",
+              "Bottom-up net revenue = 10,000 × $300 = $3m."
+            ],
+            "result": "The two approaches agree at $3m under these assumptions."
+          },
+          "trap": "Using the retail price in one model and the net price in another creates a false comparison.",
+          "quiz": [
+            {
+              "kind": "numeric",
+              "prompt": "A $600 retail price has a 40% retailer margin. What net price does the startup retain?",
+              "answer": 360,
+              "unit": "$",
+              "tolerance": 0.01,
+              "explanation": "600 × (1 − 0.40) = $360.",
+              "id": "revenue-plan-q1"
+            },
+            {
+              "kind": "numeric",
+              "prompt": "At 2,000 units and a $360 net price, what is net revenue?",
+              "answer": 720000,
+              "unit": "$",
+              "tolerance": 0.01,
+              "explanation": "2,000 × 360 = $720,000.",
+              "id": "revenue-plan-q2"
+            }
+          ],
+          "chapter_id": "evaluation",
+          "source_filename": "Topic 2 Evaluating startups(1).pdf"
+        },
+        {
+          "id": "cash-needs",
+          "title": "Costs, CAPEX, working capital and funding need",
+          "pages": [
+            27,
+            36
+          ],
+          "topic_ids": [
+            "VC14",
+            "VC15"
+          ],
+          "minutes": 7,
+          "why": "Trace a profitable-looking plan through to the actual cash requirement.",
+          "explain": [
+            "COGS follows unit-level production costs; OPEX follows activities such as payroll, marketing and administration; CAPEX purchases long-lived assets. Depreciation is an accounting cost and is distinct from the cash CAPEX outflow. Growth may consume cash through receivables and inventory before customers pay.",
+            "Net working capital is receivables plus inventory minus payables. An increase absorbs cash. Build income and cash-flow statements together: the funding need depends on the lowest cumulative cash position before cash flow turns positive, including a realistic cushion. Staged funding must reach the next major milestone."
+          ],
+          "key_points": [
+            "Explain the driver of each cost instead of relying on one expense percentage.",
+            "Keep expense, depreciation and investment cash flows distinct.",
+            "Use the stated days basis or run-rate convention for working capital.",
+            "The course warns that omitting a balance sheet can hide liquidity needs."
+          ],
+          "formula": "NWC = receivables + inventory − payables; an increase in NWC uses cash",
+          "diagram": "",
+          "example": {
+            "label": "Worked practice example",
+            "context": "On a 365-day basis, annual revenue is $3.65m, COGS is $1.825m, receivables are 90 days, inventory 60 days and payables 15 days.",
+            "steps": [
+              "Receivables = $3.65m × 90 / 365 = $900k.",
+              "Inventory = $1.825m × 60 / 365 = $300k; payables = $75k.",
+              "NWC = 900 + 300 − 75 = $1,125k."
+            ],
+            "result": "$1.125m is tied up in operating working capital at this scale."
+          },
+          "trap": "A positive accounting profit does not ensure a positive cash balance.",
+          "quiz": [
+            {
+              "kind": "numeric",
+              "prompt": "If NWC rises from $400k to $550k, how much cash is absorbed, in $th?",
+              "answer": 150,
+              "unit": "$th",
+              "tolerance": 0.01,
+              "explanation": "The increase is 550 − 400 = $150k.",
+              "id": "cash-needs-q1"
+            },
+            {
+              "kind": "mcq",
+              "prompt": "The total funding requirement is mainly linked to…",
+              "choices": [
+                "The maximum cumulative cash deficit before financing",
+                "Revenue alone",
+                "Depreciation alone"
+              ],
+              "answer": "0",
+              "explanation": "The course identifies the lowest cumulative cash position as the basis for financing need.",
+              "id": "cash-needs-q2"
+            }
+          ],
+          "chapter_id": "evaluation",
+          "source_filename": "Topic 2 Evaluating startups(1).pdf"
+        }
+      ]
+    },
+    {
+      "id": "valuation",
+      "title": "Valuation, ownership & returns",
+      "filename": "Topic 3 Valuation, ownership and returns(1).pdf",
+      "pages": 32,
+      "lessons": [
+        {
+          "id": "priced-round",
+          "title": "A priced equity round, step by step",
+          "pages": [
+            1,
+            3
+          ],
+          "topic_ids": [
+            "VC04"
+          ],
+          "minutes": 7,
+          "why": "Translate investment and valuation into price, new shares and ownership.",
+          "explain": [
+            "In a priced round, the entrepreneur and investor negotiate the amount raised, price and ownership allocation. Pre-money values the company before the new cash; post-money includes that cash. For a simple primary equity investment, post-money equals pre-money plus investment.",
+            "Derive the share price from the agreed pre-money value and the stated pre-money share base. Divide investment by the price to find new shares, then recompute total shares and ownership. State the share-base convention before using the formulas."
+          ],
+          "key_points": [
+            "V_post = V_pre + I.",
+            "Investor fraction F = I / V_post.",
+            "Price P = V_pre / pre-money shares.",
+            "New shares = I / P; check that all post-round fractions sum to 100%."
+          ],
+          "formula": "V_post = V_pre + I; F = I / V_post; P = V_pre / S_pre",
+          "diagram": "valuation",
+          "example": {
+            "label": "Worked practice example",
+            "context": "A startup has $8m pre-money value and 4m shares. A new investor contributes $2m.",
+            "steps": [
+              "Post-money = $10m.",
+              "Price = $8m / 4m = $2 per share; new shares = 1m.",
+              "Investor ownership = 1m / 5m = 20%."
+            ],
+            "result": "$2 per share, 1m new shares, 20% investor ownership."
+          },
+          "trap": "Investment divided by pre-money value is not the investor’s post-round fraction.",
+          "quiz": [
+            {
+              "kind": "numeric",
+              "prompt": "At $8m pre-money and a $2m investment, what is post-money in $m?",
+              "answer": 10,
+              "unit": "$m",
+              "tolerance": 0.01,
+              "explanation": "8 + 2 = $10m.",
+              "id": "priced-round-q1"
+            },
+            {
+              "kind": "numeric",
+              "prompt": "What percentage does the new investor own?",
+              "answer": 20,
+              "unit": "%",
+              "tolerance": 0.01,
+              "explanation": "2 / 10 = 20%.",
+              "id": "priced-round-q2"
+            }
+          ],
+          "chapter_id": "valuation",
+          "source_filename": "Topic 3 Valuation, ownership and returns(1).pdf"
+        },
+        {
+          "id": "pool-and-rounds",
+          "title": "Option pools and multi-round cap tables",
+          "pages": [
+            4,
+            9
+          ],
+          "topic_ids": [
+            "VC05"
+          ],
+          "minutes": 7,
+          "why": "Model the fully diluted share base before applying further dilution.",
+          "explain": [
+            "Startups use restricted shares and options to compensate founders and employees. In the course convention, the option pool is included in the pre-money share base, so its creation dilutes existing holders rather than the incoming investor. An unissued pool can still be included on a fully diluted basis.",
+            "For successive rounds, work with shares or apply dilution factors carefully. An existing investor’s fraction falls when a new round issues shares unless that investor follows on. A rising valuation can increase stake value while reducing percentage ownership."
+          ],
+          "key_points": [
+            "Write down whether the pool is pre-money and how its target fraction is defined.",
+            "Include the relevant reserved options in the fully diluted denominator.",
+            "Apply each later-round retention factor to every earlier stake.",
+            "Check total shares and the sum of ownership fractions after every round."
+          ],
+          "formula": "F_old at exit = F_initial × product of subsequent retention factors",
+          "diagram": "dilution",
+          "example": {
+            "label": "Worked practice example",
+            "context": "Founders initially own all shares. A round gives a new investor 20% of post-money shares and reserves a pre-money pool equal to 10% of post-money shares.",
+            "steps": [
+              "The new investor takes 20%.",
+              "The pool represents 10% of the final fully diluted base.",
+              "Founders retain 100% − 20% − 10%."
+            ],
+            "result": "Founders 70%, pool 10%, investor 20%."
+          },
+          "trap": "A 10% post-money pool is not 10% of the founder shares before the round.",
+          "quiz": [
+            {
+              "kind": "numeric",
+              "prompt": "In this example, what percentage do founders retain?",
+              "answer": 70,
+              "unit": "%",
+              "tolerance": 0.01,
+              "explanation": "100 − 20 − 10 = 70%.",
+              "id": "pool-and-rounds-q1"
+            },
+            {
+              "kind": "numeric",
+              "prompt": "An early investor owns 20%; a later round issues 25% to new investors. What percentage remains?",
+              "answer": 15,
+              "unit": "%",
+              "tolerance": 0.01,
+              "explanation": "20% × (1 − 25%) = 15%.",
+              "id": "pool-and-rounds-q2"
+            }
+          ],
+          "chapter_id": "valuation",
+          "source_filename": "Topic 3 Valuation, ownership and returns(1).pdf"
+        },
+        {
+          "id": "exit-returns",
+          "title": "Investor MOIC and IRR",
+          "pages": [
+            10,
+            11
+          ],
+          "topic_ids": [
+            "VC09"
+          ],
+          "minutes": 7,
+          "why": "Explain the difference between a multiple and an annualised return.",
+          "explain": [
+            "An investor’s exit proceeds depend on its final ownership and the security’s payoff rights. For ordinary common equity, multiply the exit equity value by the diluted ownership fraction. MOIC divides proceeds by invested capital.",
+            "With one investment and one exit cash flow, IRR equals MOIC raised to 1/T minus one. With follow-on investments or interim distributions, use the full dated cash-flow sequence. The simple two-cash-flow formula no longer applies unchanged."
+          ],
+          "key_points": [
+            "Use ownership at exit, after all subsequent dilution.",
+            "Include the actual capital contributed by this investor.",
+            "Match the holding period to the cash flows.",
+            "Later term-sheet lessons change the simple common-equity payoff."
+          ],
+          "formula": "MOIC = proceeds / investment; IRR = MOIC^(1/T) − 1",
+          "diagram": "",
+          "example": {
+            "label": "Worked practice example",
+            "context": "An investor pays $2m, owns 10% at a $60m equity exit four years later, and receives no interim cash flows.",
+            "steps": [
+              "Exit proceeds = 10% × $60m = $6m.",
+              "MOIC = $6m / $2m = 3x.",
+              "IRR = 3^(1/4) − 1 ≈ 31.61%."
+            ],
+            "result": "3x MOIC over four years corresponds to about 31.61% IRR."
+          },
+          "trap": "The same 3x realised over two and ten years has very different IRR.",
+          "quiz": [
+            {
+              "kind": "numeric",
+              "prompt": "What MOIC results from investing $2m and receiving $6m?",
+              "answer": 3,
+              "unit": "x",
+              "tolerance": 0.01,
+              "explanation": "6 / 2 = 3x.",
+              "id": "exit-returns-q1"
+            },
+            {
+              "kind": "numeric",
+              "prompt": "A 2x return over exactly two years has what IRR, in percent?",
+              "answer": 41.421356,
+              "unit": "%",
+              "tolerance": 0.01,
+              "explanation": "sqrt(2) − 1 = 41.421356%.",
+              "id": "exit-returns-q2"
+            }
+          ],
+          "chapter_id": "valuation",
+          "source_filename": "Topic 3 Valuation, ownership and returns(1).pdf"
+        },
+        {
+          "id": "vc-method",
+          "title": "Valuation negotiation and the VC method",
+          "pages": [
+            12,
+            22
+          ],
+          "topic_ids": [
+            "VC04",
+            "VC09"
+          ],
+          "minutes": 7,
+          "why": "Work backwards from exit and understand what the hurdle rate includes.",
+          "explain": [
+            "Founders usually prefer a higher valuation to limit dilution; investors prefer a lower entry price for a given expected outcome. Investment attractiveness also depends on market conditions, bargaining power and terms. The VC method starts with a successful-exit value and discounts it by a required multiple or return.",
+            "For a single round, discount the successful exit value to obtain post-money value, subtract new investment for pre-money, then calculate ownership. With multiple rounds, work backwards from the next round’s pre-money value. The course distinguishes success-conditional exit value from probability-weighted value: avoid double-counting failure risk.",
+            "The hurdle can include market risk, illiquidity, failure and service premia. Under the explicit annual failure model, rho = (d + z) / (1 − z). Forecasting only to the next round is an alternative when a full path to exit is too speculative."
+          ],
+          "key_points": [
+            "V_post = successful exit value / required MOIC.",
+            "With several rounds, discount next round’s pre-money value, not its post-money value.",
+            "Explain where failure probability enters the model.",
+            "Cross-check required ownership against investment and post-money value."
+          ],
+          "formula": "V_post = X_success / MOIC; V_pre = V_post − I; rho = (d + z) / (1 − z)",
+          "diagram": "",
+          "example": {
+            "label": "Worked practice example",
+            "context": "Successful exit value is $100m, required MOIC is 5x and the new investment is $4m.",
+            "steps": [
+              "Post-money = $100m / 5 = $20m.",
+              "Pre-money = $20m − $4m = $16m.",
+              "Required investor fraction = $4m / $20m."
+            ],
+            "result": "20% ownership at $16m pre-money under these assumptions."
+          },
+          "trap": "Discounting a success-conditional exit with a failure-adjusted hurdle and then applying the same failure probability again double-counts risk.",
+          "quiz": [
+            {
+              "kind": "numeric",
+              "prompt": "Successful exit $100m and required MOIC 5x imply what post-money value in $m?",
+              "answer": 20,
+              "unit": "$m",
+              "tolerance": 0.01,
+              "explanation": "100 / 5 = $20m.",
+              "id": "vc-method-q1"
+            },
+            {
+              "kind": "numeric",
+              "prompt": "With d = 20% and annual failure probability z = 20%, what is rho?",
+              "answer": 50,
+              "unit": "%",
+              "tolerance": 0.01,
+              "explanation": "(0.20 + 0.20) / (1 − 0.20) = 50%.",
+              "id": "vc-method-q2"
+            }
+          ],
+          "chapter_id": "valuation",
+          "source_filename": "Topic 3 Valuation, ownership and returns(1).pdf"
+        },
+        {
+          "id": "comparables",
+          "title": "Choose comparables and apply the right multiple",
+          "pages": [
+            23,
+            26
+          ],
+          "topic_ids": [
+            "VC04",
+            "VC14"
+          ],
+          "minutes": 7,
+          "why": "Use market evidence without mixing enterprise value, equity value and operating metrics.",
+          "explain": [
+            "Comparables infer value from prices paid for similar companies or investment transactions. Similarity includes development stage, size, business model, growth, profitability, industry and geography. Quoted-company and transaction multiples can differ because control, liquidity and deal terms differ.",
+            "Select a metric that is meaningful for the startup and consistent with the numerator of the multiple. Revenue may be useful when earnings are negative, but identical revenue does not imply identical unit economics or quality. State any bridge between enterprise and equity value, and compare like periods and conventions."
+          ],
+          "key_points": [
+            "Justify why each comparator is relevant.",
+            "Keep the value numerator consistent with the performance denominator.",
+            "Choose mean, median or another estimator explicitly.",
+            "Explain adjustments for growth, margin, risk, liquidity and terms."
+          ],
+          "formula": "",
+          "diagram": "",
+          "example": {
+            "label": "Worked practice example",
+            "context": "Three comparable transactions have EV/revenue multiples of 2x, 3x and 4x. Use the median and $5m revenue.",
+            "steps": [
+              "Median multiple = 3x.",
+              "Implied enterprise value = 3 × $5m = $15m.",
+              "Convert to equity value only after applying the case’s cash/debt convention."
+            ],
+            "result": "$15m enterprise value before any stated equity bridge."
+          },
+          "trap": "Do not call an EV-based result equity value without checking cash and debt.",
+          "quiz": [
+            {
+              "kind": "numeric",
+              "prompt": "Using a 3x revenue multiple and revenue of $5m, what value is implied, in $m?",
+              "answer": 15,
+              "unit": "$m",
+              "tolerance": 0.01,
+              "explanation": "3 × 5 = $15m.",
+              "id": "comparables-q1"
+            },
+            {
+              "kind": "mcq",
+              "prompt": "Which makes a comparator less reliable?",
+              "choices": [
+                "Similar business model and development stage",
+                "Very different growth and margins with no adjustment",
+                "The same metric definition"
+              ],
+              "answer": "1",
+              "explanation": "Unadjusted differences in growth, margins or stage undermine comparability.",
+              "id": "comparables-q2"
+            }
+          ],
+          "chapter_id": "valuation",
+          "source_filename": "Topic 3 Valuation, ownership and returns(1).pdf"
+        },
+        {
+          "id": "dcf-scenarios",
+          "title": "DCF, scenarios and simulation",
+          "pages": [
+            27,
+            32
+          ],
+          "topic_ids": [
+            "VC04",
+            "VC15"
+          ],
+          "minutes": 7,
+          "why": "Distinguish intrinsic cash-flow value from a probability model of uncertainty.",
+          "explain": [
+            "DCF discounts operating free cash flows and a terminal value. In the course’s stated convention, add initial cash to the discounted operating value to derive pre-money value. Perpetual growth terminal value requires a discount rate strictly above the growth rate; startup projections make this method particularly assumption-sensitive.",
+            "Scenario analysis weights separately valued business trajectories by their probabilities. Simulation instead draws uncertain parameters repeatedly and produces a distribution of outcomes. Check whether failure risk is included in the cash flows or discount rate, and whether the security is really common equity."
+          ],
+          "key_points": [
+            "TV = FCF_T × (1 + g) / (r − g), with r > g.",
+            "Discount the terminal value from the correct horizon.",
+            "Scenario probabilities must sum to one.",
+            "Explain the limitations of VCM, comparables and DCF rather than treating them as interchangeable."
+          ],
+          "formula": "V_scenarios = sum(p_s × V_s); TV = FCF_T × (1 + g) / (r − g)",
+          "diagram": "",
+          "example": {
+            "label": "Worked practice example",
+            "context": "Low, middle and high scenario values are $0m, $10m and $30m, with probabilities 20%, 50% and 30%.",
+            "steps": [
+              "Check probabilities: 0.2 + 0.5 + 0.3 = 1.",
+              "Weighted value = 0.2 × 0 + 0.5 × 10 + 0.3 × 30.",
+              "Interpret this as the weighted value of these specified scenarios."
+            ],
+            "result": "$14m under this probability model."
+          },
+          "trap": "A successful-exit value and a probability-weighted value are different inputs.",
+          "quiz": [
+            {
+              "kind": "numeric",
+              "prompt": "What is the weighted scenario value in the example, in $m?",
+              "answer": 14,
+              "unit": "$m",
+              "tolerance": 0.01,
+              "explanation": "0 + 5 + 9 = $14m.",
+              "id": "dcf-scenarios-q1"
+            },
+            {
+              "kind": "numeric",
+              "prompt": "FCF_T is $1m, g = 3%, r = 13%. What is terminal value in $m?",
+              "answer": 10.3,
+              "unit": "$m",
+              "tolerance": 0.01,
+              "explanation": "1 × 1.03 / (0.13 − 0.03) = $10.3m.",
+              "id": "dcf-scenarios-q2"
+            }
+          ],
+          "chapter_id": "valuation",
+          "source_filename": "Topic 3 Valuation, ownership and returns(1).pdf"
+        }
+      ]
+    },
+    {
+      "id": "terms",
+      "title": "Term sheets & negotiation",
+      "filename": "Topic 4 Term sheets, deal structuring and negotiation(1).pdf",
+      "pages": 39,
+      "lessons": [
+        {
+          "id": "legal-documents",
+          "title": "Founders, incorporation documents and term sheets",
+          "pages": [
+            1,
+            9
+          ],
+          "topic_ids": [
+            "VC06",
+            "VC16"
+          ],
+          "minutes": 7,
+          "why": "Identify which agreement addresses which relationship and milestone.",
+          "explain": [
+            "A founders’ agreement governs the founders’ relationship, including contributions, ownership, responsibilities and departure. Incorporation documents establish the legal entity. A shareholders’ agreement governs shareholder rights and is negotiated or amended as new investors enter.",
+            "A term sheet summarises the proposed investment economics and rights. Many commercial terms are non-binding until definitive contracts, while provisions such as confidentiality or exclusivity may bind if drafted that way. Milestones can make financing or other outcomes contingent on technology, commercial, organisational or financial progress."
+          ],
+          "key_points": [
+            "Distinguish the parties and purpose of each document.",
+            "Founder ownership allocation affects motivation and incentives.",
+            "Check the actual binding/non-binding language.",
+            "Link each milestone to an observable outcome and contractual consequence."
+          ],
+          "formula": "",
+          "diagram": "",
+          "example": {
+            "label": "Worked practice example",
+            "context": "A company negotiates a financing tranche conditional on completing a prototype, while founders disagree about who owns IP developed before incorporation.",
+            "steps": [
+              "The prototype condition belongs in the financing and milestone arrangements.",
+              "The founders’ contributions and IP allocation must be documented.",
+              "Check consistency across incorporation and shareholder documents."
+            ],
+            "result": "Different agreements solve different coordination problems."
+          },
+          "trap": "Do not claim that every clause of every term sheet is automatically non-binding.",
+          "quiz": [
+            {
+              "kind": "mcq",
+              "prompt": "Which document primarily governs the relationship among founders?",
+              "choices": [
+                "A founders’ agreement",
+                "A stock-exchange prospectus only",
+                "A supplier invoice"
+              ],
+              "answer": "0",
+              "explanation": "The founders’ agreement sets out relationships, contributions and responsibilities among founders.",
+              "id": "legal-documents-q1"
+            },
+            {
+              "kind": "mcq",
+              "prompt": "What makes a good financing milestone?",
+              "choices": [
+                "An unobservable promise",
+                "A measurable achievement with a clear consequence",
+                "Any optimistic phrase"
+              ],
+              "answer": "1",
+              "explanation": "Milestones should be observable and support contingent contracting.",
+              "id": "legal-documents-q2"
+            }
+          ],
+          "chapter_id": "terms",
+          "source_filename": "Topic 4 Term sheets, deal structuring and negotiation(1).pdf"
+        },
+        {
+          "id": "convertible-preferred",
+          "title": "Convertible preferred: preference or conversion",
+          "pages": [
+            10,
+            13
+          ],
+          "topic_ids": [
+            "VC07",
+            "VC06"
+          ],
+          "minutes": 7,
+          "why": "Compute the investor’s preferred payoff, conversion threshold and residual for founders.",
+          "explain": [
+            "Convertible preferred provides a choice at exit: take the preferred terms or convert into common equity. The course combines a liquidation multiple with any specifically stated dividend. Available exit proceeds remain an upper bound on the payout.",
+            "For a single investor with preferred amount PT and common-equity fraction F, compare PT with F × X. The conversion threshold is PT/F. Below the preference, the investor can take only the proceeds that actually exist. A one-time dividend is not an annual compounding rate."
+          ],
+          "key_points": [
+            "Calculate preferred terms from the exact multiple and dividend convention.",
+            "Compare the preferred and converted payoffs.",
+            "Cap the payout at available proceeds.",
+            "Founder proceeds are exit value minus the investor’s payout in this simplified case."
+          ],
+          "formula": "Non-participating payout = min(X, max(PT, F × X)); conversion threshold = PT / F",
+          "diagram": "waterfall",
+          "example": {
+            "label": "Worked practice example",
+            "context": "Use the course example: investment $2m, fraction 25%, 1x liquidation preference and a one-time 8% dividend.",
+            "steps": [
+              "Preferred terms = $2m × 1.08 = $2.16m.",
+              "Conversion threshold = $2.16m / 25% = $8.64m.",
+              "At a $10m exit, common conversion pays $2.5m, more than $2.16m."
+            ],
+            "result": "Investor $2.5m and founders $7.5m at this exit."
+          },
+          "trap": "Do not add the preference on top of the converted payoff for non-participating preferred.",
+          "quiz": [
+            {
+              "kind": "numeric",
+              "prompt": "What is the conversion threshold in $m?",
+              "answer": 8.64,
+              "unit": "$m",
+              "tolerance": 0.01,
+              "explanation": "2.16 / 0.25 = $8.64m.",
+              "id": "convertible-preferred-q1"
+            },
+            {
+              "kind": "numeric",
+              "prompt": "At a $5m exit, what does the investor receive, in $m?",
+              "answer": 2.16,
+              "unit": "$m",
+              "tolerance": 0.01,
+              "explanation": "Choose max(2.16, 0.25 × 5), bounded by available proceeds.",
+              "id": "convertible-preferred-q2"
+            }
+          ],
+          "chapter_id": "terms",
+          "source_filename": "Topic 4 Term sheets, deal structuring and negotiation(1).pdf"
+        },
+        {
+          "id": "participation-cap",
+          "title": "Participating preferred and the cap plateau",
+          "pages": [
+            14,
+            21
+          ],
+          "topic_ids": [
+            "VC07"
+          ],
+          "minutes": 7,
+          "why": "Distinguish double participation, the cap plateau and eventual common conversion.",
+          "explain": [
+            "Participating preferred first receives preferred terms and then its fraction of the residual. For X above PT, payout is PT + F × (X − PT). This is different from simply taking F × X, and also different from adding PT to a share of the full exit value.",
+            "A cap limits the participating payoff under the stated contract. The course then smooths the payout: it reaches C × I at X_cap, stays on a plateau until X_common = C × I / F, and then common conversion can pay more than the participation cap. This distinction matters around thresholds."
+          ],
+          "key_points": [
+            "Subtract the preference before applying participation to the remainder.",
+            "For X below PT, pay only the proceeds available.",
+            "Separate the start of the cap plateau from the common-conversion threshold.",
+            "Use the smoothed convention from pp. 18–21 when the case specifies it."
+          ],
+          "formula": "Participation = PT + F × (X − PT); X_cap = (C×I − PT×(1−F))/F; X_common = C×I/F",
+          "diagram": "waterfall",
+          "example": {
+            "label": "Worked practice example",
+            "context": "Use I = $2m, PT = $2.16m, F = 25%, cap C = 2x.",
+            "steps": [
+              "Cap payout = C × I = $4m.",
+              "X_cap = (4 − 2.16 × 0.75) / 0.25 = $9.52m.",
+              "X_common = 4 / 0.25 = $16m; at X = $12m, the capped payout is $4m."
+            ],
+            "result": "A $4m plateau from $9.52m to $16m; above $16m, common conversion pays more."
+          },
+          "trap": "The participation cap is not necessarily a permanent cap on the investor’s common-equity proceeds.",
+          "quiz": [
+            {
+              "kind": "numeric",
+              "prompt": "Without a participation cap, PT = $2m, F = 25%, X = $10m. What is the payout in $m?",
+              "answer": 4,
+              "unit": "$m",
+              "tolerance": 0.01,
+              "explanation": "2 + 0.25 × (10 − 2) = $4m.",
+              "id": "participation-cap-q1"
+            },
+            {
+              "kind": "numeric",
+              "prompt": "Under the worked capped example, what is the payout at a $12m exit, in $m?",
+              "answer": 4,
+              "unit": "$m",
+              "tolerance": 0.01,
+              "explanation": "The exit lies on the $4m cap plateau.",
+              "id": "participation-cap-q2"
+            }
+          ],
+          "chapter_id": "terms",
+          "source_filename": "Topic 4 Term sheets, deal structuring and negotiation(1).pdf"
+        },
+        {
+          "id": "rights-incentives",
+          "title": "Founder incentives, control and future financing",
+          "pages": [
+            22,
+            26
+          ],
+          "topic_ids": [
+            "VC06",
+            "VC08",
+            "VC12"
+          ],
+          "minutes": 7,
+          "why": "Explain the economic consequence of a clause, not just its name.",
+          "explain": [
+            "Vesting, departure rules and restrictions can keep founder incentives aligned over time. Governance clauses allocate board and consent rights. Future-financing protections include pro-rata or pre-emption rights and contractual anti-dilution protection; these address different mechanisms and should not be conflated.",
+            "Exit rights include drag-along, tag-along and IPO-related provisions. Other clauses cover information, insurance, legal fees and exclusivity. The key question is who can decide, who bears the risk and how the clause affects the next financing or exit."
+          ],
+          "key_points": [
+            "A pro-rata right can require new cash to preserve ownership; price protection is a different contractual mechanism.",
+            "Vesting addresses continued contribution and departure.",
+            "Drag-along can require a sale; tag-along lets an eligible minority join a sale.",
+            "The detailed weighted-average anti-dilution formula is a supplemental market convention, not a formula printed in the main lecture."
+          ],
+          "formula": "",
+          "diagram": "",
+          "example": {
+            "label": "Worked practice example",
+            "context": "An existing investor holds 20%. A new $5m round is offered pro rata, with no other changes.",
+            "steps": [
+              "To maintain its stake, the investor contributes 20% of the round.",
+              "Required new cash = 20% × $5m.",
+              "Without participation, its stake is diluted according to the round terms."
+            ],
+            "result": "$1m is required to take up the pro-rata allocation."
+          },
+          "trap": "A right to participate does not mean automatic free anti-dilution shares.",
+          "quiz": [
+            {
+              "kind": "numeric",
+              "prompt": "What contribution preserves a 20% pro-rata allocation in a $5m round, in $m?",
+              "answer": 1,
+              "unit": "$m",
+              "tolerance": 0.01,
+              "explanation": "0.20 × 5 = $1m.",
+              "id": "rights-incentives-q1"
+            },
+            {
+              "kind": "mcq",
+              "prompt": "Which right lets an eligible minority join another shareholder’s sale?",
+              "choices": [
+                "Tag-along",
+                "A compulsory founder salary increase",
+                "A revenue forecast"
+              ],
+              "answer": "0",
+              "explanation": "Tag-along is the right to join a sale, subject to contractual conditions.",
+              "id": "rights-incentives-q2"
+            }
+          ],
+          "chapter_id": "terms",
+          "source_filename": "Topic 4 Term sheets, deal structuring and negotiation(1).pdf"
+        },
+        {
+          "id": "note-discount",
+          "title": "Convertible notes: interest and discount",
+          "pages": [
+            27,
+            28
+          ],
+          "topic_ids": [
+            "VC16"
+          ],
+          "minutes": 7,
+          "why": "Calculate the accrued balance and conversion mechanics under the course convention.",
+          "explain": [
+            "A convertible note begins as debt and converts into shares at a qualifying round. The contract specifies interest, maturity, discount and possibly a valuation cap. The course examples use simple accrued interest, so accrued balance equals principal × (1 + r × t).",
+            "The note converts at a discount to the new investor’s share price. Under the course’s pre-as-converted pricing convention, the priced round must account for the note’s inflated investment value. Simply using pre-money divided by the old share base can misprice the new shares."
+          ],
+          "key_points": [
+            "Keep principal, accrued balance and conversion price distinct.",
+            "Use simple or compound interest exactly as stated.",
+            "Apply the discount to the new investor price.",
+            "Account for pre-as-converted pricing before computing all final ownership fractions."
+          ],
+          "formula": "Balance = principal × (1 + r×t); P_note = P_round × (1 − discount)",
+          "diagram": "",
+          "example": {
+            "label": "Worked practice example",
+            "context": "A $500k note accrues simple interest at 6% for one year, with a 20% conversion discount.",
+            "steps": [
+              "Accrued note balance = $500k × 1.06 = $530k.",
+              "Conversion price = 80% of the new investor’s price.",
+              "If that price were $1, the note price would be $0.80 and shares would be 662,500."
+            ],
+            "result": "Interest changes the balance; the discount changes the price paid per share."
+          },
+          "trap": "Discounting the investment amount instead of the share price reverses the economic benefit.",
+          "quiz": [
+            {
+              "kind": "numeric",
+              "prompt": "What accrued balance results, in $th?",
+              "answer": 530,
+              "unit": "$th",
+              "tolerance": 0.01,
+              "explanation": "500 × (1 + 0.06 × 1) = $530k.",
+              "id": "note-discount-q1"
+            },
+            {
+              "kind": "numeric",
+              "prompt": "At a $1 new-investor price and 20% discount, what is the note conversion price?",
+              "answer": 0.8,
+              "unit": "$/share",
+              "tolerance": 0.01,
+              "explanation": "1 × (1 − 0.20) = $0.80.",
+              "id": "note-discount-q2"
+            }
+          ],
+          "chapter_id": "terms",
+          "source_filename": "Topic 4 Term sheets, deal structuring and negotiation(1).pdf"
+        },
+        {
+          "id": "note-cap",
+          "title": "Valuation caps and the full conversion example",
+          "pages": [
+            29,
+            32
+          ],
+          "topic_ids": [
+            "VC16",
+            "VC05"
+          ],
+          "minutes": 7,
+          "why": "Choose the lower conversion price and rebuild the complete cap table.",
+          "explain": [
+            "When a note has both a discount and a valuation cap, compare the discounted round price with the cap-implied conversion price under the contractual share-base definition. The lower conversion price gives the noteholder more shares for the same accrued balance.",
+            "The course example has an $8m pre-money priced round, 10m existing shares, a 2m option pool and a $530k accrued note. Without the cap, solve the pre-as-converted price first. With a $5m cap, cap price is $5m / 12m, then add the note shares and recalculate the new investor price."
+          ],
+          "key_points": [
+            "Use the note’s actual cap-share-base definition.",
+            "Compare prices, not cap valuation with round investment.",
+            "Recompute old, pool, note and new-investor fractions on the final share total.",
+            "Preserve full precision until the final answer; the slides round intermediate values."
+          ],
+          "formula": "P_note = min(P_round × (1−d), V_cap / stated share base); S_note = accrued balance / P_note",
+          "diagram": "",
+          "example": {
+            "label": "Worked practice example",
+            "context": "Apply a $5m cap to the 12m-share base in the course example, with a $530k accrued note.",
+            "steps": [
+              "Cap price = $5m / 12m ≈ $0.416667.",
+              "Note shares = $530k / $0.416667 ≈ 1.272m.",
+              "New investor price = $8m / (12m + 1.272m) ≈ $0.602773."
+            ],
+            "result": "The cap binds because its price is below the discount-only price of about $0.489167."
+          },
+          "trap": "Do not keep the old priced-round share price after changing the note’s conversion terms.",
+          "quiz": [
+            {
+              "kind": "numeric",
+              "prompt": "What is the cap conversion price for $5m / 12m shares?",
+              "answer": 0.4166666666666667,
+              "unit": "$/share",
+              "tolerance": 1e-05,
+              "explanation": "5 / 12 = $0.4166667 per share.",
+              "id": "note-cap-q1"
+            },
+            {
+              "kind": "numeric",
+              "prompt": "How many million note shares result from $0.53m / ($5m / 12m)?",
+              "answer": 1.272,
+              "unit": "million shares",
+              "tolerance": 0.001,
+              "explanation": "0.53 / (5 / 12) = 1.272m shares.",
+              "id": "note-cap-q2"
+            }
+          ],
+          "chapter_id": "terms",
+          "source_filename": "Topic 4 Term sheets, deal structuring and negotiation(1).pdf"
+        },
+        {
+          "id": "syndication-negotiation",
+          "title": "Syndication, bargaining power and deal design",
+          "pages": [
+            33,
+            39
+          ],
+          "topic_ids": [
+            "VC10",
+            "VC11",
+            "VC18"
+          ],
+          "minutes": 7,
+          "why": "Explain why the best deal is a package of incentives, protection and trust.",
+          "explain": [
+            "Syndication pools funding, information, skills and networks. A reputable lead can certify a venture and coordinate diligence. Too many or misaligned co-investors can also create delay, free-riding, information leakage and conflicts over exit timing or control.",
+            "Negotiation depends on alternatives, funding urgency, market conditions, reputation and credibility. The course uses BATNA and ZOPA to move beyond headline price. Preferred terms, milestones and governance can expand the set of agreements, but poorly designed clauses can undermine collaboration."
+          ],
+          "key_points": [
+            "Explain both benefits and costs of syndication.",
+            "Identify each side’s best alternative and time pressure.",
+            "Analyse valuation, protection, control and relationship quality together.",
+            "Keep operating the startup while the negotiation continues."
+          ],
+          "formula": "",
+          "diagram": "",
+          "example": {
+            "label": "Worked practice example",
+            "context": "A founder has two credible offers; a syndicate offers extra expertise but requires unanimous consent from all five members for routine decisions.",
+            "steps": [
+              "Multiple offers improve the founder’s alternative.",
+              "Additional expertise may create value.",
+              "Unanimous routine decisions can create governance paralysis; negotiate a workable approval design."
+            ],
+            "result": "A better package can improve cooperation without simply changing valuation."
+          },
+          "trap": "A lower price with reasonable protections and strong support can be preferable to a high price with damaging control terms.",
+          "quiz": [
+            {
+              "kind": "mcq",
+              "prompt": "What is BATNA?",
+              "choices": [
+                "Best alternative to a negotiated agreement",
+                "A mandatory accounting ratio",
+                "The average value of all IPOs"
+              ],
+              "answer": "0",
+              "explanation": "BATNA is the outside option if this negotiation does not lead to agreement.",
+              "id": "syndication-negotiation-q1"
+            },
+            {
+              "kind": "mcq",
+              "prompt": "Which is a real syndication risk?",
+              "choices": [
+                "Coordination problems and free-riding",
+                "Every investor having identical incentives automatically",
+                "Guaranteed removal of all failure risk"
+              ],
+              "answer": "0",
+              "explanation": "Syndication adds resources but can also create coordination and incentive problems.",
+              "id": "syndication-negotiation-q2"
+            }
+          ],
+          "chapter_id": "terms",
+          "source_filename": "Topic 4 Term sheets, deal structuring and negotiation(1).pdf"
+        }
+      ]
+    },
+    {
+      "id": "governance-exits",
+      "title": "Governance, monitoring & exits",
+      "filename": "Topic 5 Governance, monitoring and exit strategies(1).pdf",
+      "pages": 14,
+      "lessons": [
+        {
+          "id": "formal-governance",
+          "title": "Votes, boards and formal control",
+          "pages": [
+            1,
+            5
+          ],
+          "topic_ids": [
+            "VC12",
+            "VC06"
+          ],
+          "minutes": 7,
+          "why": "Distinguish economic ownership, ordinary voting and class protections.",
+          "explain": [
+            "After investment, the VC’s role shifts from pricing risk to helping manage it. Governance seeks a balance: founders need autonomy for innovation and speed, while investors need accountability, protection and confidence for further rounds.",
+            "Ordinary voting, class votes and series-specific consent address different decisions. A minority investor can therefore hold protective rights without holding most shares. Board composition evolves with financing stage; the independent director can be important when founder and investor seats are balanced."
+          ],
+          "key_points": [
+            "Identify whose votes count for the particular decision.",
+            "Check aggregate, class and series-specific approval requirements separately.",
+            "Protective provisions can block specified major actions.",
+            "A board seat, an observer seat and a shareholder vote are different rights."
+          ],
+          "formula": "",
+          "diagram": "",
+          "example": {
+            "label": "Worked practice example",
+            "context": "Founders hold 60% of ordinary votes, but a preferred class has a consent right over issuing more senior securities.",
+            "steps": [
+              "Founders can pass a simple ordinary vote under the assumed rules.",
+              "The class consent is a separate required approval.",
+              "Check both conditions before concluding that the issue can proceed."
+            ],
+            "result": "Economic majority does not automatically override a negotiated class protection."
+          },
+          "trap": "Do not equate 20% ownership with exactly 20% control over every corporate decision.",
+          "quiz": [
+            {
+              "kind": "mcq",
+              "prompt": "Can a minority VC have a veto over a defined major decision?",
+              "choices": [
+                "Yes, through appropriate contractual or class rights",
+                "No, minority ownership prohibits all protective rights",
+                "Only if every founder gives up all shares"
+              ],
+              "answer": "0",
+              "explanation": "The course describes protective provisions and class votes as minority safeguards.",
+              "id": "formal-governance-q1"
+            },
+            {
+              "kind": "mcq",
+              "prompt": "Which is distinct from a legal voting board seat?",
+              "choices": [
+                "A board observer seat",
+                "A director with the relevant vote",
+                "An independent voting director"
+              ],
+              "answer": "0",
+              "explanation": "An observer can attend under its terms without the same formal voting authority.",
+              "id": "formal-governance-q2"
+            }
+          ],
+          "chapter_id": "governance-exits",
+          "source_filename": "Topic 5 Governance, monitoring and exit strategies(1).pdf"
+        },
+        {
+          "id": "monitoring",
+          "title": "Informal control, monitoring and intervention",
+          "pages": [
+            6,
+            9
+          ],
+          "topic_ids": [
+            "VC12",
+            "VC15",
+            "VC17"
+          ],
+          "minutes": 7,
+          "why": "Turn a negative variance into a diagnosis and a proportionate response.",
+          "explain": [
+            "Governance also works through trust, reputation, frequent check-ins, mentoring and networks. Monitoring compares actual revenue, margins, spending, cash and milestones with the plan. It should lead to an explanation and an agreed action, not just another report.",
+            "A founder who was effective at creation may face a growth-skill mismatch during scaling. The VC may help hire complementary leadership, adjust responsibilities or intervene through formal rights when necessary. The course’s common-law/civil-law comparison is an analytical generalisation, not advice about a particular jurisdiction."
+          ],
+          "key_points": [
+            "Track cash balance, burn, runway and timing of the next funding need.",
+            "Connect operating deviations to financing consequences.",
+            "Agree an owner, action and deadline for corrective work.",
+            "Consider morale, role clarity and timing when changing leadership."
+          ],
+          "formula": "Runway = available cash / monthly net cash burn",
+          "diagram": "",
+          "example": {
+            "label": "Worked practice example",
+            "context": "A company has $600k cash and now burns $100k per month instead of the budgeted $75k.",
+            "steps": [
+              "New runway = $600k / $100k = 6 months.",
+              "Budget runway was 8 months.",
+              "Assess the cause, revise milestones and begin financing or cost actions before the cash deadline."
+            ],
+            "result": "The variance removes two months of runway."
+          },
+          "trap": "A missed forecast does not by itself identify whether the cause is temporary timing, a broken model or execution failure.",
+          "quiz": [
+            {
+              "kind": "numeric",
+              "prompt": "At $600k cash and $100k monthly burn, what is runway?",
+              "answer": 6,
+              "unit": "months",
+              "tolerance": 0.01,
+              "explanation": "600 / 100 = 6 months.",
+              "id": "monitoring-q1"
+            },
+            {
+              "kind": "mcq",
+              "prompt": "What makes monitoring actionable?",
+              "choices": [
+                "Reporting numbers without explanation",
+                "Agreeing corrective actions, responsibilities and deadlines",
+                "Ignoring deviations until the next exit"
+              ],
+              "answer": "1",
+              "explanation": "The lecture links reporting to diagnosis and a clear board response.",
+              "id": "monitoring-q2"
+            }
+          ],
+          "chapter_id": "governance-exits",
+          "source_filename": "Topic 5 Governance, monitoring and exit strategies(1).pdf"
+        },
+        {
+          "id": "exit-mechanisms",
+          "title": "Compare exit mechanisms",
+          "pages": [
+            10,
+            11
+          ],
+          "topic_ids": [
+            "VC13"
+          ],
+          "minutes": 7,
+          "why": "Choose an exit route and explain its benefits, limits and stakeholder effects.",
+          "explain": [
+            "Exit realises value for investors, can monetise founders’ holdings and recycles capital in the ecosystem. The main routes discussed in class are IPO, trade sale, secondary sale, buyback, repayment and write-off.",
+            "Each route differs in buyer, process, liquidity, independence, control and upside. An IPO can offer valuation and prestige but requires preparation and market access. A strategic sale can create synergies but ends independence. A secondary can offer partial liquidity; a buyback depends on funding or cash generation. A write-off recognises loss rather than a successful sale."
+          ],
+          "key_points": [
+            "Identify who buys which shares or securities.",
+            "Compare speed, cost, regulatory process and independence.",
+            "Explain whether the investor exits fully or partly.",
+            "Apply the security waterfall before equating exit value with investor proceeds."
+          ],
+          "formula": "",
+          "diagram": "",
+          "example": {
+            "label": "Worked practice example",
+            "context": "A strategic acquirer offers to buy the entire company; a financial investor instead offers to buy half the VC’s stake.",
+            "steps": [
+              "The strategic offer is a trade sale of the company under the case terms.",
+              "The financial offer is a partial secondary transaction.",
+              "Compare proceeds, retained upside, approvals and alignment with remaining holders."
+            ],
+            "result": "Company exit and investor liquidity do not always mean the same transaction."
+          },
+          "trap": "A secondary sale need not inject new primary cash into the company.",
+          "quiz": [
+            {
+              "kind": "mcq",
+              "prompt": "An existing VC sells its shares to another fund. This is mainly…",
+              "choices": [
+                "A secondary sale",
+                "A new primary round in every case",
+                "A write-off"
+              ],
+              "answer": "0",
+              "explanation": "A secondary transfers an existing position between holders.",
+              "id": "exit-mechanisms-q1"
+            },
+            {
+              "kind": "mcq",
+              "prompt": "Which exit is most directly associated with strategic synergies?",
+              "choices": [
+                "A trade sale to an industrial buyer",
+                "An automatic tax payment",
+                "Writing the investment down to zero"
+              ],
+              "answer": "0",
+              "explanation": "A strategic buyer may pay for technology, customers, talent or other synergies.",
+              "id": "exit-mechanisms-q2"
+            }
+          ],
+          "chapter_id": "governance-exits",
+          "source_filename": "Topic 5 Governance, monitoring and exit strategies(1).pdf"
+        },
+        {
+          "id": "exit-timing",
+          "title": "The three clocks and staged liquidity",
+          "pages": [
+            12,
+            14
+          ],
+          "topic_ids": [
+            "VC13",
+            "VC02"
+          ],
+          "minutes": 7,
+          "why": "Separate the exit announcement, legal closing and actual cash realisation.",
+          "explain": [
+            "Exit timing balances company maturity, the market window and the fund’s own life. Holding longer may create more value, but the investor also faces opportunity cost and LP distribution constraints. Exit should be planned before the final year of a fund.",
+            "The IPO date does not necessarily make the VC’s position immediately liquid: lock-ups and phased sales can delay realisation. Trade sales may include escrow or earn-outs; buybacks may use instalments; secondary transactions can be partial. The time patterns in the slides are illustrative course ranges, not guarantees."
+          ],
+          "key_points": [
+            "Separate accounting value, transaction value and cash received.",
+            "Read lock-up, earn-out, escrow and instalment terms.",
+            "Consider both business and fund constraints.",
+            "Use the charts on pp. 13–14 to review geography and market-window evidence."
+          ],
+          "formula": "",
+          "diagram": "",
+          "example": {
+            "label": "Worked practice example",
+            "context": "A sale delivers $8m at closing and a conditional $2m earn-out later. An investor contributes $2m initially.",
+            "steps": [
+              "Cash at closing gives a realised multiple of 8 / 2 = 4x.",
+              "If the earn-out is fully received, total multiple becomes 10 / 2 = 5x.",
+              "The later payment changes IRR; its probability also matters before receipt."
+            ],
+            "result": "Potential 5x is different from 4x already realised at closing."
+          },
+          "trap": "Do not compute final IRR as if contingent future cash had already arrived.",
+          "quiz": [
+            {
+              "kind": "numeric",
+              "prompt": "What closing-cash multiple follows from $8m received on $2m invested?",
+              "answer": 4,
+              "unit": "x",
+              "tolerance": 0.01,
+              "explanation": "8 / 2 = 4x at closing.",
+              "id": "exit-timing-q1"
+            },
+            {
+              "kind": "mcq",
+              "prompt": "Which set describes the three exit clocks?",
+              "choices": [
+                "Company growth, market window and fund life",
+                "Payroll, tax and depreciation only",
+                "Price, volume and a guaranteed IPO date"
+              ],
+              "answer": "0",
+              "explanation": "The lecture balances company development, market conditions and the fund horizon.",
+              "id": "exit-timing-q2"
+            }
+          ],
+          "chapter_id": "governance-exits",
+          "source_filename": "Topic 5 Governance, monitoring and exit strategies(1).pdf"
+        }
+      ]
+    }
+  ]
+}

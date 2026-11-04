@@ -12,7 +12,7 @@ from typing import Any
 
 GRADES = ("again", "hard", "good", "easy")
 CARD_STATUSES = ("proposed", "active", "rejected", "a_completer", "suspended")
-UNITS = ("eur", "k_eur", "m_eur", "percent", "ratio", "years")
+UNITS = ("eur", "k_eur", "m_eur", "dollars", "millions of dollars", "percent", "ratio", "years", "shares", "months", "scenario", "percent of loan")
 ERROR_CATEGORIES = ("formula", "order", "unit", "missing_data", "convention")
 
 
@@ -156,6 +156,7 @@ class FormulaDrill:
     error_paths: tuple[dict[str, Any], ...] = ()
     alternative_conventions: tuple[dict[str, Any], ...] = ()
     difficulty: int = 1
+    notice: str = "Synthetic practice exercise."
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "FormulaDrill":
@@ -228,11 +229,59 @@ class CaseAttempt:
     score: float
     unsupported_numbers: list[float]
     submitted_at: str
+    penalty: float = 0.0
     model_answer: str = ""
-    notice: str = "Correction par critères, pas une note humaine."
+    notice: str = "Criterion-based grading, not a human grade."
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "CaseAttempt":
+        return cls(**_filtered(cls, payload))
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class DrillAttempt:
+    """One answered formula drill, kept outside the SM-2 schedule."""
+
+    attempt_id: str
+    drill_id: str
+    topic_id: str
+    answer: str
+    accepted: bool
+    expected: float
+    expected_unit: str
+    given_value: float | None
+    diagnostic: str | None
+    submitted_at: str
+    message: str = ""
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "DrillAttempt":
+        return cls(**_filtered(cls, payload))
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class PaperAttempt:
+    """One past-paper submission, stored per topic for the mastery radar."""
+
+    attempt_id: str
+    paper_id: str
+    year: int
+    submitted_at: str
+    auto_points: float
+    auto_max: float
+    auto_percent: float | None
+    per_topic: dict[str, dict[str, float]]
+    self_assessment_points: float = 0.0
+    notice: str = "Auto-graded items only; open questions are self-assessed."
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "PaperAttempt":
         return cls(**_filtered(cls, payload))
 
     def to_dict(self) -> dict[str, Any]:

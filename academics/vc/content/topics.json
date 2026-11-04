@@ -200,6 +200,16 @@
       "exam_weight": 0.01,
       "description": "Lecture d'énoncé, hypothèses, calculs, structuration et gestion du temps.",
       "prerequisites": ["VC04", "VC07", "VC09"]
+    },
+    {
+      "id": "VC21",
+      "code": "VC21",
+      "title_fr": "Produits avancés et gouvernance VC",
+      "title_en": "Advanced VC products and governance",
+      "order": 21,
+      "exam_weight": 0.03,
+      "description": "Pay-to-play, anti-dilution variants, drag-along rights, information rights et autres dispositions de gouvernance.",
+      "prerequisites": ["VC08", "VC09"]
     }
   ]
 }

@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "pack_id": "cards-vc20",
+  "topic_id": "VC20",
+  "language": "en",
+  "source_type": "original",
+  "license": "Original NAGE content",
+  "items": [
+    {
+      "kind": "card",
+      "id": "VC20-C001",
+      "topic_id": "VC20",
+      "question": "How should you approach a VC exam?",
+      "answer": "Read all questions first, allocate time by points, answer easy questions first, show calculations, and review before submitting.",
+      "explanation": "Time management is critical in a 90-minute exam.",
+      "status": "active",
+      "tags": ["exam method", "strategy"]
+    },
+    {
+      "kind": "card",
+      "id": "VC20-C002",
+      "topic_id": "VC20",
+      "question": "What is the typical VC exam structure?",
+      "answer": "Multiple choice questions, open questions and case studies with numerical problems.",
+      "explanation": "Each section tests different skills.",
+      "status": "active",
+      "tags": ["exam structure", "format"]
+    },
+    {
+      "kind": "card",
+      "id": "VC20-C003",
+      "topic_id": "VC20",
+      "question": "How should you handle numerical questions?",
+      "answer": "Write down the formula, substitute values, compute carefully, and check units and rounding.",
+      "explanation": "Showing work earns partial credit.",
+      "status": "active",
+      "tags": ["numerical", "method"]
+    },
+    {
+      "kind": "card",
+      "id": "VC20-C004",
+      "topic_id": "VC20",
+      "question": "What are common exam traps?",
+      "answer": "Confusing pre-money and post-money, mixing units (percent vs ratio), and forgetting to annualize rates.",
+      "explanation": "Awareness prevents careless errors.",
+      "status": "active",
+      "tags": ["traps", "errors"]
+    },
+    {
+      "kind": "card",
+      "id": "VC20-C005",
+      "topic_id": "VC20",
+      "question": "How should you manage time in a 90-minute exam?",
+      "answer": "Spend about 1 minute per MCQ point, and allocate the rest to cases; leave 10 minutes for review.",
+      "explanation": "Pacing prevents running out of time.",
+      "status": "active",
+      "tags": ["time management", "pacing"]
+    },
+    {
+      "kind": "card",
+      "id": "VC20-C006",
+      "topic_id": "VC20",
+      "question": "Why show calculations in an exam?",
+      "answer": "Graders award partial credit for correct method even if the final number is wrong.",
+      "explanation": "It is safer than guessing.",
+      "status": "active",
+      "tags": ["calculations", "credit"]
+    },
+    {
+      "kind": "card",
+      "id": "VC20-C007",
+      "topic_id": "VC20",
+      "question": "What should you do if you are stuck on a question?",
+      "answer": "Move on and return later; do not waste time on a single question.",
+      "explanation": "Maximizes total score.",
+      "status": "active",
+      "tags": ["strategy", "stuck"]
+    },
+    {
+      "kind": "card",
+      "id": "VC20-C008",
+      "topic_id": "VC20",
+      "question": "How can you verify your answers?",
+      "answer": "Check that numbers are plausible, units match, and answers address the question asked.",
+      "explanation": "A quick sanity check catches errors.",
+      "status": "active",
+      "tags": ["verification", "sanity check"]
+    }
+  ]
+}

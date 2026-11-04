@@ -1,0 +1,217 @@
+{
+  "schema_version": 1,
+  "pack_id": "drills-vc08",
+  "topic_id": "VC08",
+  "language": "en",
+  "source_type": "original",
+  "license": "Original NAGE content",
+  "items": [
+    {
+      "kind": "drill",
+      "id": "VC08-D001",
+      "topic_id": "VC08",
+      "prompt": "An investor bought preferred shares at $2.00/share. A down round prices new shares at $1.00/share. Under full-ratchet anti-dilution, what is the new conversion price? ($/share)",
+      "variables": {
+        "old_price": 2.0,
+        "down_round_price": 1.0
+      },
+      "answer": 1.0,
+      "answer_unit": "ratio",
+      "tolerance": 0.01,
+      "steps": [
+        {
+          "label": "Formula",
+          "expression": "new_conversion_price = down_round_price",
+          "result": 1.0
+        },
+        {
+          "label": "Substitution",
+          "expression": "1.00",
+          "result": 1.0
+        }
+      ],
+      "error_paths": [
+        {
+          "value": 2.0,
+          "category": "formula",
+          "message": "You kept the old price; full ratchet resets to the down-round price."
+        }
+      ],
+      "difficulty": 1
+    },
+    {
+      "kind": "drill",
+      "id": "VC08-D002",
+      "topic_id": "VC08",
+      "prompt": "An investor bought shares at $4.00/share. A down round prices new shares at $2.50/share. By how much did the price drop? ($/share)",
+      "variables": {
+        "old_price": 4.0,
+        "down_round_price": 2.5
+      },
+      "answer": 1.5,
+      "answer_unit": "ratio",
+      "tolerance": 0.01,
+      "steps": [
+        {
+          "label": "Formula",
+          "expression": "price_drop = old_price - down_round_price",
+          "result": 1.5
+        },
+        {
+          "label": "Substitution",
+          "expression": "4.00 - 2.50",
+          "result": 1.5
+        }
+      ],
+      "error_paths": [
+        {
+          "value": 2.5,
+          "category": "formula",
+          "message": "You gave the new price, not the drop."
+        }
+      ],
+      "difficulty": 1
+    },
+    {
+      "kind": "drill",
+      "id": "VC08-D003",
+      "topic_id": "VC08",
+      "prompt": "An investor holds preferred shares with a conversion price of $5.00/share; before the down round the company has 1,000,000 common-equivalent shares (as-converted basis). The company then issues 500,000 new shares at $2.00/share (new money = $1,000,000). Under a broad-based weighted-average anti-dilution provision, what is the NEW conversion price? ($/share)",
+      "variables": {
+        "conversion_price_old": 5.0,
+        "shares_before_round": 1000000,
+        "new_shares": 500000,
+        "new_price": 2.0
+      },
+      "answer": 4.0,
+      "answer_unit": "ratio",
+      "tolerance": 0.01,
+      "steps": [
+        {
+          "label": "Formula",
+          "expression": "CP2 = CP1 x (A + B) / (A + C), with A = shares before the round, B = new money / CP1, C = new shares issued",
+          "result": 4.0
+        },
+        {
+          "label": "New-money equivalent",
+          "expression": "B = 1,000,000 / 5.00 = 200,000 shares",
+          "result": 200000.0
+        },
+        {
+          "label": "Substitution",
+          "expression": "CP2 = 5.00 x (1,000,000 + 200,000) / (1,000,000 + 500,000) = 5.00 x 0.80",
+          "result": 4.0
+        }
+      ],
+      "error_paths": [
+        {
+          "value": 3.5,
+          "category": "formula",
+          "message": "You averaged the two prices without weighting: (5.00 + 2.00) / 2 = 3.50. Weighted average must reflect the shares and the new money."
+        },
+        {
+          "value": 1.0,
+          "category": "convention",
+          "message": "$1.00 is the down-round price: that is a full-ratchet reset, not a weighted-average adjustment."
+        },
+        {
+          "value": 5.0,
+          "category": "formula",
+          "message": "You kept the old conversion price; the weighted average always moves the price down after a down round."
+        }
+      ],
+      "difficulty": 2
+    },
+    {
+      "kind": "drill",
+      "id": "VC08-D004",
+      "topic_id": "VC08",
+      "prompt": "A preferred investor paid $3.00/share for 2,000,000 shares. The conversion price is $3.00. A down round prices new shares at $1.50/share. Under full ratchet, how many common shares will the investor receive upon conversion?",
+      "variables": {
+        "investment_shares": 2000000,
+        "old_conversion_price": 3.0,
+        "down_round_price": 1.5
+      },
+      "answer": 4000000,
+      "answer_unit": "ratio",
+      "tolerance": 0.01,
+      "steps": [
+        {
+          "label": "Formula",
+          "expression": "new_shares = investment_shares * (old_conversion_price / down_round_price)",
+          "result": 4000000
+        },
+        {
+          "label": "Substitution",
+          "expression": "2000000 * (3.00 / 1.50)",
+          "result": 4000000
+        }
+      ],
+      "error_paths": [
+        {
+          "value": 2000000,
+          "category": "formula",
+          "message": "You did not adjust for the lower conversion price."
+        }
+      ],
+      "difficulty": 2
+    },
+    {
+      "kind": "drill",
+      "id": "VC08-D005",
+      "topic_id": "VC08",
+      "prompt": "Before a down round: 1,000,000 common shares outstanding PLUS 200,000 option-plan shares. The investor's conversion price is $4.00. The company raises $800,000 of new money by issuing 400,000 new shares at $2.00/share. Under the BROAD-BASED weighted-average convention (option shares included in A), what is the new conversion price? ($/share)",
+      "variables": {
+        "common_shares": 1000000,
+        "option_shares": 200000,
+        "conversion_price_old": 4.0,
+        "new_money": 800000.0,
+        "new_shares": 400000
+      },
+      "answer": 3.5,
+      "answer_unit": "ratio",
+      "tolerance": 0.01,
+      "steps": [
+        {
+          "label": "Formula",
+          "expression": "CP2 = CP1 x (A + B) / (A + C), A includes option-plan shares (broad-based)",
+          "result": 3.5
+        },
+        {
+          "label": "New-money equivalent",
+          "expression": "B = 800,000 / 4.00 = 200,000 shares",
+          "result": 200000.0
+        },
+        {
+          "label": "Substitution",
+          "expression": "CP2 = 4.00 x (1,200,000 + 200,000) / (1,200,000 + 400,000) = 4.00 x 0.875",
+          "result": 3.5
+        }
+      ],
+      "error_paths": [
+        {
+          "value": 3.0,
+          "category": "formula",
+          "message": "You averaged the two prices (4.00 + 2.00) / 2 without weighting shares and money."
+        },
+        {
+          "value": 2.0,
+          "category": "convention",
+          "message": "$2.00 is a full-ratchet reset to the down-round price, not a weighted average."
+        },
+        {
+          "value": 4.0,
+          "category": "formula",
+          "message": "You kept the old conversion price; after a down round the weighted average always lowers it."
+        }
+      ],
+      "alternative_conventions": [
+        {
+          "value": 3.4286,
+          "explanation": "Narrow-based (option shares excluded from A): 4.00 x (1,000,000 + 200,000) / (1,000,000 + 400,000) = 3.43. Investor-favorable variant; broad-based (3.50) is the entrepreneur-favorable market standard used in 88-92% of deals."
+        }
+      ],
+      "difficulty": 3
+    }
+  ]
+}

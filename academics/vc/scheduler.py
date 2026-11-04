@@ -152,7 +152,7 @@ def _weak_topic_ids(reviews: Sequence[ReviewEvent]) -> list[str]:
 
 def _limit_for(minutes: int, mode: str) -> int:
     if minutes <= 0:
-        raise InputError("La durée doit être positive.")
+        raise InputError("Duration must be positive.")
     if mode == "quick":
         return max(5, min(20, minutes * 2))
     if mode == "long":
@@ -214,12 +214,12 @@ def card_reason(progress: CardProgress | None, today: str) -> str:
     if progress is None:
         return "nouvelle carte"
     if progress.last_grade == "again":
-        return "carte à revoir après un oubli"
+        return "card to review after a lapse"
     if progress.last_grade == "hard":
-        return "carte difficile à consolider"
+        return "card that is hard to consolidate"
     if progress.due_date and progress.due_date <= today:
         return "carte due"
-    return "révision programmée"
+    return "scheduled revision"
 
 
 def answer_session(
@@ -231,9 +231,9 @@ def answer_session(
     duration_seconds: int = 0,
 ) -> tuple[ReviewSession, ReviewEvent]:
     if session.status != "active":
-        raise InputError("Cette session est déjà terminée.")
+        raise InputError("This session is already finished.")
     if session.cursor >= len(session.card_ids):
-        raise InputError("Aucune carte à noter dans cette session.")
+        raise InputError("No card to grade in this session.")
     card = content.card(session.card_ids[session.cursor])
     progress = store.load_progress()
     current = progress.get(card.id) or CardProgress(card_id=card.id, due_date=session.today)

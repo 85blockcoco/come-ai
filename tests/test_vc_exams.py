@@ -38,13 +38,17 @@ def _keys(payload) -> set[str]:
     return set()
 
 
-def test_exam_content_has_twenty_questions_and_one_hundred_points() -> None:
+def test_expanded_bank_still_produces_twenty_questions_and_one_hundred_points() -> None:
     content = load_content()
-    assert len(content.exams) == 20
-    assert sum(question.points for question in content.exams) == 100
+    assert len(content.exams) == 26
+    assert sum(question.points for question in content.exams) == 130
+    exam = build_exam(content, questions=20, seed=0)
+    assert len(exam.questions) == 20
+    assert sum(item["points"] for item in exam.questions) == 100
     assert {question.topic_id for question in content.exams} == {
         "VC04",
         "VC05",
+        "VC06",
         "VC07",
         "VC09",
     }
@@ -131,12 +135,9 @@ def test_per_topic_scores_and_weak_topics() -> None:
     result = grade_exam(exam, content)
     assert result["per_topic"]["VC04"]["score"] == pytest.approx(1.0)
     assert "VC04" not in result["weak_topics"]
-    assert set(result["weak_topics"]) == {"VC05", "VC07", "VC09"}
-    assert {item["topic_id"] for item in result["remediation"]} == {
-        "VC05",
-        "VC07",
-        "VC09",
-    }
+    unanswered_topics = {content.exam_question(ref["ref_id"]).topic_id for ref in exam.questions} - {"VC04"}
+    assert set(result["weak_topics"]) == unanswered_topics
+    assert {item["topic_id"] for item in result["remediation"]} == unanswered_topics
     assert all(item["reason"] for item in result["remediation"])
 
 
@@ -208,10 +209,10 @@ def test_oral_follow_ups_never_reveal_the_model_answer() -> None:
 
 def test_insufficient_questions_is_a_readable_error() -> None:
     content = load_content()
-    with pytest.raises(InputError, match="Pas assez"):
-        build_exam(content, questions=21)
-    with pytest.raises(InputError, match="Pas assez"):
-        build_exam(content, questions=6, topic_ids=["VC04"])
+    with pytest.raises(InputError, match="Not enough"):
+        build_exam(content, questions=len(content.exams) + 1)
+    with pytest.raises(InputError, match="Not enough"):
+        build_exam(content, questions=sum(q.topic_id == "VC04" for q in content.exams) + 1, topic_ids=["VC04"])
 
 
 def test_suspended_card_question_is_excluded() -> None:
@@ -252,7 +253,7 @@ def test_history_entry_keeps_mastery_inputs_only() -> None:
 
 def test_exam_rejects_unknown_topic_filter() -> None:
     content = load_content()
-    with pytest.raises(InputError, match="Topic inconnu"):
+    with pytest.raises(InputError, match="Unknown topic"):
         build_exam(content, questions=1, topic_ids=["VC99"])
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Iterable
@@ -45,7 +46,7 @@ class ContentPack:
         try:
             return self.topic_by_id[topic_id]
         except KeyError as error:
-            raise ContentError(f"Topic inconnu : {topic_id}") from error
+            raise ContentError(f"Unknown topic: {topic_id}") from error
 
     def card(self, card_id: str) -> Flashcard:
         try:
@@ -102,11 +103,11 @@ def _read_json(path: Path) -> dict[str, Any]:
     except OSError as error:
         raise ContentError(f"Lecture impossible : {path.name}") from error
     if not isinstance(payload, dict):
-        raise ContentError(f"Le pack {path.name} doit être un objet JSON.")
+        raise ContentError(f"The pack {path.name} must be a JSON object.")
     version = payload.get("schema_version")
     if version != CONTENT_SCHEMA_VERSION:
         raise ContentError(
-            f"Version de pack non supportée dans {path.name} : {version!r}."
+            f"Unsupported pack version in {path.name}: {version!r}."
         )
     return payload
 
@@ -136,7 +137,7 @@ def _citation(item: dict[str, Any], path: Path) -> dict[str, str] | None:
         raise ContentError(f"citation invalide dans {path.name}.")
     for key in ("source_id", "locator", "quote"):
         if not isinstance(citation.get(key), str) or not citation[key].strip():
-            raise ContentError(f"citation incomplète dans {path.name}.")
+            raise ContentError(f"Incomplete citation in {path.name}.")
     return {key: citation[key] for key in ("source_id", "locator", "quote")}
 
 
@@ -152,7 +153,7 @@ def _load_topics(path: Path) -> tuple[CourseTopic, ...]:
             raise ContentError("Topic invalide dans topics.json.")
         topic = CourseTopic.from_dict(item)
         if topic.id in seen:
-            raise ContentError(f"Topic dupliqué : {topic.id}")
+            raise ContentError(f"Duplicate topic: {topic.id}")
         seen.add(topic.id)
         if not 0 <= topic.exam_weight <= 1:
             raise ContentError(f"exam_weight hors [0,1] pour {topic.id}.")
@@ -168,15 +169,15 @@ def _load_cards(path: Path, topic_ids: set[str]) -> list[Flashcard]:
             raise ContentError(f"Item non-card dans {path.name}.")
         topic_id = _topic_id(item, path)
         if topic_id not in topic_ids:
-            raise ContentError(f"Topic inconnu {topic_id} dans {path.name}.")
+            raise ContentError(f"Unknown topic {topic_id} in {path.name}.")
         card = Flashcard.from_dict(item)
         if card.status not in CARD_STATUSES:
             raise ContentError(f"Statut de carte invalide : {card.status} ({card.id}).")
         if card.status != "a_completer" and not card.answer.strip():
-            raise ContentError(f"Réponse vide pour la carte {card.id}.")
+            raise ContentError(f"Empty answer for card {card.id}.")
         citation = _citation(item, path)
         if card.source_type == "user_note" and citation is None:
-            raise ContentError(f"Citation obligatoire pour la carte importée {card.id}.")
+            raise ContentError(f"Citation required for imported card {card.id}.")
         card = Flashcard(
             id=card.id,
             topic_id=card.topic_id,
@@ -199,22 +200,40 @@ def _load_drills(path: Path, topic_ids: set[str]) -> list[FormulaDrill]:
     for item in _items(payload, path):
         if item.get("kind") != "drill":
             raise ContentError(f"Item non-drill dans {path.name}.")
+        if item.get("status") == "draft":
+            if not str(item.get("draft_reason", "")).strip():
+                raise ContentError(f"Draft drill requires a reason in {path.name}.")
+            continue
+        if item.get("status", "active") != "active":
+            raise ContentError(f"Unknown drill status in {path.name}.")
         topic_id = _topic_id(item, path)
         if topic_id not in topic_ids:
-            raise ContentError(f"Topic inconnu {topic_id} dans {path.name}.")
+            raise ContentError(f"Unknown topic {topic_id} in {path.name}.")
         drill = FormulaDrill.from_dict(item)
+        try:
+            expected = float(drill.answer)
+        except (TypeError, ValueError) as error:
+            raise ContentError(f"Active drill {drill.id} requires a single numeric answer.") from error
+        if not math.isfinite(expected):
+            raise ContentError(f"Non-finite answer for {drill.id}.")
         if drill.answer_unit not in UNITS:
-            raise ContentError(f"Unité invalide pour {drill.id} : {drill.answer_unit}.")
+            raise ContentError(f"Invalid unit for {drill.id}: {drill.answer_unit}.")
         if drill.tolerance <= 0:
-            raise ContentError(f"Tolérance invalide pour {drill.id}.")
+            raise ContentError(f"Invalid tolerance for {drill.id}.")
         if not drill.steps:
             raise ContentError(f"Étapes manquantes pour {drill.id}.")
         for step in drill.steps:
             if not isinstance(step, dict) or not {"label", "expression", "result"} <= set(step):
                 raise ContentError(f"Étape invalide pour {drill.id}.")
+        try:
+            final_result = float(drill.steps[-1]["result"])
+        except (TypeError, ValueError) as error:
+            raise ContentError(f"Final calculation must be numeric for {drill.id}.") from error
+        if not math.isfinite(final_result) or abs(final_result - expected) > 1e-6:
+            raise ContentError(f"Final calculation disagrees with the answer for {drill.id}.")
         for error_path in drill.error_paths:
             if error_path.get("category") not in ERROR_CATEGORIES:
-                raise ContentError(f"Catégorie d'erreur invalide pour {drill.id}.")
+                raise ContentError(f"Invalid error category for {drill.id}.")
         drills.append(drill)
     return drills
 
@@ -227,14 +246,14 @@ def _load_cases(path: Path, topic_ids: set[str]) -> list[CaseStudy]:
             raise ContentError(f"Item non-case dans {path.name}.")
         topic_id = _topic_id(item, path)
         if topic_id not in topic_ids:
-            raise ContentError(f"Topic inconnu {topic_id} dans {path.name}.")
+            raise ContentError(f"Unknown topic {topic_id} in {path.name}.")
         case = CaseStudy.from_dict(item)
         if not case.questions:
             raise ContentError(f"Aucune question pour le cas {case.id}.")
         total_weight = 0.0
         for question in case.questions:
             if not question.criteria:
-                raise ContentError(f"Aucun critère pour {case.id}/{question.id}.")
+                raise ContentError(f"No criterion for {case.id}/{question.id}.")
             for criterion in question.criteria:
                 total_weight += criterion.weight
                 for expected in criterion.expected_numbers:
@@ -244,7 +263,7 @@ def _load_cases(path: Path, topic_ids: set[str]) -> list[CaseStudy]:
                             f"Nombre attendu {value} absent de allowed_numbers pour {case.id}."
                         )
         if abs(total_weight - 1.0) > 0.001:
-            raise ContentError(f"Les poids du cas {case.id} ne somment pas à 1.0.")
+            raise ContentError(f"The weights of case {case.id} do not sum to 1.0.")
         cases.append(case)
     return cases
 
@@ -257,7 +276,7 @@ def _load_glossary(path: Path, topic_ids: set[str]) -> list[GlossaryEntry]:
             raise ContentError(f"Item non-glossary dans {path.name}.")
         topic_id = _topic_id(item, path)
         if topic_id not in topic_ids:
-            raise ContentError(f"Topic inconnu {topic_id} dans {path.name}.")
+            raise ContentError(f"Unknown topic {topic_id} in {path.name}.")
         entry = GlossaryEntry.from_dict(item)
         if not entry.term_fr.strip() or not entry.term_en.strip():
             raise ContentError(f"Terme vide dans {path.name}.")
@@ -275,7 +294,7 @@ def _load_exams(
             raise ContentError(f"Item non-exam_question dans {path.name}.")
         topic_id = _topic_id(item, path)
         if topic_id not in topic_ids:
-            raise ContentError(f"Topic inconnu {topic_id} dans {path.name}.")
+            raise ContentError(f"Unknown topic {topic_id} in {path.name}.")
         question = ExamQuestion.from_dict(item)
         if question.format not in ("mcq", "numeric", "open"):
             raise ContentError(f"Format d'examen invalide pour {question.id}.")
@@ -284,7 +303,7 @@ def _load_exams(
         if not 1 <= question.points <= 100:
             raise ContentError(f"Points hors [1,100] pour {question.id}.")
         if len(question.question.strip()) < 8 or not question.answer.strip():
-            raise ContentError(f"Question ou réponse vide pour {question.id}.")
+            raise ContentError(f"Empty question or answer for {question.id}.")
         if question.source_card_id and question.source_card_id not in card_ids:
             raise ContentError(
                 f"Carte source inconnue {question.source_card_id} pour {question.id}."
@@ -293,27 +312,27 @@ def _load_exams(
             if len(question.choices) < 2:
                 raise ContentError(f"QCM sans choix suffisants pour {question.id}.")
             if len(set(question.choices)) != len(question.choices):
-                raise ContentError(f"Choix dupliqués pour {question.id}.")
+                raise ContentError(f"Duplicate choices for {question.id}.")
             if question.answer not in question.choices:
                 raise ContentError(
-                    f"Réponse hors choix pour {question.id} : {question.answer!r}."
+                    f"Answer not among choices for {question.id}: {question.answer!r}."
                 )
         elif question.format == "numeric":
             if question.unit not in UNITS:
-                raise ContentError(f"Unité d'examen invalide pour {question.id}.")
+                raise ContentError(f"Invalid exam unit for {question.id}.")
             if question.tolerance < 0:
-                raise ContentError(f"Tolérance négative pour {question.id}.")
+                raise ContentError(f"Negative tolerance for {question.id}.")
             try:
                 parse_number(question.answer, question.unit)
             except ValueError as error:
                 raise ContentError(
-                    f"Réponse numérique invalide pour {question.id} : {question.answer!r}."
+                    f"Invalid numeric answer for {question.id}: {question.answer!r}."
                 ) from error
         else:
             if not question.keywords:
-                raise ContentError(f"Mots-clés manquants pour {question.id}.")
+                raise ContentError(f"Missing keywords for {question.id}.")
             if any(not keyword.strip() for keyword in question.keywords):
-                raise ContentError(f"Mot-clé vide pour {question.id}.")
+                raise ContentError(f"Empty keyword for {question.id}.")
             if not 1 <= question.min_keywords <= len(question.keywords):
                 raise ContentError(
                     f"min_keywords hors bornes pour {question.id}."
@@ -329,9 +348,9 @@ def _check_unique_glossary(entries: list[GlossaryEntry]) -> None:
         term_fr = normalize_text(entry.term_fr)
         term_en = normalize_text(entry.term_en)
         if term_fr in french:
-            raise ContentError(f"Terme FR dupliqué : {entry.term_fr}")
+            raise ContentError(f"Duplicate FR term: {entry.term_fr}")
         if term_en in english:
-            raise ContentError(f"Terme EN dupliqué : {entry.term_en}")
+            raise ContentError(f"Duplicate EN term: {entry.term_en}")
         french.add(term_fr)
         english.add(term_en)
 
@@ -343,12 +362,19 @@ def _check_unique(items: list[Any], label: str) -> None:
         if not identifier:
             raise ContentError(f"{label} sans identifiant.")
         if identifier in seen:
-            raise ContentError(f"{label} dupliqué : {identifier}")
+            raise ContentError(f"{label} duplicate: {identifier}")
         seen.add(identifier)
+
+
+_CONTENT_CACHE: dict[str, "ContentPack"] = {}
 
 
 def load_content(path: Path | None = None) -> ContentPack:
     directory = Path(path) if path is not None else CONTENT_DIR
+    key = str(directory)
+    cached = _CONTENT_CACHE.get(key)
+    if cached is not None:
+        return cached
     topics = _load_topics(directory / "topics.json")
     topic_ids = {topic.id for topic in topics}
     cards: list[Flashcard] = []
@@ -372,7 +398,7 @@ def load_content(path: Path | None = None) -> ContentPack:
     _check_unique(cases, "Cas")
     _check_unique(exams, "Question d'examen")
     _check_unique_glossary(glossary)
-    return ContentPack(
+    result = ContentPack(
         schema_version=CONTENT_SCHEMA_VERSION,
         topics=topics,
         cards=tuple(cards),
@@ -386,3 +412,5 @@ def load_content(path: Path | None = None) -> ContentPack:
         case_by_id={case.id: case for case in cases},
         exam_by_id={question.id: question for question in exams},
     )
+    _CONTENT_CACHE[key] = result
+    return result

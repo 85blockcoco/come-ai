@@ -1,0 +1,206 @@
+{
+  "schema_version": 1,
+  "pack_id": "drills-vc19",
+  "topic_id": "VC19",
+  "language": "en",
+  "source_type": "original",
+  "license": "Original NAGE content",
+  "items": [
+    {
+      "kind": "drill",
+      "id": "VC19-D001",
+      "topic_id": "VC19",
+      "prompt": "A startup raises a $5M Series A. The term sheet includes venture debt of $1.5M at 12% interest, 2-year term with 6-month interest-only period, and warrants for 10% of the Series A round. What is the annual interest expense in the interest-only period?",
+      "variables": {
+        "debt_amount": 1.5,
+        "interest_rate": 12.0
+      },
+      "answer": {
+        "annual_interest": 180000.0,
+        "monthly_interest": 15000.0
+      },
+      "answer_unit": "dollars",
+      "tolerance": 0.01,
+      "steps": [
+        {
+          "label": "Step 1: Annual interest = debt amount x interest rate",
+          "expression": "1.5 x 12% = 180,000",
+          "result": 180000.0
+        },
+        {
+          "label": "Step 2: Monthly interest = annual interest / 12",
+          "expression": "180,000 / 12 = 15,000",
+          "result": 15000.0
+        }
+      ],
+      "error_paths": [
+        {
+          "value": 60000.0,
+          "category": "formula",
+          "message": "Forgetting to multiply by the interest rate: 1.5M / 25 = 60,000 is wrong."
+        }
+      ],
+      "difficulty": 2,
+      "status": "draft",
+      "draft_reason": "Preserved original proposal: a multi-output or qualitative answer is incompatible with the single-numeric drill grader. Units, assumptions and course provenance require review before activation."
+    },
+    {
+      "kind": "drill",
+      "id": "VC19-D002",
+      "topic_id": "VC19",
+      "prompt": "A $10M venture debt loan has 8% annual interest, 18-month term with 12-month interest-only period, and warrants for 8% of equity. If the company raises a Series B at a higher valuation, what happens to the warrants?",
+      "variables": {
+        "debt_amount": 10.0,
+        "interest_rate": 8.0,
+        "term_months": 18,
+        "io_months": 12,
+        "warrant_pct": 8.0
+      },
+      "answer": {
+        "warrant_dilution": "Warrants may be adjusted on a pro-rata basis in the Series B round, or may remain unchanged depending on the anti-dilution provisions negotiated."
+      },
+      "answer_unit": "percent",
+      "tolerance": 0.01,
+      "steps": [
+        {
+          "label": "Step 1: Review the original warrant terms and Series B anti-dilution provisions",
+          "expression": "Depends on deal structure",
+          "result": "variable"
+        },
+        {
+          "label": "Step 2: Determine if warrants are net-exercised or cash-settled",
+          "expression": "Varies by lender and negotiation",
+          "result": "variable"
+        }
+      ],
+      "error_paths": [],
+      "difficulty": 3,
+      "status": "draft",
+      "draft_reason": "Preserved original proposal: a multi-output or qualitative answer is incompatible with the single-numeric drill grader. Units, assumptions and course provenance require review before activation."
+    },
+    {
+      "kind": "drill",
+      "id": "VC19-D003",
+      "topic_id": "VC19",
+      "prompt": "A startup has $8M revenue and is offered revenue-based financing of 5x monthly revenue, with a repayment rate of 5% of monthly revenue. How many months to repay the full amount?",
+      "variables": {
+        "monthly_revenue": 666666.6666666666,
+        "rp_multiplier": 5.0,
+        "repayment_rate_pct": 5.0
+      },
+      "answer": {
+        "total_payable": 40000000.0,
+        "monthly_payment": 333333.33,
+        "repayment_months": 120.0
+      },
+      "answer_unit": "months",
+      "tolerance": 0.01,
+      "steps": [
+        {
+          "label": "Step 1: Total payable = 5 x annual revenue",
+          "expression": "5 x 8M = 40,000,000",
+          "result": 40000000.0
+        },
+        {
+          "label": "Step 2: Monthly payment = monthly revenue x repayment rate",
+          "expression": "8,000,000/12 x 5% = 333,333.33",
+          "result": 333333.33
+        },
+        {
+          "label": "Step 3: Repayment months = total payable / monthly payment",
+          "expression": "40,000,000 / 333,333.33 = 120",
+          "result": 120.0
+        }
+      ],
+      "error_paths": [],
+      "difficulty": 3,
+      "status": "draft",
+      "draft_reason": "Preserved original proposal: a multi-output or qualitative answer is incompatible with the single-numeric drill grader. Units, assumptions and course provenance require review before activation."
+    },
+    {
+      "kind": "drill",
+      "id": "VC19-D004",
+      "topic_id": "VC19",
+      "prompt": "Compare venture debt vs. equity: A startup needs $5M. Option A: Issue 20% more equity at current valuation. Option B: Take $5M venture debt at 12% interest with 20% warrants. At what exit value does Option A (equity) become better than Option B (debt + warrants) for existing shareholders?",
+      "variables": {
+        "equity_pct": 20.0,
+        "debt_amount": 5.0,
+        "interest_rate": 12.0,
+        "warrant_pct": 20.0
+      },
+      "answer": {
+        "comparison": "Depends on exit scenario; warrant dilution is capped at 20% while equity dilution is fixed at 20%, but debt has interest obligation"
+      },
+      "answer_unit": "scenario",
+      "tolerance": 0.01,
+      "steps": [
+        {
+          "label": "Step 1: Calculate equity dilution impact",
+          "expression": "20% fixed dilution regardless of exit size",
+          "result": "20% dilution"
+        },
+        {
+          "label": "Step 2: Calculate warrant exercise impact",
+          "expression": "20% of equity available at strike price, typically at or near current valuation",
+          "result": "20% max dilution if fully exercised"
+        },
+        {
+          "label": "Step 3: Calculate debt interest obligation",
+          "expression": "5M x 12% x years to exit per year",
+          "result": "variable depending on exit timeline"
+        },
+        {
+          "label": "Step 4: Compare total ownership at different exit values",
+          "expression": "Requires modeling multiple exit scenarios",
+          "result": "no single answer"
+        }
+      ],
+      "error_paths": [],
+      "difficulty": 4,
+      "status": "draft",
+      "draft_reason": "Preserved original proposal: a multi-output or qualitative answer is incompatible with the single-numeric drill grader. Units, assumptions and course provenance require review before activation."
+    },
+    {
+      "kind": "drill",
+      "id": "VC19-D005",
+      "topic_id": "VC19",
+      "prompt": "A startup with $2M ARR is considering $1M venture debt at 10% interest, 2-year term, 8% warrants, and 12-month interest-only period. What is the total cost of capital as a percentage of the loan amount if the company exits after 3 years?",
+      "variables": {
+        "loan_amount": 1.0,
+        "interest_rate": 10.0,
+        "term_years": 2,
+        "io_months": 12,
+        "warrant_pct": 8.0,
+        "exit_years": 3
+      },
+      "answer": {
+        "total_interest_paid": 300000.0,
+        "worth_warrants": "depends on exit valuation",
+        "effective_cost_pct": "variable"
+      },
+      "answer_unit": "percent of loan",
+      "tolerance": 0.01,
+      "steps": [
+        {
+          "label": "Step 1: Interest-only period (first 12 months): 1M x 10% = 100K per year",
+          "expression": "1M x 10% x 1 year = 100,000",
+          "result": 100000.0
+        },
+        {
+          "label": "Step 2: Total interest over 3 years (including post-maturity if not repaid)",
+          "expression": "Approximate: 3 years x 10% x 1M = 300,000",
+          "result": 300000.0
+        },
+        {
+          "label": "Step 3: Effective cost of capital = total cash outflow / loan amount",
+          "expression": "300,000 / 1,000,000 = 30%",
+          "result": 30.0
+        }
+      ],
+      "error_paths": [],
+      "difficulty": 4,
+      "status": "draft",
+      "draft_reason": "Preserved original proposal: a multi-output or qualitative answer is incompatible with the single-numeric drill grader. Units, assumptions and course provenance require review before activation."
+    }
+  ]
+}

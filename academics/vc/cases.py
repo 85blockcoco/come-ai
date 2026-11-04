@@ -74,7 +74,7 @@ def unsupported_numbers(case: CaseStudy, text: str) -> list[float]:
     for number in extract_numbers(text):
         if abs(number) <= 1:
             continue
-        if any(abs(number - value) <= max(1e-6, abs(value) * 1e-6) for value in allowed):
+        if any(abs(number - value) <= max(1e-6, abs(value) * 0.001) for value in allowed):
             continue
         rounded = round(number, 6)
         if rounded not in result:
@@ -116,15 +116,25 @@ def evaluate_case(
                     "model_answer": criterion.model_answer,
                 }
             )
-    score = round(earned_weight / total_weight, 4) if total_weight else 0.0
+    raw_score = round(earned_weight / total_weight, 4) if total_weight else 0.0
+    unsupported = unsupported_numbers(case, " ".join(str(value) for value in answers.values()))
+    # Hardening: an invented number that is not in the case data is not a
+    # rounding slip, it is a fabrication.  Each one costs a penalty weighted by
+    # the heaviest criterion, so a fabricated figure cannot be hidden behind a
+    # minor criterion.  The penalty is capped at 1.0.
+    max_weight = max((criterion.weight for q in case.questions for criterion in q.criteria), default=0.0)
+    per_number = 0.1 + 0.1 * max_weight
+    penalty = min(1.0, per_number * len(unsupported))
+    score = round(max(0.0, raw_score - penalty), 4)
     return CaseAttempt(
         attempt_id=attempt_id or new_id("case"),
         case_id=case.id,
         answers={str(key): str(value) for key, value in answers.items()},
         criteria_results=results,
         score=score,
-        unsupported_numbers=unsupported_numbers(case, " ".join(str(value) for value in answers.values())),
+        unsupported_numbers=unsupported,
         submitted_at=now_iso() if today is None else f"{today}T00:00:00",
+        penalty=penalty,
         model_answer=case.model_answer,
     )
 
@@ -151,6 +161,7 @@ def case_result_payload(attempt: CaseAttempt) -> dict[str, Any]:
     return {
         "case_id": attempt.case_id,
         "score": attempt.score,
+        "penalty": attempt.penalty,
         "criteria": attempt.criteria_results,
         "unsupported_numbers": attempt.unsupported_numbers,
         "model_answer": attempt.model_answer,

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">NAGe</title><desc id="desc">Nouvel emblème symétrique NAGe inspiré de la référence néon.</desc>
+  <defs><path id="nage-half" d="M -24 -166 V -78 Q -24 -65 -35 -57 L -61 -39 Q -70 -33 -70 -21 V 21 Q -70 33 -61 39 L -35 57 Q -24 65 -24 78 V 166"/>
+    <linearGradient id="green" x1="0" y1="0" x2="0.72" y2="1"><stop stop-color="#8bffb1"/><stop offset="0.42" stop-color="#20ff78"/><stop offset="1" stop-color="#00cc60"/></linearGradient>
+    <filter id="glow" x="-90%" y="-30%" width="280%" height="160%" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+  <g transform="translate(256 211) scale(0.87)" fill="none" stroke="url(#green)" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"><use href="#nage-half"/><g transform="scale(-1,1)"><use href="#nage-half"/></g></g>
+  <text x="256" y="444" text-anchor="middle" font-family="system-ui,sans-serif" font-size="49" font-weight="500" letter-spacing="5" fill="#00d47a">NAGe</text>
+</svg>

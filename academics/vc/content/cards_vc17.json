@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "pack_id": "cards-vc17",
+  "topic_id": "VC17",
+  "language": "en",
+  "source_type": "original",
+  "license": "Original NAGE content",
+  "items": [
+    {
+      "kind": "card",
+      "id": "VC17-C001",
+      "topic_id": "VC17",
+      "question": "What is the Bpifrance role in the French VC ecosystem?",
+      "answer": "Bpifrance is the French public investment bank that supports startups and VC funds through direct investments, fund-of-funds and guarantees.",
+      "explanation": "It is a major player in French innovation financing.",
+      "status": "active",
+      "tags": [
+        "Bpifrance",
+        "France"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC17-C002",
+      "topic_id": "VC17",
+      "question": "What is the European Investment Fund (EIF)?",
+      "answer": "An EU institution that provides venture and growth capital to SMEs through financial intermediaries, supporting European VC funds.",
+      "explanation": "It is a key LP in European VC.",
+      "status": "active",
+      "tags": [
+        "EIF",
+        "Europe"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC17-C003",
+      "topic_id": "VC17",
+      "question": "What is the French Tech ecosystem?",
+      "answer": "A government-backed initiative supporting French startups through labels, funding and international visibility.",
+      "explanation": "It strengthens France's attractiveness for VC.",
+      "status": "active",
+      "tags": [
+        "French Tech",
+        "France"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC17-C004",
+      "topic_id": "VC17",
+      "question": "What is a SAS in the French context?",
+      "answer": "A Société par Actions Simplifiée, a flexible French corporate form commonly used by startups and VCs.",
+      "explanation": "It allows tailored governance and share classes.",
+      "status": "active",
+      "tags": [
+        "SAS",
+        "France"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC17-C005",
+      "topic_id": "VC17",
+      "question": "What are the main European VC hubs?",
+      "answer": "London, Paris, Berlin, Stockholm, Amsterdam and Zurich, among others.",
+      "explanation": "They concentrate deal flow and talent.",
+      "status": "active",
+      "tags": [
+        "hubs",
+        "Europe"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC17-C006",
+      "topic_id": "VC17",
+      "question": "What is the ELTIF regulation?",
+      "answer": "The European Long-Term Investment Fund regulation, facilitating cross-border investment in long-term assets including VC.",
+      "explanation": "It aims to channel savings into productive investment.",
+      "status": "active",
+      "tags": [
+        "ELTIF",
+        "regulation"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC17-C007",
+      "topic_id": "VC17",
+      "question": "What is a venture capital trust (VCT) in the UK?",
+      "answer": "A listed company that invests in small unquoted companies, offering tax incentives to investors.",
+      "explanation": "It is a UK-specific VC vehicle.",
+      "status": "active",
+      "tags": [
+        "VCT",
+        "UK"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC17-C008",
+      "topic_id": "VC17",
+      "question": "What is the typical size of a European VC fund?",
+      "answer": "European VC funds typically run from €100m to €500m, smaller than growth-equity (€1-10bn) and buyout (€5-25bn) funds.",
+      "explanation": "Fund size affects strategy and portfolio construction.",
+      "status": "active",
+      "tags": [
+        "fund size",
+        "Europe"
+      ]
+    }
+  ]
+}

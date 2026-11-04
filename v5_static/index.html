@@ -5,8 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light">
     <meta name="description" content="Côme AI 5.0 — assistant personnel local, mémoire et analyses contrôlées.">
-    <title>Côme AI 5.0 — Espace personnel</title>
-    <link rel="stylesheet" href="/v5-static/v5.css">
+    <title>NAGe — Your workspace</title>
+    <link rel="icon" type="image/svg+xml" href="/career-static/nage_assets/favicon.svg?v=neon-20261104">
+    <link rel="apple-touch-icon" href="/career-static/nage_assets/favicon-180.png?v=neon-20261104">
+    <link rel="stylesheet" href="/v5-static/v5.css?v=neon-20261104">
+    <link rel="stylesheet" href="/v5-static/vc_studio.css?v=neon-20261104">
   </head>
   <body>
     <a class="skip-link" href="#main-content">Aller au contenu</a>
@@ -14,21 +17,21 @@
     <div class="ambient ambient-two" aria-hidden="true"></div>
     <div class="app-shell">
       <header class="topbar">
-        <a class="brand" href="/v5" aria-label="Côme AI 5.0, accueil">
-          <span class="brand-mark" aria-hidden="true">C</span>
-          <span><strong>Côme AI</strong><small>5.0 · espace personnel</small></span>
+        <a class="brand" href="#v5/assistantView" aria-label="NAGe, accueil">
+          <span class="brand-mark" aria-hidden="true"><img src="/career-static/nage_assets/favicon.svg?v=neon-20261104" width="56" height="56" alt=""></span>
+          <span><strong>NAGe</strong><small>Your personal workspace</small></span>
         </a>
         <nav class="main-nav" aria-label="Espaces de travail">
           <button class="nav-item active" type="button" data-view-target="assistantView" aria-current="page">Assistant</button>
           <button class="nav-item" type="button" data-view-target="documentsView">Documents &amp; Finance</button>
           <button class="nav-item" type="button" data-view-target="memoryView">Mémoire &amp; stockage</button>
-          <a class="nav-item nav-link" href="/career">Career</a>
+          <button class="nav-item" type="button" data-view-target="revisionsView">Revision</button>
+          <button class="nav-item" type="button" data-view-target="careerView">Stages &amp; candidatures</button>
           <button class="nav-item" type="button" data-view-target="settingsView">Réglages</button>
           <button class="nav-item" type="button" data-view-target="developerView">Atelier Développeur</button>
         </nav>
         <div class="topbar-status" aria-live="polite">
           <span id="localStatus" class="status-pill neutral">Initialisation locale…</span>
-          <a class="subtle-link" href="/" title="Ouvrir l’interface V3 historique">V3</a>
         </div>
       </header>
 
@@ -46,6 +49,8 @@
               <div><span id="metricTasks">0</span><small>tâche active</small></div>
             </div>
           </div>
+
+          <a class="vc-home-shortcut" href="#v5/revisionsView"><span><b>Ton espace de révision Venture Capital</b><small>Cours en anglais, exemples guidés, entraînement et annales EDHEC.</small></span><strong>Ouvrir les révisions →</strong></a>
 
           <div class="workspace-grid">
             <aside class="panel documents-panel" aria-labelledby="workspaceFilesTitle">
@@ -217,12 +222,64 @@
           </section>
         </section>
 
+        <section id="revisionsView" class="view vc-studio" lang="en" aria-labelledby="revisionsTitle" hidden>
+          <header class="vc-heading">
+            <div><p class="eyebrow">NAGe ACADEMY / EDHEC</p><h1 id="revisionsTitle">Venture Capital</h1><p id="revisionsLead">Understand the course. Practise the method. Walk into your exam prepared.</p></div>
+            <div class="vc-top-actions"><span class="vc-exam-date"><b id="revDaysLeft">—</b> days to exam</span><button id="vcFocusToggle" class="vc-quiet-button" type="button" aria-pressed="false">Focus mode</button><button id="vcOpenLibrary" class="vc-quiet-button" type="button">Course library</button><button class="vc-quiet-button" type="button" data-rev-go="revProgress">My progress</button></div>
+          </header>
+          <p id="vcStatusMessage" class="vc-status-message" role="status" hidden></p>
+          <section class="vc-welcome" aria-label="Your next step">
+            <div class="vc-welcome-main"><span class="vc-mini-label">YOUR NEXT STEP</span><h2 id="vcNextTitle">Start with the foundations</h2><p id="vcNextDescription">Five chapters, short lessons and worked examples. Start from zero or pick the concept you need.</p><button id="revStartNow" class="vc-primary" type="button">Start learning <span aria-hidden="true">→</span></button></div>
+            <div class="vc-progress-summary"><div class="vc-progress-numbers"><strong id="vcReadCount">0 / 28</strong><span>lessons studied</span></div><progress id="vcReadProgress" max="28" value="0" aria-label="Lessons studied"></progress><div class="vc-progress-detail"><span id="vcCheckpointCount">0 checkpoints passed</span><span id="vcReviewCount">0 to revisit</span></div><p>Reading and checkpoint results are tracked separately. One step at a time.</p></div>
+          </section>
+          <nav class="rev-tabs vc-main-tabs" aria-label="Your study journey">
+            <button class="rev-tab active" type="button" data-rev-tab="revCourse" aria-pressed="true"><span>01</span> Learn</button>
+            <button class="rev-tab" type="button" data-rev-tab="revMemorize" aria-pressed="false"><span>02</span> Recall</button>
+            <button class="rev-tab" type="button" data-rev-tab="revPractice" aria-pressed="false"><span>03</span> Practise</button>
+            <button class="rev-tab" type="button" data-rev-tab="revEvaluate" aria-pressed="false"><span>04</span> Mock exam</button>
+          </nav>
+          <section id="revCourse" class="rev-panel" aria-label="Course lessons">
+            <div class="vc-course-grid">
+              <aside class="vc-sidebar" aria-label="Course contents"><div class="vc-sidebar-heading"><h2>Your course</h2><button id="vcToggleContents" class="vc-quiet-button" type="button" aria-expanded="false" aria-controls="vcContentsBody">Contents</button></div><div id="vcContentsBody"><label class="sr-only" for="vcLessonSearch">Find a lesson</label><input id="vcLessonSearch" type="search" placeholder="Find a concept…" autocomplete="off"><label class="vc-review-filter"><input id="vcOnlyReview" type="checkbox"> My review list</label><nav id="vcChapterList" aria-label="Choose a chapter and lesson"><p class="quiet-status">Loading your course…</p></nav></div><p class="vc-sidebar-note">Based on the five lecture decks. Open original pages beside every lesson, including charts and tables.</p></aside>
+              <article id="vcLesson" class="vc-lesson" aria-live="polite"><div class="vc-lesson-loading"><span class="vc-mini-label">PREPARING YOUR WORKSPACE</span><h2>Your first lesson is on its way.</h2><p>The course and worked examples run locally.</p></div></article>
+            </div>
+          </section>
+          <section id="revMemorize" class="rev-panel" aria-label="Active recall" hidden>
+            <div class="vc-section-heading"><div><p class="eyebrow">RETRIEVE BEFORE YOU REVEAL</p><h2>Make the ideas stick.</h2><p>Say the answer out loud, reveal it, then rate how well you remembered it.</p></div><span class="vc-small-pill"><b id="revDueCards">—</b> cards due</span></div>
+            <section class="panel vc-training-panel"><div class="panel-heading"><h2 id="revCardsTitle">Your flashcard session</h2><div class="rev-actions"><select id="revCardScope" class="rev-select" aria-label="Flashcard scope"><option value="course">Course essentials</option><option value="all">All cards + background topics</option></select><select id="revCardMode" class="rev-select" aria-label="Session length"><option value="quick">10-minute session</option><option value="long">30-minute session</option><option value="exam_eve">Exam-eve review</option></select><button id="revCardsStart" class="vc-primary" type="button">Start recall</button></div></div><div id="revCardArea" class="rev-card-area"><div class="vc-empty-state"><span aria-hidden="true">↻</span><h3>A little effort now. Better recall later.</h3><p>Start a session to work through the cards due for review.</p></div></div></section>
+          </section>
+          <section id="revPractice" class="rev-panel" aria-label="Practice" hidden>
+            <div class="vc-section-heading"><div><p class="eyebrow">TURN UNDERSTANDING INTO METHOD</p><h2>Work it out. Then check it.</h2><p>Use calculations for the mechanics, cases for reasoning and past papers for the exam format.</p></div></div>
+            <div class="vc-training-switch" role="group" aria-label="Practice type"><button type="button" data-training-mode="drills" aria-pressed="true">Calculations</button><button type="button" data-training-mode="cases" aria-pressed="false">Investment cases</button><button type="button" data-training-mode="papers" aria-pressed="false">Past papers 2023–25</button></div>
+            <section class="panel vc-training-panel" data-training-panel="drills"><div class="panel-heading"><h2 id="revDrillsTitle">One calculation at a time</h2><div class="rev-actions"><select id="revDrillTopic" class="rev-select" aria-label="Exercise topic"><option value="">All calculation topics</option></select><button id="revDrillDraw" class="vc-primary" type="button">New exercise</button></div></div><div id="revDrillArea" class="rev-drill-area"><div class="vc-empty-state"><span aria-hidden="true">ƒ</span><h3>Write the formula. Keep the units.</h3><p>Choose a topic and draw an exercise. You will get the method as well as the answer.</p></div></div></section>
+            <section class="panel vc-training-panel" data-training-panel="cases" hidden><div class="panel-heading"><h2 id="revCasesTitle">Reason through an investment case</h2><span id="revCaseCount" class="rev-case-count">Loading…</span></div><p class="quiet-status">Write your reasoning first. Feedback checks stated criteria and figures; compare the worked solution with your own method.</p><div id="revCasesList" class="rev-cases"></div></section>
+            <section class="panel vc-training-panel" data-training-panel="papers" hidden><div class="panel-heading"><h2 id="revPapersTitle">Your actual past papers</h2></div><p class="quiet-status">Full subjects and worked solutions are available. MCQ answer letters are derived study keys where the original paper does not mark them; they are labelled separately from official worked solutions.</p><div id="revPapersList" class="rev-papers"></div></section>
+          </section>
+          <section id="revEvaluate" class="rev-panel" aria-label="Mock exam" hidden>
+            <div class="vc-section-heading"><div><p class="eyebrow">A DRESS REHEARSAL FOR THE REAL THING</p><h2>Bring it all together.</h2><p>A timed mixed-question mock, followed by correction and topics to revisit. Use the past papers for full case-style questions.</p></div><span id="revLastExam" class="vc-small-pill">No mock completed yet</span></div>
+            <section class="panel vc-training-panel"><div class="panel-heading"><h2 id="revExamTitle">90-minute mock exam</h2><div class="rev-actions"><span id="revExamTimer" class="status-pill neutral" hidden>90:00</span><button id="revExamStart" class="vc-primary" type="button">Start or resume mock</button><button id="revExamSubmit" class="secondary-button" type="button" hidden>Submit my answers</button></div></div><div id="revExamArea" class="rev-exam-area"><div class="vc-empty-state"><span aria-hidden="true">◷</span><h3>Give yourself an honest starting point.</h3><p>The timer and active mock persist on the server. Solutions appear after submission.</p></div></div><div id="revExamResult" class="rev-exam-result" hidden></div></section>
+          </section>
+          <section id="revLearn" class="rev-panel" aria-label="Optional course tutor" hidden>
+            <button class="vc-back-button" type="button" data-rev-go="revCourse">← Back to my lesson</button><div class="vc-section-heading"><div><p class="eyebrow">WHEN YOU WANT ANOTHER EXPLANATION</p><h2>Ask about this lesson.</h2><p>Your written lessons are always available. This optional tutor uses the model configuration already enabled in NAGe.</p></div><span id="revTutorStatus" class="status-pill neutral">Checking tutor…</span></div>
+            <div class="memory-grid"><section class="panel vc-training-panel"><h2 id="revTutorTitle">Your question</h2><label class="rev-field" for="revTutorTopic">Course topic</label><select id="revTutorTopic" class="rev-select"><option value="">General question</option></select><div class="rev-mode-row" role="group" aria-label="Tutor approach"><button class="rev-chip active" type="button" data-tutor-mode="explain">Explain simply</button><button class="rev-chip" type="button" data-tutor-mode="hint">Give a hint</button><button class="rev-chip" type="button" data-tutor-mode="socratic">Ask me questions</button><button class="rev-chip" type="button" data-tutor-mode="analogy">Use an analogy</button><button class="rev-chip" type="button" data-tutor-mode="deep">Go deeper</button></div><div id="revTutorLog" class="rev-chat" aria-live="polite"></div><form id="revTutorForm" class="rev-composer"><label class="sr-only" for="revTutorInput">Your question</label><textarea id="revTutorInput" rows="4" maxlength="4000" placeholder="What would you like to understand?"></textarea><div class="rev-composer-actions"><button id="revTutorCheck" class="text-button" type="button">Check my reasoning</button><button class="vc-primary" type="submit">Ask the tutor</button></div></form></section><section class="panel vc-training-panel"><h2 id="revSourcesTitle">Course extracts</h2><div id="revTutorSources" class="rev-sources"><p class="quiet-status">Sources will appear after a question. Check the original pages for figures and formulas.</p></div><div class="panel-heading rev-gap-top"><h2>Formula reference</h2><button id="revLoadFormulas" class="text-button" type="button">Show formulas</button></div><div id="revFormulas" hidden></div></section></div>
+          </section>
+          <section id="revProgress" class="rev-panel" aria-label="Your results" hidden><button class="vc-back-button" type="button" data-rev-go="revCourse">← Back to my course</button><div class="vc-section-heading"><div><p class="eyebrow">USE YOUR RESULTS TO PICK THE NEXT STEP</p><h2>What needs another look?</h2><p>Lesson checkpoints and reading progress are on the course screen. This radar reflects your cards, calculations, cases and exams.</p></div><span class="vc-small-pill"><b id="revMastery">—</b> topics tested</span></div><div class="memory-grid"><section class="panel vc-training-panel"><div class="panel-heading"><h2 id="revRadarTitle">Your topic radar</h2><button id="revRefreshRadar" class="text-button" type="button">Refresh results</button></div><div id="revRadar"></div></section><section class="panel vc-training-panel"><div class="panel-heading"><h2 id="revPlanTitle">A session that fits your time</h2><select id="revPlanMinutes" class="rev-select" aria-label="Available study time"><option value="30">30 min</option><option value="60" selected>60 min</option><option value="90">90 min</option><option value="120">120 min</option></select></div><div id="revPlan"></div><h2 class="rev-gap-top">Mistakes to learn from</h2><div id="revErrors"></div></section></div></section>
+          <dialog id="vcLibraryDialog" class="vc-modal" aria-labelledby="vcLibraryTitle"><header class="vc-modal-header"><div><p class="eyebrow">YOUR ORIGINAL MATERIALS</p><h2 id="vcLibraryTitle">Course library</h2></div><button type="button" data-close-dialog="vcLibraryDialog" aria-label="Close library">✕</button></header><div class="vc-modal-body"><p id="vcLibrarySummary">Loading your local course files…</p><label class="sr-only" for="vcLibrarySearch">Find a source</label><input id="vcLibrarySearch" type="search" placeholder="Search slides, readings, assignments or exams…"><div id="vcLibraryList"></div></div></dialog>
+          <dialog id="vcSourceDialog" class="vc-modal vc-source-modal" aria-labelledby="vcSourceTitle"><header class="vc-modal-header"><h2 id="vcSourceTitle">Original course page</h2><button type="button" data-close-dialog="vcSourceDialog" aria-label="Close original source">✕</button></header><div class="vc-source-controls"><button id="vcPagePrevious" class="vc-quiet-button" type="button">← Previous</button><span id="vcSourcePageNumber"></span><button id="vcPageNext" class="vc-quiet-button" type="button">Next →</button><a id="vcOriginalLink" target="_blank" rel="noopener">Open original file ↗</a></div><div id="vcSourceBody" class="vc-modal-body"></div></dialog>
+        </section>
+
+        <section id="careerView" class="view" aria-labelledby="careerTitle" hidden>
+          <div class="career-space-heading"><div><p class="eyebrow">TON PROCHAIN STAGE</p><h1 id="careerTitle">Stages &amp; candidatures</h1><p class="lead">Explore les offres, prépare ton dossier et garde la main sur chaque candidature.</p></div><button id="reloadCareerSpace" class="secondary-button" type="button">Recharger l’espace</button></div>
+          <p id="careerSpaceStatus" class="quiet-status" role="status" hidden></p>
+          <iframe id="careerSpaceFrame" class="career-space-frame" title="Stages et candidatures NAGe" referrerpolicy="same-origin"></iframe>
+        </section>
+
         <section id="settingsView" class="view" aria-labelledby="settingsTitle" hidden>
           <div class="section-intro"><p class="eyebrow">CONFIGURATION TRANSPARENTE</p><h1 id="settingsTitle">Réglages &amp; limites</h1><p>Les modes externes restent séparés du noyau local. Côme AI n’envoie rien au cloud automatiquement.</p></div>
           <div class="settings-grid">
-            <article class="panel setting-card"><h2>Mode actuel</h2><p id="providerDetails">Chargement…</p><p class="quiet-status">Le mode V5 présenté ici n’appelle aucun fournisseur IA.</p></article>
+            <article class="panel setting-card"><h2>Mode actuel</h2><p id="providerDetails">Chargement…</p><p class="quiet-status">Les analyses locales présentées ici ne nécessitent aucun appel à un fournisseur IA.</p></article>
             <article class="panel setting-card"><h2>Sécurité du workspace</h2><ul><li>Fichiers identifiés par ID, pas par chemin exposé</li><li>Rapports créés seulement avec confirmation</li><li>Serveur limité à 127.0.0.1</li></ul></article>
-            <article class="panel setting-card"><h2>Modules disponibles</h2><ul><li>Documents &amp; Finance : analyses locales</li><li>Mémoire : indexation/recherche persistantes</li><li><a href="/career">Career 4.1 : profil, offres, candidatures, entretien</a></li></ul></article>
+            <article class="panel setting-card"><h2>Modules disponibles</h2><ul><li>Documents &amp; Finance : analyses locales</li><li>Mémoire : indexation/recherche persistantes</li><li><a href="#v5/careerView">Stages &amp; candidatures : profil, offres et préparation aux entretiens</a></li></ul></article>
           </div>
         </section>
         <section id="developerView" class="view" aria-labelledby="developerTitle" hidden>
@@ -308,7 +365,9 @@
         </section>
       </main>
     </div>
-    <script src="/v5-static/v5.js" defer></script>
+    <script src="/v5-static/v5.js?v=studio-20261104-2" defer></script>
+    <script src="/v5-static/revisions.js?v=studio-20261104-2" defer></script>
+    <script src="/v5-static/vc_studio.js?v=studio-20261104-2" defer></script>
     <script src="/v5-static/devkit.js?v=rc5" defer></script>
     <script src="/v5-static/evolution.js?v=rc4" defer></script>
   </body>

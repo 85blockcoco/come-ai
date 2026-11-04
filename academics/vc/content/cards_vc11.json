@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "pack_id": "cards-vc11",
+  "topic_id": "VC11",
+  "language": "en",
+  "source_type": "original",
+  "license": "Original NAGE content",
+  "items": [
+    {
+      "kind": "card",
+      "id": "VC11-C001",
+      "topic_id": "VC11",
+      "question": "What is portfolio construction in VC?",
+      "answer": "The strategy of deciding how many investments to make, their size, and their distribution across stages and sectors to optimize risk-return.",
+      "explanation": "It balances diversification with the need for meaningful ownership.",
+      "status": "active",
+      "tags": ["portfolio construction", "strategy"]
+    },
+    {
+      "kind": "card",
+      "id": "VC11-C002",
+      "topic_id": "VC11",
+      "question": "What is a reserve in a VC fund?",
+      "answer": "Capital set aside to make follow-on investments in portfolio companies that perform well.",
+      "explanation": "Reserves are critical to defend ownership in winners.",
+      "status": "active",
+      "tags": ["reserves", "follow-on"]
+    },
+    {
+      "kind": "card",
+      "id": "VC11-C003",
+      "topic_id": "VC11",
+      "question": "Why do VCs make follow-on investments?",
+      "answer": "To maintain or increase ownership in companies that are performing well and need more capital to scale.",
+      "explanation": "Follow-ons concentrate capital on winners.",
+      "status": "active",
+      "tags": ["follow-on", "ownership"]
+    },
+    {
+      "kind": "card",
+      "id": "VC11-C004",
+      "topic_id": "VC11",
+      "question": "What is pro rata participation?",
+      "answer": "The right to invest in a future round in proportion to one's current ownership, to avoid dilution.",
+      "explanation": "It is a key tool for defending ownership.",
+      "status": "active",
+      "tags": ["pro rata", "ownership"]
+    },
+    {
+      "kind": "card",
+      "id": "VC11-C005",
+      "topic_id": "VC11",
+      "question": "What is the power law in VC returns?",
+      "answer": "The observation that a small number of investments generate most of a fund's returns, while most others lose money or return little.",
+      "explanation": "It justifies making many small bets and doubling down on winners.",
+      "status": "active",
+      "tags": ["power law", "returns"]
+    },
+    {
+      "kind": "card",
+      "id": "VC11-C006",
+      "topic_id": "VC11",
+      "question": "What is diversification in a VC portfolio?",
+      "answer": "Spreading investments across companies, sectors and stages to reduce the risk of total loss.",
+      "explanation": "Diversification must be balanced against the ability to support winners.",
+      "status": "active",
+      "tags": ["diversification", "risk"]
+    },
+    {
+      "kind": "card",
+      "id": "VC11-C007",
+      "topic_id": "VC11",
+      "question": "What is a concentration limit?",
+      "answer": "A cap on the share of the fund that can be invested in a single company, to limit exposure.",
+      "explanation": "It prevents a single failure from sinking the fund.",
+      "status": "active",
+      "tags": ["concentration", "risk"]
+    },
+    {
+      "kind": "card",
+      "id": "VC11-C008",
+      "topic_id": "VC11",
+      "question": "What is an overage or opportunity fund?",
+      "answer": "A separate fund raised to make larger follow-on investments in the best-performing portfolio companies beyond the main fund's reserves.",
+      "explanation": "It allows VCs to double down on winners without diluting the main fund.",
+      "status": "active",
+      "tags": ["opportunity fund", "follow-on"]
+    }
+  ]
+}

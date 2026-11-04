@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">NAGe — Neon Green</title>
+  <desc id="desc">Emblème vert néon symétrique, fond vert profond et lignes de contour.</desc>
+  <defs><path id="nage-half" d="M -24 -166 V -78 Q -24 -65 -35 -57 L -61 -39 Q -70 -33 -70 -21 V 21 Q -70 33 -61 39 L -35 57 Q -24 65 -24 78 V 166"/>
+    <linearGradient id="green" x1="0" y1="0" x2="0.72" y2="1"><stop stop-color="#8bffb1"/><stop offset="0.42" stop-color="#20ff78"/><stop offset="1" stop-color="#00cc60"/></linearGradient>
+    <filter id="glow" x="-90%" y="-30%" width="280%" height="160%" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="4" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <linearGradient id="tile" x2="0.8" y2="1"><stop stop-color="#062416"/><stop offset="1" stop-color="#010c06"/></linearGradient>
+    <clipPath id="tile-clip"><rect x="16" y="16" width="480" height="480" rx="106"/></clipPath>
+  </defs>
+  <style>.mark{stroke-width:9}@media(max-width:64px){.mark{stroke-width:18}.mesh{display:none}}</style>
+  <rect x="16" y="16" width="480" height="480" rx="106" fill="url(#tile)"/>
+  <g class="mesh" clip-path="url(#tile-clip)" fill="none" stroke="#24d866" stroke-width="0.85" opacity="0.28"><path d="M 82 500 C 160 310, 440 430, 512 60"/>
+<path d="M 96 500 C 170 307, 436 421, 512 72"/>
+<path d="M 110 500 C 180 304, 432 412, 512 84"/>
+<path d="M 124 500 C 190 301, 428 403, 512 96"/>
+<path d="M 138 500 C 200 298, 424 394, 512 108"/>
+<path d="M 152 500 C 210 295, 420 385, 512 120"/>
+<path d="M 166 500 C 220 292, 416 376, 512 132"/>
+<path d="M 180 500 C 230 289, 412 367, 512 144"/>
+<path d="M 194 500 C 240 286, 408 358, 512 156"/>
+<path d="M 208 500 C 250 283, 404 349, 512 168"/>
+<path d="M 222 500 C 260 280, 400 340, 512 180"/>
+<path d="M 236 500 C 270 277, 396 331, 512 192"/>
+<path d="M 250 500 C 280 274, 392 322, 512 204"/>
+<path d="M 264 500 C 290 271, 388 313, 512 216"/>
+<path d="M 278 500 C 300 268, 384 304, 512 228"/>
+<path d="M 292 500 C 310 265, 380 295, 512 240"/>
+<path d="M 306 500 C 320 262, 376 286, 512 252"/>
+<path d="M 320 500 C 330 259, 372 277, 512 264"/>
+<path d="M 334 500 C 340 256, 368 268, 512 276"/>
+<path d="M 348 500 C 350 253, 364 259, 512 288"/>
+<path d="M 362 500 C 360 250, 360 250, 512 300"/>
+<path d="M 376 500 C 370 247, 356 241, 512 312"/>
+<path d="M 390 500 C 380 244, 352 232, 512 324"/>
+<path d="M 404 500 C 390 241, 348 223, 512 336"/>
+<path d="M 418 500 C 400 238, 344 214, 512 348"/>
+<path d="M 432 500 C 410 235, 340 205, 512 360"/>
+<path d="M 446 500 C 420 232, 336 196, 512 372"/>
+<path d="M 460 500 C 430 229, 332 187, 512 384"/></g>
+  <rect x="17" y="17" width="478" height="478" rx="105" fill="none" stroke="#207d42" stroke-width="1.5" opacity="0.8"/>
+  <g class="mark" transform="translate(256 256) scale(1.12)" fill="none" stroke="url(#green)" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"><use href="#nage-half"/><g transform="scale(-1,1)"><use href="#nage-half"/></g></g>
+</svg>

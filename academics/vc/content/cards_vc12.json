@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "pack_id": "cards-vc12",
+  "topic_id": "VC12",
+  "language": "en",
+  "source_type": "original",
+  "license": "Original NAGE content",
+  "items": [
+    {
+      "kind": "card",
+      "id": "VC12-C001",
+      "topic_id": "VC12",
+      "question": "What is a board seat in VC?",
+      "answer": "A position on the company's board of directors granted to an investor, giving it a formal role in governance and strategic decisions.",
+      "explanation": "Board seats are a key control right in VC.",
+      "status": "active",
+      "tags": ["board", "governance"]
+    },
+    {
+      "kind": "card",
+      "id": "VC12-C002",
+      "topic_id": "VC12",
+      "question": "What is an observer right?",
+      "answer": "The right to attend board meetings without voting, often granted to smaller investors.",
+      "explanation": "It provides information without full control.",
+      "status": "active",
+      "tags": ["observer", "board"]
+    },
+    {
+      "kind": "card",
+      "id": "VC12-C003",
+      "topic_id": "VC12",
+      "question": "What is a founder vesting schedule?",
+      "answer": "A schedule (often 4 years with a 1-year cliff) over which founders earn their shares, ensuring continued commitment.",
+      "explanation": "It aligns founders with the company's long-term success.",
+      "status": "active",
+      "tags": ["vesting", "founders"]
+    },
+    {
+      "kind": "card",
+      "id": "VC12-C004",
+      "topic_id": "VC12",
+      "question": "What is a CEO replacement clause?",
+      "answer": "A provision allowing investors to replace the CEO under certain conditions, such as missed milestones or misconduct.",
+      "explanation": "It is a control right that protects the investment.",
+      "status": "active",
+      "tags": ["CEO", "control"]
+    },
+    {
+      "kind": "card",
+      "id": "VC12-C005",
+      "topic_id": "VC12",
+      "question": "What is information rights?",
+      "answer": "The right of investors to receive regular financial and operational reports from the company.",
+      "explanation": "It enables monitoring and early detection of problems.",
+      "status": "active",
+      "tags": ["information rights", "monitoring"]
+    },
+    {
+      "kind": "card",
+      "id": "VC12-C006",
+      "topic_id": "VC12",
+      "question": "What is a quorum for board decisions?",
+      "answer": "The minimum number of board members that must be present for a vote to be valid.",
+      "explanation": "Quorum rules can give investors veto power.",
+      "status": "active",
+      "tags": ["quorum", "board"]
+    },
+    {
+      "kind": "card",
+      "id": "VC12-C007",
+      "topic_id": "VC12",
+      "question": "What is a conflict of interest in VC governance?",
+      "answer": "A situation where a director's personal interests (e.g. as a founder or investor) conflict with the company's interests.",
+      "explanation": "It must be disclosed and managed.",
+      "status": "active",
+      "tags": ["conflict of interest", "governance"]
+    },
+    {
+      "kind": "card",
+      "id": "VC12-C008",
+      "topic_id": "VC12",
+      "question": "What is an independent director?",
+      "answer": "A board member with no material relationship to the company or its investors, providing objective oversight.",
+      "explanation": "Independent directors improve governance quality.",
+      "status": "active",
+      "tags": ["independent director", "governance"]
+    }
+  ]
+}

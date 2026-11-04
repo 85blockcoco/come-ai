@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "pack_id": "cards-vc02",
+  "topic_id": "VC02",
+  "language": "en",
+  "source_type": "original",
+  "license": "Original NAGE content",
+  "items": [
+    {
+      "kind": "card",
+      "id": "VC02-C001",
+      "topic_id": "VC02",
+      "question": "What is management fee in a VC fund?",
+      "answer": "A periodic fee, usually 1.5-2.5% of committed capital per year, charged by the GP to cover fund operating expenses.",
+      "explanation": "It is typically paid during the investment period and declines afterwards.",
+      "status": "active",
+      "tags": ["management fee", "fund economics"]
+    },
+    {
+      "kind": "card",
+      "id": "VC02-C002",
+      "topic_id": "VC02",
+      "question": "What is carried interest (carry)?",
+      "answer": "The GP's share of the fund's profits, typically 20%, earned after returning capital and the preferred return to LPs.",
+      "explanation": "Carry aligns the GP's incentives with the LPs' returns.",
+      "status": "active",
+      "tags": ["carry", "profit sharing"]
+    },
+    {
+      "kind": "card",
+      "id": "VC02-C003",
+      "topic_id": "VC02",
+      "question": "What is a hurdle rate (preferred return)?",
+      "answer": "The minimum annual return (often around 8%) that LPs must receive before the GP can start earning carry.",
+      "explanation": "It protects LPs from paying carry on mediocre performance.",
+      "status": "active",
+      "tags": ["hurdle", "preferred return"]
+    },
+    {
+      "kind": "card",
+      "id": "VC02-C004",
+      "topic_id": "VC02",
+      "question": "What is a catch-up clause?",
+      "answer": "A provision that allows the GP to receive a larger share of profits after the hurdle is met, until the GP has caught up to its agreed share (e.g. 20%) of total profits.",
+      "explanation": "It ensures the GP ultimately receives its full carry.",
+      "status": "active",
+      "tags": ["catch-up", "waterfall"]
+    },
+    {
+      "kind": "card",
+      "id": "VC02-C005",
+      "topic_id": "VC02",
+      "question": "What are the steps of a standard VC distribution waterfall?",
+      "answer": "1) Return contributed capital to LPs. 2) Pay the preferred return/hurdle. 3) GP catch-up. 4) Split remaining profits 80/20 (LPs/GP). 5) True-up/clawback at the end.",
+      "explanation": "The order determines when the GP starts earning carry.",
+      "status": "active",
+      "tags": ["waterfall", "distribution"]
+    },
+    {
+      "kind": "card",
+      "id": "VC02-C006",
+      "topic_id": "VC02",
+      "question": "What is a clawback?",
+      "answer": "A contractual obligation requiring the GP to return excess carry previously received if later losses mean it was overpaid.",
+      "explanation": "It protects LPs in funds with early wins and late losses.",
+      "status": "active",
+      "tags": ["clawback", "protection"]
+    },
+    {
+      "kind": "card",
+      "id": "VC02-C007",
+      "topic_id": "VC02",
+      "question": "What is committed capital?",
+      "answer": "The total amount LPs have contractually pledged to invest in the fund, which the GP can draw down over the investment period.",
+      "explanation": "It is the basis on which management fees are usually calculated.",
+      "status": "active",
+      "tags": ["committed capital", "fund"]
+    },
+    {
+      "kind": "card",
+      "id": "VC02-C008",
+      "topic_id": "VC02",
+      "question": "What is the difference between European and American waterfall?",
+      "answer": "European (whole-fund) waterfall applies carry at the fund level after all capital is returned; American (deal-by-deal) waterfall applies carry per deal, with a clawback to true up.",
+      "explanation": "European is more LP-friendly; American favours the GP's cash flow.",
+      "status": "active",
+      "tags": ["European", "American", "waterfall"]
+    }
+  ]
+}

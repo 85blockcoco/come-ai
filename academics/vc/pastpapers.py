@@ -30,9 +30,9 @@ def _as_float(value: Any, label: str) -> float:
     try:
         number = float(value)
     except (TypeError, ValueError) as error:
-        raise ContentError(f"{label} doit être un nombre.") from error
+        raise ContentError(f"{label} must be a number.") from error
     if number != number or number in (float("inf"), float("-inf")):
-        raise ContentError(f"{label} doit être un nombre fini.")
+        raise ContentError(f"{label} must be a finite number.")
     return number
 
 
@@ -66,12 +66,12 @@ class PaperPart:
         part_id = str(payload.get("id") or f"{question_id}-{index}").strip()
         kind = str(payload.get("kind") or "open").strip()
         if kind not in PART_KINDS:
-            raise ContentError(f"Type de partie non supporté dans {part_id} : {kind!r}.")
+            raise ContentError(f"Unsupported part type in {part_id}: {kind!r}.")
         points = _as_float(payload.get("points", 0), f"Points de {part_id}")
         if points < 0:
-            raise ContentError(f"Points négatifs dans {part_id}.")
+            raise ContentError(f"Negative points in {part_id}.")
         unit = str(payload.get("unit") or "ratio")
-        tolerance = _as_float(payload.get("tolerance", 0), f"Tolérance de {part_id}")
+        tolerance = _as_float(payload.get("tolerance", 0), f"Tolerance of {part_id}")
         return cls(
             id=part_id,
             prompt=str(payload.get("prompt", "")).strip(),
@@ -109,11 +109,11 @@ class PaperQuestion:
             raise ContentError(f"Question sans identifiant dans {paper_id}.")
         kind = str(payload.get("kind") or "open").strip()
         if kind not in PAPER_KINDS:
-            raise ContentError(f"Type de question non supporté dans {question_id} : {kind!r}.")
+            raise ContentError(f"Unsupported question type in {question_id}: {kind!r}.")
         try:
             number = int(payload.get("number"))
         except (TypeError, ValueError) as error:
-            raise ContentError(f"Numéro invalide dans {question_id}.") from error
+            raise ContentError(f"Invalid number in {question_id}.") from error
         points = _as_float(payload.get("points", 0), f"Points de {question_id}")
         if points <= 0:
             raise ContentError(f"Points invalides dans {question_id}.")
@@ -143,7 +143,7 @@ class PaperQuestion:
             choices=choices,
             answer=answer,
             unit=str(payload.get("unit") or "ratio"),
-            tolerance=_as_float(payload.get("tolerance", 0), f"Tolérance de {question_id}"),
+            tolerance=_as_float(payload.get("tolerance", 0), f"Tolerance of {question_id}"),
             solution=str(payload.get("solution", "")).strip(),
             parts=parts,
         )
@@ -156,27 +156,27 @@ def _validate_question(question: PaperQuestion) -> None:
         if len(question.choices) < 2:
             raise ContentError(f"{question.id} : un QCM doit avoir au moins deux choix.")
         if question.answer.strip().upper() not in {choice.label for choice in question.choices}:
-            raise ContentError(f"{question.id} : la réponse ne correspond à aucun choix.")
+            raise ContentError(f"{question.id} : the answer matches no choice.")
         if not question.solution:
-            raise ContentError(f"{question.id} : corrigé manquant.")
+            raise ContentError(f"{question.id} : missing solution.")
         return
     if question.kind == "numeric":
         if not question.answer:
-            raise ContentError(f"{question.id} : réponse numérique manquante.")
+            raise ContentError(f"{question.id} : missing numeric answer.")
         if not question.solution:
-            raise ContentError(f"{question.id} : corrigé manquant.")
+            raise ContentError(f"{question.id} : missing solution.")
         return
     if question.kind == "case":
         if not question.parts:
             raise ContentError(f"{question.id} : un cas doit avoir au moins une partie.")
         for part in question.parts:
             if part.kind == "numeric" and not part.answer:
-                raise ContentError(f"{part.id} : réponse numérique manquante.")
+                raise ContentError(f"{part.id} : missing numeric answer.")
             if not part.solution:
-                raise ContentError(f"{part.id} : corrigé manquant.")
+                raise ContentError(f"{part.id} : missing solution.")
         return
     if not question.answer and not question.parts:
-        raise ContentError(f"{question.id} : réponse modèle manquante.")
+        raise ContentError(f"{question.id} : missing model answer.")
 
 
 @dataclass(frozen=True)
@@ -198,7 +198,7 @@ class PastPaper:
         version = payload.get("schema_version")
         if version != PAPER_SCHEMA_VERSION:
             raise ContentError(
-                f"Version de sujet non supportée : {version!r} (attendu {PAPER_SCHEMA_VERSION})."
+                f"Unsupported paper version: {version!r} (expected {PAPER_SCHEMA_VERSION})."
             )
         paper_id = str(payload.get("paper_id") or "").strip()
         if not paper_id:
@@ -206,11 +206,11 @@ class PastPaper:
         try:
             year = int(payload.get("year"))
         except (TypeError, ValueError) as error:
-            raise ContentError(f"Année invalide dans {paper_id}.") from error
+            raise ContentError(f"Invalid year in {paper_id}.") from error
         try:
             duration = int(payload.get("duration_minutes", 90))
         except (TypeError, ValueError) as error:
-            raise ContentError(f"Durée invalide dans {paper_id}.") from error
+            raise ContentError(f"Invalid duration in {paper_id}.") from error
         raw_sections = payload.get("sections") or []
         if not isinstance(raw_sections, list) or not raw_sections:
             raise ContentError(f"Sections manquantes dans {paper_id}.")
@@ -239,9 +239,9 @@ class PastPaper:
             if question.section not in section_ids:
                 raise ContentError(f"{question.id} : section inconnue {question.section!r}.")
             if question.number in seen_numbers:
-                raise ContentError(f"{paper_id} : numéro dupliqué {question.number}.")
+                raise ContentError(f"{paper_id}: duplicate number {question.number}.")
             if question.id in seen_ids:
-                raise ContentError(f"{paper_id} : identifiant dupliqué {question.id}.")
+                raise ContentError(f"{paper_id}: duplicate id {question.id}.")
             if question.topic_id not in topic_ids:
                 raise ContentError(f"{question.id} : topic inconnu {question.topic_id}.")
             seen_numbers.add(question.number)
@@ -291,15 +291,15 @@ def load_papers(directory: Path | None = None) -> tuple[PastPaper, ...]:
         except OSError as error:
             raise ContentError(f"Lecture impossible : {file.name}") from error
         if not isinstance(payload, dict):
-            raise ContentError(f"Le sujet {file.name} doit être un objet JSON.")
+            raise ContentError(f"The paper {file.name} must be a JSON object.")
         papers.append(PastPaper.from_dict(payload, topic_ids=allowed))
     if not papers:
-        raise ContentError("Aucun sujet d'examen trouvé.")
+        raise ContentError("No exam paper found.")
     papers.sort(key=lambda paper: paper.year)
     seen_years: set[int] = set()
     for paper in papers:
         if paper.year in seen_years:
-            raise ContentError(f"Année dupliquée : {paper.year}.")
+            raise ContentError(f"Duplicate year: {paper.year}.")
         seen_years.add(paper.year)
     return tuple(papers)
 
@@ -309,7 +309,7 @@ def find_paper(year: int | str, papers: Iterable[PastPaper] | None = None) -> Pa
     try:
         wanted = int(year)
     except (TypeError, ValueError) as error:
-        raise InputError(f"Année invalide : {year!r}.") from error
+        raise InputError(f"Invalid year: {year!r}.") from error
     for paper in collection:
         if paper.year == wanted:
             return paper
@@ -328,6 +328,7 @@ def paper_payload(paper: PastPaper, *, solutions: bool = False) -> dict[str, Any
             "kind": question.kind,
             "topic_id": question.topic_id,
             "prompt": question.prompt,
+            "unit": question.unit,
         }
         if question.choices:
             item["choices"] = [
@@ -340,6 +341,7 @@ def paper_payload(paper: PastPaper, *, solutions: bool = False) -> dict[str, Any
                     "prompt": part.prompt,
                     "kind": part.kind,
                     "points": part.points,
+                    "unit": part.unit,
                     **(
                         {"unit": part.unit, "answer": part.answer, "solution": part.solution}
                         if solutions
@@ -406,7 +408,7 @@ def _grade_numeric(
             "expected": expected,
             "unit": unit,
             "earned": 0.0,
-            "message": "Réponse absente.",
+            "message": "Missing answer.",
         }
     try:
         value, parsed_unit = parse_number(str(given_raw), unit)
@@ -435,7 +437,7 @@ def grade_paper(paper: PastPaper, answers: dict[str, Any]) -> dict[str, Any]:
     """Grade the auto-gradable items and expose the open items for self-review."""
 
     if not isinstance(answers, dict):
-        raise InputError("Le fichier de réponses doit être un objet JSON.")
+        raise InputError("Answers file must be a JSON object.")
     items: list[dict[str, Any]] = []
     auto_earned = 0.0
     auto_max = 0.0
@@ -582,7 +584,7 @@ def grade_paper(paper: PastPaper, answers: dict[str, Any]) -> dict[str, Any]:
         "self_assessment_points": round(self_points, 2),
         "items": items,
         "notice": (
-            "Les QCM et les calculs sont corrigés automatiquement. "
-            "Les questions ouvertes et les cas sont à auto-évaluer avec le corrigé."
+            "MCQs and calculations are graded automatically. "
+            "Open questions and cases are self-assessed using the solution."
         ),
     }

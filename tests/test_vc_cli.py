@@ -15,6 +15,48 @@ def invoke(capsys, *args: str) -> tuple[int, str, str]:
     return code, captured.out, captured.err
 
 
+@pytest.mark.parametrize("action,extra,mode", [
+    ("explain", ["--question", "What is dilution?"], "explain"),
+    ("debug", ["--question", "Check this denominator", "--answer", "2/10"], "correct"),
+    ("oral", ["--topic", "VC04"], "socratic"),
+])
+def test_tutor_command_uses_only_the_local_tutor(tmp_path, capsys, monkeypatch, action, extra, mode):
+    import vc_tutor
+    construction = []
+    turns = []
+    class Tutor:
+        def __init__(self, **kwargs):
+            construction.append(kwargs)
+        def tutor_chat(self, message, **kwargs):
+            turns.append((message, kwargs))
+            return {"text": "Synthetic tutor", "source": "offline", "passages": []}
+    monkeypatch.setattr(vc_tutor, "VCTutor", Tutor)
+    home = tmp_path / "vc"
+    code, output, _ = invoke(capsys, "vc", "tutor", action, *extra, "--json", "--home", str(home))
+    assert code == 0
+    assert json.loads(output)["text"] == "Synthetic tutor"
+    assert construction == [{"cloud": False, "load_env": False, "data_dir": home}]
+    assert turns[0][1]["mode"] == mode
+    if action == "debug":
+        assert turns[0][1]["student_answer"] == "2/10"
+
+
+def test_tutor_missing_question_is_a_controlled_usage_error(tmp_path, capsys, monkeypatch):
+    import vc_tutor
+    def forbidden_constructor(**kwargs):
+        raise AssertionError("No tutor/provider should be created for invalid input")
+    monkeypatch.setattr(vc_tutor, "VCTutor", forbidden_constructor)
+    code, _, error = invoke(capsys, "vc", "tutor", "explain", "--home", str(tmp_path))
+    assert code == 2
+    assert "--question" in error
+
+
+def test_unverified_kilo_coach_is_not_exposed(capsys):
+    with pytest.raises(SystemExit) as error:
+        invoke(capsys, "vc", "coach", "explain", "--question", "Synthetic")
+    assert error.value.code == 2
+
+
 def test_review_start_reveal_grade_and_finish(tmp_path: Path, capsys) -> None:
     home = str(tmp_path / "vc")
     code, out, _ = invoke(
@@ -167,7 +209,7 @@ def test_unknown_session_exits_two(tmp_path: Path, capsys) -> None:
         str(tmp_path / "vc"),
     )
     assert code == 2
-    assert "Session active introuvable" in err
+    assert "Active session not found" in err
 
 
 def test_drill_list_run_random_and_diagnostics(tmp_path: Path, capsys) -> None:
@@ -266,9 +308,9 @@ def test_case_list_show_grade_and_errors(tmp_path: Path, capsys) -> None:
     answers_path.write_text(
         json.dumps(
             {
-                "q1": "Post-money 10 M€, investisseur 20 %.",
-                "q2": "2 millions d'actions nouvelles.",
-                "q3": "Le runway se raccourcit et un bridge peut diluer.",
+                "q1": "Post-money 10 M€, investor 20%.",
+                "q2": "2 million new shares.",
+                "q3": "The runway shortens and a bridge may dilute further.",
             }
         ),
         encoding="utf-8",
@@ -289,7 +331,7 @@ def test_case_list_show_grade_and_errors(tmp_path: Path, capsys) -> None:
     result = json.loads(out)
     assert result["score"] == pytest.approx(1.0)
     assert result["model_answer"]
-    assert "pas une note humaine" in result["notice"]
+    assert "not a human grade" in result["notice"]
 
     malformed = tmp_path / "malformed.json"
     malformed.write_text("not json", encoding="utf-8")
@@ -306,7 +348,7 @@ def test_case_list_show_grade_and_errors(tmp_path: Path, capsys) -> None:
         home,
     )
     assert code == 2
-    assert "JSON invalide" in err
+    assert "Invalid answers JSON" in err
 
     code, _, err = invoke(
         capsys,
@@ -321,7 +363,7 @@ def test_case_list_show_grade_and_errors(tmp_path: Path, capsys) -> None:
         home,
     )
     assert code == 2
-    assert "introuvable" in err
+    assert "not found" in err
 
 
 def test_radar_plan_and_report(tmp_path: Path, capsys) -> None:
@@ -358,8 +400,9 @@ def test_radar_plan_and_report(tmp_path: Path, capsys) -> None:
     code, out, _ = invoke(capsys, "vc", "radar", "--today", "2026-11-02", "--json", "--home", home)
     assert code == 0
     radar = json.loads(out)
-    assert len(radar["topics"]) == 20
-    assert "VC03" not in radar["untested"]
+    expected_topics = {f"VC{i:02d}" for i in range(1, 22)}
+    assert {topic["topic_id"] for topic in radar["topics"]} == expected_topics
+    assert len(radar["untested"]) == len(expected_topics) - 1
 
     code, out, _ = invoke(
         capsys,
@@ -412,7 +455,7 @@ def test_glossary_search_and_term_sheet_decode(tmp_path: Path, capsys) -> None:
         capsys, "vc", "glossary", "search", "zzz-inconnu", "--json", "--home", home
     )
     assert code == 0
-    assert json.loads(out)["notice"] == "non documenté"
+    assert json.loads(out)["notice"] == "not documented"
 
     term_sheet = tmp_path / "term_sheet.txt"
     term_sheet.write_text(
@@ -480,6 +523,79 @@ def test_plan_uses_exam_date_from_settings_and_cli_overrides_it(tmp_path: Path, 
     )
     assert code == 0
     assert json.loads(out)["exam_date"] == "2026-12-01"
+
+
+def test_plan_uses_the_default_exam_date_from_settings(tmp_path: Path, capsys) -> None:
+    home = tmp_path / "vc"
+    code, out, _ = invoke(
+        capsys,
+        "vc",
+        "plan",
+        "--minutes",
+        "30",
+        "--today",
+        "2026-11-03",
+        "--json",
+        "--home",
+        str(home),
+    )
+    assert code == 0
+    assert json.loads(out)["exam_date"] == "2026-11-06"
+
+
+def test_exam_date_command_shows_and_persists_the_slot(tmp_path: Path, capsys) -> None:
+    home = tmp_path / "vc"
+    code, out, _ = invoke(capsys, "vc", "exam-date", "--json", "--home", str(home))
+    assert code == 0
+    assert json.loads(out) == {
+        "exam_date": "2026-11-06",
+        "exam_time": "16:00",
+        "exam_duration_minutes": 90,
+        "source": "settings",
+    }
+
+    code, out, _ = invoke(
+        capsys,
+        "vc",
+        "exam-date",
+        "2026-12-01",
+        "--time",
+        "09:30",
+        "--duration",
+        "120",
+        "--json",
+        "--home",
+        str(home),
+    )
+    assert code == 0
+    assert json.loads(out)["saved"] is True
+
+    code, out, _ = invoke(
+        capsys,
+        "vc",
+        "plan",
+        "--minutes",
+        "30",
+        "--today",
+        "2026-11-03",
+        "--json",
+        "--home",
+        str(home),
+    )
+    assert code == 0
+    assert json.loads(out)["exam_date"] == "2026-12-01"
+
+    code, _, err = invoke(
+        capsys,
+        "vc",
+        "exam-date",
+        "06/11/2026",
+        "--json",
+        "--home",
+        str(home),
+    )
+    assert code == 2
+    assert "AAAA-MM-JJ" in err
 
 
 def test_delete_requires_phrase_and_removes_only_vc_home(tmp_path: Path, capsys) -> None:
@@ -596,7 +712,7 @@ def test_exam_start_resume_submit_and_oral(tmp_path: Path, capsys) -> None:
     assert result["status"] == "submitted"
     assert result["points_total"] == 100
     assert result["per_topic"]
-    assert result["notice"].startswith("Correction déterministe")
+    assert result["notice"].startswith("Deterministic grading")
     assert not (Path(home) / "exams" / "active.json").exists()
     history = (Path(home) / "exams" / "history.jsonl").read_text(encoding="utf-8")
     assert exam_id in history
@@ -667,6 +783,8 @@ def test_exam_submit_marks_an_expired_exam(tmp_path: Path, capsys) -> None:
 
 
 def test_exam_and_oral_errors_exit_two(tmp_path: Path, capsys) -> None:
+    from academics.vc.content import load_content
+
     home = str(tmp_path / "vc")
     code, _, err = invoke(
         capsys,
@@ -674,13 +792,13 @@ def test_exam_and_oral_errors_exit_two(tmp_path: Path, capsys) -> None:
         "exam",
         "start",
         "--questions",
-        "21",
+        str(len(load_content().exams) + 1),
         "--json",
         "--home",
         home,
     )
     assert code == 2
-    assert "Pas assez" in err
+    assert "Not enough" in err
 
     code, _, err = invoke(
         capsys,
@@ -695,7 +813,7 @@ def test_exam_and_oral_errors_exit_two(tmp_path: Path, capsys) -> None:
         home,
     )
     assert code == 2
-    assert "introuvable" in err
+    assert "not found" in err
 
     code, out, _ = invoke(
         capsys,
@@ -725,13 +843,13 @@ def test_exam_and_oral_errors_exit_two(tmp_path: Path, capsys) -> None:
         home,
     )
     assert code == 2
-    assert "JSON invalide" in err
+    assert "Invalid answers JSON" in err
 
     code, _, err = invoke(
         capsys, "vc", "oral", "VC99", "--json", "--home", home
     )
     assert code == 2
-    assert "Topic inconnu" in err
+    assert "Unknown topic" in err
 
 
 NOTES_FIXTURES = Path(__file__).parent / "fixtures" / "vc_notes"
@@ -848,7 +966,7 @@ def test_notes_a_completer_requires_an_explicit_answer(tmp_path: Path, capsys) -
         home,
     )
     assert code == 2
-    assert "à compléter" in err
+    assert "to be completed" in err
 
     code, out, _ = invoke(
         capsys,
@@ -906,7 +1024,7 @@ def test_notes_changed_source_requires_replace(tmp_path: Path, capsys) -> None:
         home,
     )
     assert code == 2
-    assert "changé" in err
+    assert "has changed" in err
 
     code, out, _ = invoke(
         capsys,
@@ -945,7 +1063,7 @@ def test_notes_errors_exit_two_and_do_not_echo_note_text(
         home,
     )
     assert code == 2
-    assert "introuvable" in err
+    assert "not found" in err
 
     fixture = NOTES_FIXTURES / "definitions.md"
     code, _, err = invoke(
@@ -961,7 +1079,7 @@ def test_notes_errors_exit_two_and_do_not_echo_note_text(
         home,
     )
     assert code == 2
-    assert "Topic inconnu" in err
+    assert "Unknown topic" in err
 
     code, _, err = invoke(
         capsys,
@@ -974,7 +1092,7 @@ def test_notes_errors_exit_two_and_do_not_echo_note_text(
         home,
     )
     assert code == 2
-    assert "introuvable" in err
+    assert "not found" in err
 
     code, out, _ = invoke(
         capsys,
@@ -1014,7 +1132,7 @@ def test_notes_errors_exit_two_and_do_not_echo_note_text(
         home,
     )
     assert code == 2
-    assert "déjà approuvée" in err
+    assert "already approved" in err
 
 
 def test_approved_note_card_is_available_to_review(tmp_path: Path, capsys) -> None:
@@ -1066,4 +1184,4 @@ def test_approved_note_card_is_available_to_review(tmp_path: Path, capsys) -> No
     )
     assert code == 0
     session = json.loads(out)
-    assert session["total"] == len(load_content().cards) + 1
+    assert session["total"] == min(100, len(load_content().cards) + 1)

@@ -8,9 +8,9 @@ from academics.vc.content import load_content
 
 def test_content_pack_loads_with_all_core_items() -> None:
     content = load_content()
-    assert len(content.topics) == 20
-    assert len(content.cards) >= 50
-    assert len(content.drills) >= 24
+    assert {topic.id for topic in content.topics} == {f"VC{i:02d}" for i in range(1, 22)}
+    assert len(content.cards) >= 189
+    assert len(content.drills) >= 39
     assert len(content.cases) >= 4
     assert len(content.glossary) >= 40
     assert content.topic("VC04").title_fr.startswith("Pre-money")

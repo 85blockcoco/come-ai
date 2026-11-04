@@ -51,22 +51,22 @@ def _clause_payload(kind: str, line: str) -> dict[str, Any]:
     )
     capped = re.search(r"\bcap(?:ped)?\b|\bplafond\b", normalized) is not None
     explanations = {
-        "liquidation": "Le préférentiel est remboursé avant les actions ordinaires.",
-        "anti_dilution": "Le prix de conversion est ajusté en cas de down round.",
-        "board": "Le conseil fixe les décisions stratégiques et les droits de contrôle.",
-        "drag_along": "Un actionnaire majoritaire peut entraîner les minoritaires dans une vente.",
-        "tag_along": "Un minoritaire peut vendre ses actions aux mêmes conditions qu'un majoritaire.",
+        "liquidation": "The preferred is repaid before ordinary shares.",
+        "anti_dilution": "The conversion price is adjusted in a down round.",
+        "board": "The board sets strategic decisions and control rights.",
+        "drag_along": "A majority shareholder can drag minority shareholders into a sale.",
+        "tag_along": "A minority shareholder can sell on the same terms as a majority shareholder.",
         "pro_rata": "L'investisseur peut maintenir sa part lors d'un futur tour.",
-        "participation": "Le préférentiel participe au résidu après sa préférence.",
-        "cap": "Le montant total reçu par le préférentiel est plafonné.",
+        "participation": "The preferred participates in the residual after its preference.",
+        "cap": "The total amount received by the preferred is capped.",
     }
     effects = {
-        "liquidation": "Réduit le produit disponible pour les fondateurs dans les sorties faibles.",
+        "liquidation": "Reduces the proceeds available to founders in weak exits.",
         "anti_dilution": "Augmente le nombre d'actions de l'investisseur et dilue les autres.",
-        "board": "Donne un droit de contrôle ou d'information à l'investisseur.",
+        "board": "Grants the investor a control or information right.",
         "drag_along": "Facilite une sortie mais limite le choix des minoritaires.",
-        "tag_along": "Protège le minoritaire contre une vente inégale.",
-        "pro_rata": "Protège contre la dilution mais exige du capital supplémentaire.",
+        "tag_along": "Protects the minority against an unfair sale.",
+        "pro_rata": "Protects against dilution but requires additional capital.",
         "participation": "Augmente la part de l'investisseur dans les sorties modestes.",
         "cap": "Limite le gain de l'investisseur sur les grosses sorties.",
     }
@@ -101,5 +101,5 @@ def decode_term_sheet(content, text: str) -> dict[str, Any]:
     return {
         "clauses": clauses,
         "unknown_clauses": unknown,
-        "notice": "Décodage conservateur : les clauses non reconnues ne sont pas inventées.",
+        "notice": "Conservative decoding: unrecognised clauses are not invented.",
     }
