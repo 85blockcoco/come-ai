@@ -40,12 +40,15 @@ def _keys(payload) -> set[str]:
 
 def test_expanded_bank_still_produces_twenty_questions_and_one_hundred_points() -> None:
     content = load_content()
-    assert len(content.exams) == 26
-    assert sum(question.points for question in content.exams) == 130
+    # Six fresh-number variants are part of the approved bank in addition to
+    # the original 26 questions.
+    assert len(content.exams) == 32
+    assert sum(question.points for question in content.exams) == 160
     exam = build_exam(content, questions=20, seed=0)
     assert len(exam.questions) == 20
     assert sum(item["points"] for item in exam.questions) == 100
     assert {question.topic_id for question in content.exams} == {
+        "VC03",
         "VC04",
         "VC05",
         "VC06",
