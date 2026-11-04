@@ -23,7 +23,8 @@ class VCMaster:
     def __init__(self):
         self.base = Path(__file__).resolve().parent
         self.courses_dir = self.base / "docs/vc_study"
-        self.data_dir = Path.home() / ".nage/vc_master"
+        # An isolated VC workspace must not write into the user's legacy home.
+        self.data_dir = vc_home() / "master" if os.environ.get("NAGE_VC_HOME") else Path.home() / ".nage/vc_master"
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.courses = {}
         if self.courses_dir.is_dir():

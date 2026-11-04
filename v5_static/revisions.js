@@ -87,7 +87,9 @@ async function revLoadStatus() {
     const tutor = status.tutor || {};
     const pill = revEl("revTutorStatus");
     if (tutor.mode === "gemini") {
-      pill.textContent = `Gemini online · ${tutor.gemini_model || ""}`;
+      const count = Number(tutor.gemini_key_count || 1);
+      pill.textContent = `Gemini configured · ${count} key${count > 1 ? "s" : ""}${tutor.kilo_enabled ? " · Kilo backup" : ""}`;
+      pill.title = `Model: ${tutor.gemini_model || "configured model"}. Provider availability is checked when you send a question.`;
       pill.classList.add("ready"); pill.classList.remove("neutral", "warn");
     } else if (tutor.mode === "degraded") {
       pill.textContent = "Cloud on, no key";

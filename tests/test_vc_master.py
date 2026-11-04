@@ -36,7 +36,7 @@ def test_master_status_uses_the_deterministic_exam_date(tmp_path: Path) -> None:
         ),
         encoding="utf-8",
     )
-    env = {**os.environ, "HOME": str(home), "NAGE_VC_HOME": str(vc_home)}
+    env = {**os.environ, "NAGE_VC_HOME": str(vc_home)}
 
     result = _run(repo, env, "vc", "master", "status")
 
@@ -55,7 +55,7 @@ def test_master_set_exam_persists_the_same_settings(tmp_path: Path) -> None:
         json.dumps({"language": "fr", "daily_capacity": 60, "custom": "keep"}),
         encoding="utf-8",
     )
-    env = {**os.environ, "HOME": str(home), "NAGE_VC_HOME": str(vc_home)}
+    env = {**os.environ, "NAGE_VC_HOME": str(vc_home)}
 
     result = _run(
         repo,
@@ -76,3 +76,4 @@ def test_master_set_exam_persists_the_same_settings(tmp_path: Path) -> None:
     assert settings["exam_duration_minutes"] == 120
     assert settings["language"] == "fr"
     assert settings["custom"] == "keep"
+    assert (vc_home / "master" / "progress.json").is_file()

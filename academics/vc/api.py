@@ -8,6 +8,8 @@ so the UI can separate them from deterministic or official results.
 
 from __future__ import annotations
 
+import os
+import subprocess
 import threading
 from dataclasses import replace
 from typing import Any
@@ -29,6 +31,18 @@ from .models import DrillAttempt
 from .pastpapers import find_paper, grade_paper, load_papers, paper_payload
 from .scheduler import answer_session, session_payload, start_session
 from .storage import VcStore
+from .keychain import KeychainError
+
+
+def _keychain_environment() -> dict[str, str]:
+    """Read only NAGe's three Gemini slots; never return them over HTTP."""
+    from .keychain import gemini_key_environment
+
+    def bounded_security(args, **kwargs):
+        kwargs["timeout"] = 3
+        return subprocess.run(args, **kwargs)
+
+    return gemini_key_environment(runner=bounded_security)
 
 
 # ----------------------------------------------------------------- payloads
@@ -109,10 +123,18 @@ def create_vc_router(
             if tutor_factory is None:
                 from vc_tutor import VCTutor
 
-                # Revision never opts the user into a metered provider or
-                # reads credentials merely to display the learning dashboard.
+                # Production reads explicitly authorized provider configuration.
+                # Loading credentials alone never enables cloud: VC_TUTOR_CLOUD
+                # must be true. Explicit-base test apps inject an offline tutor.
+                try:
+                    credential_env = _keychain_environment()
+                except (KeychainError, OSError):
+                    # A locked/missing Keychain must not break the course or
+                    # prevent use of the explicitly configured .env keys.
+                    credential_env = {}
                 local_tutor = VCTutor(
-                    cloud=False, load_env=False, data_dir=get_store().home
+                    load_env=True, data_dir=get_store().home,
+                    environ={**os.environ, **credential_env},
                 )
             else:
                 local_tutor = tutor_factory()
@@ -120,6 +142,14 @@ def create_vc_router(
 
     def get_content():
         return load_content().with_cards(get_store().load_deck())
+
+    @router.post("/api/vc/tutor/reload")
+    def reload_tutor():
+        nonlocal local_tutor
+        with lock:
+            # An injected offline/test tutor must remain injected after reload.
+            local_tutor = tutor
+            return {"status": "reloaded", "tutor": get_tutor().provider_status()}
 
     def _radar(content, store: VcStore, day: str):
         return mastery_radar(
@@ -195,12 +225,7 @@ def create_vc_router(
     @router.get("/api/vc/cases")
     def vc_cases() -> dict[str, Any]:
         content = get_content()
-        return {
-            "cases": [
-                case_payload(case)
-                for case in content.cases
-            ]
-        }
+        return {"cases": [case_payload(case) for case in content.cases]}
 
     @router.post("/api/vc/cases/{case_id}/grade")
     def vc_case_grade(case_id: str, payload: CaseGradeRequest) -> dict[str, Any]:
@@ -272,9 +297,7 @@ def create_vc_router(
                     mastery = record.to_dict()
                     break
             if mastery is None:
-                raise HTTPException(
-                    status_code=400, detail=f"Unknown topic: {payload.topic_id}"
-                )
+                raise HTTPException(status_code=400, detail=f"Unknown topic: {payload.topic_id}")
 
         # Recent mistakes, most frequent first, so the tutor can target them.
         errors = _wrap(
@@ -290,9 +313,7 @@ def create_vc_router(
         for entry in errors.get("categories") or []:
             category = str(entry.get("category", ""))
             for topic_id, count in (entry.get("topics") or {}).items():
-                flat_errors.append(
-                    {"category": category, "topic_id": topic_id, "count": count}
-                )
+                flat_errors.append({"category": category, "topic_id": topic_id, "count": count})
         flat_errors.sort(key=lambda item: -int(item["count"]))
 
         result = get_tutor().tutor_chat(
@@ -329,9 +350,7 @@ def create_vc_router(
     @router.post("/api/vc/review/answer")
     def vc_review_answer(payload: ReviewAnswerRequest) -> dict[str, Any]:
         if payload.grade not in ("again", "hard", "good", "easy"):
-            raise HTTPException(
-                status_code=400, detail="grade must be again/hard/good/easy"
-            )
+            raise HTTPException(status_code=400, detail="grade must be again/hard/good/easy")
         store = get_store()
         content = get_content()
         with lock:
@@ -346,9 +365,7 @@ def create_vc_router(
                 payload.grade,
                 duration_seconds=payload.duration_seconds,
             )
-            result = _wrap(
-                session_payload, session, content, store.load_progress()
-            )
+            result = _wrap(session_payload, session, content, store.load_progress())
         result["last_result"] = {
             "card_id": event.card_id,
             "grade": event.grade,
@@ -509,9 +526,7 @@ def create_vc_router(
             topic_id = str(item.get("topic_id") or "")
             if not topic_id:
                 continue
-            bucket = per_topic.setdefault(
-                topic_id, {"attempts": 0, "correct": 0, "earned": 0.0, "max": 0.0}
-            )
+            bucket = per_topic.setdefault(topic_id, {"attempts": 0, "correct": 0, "earned": 0.0, "max": 0.0})
             bucket["attempts"] += 1
             if item.get("status") == "correct":
                 bucket["correct"] += 1
@@ -529,15 +544,9 @@ def create_vc_router(
                     submitted_at=now_iso(),
                     auto_points=float(result.get("auto_points", 0.0)),
                     auto_max=float(result.get("auto_max", 0.0)),
-                    auto_percent=(
-                        float(result["auto_percent"])
-                        if result.get("auto_percent") is not None
-                        else None
-                    ),
+                    auto_percent=(float(result["auto_percent"]) if result.get("auto_percent") is not None else None),
                     per_topic=per_topic,
-                    self_assessment_points=float(
-                        result.get("self_assessment_points", 0.0)
-                    ),
+                    self_assessment_points=float(result.get("self_assessment_points", 0.0)),
                     notice=str(result.get("notice", "")),
                 )
             )
