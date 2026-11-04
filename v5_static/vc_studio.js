@@ -80,8 +80,8 @@ function vcExtraPractice(lesson) {
     <div class="vc-extra-practice-heading"><div><p class="vc-mini-label">EXAM-STYLE PRACTICE</p><h3 id="vcExtraPracticeTitle">QCM, method and exam trap</h3></div><span class="vc-practice-count">3 short exercises</span></div>
     <div class="vc-practice-grid">
       <article class="vc-practice-card"><span class="vc-practice-number">01</span><h4>Mini multiple-choice question</h4><p>Which statement best matches <b>${revEsc(lesson.title)}</b>?</p><div class="vc-mini-options"><label><input type="radio" name="extra-mcq" value="0"><span>A</span><span>${revEsc(takeaway)}</span></label><label><input type="radio" name="extra-mcq" value="1"><span>B</span><span>VC investments eliminate uncertainty once funding is received.</span></label><label><input type="radio" name="extra-mcq" value="2"><span>C</span><span>Every percentage change is applied by subtracting points directly.</span></label></div><button type="button" class="vc-quiet-button" data-extra-mcq>Check my answer</button><div class="vc-extra-answer" data-extra-answer="extra-mcq-result" hidden><b>Correction:</b><p>${revEsc(takeaway)} The other choices confuse the course principle.</p></div></article>
-      <article class="vc-practice-card"><span class="vc-practice-number">02</span><h4>Calculation method</h4><p>Before touching the numbers, write the relationship you would use for a new dataset.</p><textarea rows="3" data-extra-input="method" placeholder="Formula, variables and units…" aria-label="Your calculation method"></textarea><button type="button" class="vc-quiet-button" data-extra-score-button="method">Check my method</button><div class="vc-extra-answer" data-extra-answer="method" hidden></div></article>
-      <article class="vc-practice-card"><span class="vc-practice-number">03</span><h4>Catch the exam trap</h4><p>Before looking below, write one mistake a rushed student could make in this topic.</p><textarea rows="3" data-extra-input="trap" placeholder="The mistake to avoid…" aria-label="The exam trap"></textarea><button type="button" class="vc-quiet-button" data-extra-score-button="trap">Check my reasoning</button><div class="vc-extra-answer" data-extra-answer="trap" hidden></div></article>
+      <article class="vc-practice-card"><span class="vc-practice-number">02</span><h4>Calculation method</h4><p>Before touching the numbers, write the relationship you would use for a new dataset.</p><textarea rows="3" data-extra-input="method" placeholder="Formula, variables and units…" aria-label="Your calculation method"></textarea><button type="button" class="vc-quiet-button" data-extra-score-button="method">Check my method</button><div class="vc-tutor-progress" data-extra-progress="method" hidden><span class="vc-progress-track"><i></i></span><span class="vc-progress-label">Preparing Gemini…</span></div><div class="vc-extra-answer" data-extra-answer="method" hidden></div></article>
+      <article class="vc-practice-card"><span class="vc-practice-number">03</span><h4>Catch the exam trap</h4><p>Before looking below, write one mistake a rushed student could make in this topic.</p><textarea rows="3" data-extra-input="trap" placeholder="The mistake to avoid…" aria-label="The exam trap"></textarea><button type="button" class="vc-quiet-button" data-extra-score-button="trap">Check my reasoning</button><div class="vc-tutor-progress" data-extra-progress="trap" hidden><span class="vc-progress-track"><i></i></span><span class="vc-progress-label">Preparing Gemini…</span></div><div class="vc-extra-answer" data-extra-answer="trap" hidden></div></article>
     </div><p class="vc-practice-note">The checkpoint above is scored. These three exercises reinforce the same exam skills; reveal the correction only after committing to an answer, then continue with a fresh-number drill or a past-paper case.</p>
   </section>`;
 }
@@ -147,12 +147,17 @@ function vcRenderLesson() {
     const buttonLabel = event.currentTarget.textContent;
     event.currentTarget.disabled = true;
     event.currentTarget.textContent = "Tutor is checking…";
+    const progress = vcNode("vcLesson").querySelector(`[data-extra-progress="${kind}"]`);
+    const progressLabel = progress?.querySelector(".vc-progress-label");
+    if (progress) { progress.hidden = false; progress.classList.add("active"); }
+    if (progressLabel) progressLabel.textContent = "Gemini is reading your answer…";
     answer.hidden = false;
     answer.innerHTML = '<p class="vc-tutor-pending"><span class="vc-pending-dot" aria-hidden="true"></span> Gemini is checking your reasoning against the course…</p>';
     vcMessage("Gemini is checking your answer…");
     try {
       const prompt = `Correct this student's ${kind === "method" ? "calculation method" : "exam-trap reasoning"} for the Venture Capital lesson "${lesson.title}". Return the first line exactly as SCORE: NN% (an indicative pedagogical score, not an official grade), then give: 1) what is correct, 2) what is missing or wrong, 3) the corrected method in concise English. Use only the course concepts provided to you.`;
       const request = revApi("/api/vc/tutor", { method: "POST", body: JSON.stringify({ message: prompt, mode: "correct", topic_id: lesson.topic_ids?.[0] || null, student_answer: value }) });
+      if (progressLabel) progressLabel.textContent = "Gemini is writing your feedback…";
       const payload = await Promise.race([request, new Promise((_, reject) => setTimeout(() => reject(new Error("Gemini took too long to respond. Try again; your answer is still in the box.")), 20000))]);
       const match = String(payload.text || "").match(/SCORE\s*:\s*(\d{1,3})\s*%/i);
       const score = match ? Math.min(100, Number(match[1])) : null;
@@ -160,12 +165,16 @@ function vcRenderLesson() {
       answer.innerHTML = `${scoreHtml}<div class="vc-tutor-correction">${typeof revMarkdown === "function" ? revMarkdown(payload.text) : revEsc(payload.text || "No correction returned.")}</div><small>${payload.source === "ai" ? "Gemini tutor correction, grounded in the course context." : "Tutor unavailable: local course correction shown as a fallback."}</small>`;
       answer.hidden = false;
       event.currentTarget.textContent = "✓ Checked by tutor";
+      if (progress) { progress.classList.remove("active"); progress.classList.add("done"); }
+      if (progressLabel) progressLabel.textContent = "Correction ready";
     } catch (_) {
       const result = vcFreeTextFeedback(value, scoring[kind].terms, scoring[kind].correction);
       const missing = result.missing.length ? `<p><b>Still to include:</b> ${revEsc(result.missing.join(", "))}</p>` : "<p><b>Key concepts detected.</b> Now verify the units and interpretation.</p>";
       answer.innerHTML = `<div class="vc-text-score"><strong>${result.score}%</strong><span>offline concept coverage</span></div><p class="vc-tutor-error">Gemini could not return a correction this time.</p>${missing}<p><b>Course correction:</b> ${revEsc(result.correction)}</p><small>This is a local fallback, not an official exam grade. Try the tutor again when the connection is available.</small>`;
       answer.hidden = false;
       event.currentTarget.textContent = "Try Gemini again";
+      if (progress) { progress.classList.remove("active"); progress.classList.add("error"); }
+      if (progressLabel) progressLabel.textContent = "Gemini unavailable — try again";
     } finally { event.currentTarget.disabled = false; if (!answer.hidden) vcMessage(""); else event.currentTarget.textContent = buttonLabel; }
   }));
 }
