@@ -41,7 +41,7 @@
       "pages": 14,
       "text_extraction": "empty",
       "visual_review": "complete",
-      "status": "duplicate_of_official_pack",
+      "status": "duplicate_exam_source",
       "duplicate_of": "edhec-pevc-2024",
       "notes": "Seven printed exam pages match paper_2024.json; seven reverse sides are blank. No student identifier is retained."
     },
@@ -51,7 +51,18 @@
       "text_extraction": "available",
       "visual_review": "covered_by_curriculum_and_cases",
       "status": "supplementary_lecture_deck",
-      "notes": "Topics overlap the five mapped lecture decks; workbook-derived cases cover its valuation, term-sheet and convertible-note methods."
+      "notes": "Topics overlap the five mapped lecture decks; workbook-derived cases cover its valuation, term-sheet and convertible-note methods.",
+      "page_map": [
+        {"pages": "2-7", "topics": ["VC01", "VC03", "VC10"]},
+        {"pages": "8-12", "topics": ["VC14", "VC18"]},
+        {"pages": "13-20", "topics": ["VC04", "VC05", "VC09"]},
+        {"pages": "21-40", "topics": ["VC04", "VC15"]},
+        {"pages": "41-41", "topics": ["VC04", "VC15"]},
+        {"pages": "42-44", "topics": ["VC16", "VC18"]},
+        {"pages": "45-47", "topics": ["VC06", "VC10"]},
+        {"pages": "48-62", "topics": ["VC06", "VC07", "VC12", "VC13"]},
+        {"pages": "63-64", "topics": ["VC16"]}
+      ]
     },
     {
       "file": "Team project 2027.pdf",
