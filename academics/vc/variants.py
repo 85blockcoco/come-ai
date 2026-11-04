@@ -112,7 +112,7 @@ def generated_drill(topic_id: str | None, seed: int) -> FormulaDrill | None:
             difficulty=1, notice="Fresh-number variant: same method, new data.",
         )
     if topic_id == "VC09":
-        invested = _money(rng, 1, 5)
+        invested = rng.choice((1, 2, 3, 4, 5))
         multiple = rng.choice((2, 3, 4, 5))
         proceeds = invested * multiple
         return FormulaDrill(

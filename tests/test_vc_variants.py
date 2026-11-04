@@ -51,6 +51,13 @@ def test_generated_drills_use_new_numbers_and_are_gradeable(tmp_path) -> None:
         assert graded.json()["accepted"] is True
 
 
+def test_generated_method_drills_never_use_zero_denominators() -> None:
+    for topic_id in ("VC03", "VC04", "VC05", "VC07", "VC09"):
+        drill = generated_drill(topic_id, 42)
+        assert drill is not None
+        assert drill.answer > 0
+
+
 def test_exam_content_includes_fresh_variants() -> None:
     content = load_content()
     ids = {question.id for question in content.exams}
