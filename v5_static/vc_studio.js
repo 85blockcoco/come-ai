@@ -94,6 +94,9 @@ function vcRenderLesson() {
   const state = vcStudio.progress.lessons[lesson.id] || {};
   const variant = vcStudio.lessonVariant?.lesson_id === lesson.id ? vcStudio.lessonVariant : null;
   const practice = variant || lesson;
+  const formula = lesson.formula || "State the relevant definition, formula and units before calculating.";
+  const methodTerms = (lesson.formula ? lesson.formula.split(/[^A-Za-z0-9%€]+/) : lesson.key_points).filter((term) => String(term).length >= 4).slice(0, 8);
+  const trapTerms = String(lesson.trap).split(/[^A-Za-z0-9%€]+/).filter((term) => term.length >= 4).slice(0, 8);
   const questions = practice.quiz.map((question, i) => `<fieldset class="vc-check-question"><legend><span>${i + 1}</span>${revEsc(question.prompt)}</legend>${question.kind === "mcq" ? `<div class="vc-mcq-options">${question.choices.map((choice, j) => `<label><input type="radio" name="${revEsc(question.id)}" value="${j}" required><span class="vc-choice-letter" aria-hidden="true">${String.fromCharCode(65 + j)}</span><span class="vc-choice-text">${revEsc(choice)}</span></label>`).join("")}</div>` : `<label class="vc-number-answer"><input name="${revEsc(question.id)}" inputmode="decimal" autocomplete="off" placeholder="Your answer" required><span>${revEsc(question.unit || "")}</span></label>`}</fieldset>`).join("");
   const example = practice.example || lesson.example;
   vcNode("vcLesson").innerHTML = `<div class="vc-lesson-topline"><span>CHAPTER ${vcStudio.course.chapters.indexOf(chapter) + 1} · LESSON ${index + 1} OF ${lessons.length}</span><button type="button" class="vc-quiet-button" data-print-lesson>Print lesson</button></div><h2 class="vc-lesson-title" tabindex="-1">${revEsc(lesson.title)}</h2><p class="vc-lesson-objective">${revEsc(lesson.why)}</p><div class="vc-lesson-meta"><span>About ${lesson.minutes} min</span><button type="button" data-open-lesson-source>Course pp. ${lesson.pages[0]}–${lesson.pages[1]} ↗</button>${state.last_score != null ? `<span>Last checkpoint: ${state.last_score}%</span>` : ""}</div>
@@ -155,7 +158,7 @@ function vcRenderLesson() {
     answer.innerHTML = '<p class="vc-tutor-pending"><span class="vc-pending-dot" aria-hidden="true"></span> Gemini is checking your reasoning against the course…</p>';
     vcMessage("Gemini is checking your answer…");
     try {
-      const prompt = `Correct this student's ${kind === "method" ? "calculation method" : "exam-trap reasoning"} for the Venture Capital lesson "${lesson.title}". Return the first line exactly as SCORE: NN% (an indicative pedagogical score, not an official grade), then give: 1) what is correct, 2) what is missing or wrong, 3) the corrected method in concise English. Use only the course concepts provided to you.`;
+      const prompt = `Grade this student's ${kind === "method" ? "calculation method" : "exam-trap reasoning"} for the Venture Capital lesson "${lesson.title}".\n\nCOURSE MATERIAL FOR THIS LESSON:\nObjective: ${lesson.why}\nKey points: ${(lesson.key_points || []).join("; ")}\nFormula: ${lesson.formula || "No formula is specified in this lesson."}\nCourse trap: ${lesson.trap}\n\nStudent answer: ${value}\n\nUse the lesson material above as the authority. Do not invent assumptions, penalties, market conventions, sources or requirements that are absent from it. Do not penalize a correct simple answer for omitting unstated extras. Grade completeness and accuracy against the relevant key points. For calculation methods, check the actual formula, variables, units and order only when relevant. Return the first line exactly as SCORE: NN% (indicative practice feedback, not an official exam grade), followed by concise sections: What is correct; What is missing or incorrect; Model correction. Always answer in English.`;
       const request = revApi("/api/vc/tutor", { method: "POST", body: JSON.stringify({ message: prompt, mode: "correct", topic_id: lesson.topic_ids?.[0] || null, student_answer: value }) });
       if (progressLabel) progressLabel.textContent = "Gemini is writing your feedback…";
       const payload = await Promise.race([request, new Promise((_, reject) => setTimeout(() => reject(new Error("Gemini took too long to respond. Try again; your answer is still in the box.")), 20000))]);
@@ -167,10 +170,10 @@ function vcRenderLesson() {
       event.currentTarget.textContent = "✓ Checked by tutor";
       if (progress) { progress.classList.remove("active"); progress.classList.add("done"); }
       if (progressLabel) progressLabel.textContent = "Correction ready";
-    } catch (_) {
+    } catch (error) {
       const result = vcFreeTextFeedback(value, scoring[kind].terms, scoring[kind].correction);
       const missing = result.missing.length ? `<p><b>Still to include:</b> ${revEsc(result.missing.join(", "))}</p>` : "<p><b>Key concepts detected.</b> Now verify the units and interpretation.</p>";
-      answer.innerHTML = `<div class="vc-text-score"><strong>${result.score}%</strong><span>offline concept coverage</span></div><p class="vc-tutor-error">Gemini could not return a correction this time.</p>${missing}<p><b>Course correction:</b> ${revEsc(result.correction)}</p><small>This is a local fallback, not an official exam grade. Try the tutor again when the connection is available.</small>`;
+      answer.innerHTML = `<div class="vc-text-score"><strong>${result.score}%</strong><span>offline concept coverage</span></div><p class="vc-tutor-error">Gemini could not return a correction this time: ${revEsc(error.message || "request failed")}</p>${missing}<p><b>Course correction:</b> ${revEsc(result.correction)}</p><small>This is a local fallback, not an official exam grade. Try the tutor again when the connection is available.</small>`;
       answer.hidden = false;
       event.currentTarget.textContent = "Try Gemini again";
       if (progress) { progress.classList.remove("active"); progress.classList.add("error"); }
