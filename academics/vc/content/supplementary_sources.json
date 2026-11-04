@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "file": "7017_69368.pdf",
+      "pages": 14,
+      "text_extraction": "empty",
+      "visual_review": "complete",
+      "status": "duplicate_of_official_pack",
+      "duplicate_of": "edhec-pevc-2024",
+      "notes": "Seven printed exam pages match paper_2024.json; seven reverse sides are blank. No student identifier is retained."
+    },
+    {
+      "file": "Team project 2027.pdf",
+      "pages": 2,
+      "text_extraction": "empty",
+      "visual_review": "complete",
+      "status": "rubric_integrated",
+      "case_id": "WB-TEAM-PITCHBOOK-01",
+      "notes": "Qualitative investment-committee pitchbook brief represented as a criterion-based case, not as a fabricated single correct answer."
+    }
+  ]
+}

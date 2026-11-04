@@ -4,7 +4,7 @@
 
 The local authorised course folder contains 29 non-hidden files: 26 PDFs and 3 XLSX workbooks. The PDFs contain 1,494 pages; 1,478 pages have extractable text and 16 pages require visual review because text extraction is empty. The three workbooks contain 14 sheets and 249 formula cells.
 
-The indexed study library contains 20 PDFs and 2,381,571 extracted characters. `7017_69368.pdf` is a 14-page scan with seven printed exam pages and seven blank reverse sides; visual comparison confirms that its seven exam pages duplicate the 2024 paper already represented by `paper_2024.json`. `Team project 2027.pdf` is a two-page pitchbook brief; it is now represented by a rubric-based case rather than being treated as a single-answer exam.
+The indexed study library contains 20 PDFs and 2,381,571 extracted characters. `7017_69368.pdf` is a 14-page scan with seven printed exam pages and seven blank reverse sides; visual comparison confirms that its seven exam pages duplicate the 2024 paper already represented by `paper_2024.json`. `Team project 2027.pdf` is a two-page pitchbook brief; it is now represented by a rubric-based case rather than being treated as a single-answer exam. The machine-readable decisions are recorded in `academics/vc/content/supplementary_sources.json`.
 
 The primary course maps the five lecture decks to 5 chapters and 28 lessons. The application content pack contains 21 topics, 189 active cards, 44 static drills, 15 graded cases (including 11 workbook-derived/rubric cases), 32 deterministic mock questions and past-paper packs for 2023, 2024 and 2025.
 
@@ -78,4 +78,4 @@ and its source reference; it is not presented as an official exam answer.
 
 ## Interpretation
 
-The five lecture decks, three past-paper packs and workbook-derived cases now form a strong exam path. It would still be inaccurate to say that every page has been semantically certified: the remaining 16 empty-text pages in other PDFs need visual/OCR review, and thin non-exam topics may need more cards. All newly added workbook exercises are explicitly labelled as adaptations, while official past-paper material remains separate.
+The five lecture decks, three past-paper packs and workbook-derived cases now form a strong exam path. All 16 pages that had empty text extraction were visually checked in the two image-based PDFs: the 7017 scan is a duplicate of the 2024 exam (with blank reverse sides), and the Team Project brief is captured as a qualitative rubric case. Thin non-exam topics may still need more cards. All newly added workbook exercises are explicitly labelled as adaptations, while official past-paper material remains separate.
