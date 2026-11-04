@@ -399,7 +399,7 @@ def create_vc_router(
             seed = variant_seed(payload.drill_id)
             if seed is None:
                 raise HTTPException(status_code=400, detail=str(error)) from error
-            topic_id = "VC03" if payload.drill_id.startswith("variant-vc03-") else "VC05"
+            topic_id = payload.drill_id.split("-", 2)[1].upper()
             drill = generated_drill(topic_id, seed)
             if drill is None:
                 raise HTTPException(status_code=400, detail="Unknown drill variant.") from error

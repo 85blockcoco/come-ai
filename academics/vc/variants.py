@@ -65,13 +65,13 @@ def lesson_variant(lesson: dict[str, Any], seed: int) -> dict[str, Any]:
 
 
 def variant_seed(identifier: str) -> int | None:
-    match = re.fullmatch(r"variant-vc(?:03|05)-(-?\d+)", identifier)
+    match = re.fullmatch(r"variant-vc(?:03|04|05|07|09)-(-?\d+)", identifier)
     return int(match.group(1)) if match else None
 
 
 def generated_drill(topic_id: str | None, seed: int) -> FormulaDrill | None:
     """Create a new-number drill for the stages/dilution topics."""
-    if topic_id not in {"VC03", "VC05"}:
+    if topic_id not in {"VC03", "VC04", "VC05", "VC07", "VC09"}:
         return None
     rng = random.Random(seed)
     burn = _money(rng, 30, 100)
@@ -86,6 +86,42 @@ def generated_drill(topic_id: str | None, seed: int) -> FormulaDrill | None:
             steps=(
                 {"label": "Funding need", "expression": f"{burn} × {months}", "result": f"{answer:g} k€"},
             ), difficulty=1, notice="Fresh-number variant: same method, new data.",
+        )
+    if topic_id == "VC04":
+        pre = _money(rng, 6, 24)
+        investment = _money(rng, 2, 8)
+        answer = pre + investment
+        return FormulaDrill(
+            id=f"variant-vc04-{seed}", topic_id="VC04",
+            prompt=f"A company is valued at €{pre}m pre-money and receives €{investment}m of new investment. What is the post-money valuation (€m)?",
+            variables={"pre_money_m": pre, "investment_m": investment}, answer=float(answer),
+            answer_unit="m_eur", tolerance=0.01,
+            steps=({"label": "Post-money", "expression": f"{pre} + {investment}", "result": f"{answer:g} M€"},),
+            difficulty=1, notice="Fresh-number variant: same method, new data.",
+        )
+    if topic_id == "VC07":
+        proceeds = _money(rng, 5, 20)
+        preference = _money(rng, 2, 8)
+        answer = min(proceeds, preference)
+        return FormulaDrill(
+            id=f"variant-vc07-{seed}", topic_id="VC07",
+            prompt=f"A non-participating preferred investor has a 1x preference of €{preference}m. The exit proceeds are €{proceeds}m. What preference amount is paid before ordinary shares (€m)?",
+            variables={"proceeds_m": proceeds, "preference_m": preference}, answer=float(answer),
+            answer_unit="m_eur", tolerance=0.01,
+            steps=({"label": "Preference payout", "expression": f"min({proceeds}, {preference})", "result": f"{answer:g} M€"},),
+            difficulty=1, notice="Fresh-number variant: same method, new data.",
+        )
+    if topic_id == "VC09":
+        invested = _money(rng, 1, 5)
+        multiple = rng.choice((2, 3, 4, 5))
+        proceeds = invested * multiple
+        return FormulaDrill(
+            id=f"variant-vc09-{seed}", topic_id="VC09",
+            prompt=f"An investor receives €{proceeds}m after investing €{invested}m. What is the MOIC (x)?",
+            variables={"proceeds_m": proceeds, "invested_m": invested}, answer=float(multiple),
+            answer_unit="ratio", tolerance=0.01,
+            steps=({"label": "MOIC", "expression": f"{proceeds} ÷ {invested}", "result": f"{multiple:g}x"},),
+            difficulty=1, notice="Fresh-number variant: same method, new data.",
         )
     starting = rng.choice((70, 78, 82, 85, 90))
     dilution = rng.choice((12, 15, 18, 22, 25))
