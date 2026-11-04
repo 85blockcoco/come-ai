@@ -2,6 +2,10 @@
 
 Candidate : `codex/vc-learning-studio-20261104`, worktree `Documents/Codex/2026-10-25/nage-revision-rebuild`.
 
+Commits livrés et poussés : `0b36128` (cours/corrections), `1f69c7b` (lecteur intégré), `6b6bf2dd7ee731d03eb8c60e178242973376bc7e` (QCM compact). Tip de code vérifié par `git ls-remote`. Les 22 fichiers de la livraison sont identiques dans le worktree et le dépôt de l'icône ; les modifications concurrentes de missions sont conservées.
+
+Dernière recette sur l'instance bureau `127.0.0.1:8765` : onglet Révision observé dans sa fenêtre Chrome ; sondage navigateur en lecture seule, zéro requête d'écriture et zéro erreur JS. Pastilles 22 px / texte 15 px sur ordinateur ; 20 px / 14 px à 390 px, sans débordement. Tests cours/UI rejoués : 16 passed en 2,32 s ; Ruff, syntaxe JS et diff-check verts. Serveur bureau confirmé dans le bon dépôt ; API cours HTTP 200, 5 chapitres / 28 leçons. Serveur de recette isolé arrêté. Empreintes des 29 originaux et des anciens fichiers de progression inchangées.
+
 Livraison : reconstruction V5 Révision avec 28 leçons / 56 contrôles, accès in-app aux sources, progression de lecture/contrôles/revue persistée, annales avec toutes les sous-questions, brouillons d'examen, correction de sept calculs et cinq propositions de dette préservées en draft. Rapport : `docs/agent-reports/NAGE-VC-STUDIO-20261104.md`.
 
 Preuves : 126 tests ciblés verts, Ruff / syntaxe JS / diff-check verts, recette Chromium avec store synthétique (lecture, original, contrôles, reprise, cartes, calcul, cas, annales, mock, mobile, panne réseau). Originaux : 29/29 empreintes inchangées. Aucun appel de modèle dans cette campagne.

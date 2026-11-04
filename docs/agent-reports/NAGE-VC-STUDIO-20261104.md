@@ -56,3 +56,13 @@ Les scores de recette sont des données synthétiques : ils ne représentent pas
 Pastilles A/B/C de 22 px (lettres 10 px) sur écran large, 20 px sur mobile ; texte des réponses 15 px (14 px sur mobile), interligne 1,65–1,7. Toute la ligne est cliquable, le focus clavier est visible, et la sélection reste accessible aux lecteurs d'écran. Même présentation pour les contrôles de leçon et les annales. Les listes de choix de l'examen utilisent aussi des marqueurs plus petits.
 
 Après cette modification : 16 tests ciblés de cours/UI rejoués, verts ; recette Chromium confirmant la sélection de la ligne, les tailles calculées et l'absence de débordement à 390 px. La fenêtre Chrome de l'application du bureau a été observée avec le nouveau lecteur et ses 28 leçons. Le lanceur fixe désormais son dossier de travail sur le dépôt avant de démarrer Python.
+
+## Installation vérifiée sur le bureau
+
+Code final : `6b6bf2dd7ee731d03eb8c60e178242973376bc7e`, publié sur `origin/codex/vc-learning-studio-20261104` et vérifié par `git ls-remote`. Les 22 fichiers installés correspondent exactement à la candidate. Le dépôt live reste sur sa branche existante, avec le commit concurrent `c9a252b` et ses 500 missions préservés ; les fichiers installés sont des modifications locales, pas un merge dans main.
+
+Instance réelle : port 8765, processus confirmé avec `run_come_ai_v3.py` du dépôt `/Users/comedelavenne/AI-Excel-Agent`, dossier de travail identique. API du cours HTTP 200 : cinq chapitres, 28 leçons. L'icône ouvre l'accueil et son onglet Revision mène au lecteur. Son affichage a été vérifié dans la fenêtre de l'application.
+
+Dernier passage indépendant : 16 tests cours/UI réussis en 2,32 s ; sondage Chromium de l'instance réelle sans requête d'écriture, sans erreur JavaScript, tailles QCM 22/15 px sur ordinateur et 20/14 px sur mobile, sans débordement à 390 px. Les 29 originaux et les fichiers de progression préexistants ont conservé leurs empreintes. Le serveur temporaire de recette a été arrêté ; celui du bureau reste actif.
+
+Sauvegardes locales réversibles : `~/Library/Application Support/NAGE/backups/20261104-145415-vc-studio` pour l'installation principale et `20261104-150241-qcm-readability` pour l'ajustement QCM. Les jeux de réponses et scores de test sont restés sous `/tmp`.
