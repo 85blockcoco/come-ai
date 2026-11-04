@@ -1,5 +1,11 @@
 # CODEX — Rangement NAGe — 4 novembre 2026
 
+Mise à jour : Côme autorise maintenant explicitement la consolidation et le push de main après vérification. Intégration en préparation sur le socle main, afin de conserver les modules Career supplémentaires absents du snapshot bureau. Aucune substitution globale par le studio.
+
+Identité demandée : nouveau symbole vectoriel vert néon et motif, inspiré de la planche fournie ; icône macOS remplacée avec sauvegarde préalable. Logo visible 56 px sur ordinateur / 40 px sur téléphone. Quatre SVG validés par le sondage Playwright existant ; 21 tests ciblés verts en 6,84 s. Recette navigateur sur le serveur réel : accueil → Revision (28 leçons) → accueil par logo, aucun appel d'écriture ni erreur JS, pas de débordement à390 px. Correction du min-content des grilles qui causait le débordement de la page d'accueil.
+
+Les 663 worktrees existants ont maintenant été inspectés : 635 présentent des changements visibles, 28 sont propres dans le périmètre vérifié, aucun conflit d'index. Les 27 entrées manquantes sont explicitement non inspectées. Inventaire local en quarantaine ; rien supprimé. Le dépôt exécuté a été aligné proprement sur la branche cleanup après commit de sauvegarde local `archive/nage-desktop-pre-alignment-20261104` ; le seul répertoire local non suivi `vc/` reste conservé.
+
 Branche de référence bureau préparée : `codex/nage-workspace-cleanup-20261104`, issue du studio `4fe8ceb` et du commit live `c9a252b` réconciliés sans conflit. Le dossier de code de l'icône reste `~/AI-Excel-Agent` ; guide durable dans `docs/WORKSPACE.md`.
 
 Rangement récupérable effectué : neuf dossiers/archives/lanceurs techniques retirés du Bureau, 500 gabarits identiques à c9a252b retirés de l'arbre actif, un backup JS non suivi archivé. Tous conservés dans `~/Documents/NAGe/Archives/2026-11-04_152145` avec manifeste et restauration sans écrasement. Aucun original de cours, aucune progression, aucun profil Chrome déplacé ; aucune suppression irréversible, branche ou worktree supprimé.

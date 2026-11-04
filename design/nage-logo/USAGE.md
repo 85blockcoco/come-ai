@@ -1,13 +1,13 @@
 # Guide d’usage du logo NAGe
 
-Les fichiers prêts à intégrer sont dans [`career_static/nage_assets/`](../../career_static/nage_assets/). La géométrie reprend la ligne centrale, le profil d’épaisseur et les points de contrôle du prototype. Le tracé source d’une moitié est défini une seule fois ; l’autre moitié utilise ce même tracé dans un groupe `scale(-1,1)`.
+Les fichiers prêts à intégrer sont dans [`career_static/nage_assets/`](../../career_static/nage_assets/). La nouvelle direction demandée le 4 novembre 2026 reprend l'emblème symétrique de la [planche de référence](https://chatgpt.com/s/m_6aeb412032d0819188467a4e53cf0451) : vert néon et motif sur fond vert profond. Le prototype historique reste préservé ; il n'a pas été modifié par cette évolution. Le tracé source d’une moitié est défini une seule fois ; l’autre moitié utilise ce même tracé dans un groupe `scale(-1,1)`.
 
 ## Versions
 
-- **Dégradé — `nage-logo.svg`** : emploi principal sur fond uni clair ou sombre. Le dégradé reprend la palette émeraude du prototype, sans lueur ni reflet animé.
+- **Dégradé — `nage-logo.svg`** : emblème et nom verts, lueur douce, à privilégier sur fond sombre. Aucun reflet animé.
 - **Monochrome — `nage-logo-mono.svg`** : variante durable et sobre en `#00d47a`, à privilégier pour les interfaces, documents et impressions simples.
 - **Contour — `nage-logo-stencil.svg`** : contour émeraude pour gravure, gaufrage ou usage où une forme évidée est préférable. Vérifier le contraste et l’épaisseur sur le support final.
-- **Symbole seul — `favicon.svg`** : les deux rubans en miroir, sans mot-symbole. Utiliser les PNG fournis pour les environnements qui ne prennent pas en charge SVG.
+- **Symbole seul — `favicon.svg`** : emblème néon, fond vert profond, motif de lignes, sans mot-symbole. Utiliser les PNG fournis pour les environnements qui ne prennent pas en charge SVG. Le motif est masqué aux petites tailles pour garder le symbole lisible.
 
 ## Tailles minimales
 
@@ -31,6 +31,6 @@ Garder libre autour du logo une marge minimale égale à la hauteur du « e » d
 
 - Ne pas étirer, incliner, tourner, recadrer ni séparer les rubans.
 - Ne pas redessiner ni substituer une moitié : la symétrie dépend du miroir du tracé source.
-- Ne pas ajouter de lueur, reflet, ombre, contour supplémentaire, texture ou animation aux exports statiques.
+- Ne pas amplifier la lueur ni superposer d'effets aux exports : utiliser la finition adaptée à la taille. Garder les pages d'apprentissage sobres.
 - Ne pas remplacer la palette officielle, ni placer le logo sur un fond dont le contraste rend les rubans difficiles à distinguer.
 - Ne pas ajouter le mot-symbole au favicon.

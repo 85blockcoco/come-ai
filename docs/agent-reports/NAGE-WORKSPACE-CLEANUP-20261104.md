@@ -31,3 +31,13 @@ git diff --check
 ```
 
 Résultat : **24 passed en 7,08 s**, syntaxe JS et diff-check verts. Tests avec données synthétiques ; suite globale non lancée. Le rangement libère l'espace quotidien sans prétendre récupérer la place disque des centaines de worktrees préservés.
+
+## Contrôles complémentaires et identité
+
+Les 663 worktrees existants ont ensuite été vérifiés : 635 avec changements visibles, 28 propres dans le périmètre inspecté, zéro conflit d'index, zéro timeout. Les 27 répertoires manquants sont signalés sans prétendre les avoir inspectés. Aucune suppression de branche/worktree n'est déduite automatiquement de ces résultats.
+
+Le dépôt exécuté a été aligné sur la branche cleanup après comparaison de l'arbre Git complet et commit de sauvegarde sur `archive/nage-desktop-pre-alignment-20261104` (`32a634a`). Les anciens changements de code installés sont ainsi committés ; le répertoire local non suivi `vc/` reste préservé.
+
+Logo actualisé à la demande de Côme : SVG vert néon, motif de lignes sur vert profond, miroir conservé par construction, déclinaisons PNG et ICNS macOS. Ancienne identité conservée dans la quarantaine. Taille en-tête 56 px sur ordinateur / 40 px sur téléphone. Les quatre SVG passent `scripts/nage_intro_check.py` ; 21 tests ciblés ont été rejoués en 6,84 s. Recette navigateur réelle du serveur bureau : accueil → 28 leçons → accueil par le logo, aucune requête d'écriture ni erreur JS, pas de débordement à 390 px après correction des grilles min-content.
+
+Côme a ensuite autorisé explicitement l'intégration dans main. Elle doit conserver le socle Career et les protections de main tout en apportant les révisions et l'identité vérifiées ; l'autorisation ne constitue pas une preuve de compatibilité.
