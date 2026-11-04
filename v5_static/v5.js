@@ -49,7 +49,7 @@ function formatBytes(value) { const bytes = Number(value || 0); if (!Number.isFi
 function text(node, value) { node.textContent = value == null ? "" : String(value); }
 
 const viewTargets = new Set(["assistantView", "documentsView", "memoryView", "revisionsView", "settingsView", "developerView"]);
-const viewLabels = { assistantView: "Assistant", documentsView: "Documents & Finance", memoryView: "Mémoire & stockage", revisionsView: "Révisions", settingsView: "Réglages", developerView: "Atelier Développeur" };
+const viewLabels = { assistantView: "Assistant", documentsView: "Documents & Finance", memoryView: "Mémoire & stockage", revisionsView: "VC Learning Path", settingsView: "Réglages", developerView: "Atelier Développeur" };
 let internalHashChange = false;
 
 function requestedHashView() {

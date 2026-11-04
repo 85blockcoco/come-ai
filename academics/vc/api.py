@@ -14,6 +14,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from .cases import case_payload, case_result_payload, evaluate_case
 from .content import load_content
 from .cram import formula_payload
 from .dates import new_id, now_iso, today_iso
@@ -50,6 +51,10 @@ class DrillGradeRequest(BaseModel):
 class DrillDrawRequest(BaseModel):
     topic_id: str | None = Field(default=None, max_length=16)
     seed: int | None = None
+
+
+class CaseGradeRequest(BaseModel):
+    answers: dict[str, str] = Field(default_factory=dict)
 
 
 class ExamStartRequest(BaseModel):
@@ -182,6 +187,34 @@ def create_vc_router(
     @router.get("/api/vc/coverage")
     def vc_coverage() -> dict[str, Any]:
         return {"topics": _wrap(coverage_report, get_content())}
+
+    # --------------------------------------------------------------- cases
+    @router.get("/api/vc/cases")
+    def vc_cases() -> dict[str, Any]:
+        content = get_content()
+        return {
+            "cases": [
+                case_payload(case)
+                for case in content.cases
+            ]
+        }
+
+    @router.post("/api/vc/cases/{case_id}/grade")
+    def vc_case_grade(case_id: str, payload: CaseGradeRequest) -> dict[str, Any]:
+        content = get_content()
+        try:
+            case = content.case(case_id)
+        except ContentError as error:
+            raise HTTPException(status_code=404, detail="Case not found.") from error
+        question_ids = {question.id for question in case.questions}
+        if set(payload.answers) - question_ids:
+            raise HTTPException(status_code=400, detail="Answer contains an unknown case question.")
+        if len(payload.answers) > len(question_ids) or any(len(answer) > 4_000 for answer in payload.answers.values()):
+            raise HTTPException(status_code=422, detail="Case answers exceed the allowed size.")
+        attempt = _wrap(evaluate_case, case, payload.answers)
+        with lock:
+            get_store().append_case_attempt(attempt)
+        return {"result": case_result_payload(attempt), "source": "deterministic"}
 
     # -------------------------------------------------------------- radar
     @router.get("/api/vc/radar")

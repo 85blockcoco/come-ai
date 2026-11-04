@@ -40,7 +40,237 @@
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
   })[c]);
 
-  const num = (value) => new Intl.NumberFormat("fr-FR").format(Number(value) || 0);
+  
+/* ---- Parse MCQ format from tutor or content text ---- */
+function parseMCQ(text) {
+  /* Look for MCQ patterns:
+     - "a) ... b) ... c) ... d) ..." with "Correct answer: X" or "Good answer: X"
+     - "1." "2." "3." "4." patterns
+     - "Vrai / Faux" patterns
+  */
+  const lines = text.split('\n');
+  const mcq = { options: [], correct: null, explanation: null, type: 'mcq' };
+  
+  /* Try to find a) b) c) d) pattern */
+  const pattern1 = /^([a-dA-D]\))\s(.+)$/m;
+  const matches1 = text.match(pattern1);
+  if (matches1 && matches1.length >= 3) {
+    /* We have at least 3 options, likely an MCQ */
+    for (const m of matches1) {
+      const letter = m[1];
+      const text = m[2].trim();
+      mcq.options.push({ letter, text });
+    }
+    /* Try to find the correct answer */
+    const correctPattern = /Correct answer[:\s]*([a-dA-D])/i;
+    const correctMatch = text.match(correctPattern);
+    if (correctMatch) {
+      mcq.correct = correctMatch[1];
+    } else {
+      /* Check for "Good answer" or "bonne réponse" */
+      const goodPattern = /Good answer[:\s]*([a-dA-D])|bonne réponse[:\s]*([a-dA-D])/i;
+      const goodMatch = text.match(goodPattern);
+      if (goodMatch) {
+        mcq.correct = goodMatch[1] || goodMatch[2];
+      }
+    }
+    /* Try to find explanation */
+    const explPattern = /Explication[:\s]*(.+)/i;
+    const explMatch = text.match(explPattern);
+    if (explMatch) {
+      mcq.explanation = explMatch[1].trim();
+    }
+    mcq.type = 'mcq';
+    return mcq;
+  }
+  
+  /* Try Vrai / Faux pattern */
+  const vfPattern = /(Vrai|Faux)[:\s]*(.+)/i;
+  const vfMatch = text.match(vfPattern);
+  if (vfMatch) {
+    mcq.type = 'vrai_faux';
+    mcq.question = vfMatch[2].trim();
+    /* Check if the first part was Vrai or Faux */
+    const fullVFPattern = /^(Vrai|Faux)\s+(.+)$/i;
+    const fullMatch = text.match(fullVFPattern);
+    if (fullMatch) {
+      mcq.correct = fullMatch[1] === 'Vrai' ? 'Vrai' : 'Faux';
+      mcq.question = fullMatch[2].trim();
+    }
+    /* Check for explanation after Vrai/Faux */
+    const vfExplPattern = /(?:Vrai|Faux).+?Explication[:\s]*(.+)/i;
+    const vfExplMatch = text.match(vfExplPattern);
+    if (vfExplMatch) {
+      mcq.explanation = vfExplMatch[1].trim();
+    }
+    return mcq;
+  }
+  
+  /* Try numbered pattern 1.) 2.) 3.) 4.) */
+  const pattern2 = /^(\d+)\)\s(.+)$/m;
+  const matches2 = text.match(pattern2);
+  if (matches2 && matches2.length >= 3) {
+    for (const m of matches2) {
+      const num = m[1];
+      const text = m[2].trim();
+      /* Map numbers to letters */
+      const letter = String.fromCharCode(96 + Number(num)); // 1->a, 2->b, etc.
+      mcq.options.push({ letter, text });
+    }
+    /* Try to find correct answer */
+    const correctPattern = /Correct answer[:\s]*(\d+)|Good answer[:\s]*(\d+)/i;
+    const correctMatch = text.match(correctPattern);
+    if (correctMatch) {
+      const num = (correctMatch[1] || correctMatch[2]);
+      mcq.correct = String.fromCharCode(96 + Number(num));
+    }
+    /* Try explanation */
+    const explPattern = /Explication[:\s]*(.+)/i;
+    const explMatch = text.match(explPattern);
+    if (explMatch) {
+      mcq.explanation = explMatch[1].trim();
+    }
+    mcq.type = 'mcq';
+    return mcq;
+  }
+  
+  return null;
+
+/* ---- Display Vrai/Faux ---- */
+function displayVraiFaux(vf) {
+  if (!vf || !vf.correct) return '';
+  const correct = vf.correct === 'Vrai';
+  return '<div class="rev-vf" role="alert">' +
+    '<div>' + (vf.question || 'Question') + '</div>' +
+    '<div class="vf-options">' +
+    '<button class="rev-vf-btn ' + (correct ? 'correct' : '') + '" type="button" data-answer="Vrai">Vrai</button>' +
+    '<button class="rev-vf-btn ' + (!correct ? 'correct' : '') + '" type="button" data-answer="Faux">Faux</button>' +
+    '</div>' +
+    (vf.explanation ? '<div class="rev-vf-explication"><strong>Explication :</strong> ' + vf.explanation + '</div>' : '') +
+    '</div>';
+}
+
+/* ---- Update progress bar reliably ---- */
+function updateProgress(value, max = 100, label = '') {
+  const percent = Math.max(0, Math.min(100, Number(value) || 0));
+  const kpi = $('.kpi-value').last();
+  if (kpi.length) {
+    kpi.text(String(percent));
+    /* Update any progress bar if exists */
+    const pb = $('.progress-bar');
+    if (pb.length) {
+      pb.css('width', percent + '%');
+    }
+  }
+  /* Show label if provided */
+  if (label && label.trim()) {
+    /* Add status note */
+    const statusDiv = $('<div class="status-note"></div>').text(label);
+    $('.rev-status-row').prepend(statusDiv);
+  }
+}
+
+/* ---- Show stats with reliable data ---- */
+function showStats(statsObj) {
+  if (!statsObj) return;
+  let html = '';
+  if (statsObj.daysLeft !== undefined) {
+    html += '<div><span id="revDaysLeft">' + statsObj.daysLeft + '</span><small>days to exam</small></div>';
+  }
+  if (statsObj.mastery !== undefined) {
+    html += '<div><span id="revMastery">' + statsObj.mastery + '</span><small>topics tested</small></div>';
+  }
+  if (statsObj.dueCards !== undefined) {
+    html += '<div><span id="revDueCards">' + statsObj.dueCards + '</span><small>cards due</small></div>';
+  }
+  if (html) {
+    $('.rev-status-row').prepend('<div class="rev-stats">' + html + '</div>');
+  }
+}
+
+}
+
+/* ---- Display MCQ in the tutor panel ---- */
+function displayMCQ(mcq) {
+  if (!mcq || mcq.options.length < 2) return '';
+  let html = '';
+  /* Build the question div */
+  html += '<div class="rev-mcq" role="alert">';
+  /* Show the question/stem */
+  /* Extract the question part (everything before the options) */
+  const lines = mcq.explanation ? mcq.explanation.split('\n')[0] : '';
+  /* If we have options but no explicit question stem, use first option context */
+  /* Build options */
+  html += '<div class="mcq-stem">' + (mcq.question || 'Question') + '</div>';
+  html += '<div class="mcq-options">';
+  mcq.options.forEach(opt => {
+    const isCorrect = opt.letter === mcq.correct;
+    const buttonClass = isCorrect ? 'rev-chip correct' : 'rev-chip';
+    html += '<button class="' + buttonClass + '" type="button" data-letter="' + opt.letter + '" rev-mcq-option>';
+    html += opt.text;
+    html += '</button>';
+  });
+  html += '</div>';
+  /* Show explanation if available */
+  if (mcq.explanation) {
+    html += '<div class="mcq-explanation"><strong>Explication :</strong> ' + mcq.explanation + '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+/* ---- Display Vrai/Faux ---- */
+function displayVraiFaux(vf) {
+  if (!vf || !vf.correct) return '';
+  const correct = vf.correct === 'Vrai';
+  return '<div class="rev-vf" role="alert">' +
+    '<div>' + (vf.question || 'Question') + '</div>' +
+    '<div class="vf-options">' +
+    '<button class="rev-vf-btn ' + (correct ? 'correct' : '') + '" type="button" data-answer="Vrai">Vrai</button>' +
+    '<button class="rev-vf-btn ' + (!correct ? 'correct' : '') + '" type="button" data-answer="Faux">Faux</button>' +
+    '</div>' +
+    (vf.explanation ? '<div class="rev-vf-explication"><strong>Explication :</strong> ' + vf.explanation + '</div>' : '') +
+    '</div>';
+}
+
+/* ---- Update progress bar reliably ---- */
+function updateProgress(value, max = 100, label = '') {
+  const percent = Math.max(0, Math.min(100, Number(value) || 0));
+  const kpi = $('.kpi-value').last();
+  if (kpi.length) {
+    kpi.text(String(percent));
+    /* Update any progress bar if exists */
+    const pb = $('.progress-bar');
+    if (pb.length) {
+      pb.css('width', percent + '%');
+    }
+  }
+  /* Show label if provided */
+  if (label && label.trim()) {
+    /* Add status note */
+    const statusDiv = $('<div class="status-note"></div>').text(label);
+    $('.rev-status-row').prepend(statusDiv);
+  }
+}
+
+/* ---- Show stats with reliable data ---- */
+function showStats(statsObj) {
+  if (!statsObj) return;
+  let html = '';
+  if (statsObj.daysLeft !== undefined) {
+    html += '<div><span id="revDaysLeft">' + statsObj.daysLeft + '</span><small>days to exam</small></div>';
+  }
+  if (statsObj.mastery !== undefined) {
+    html += '<div><span id="revMastery">' + statsObj.mastery + '</span><small>topics tested</small></div>';
+  }
+  if (statsObj.dueCards !== undefined) {
+    html += '<div><span id="revDueCards">' + statsObj.dueCards + '</span><small>cards due</small></div>';
+  }
+  if (html) {
+    $('.rev-status-row').prepend('<div class="rev-stats">' + html + '</div>');
+  }
+}
+const num = (value) => new Intl.NumberFormat("fr-FR").format(Number(value) || 0);
 
   async function api(path, options) {
     const response = await fetch(path, {
@@ -524,6 +754,28 @@
     } finally {
       state.sending = false;
       sendBtn.disabled = false;
+    /* ---- Tutor MCQ/VF enhancement: parse recent messages for MCQ/VF ---- */
+    setTimeout(function() {
+      /* Check the most recent AI message in the chat */
+      const aiMessages = $(".msg.ai");
+      if (aiMessages.length === 0) return;
+      const lastAi = aiMessages.ai(':last');
+      if (!lastAi.length) return;
+      const msgText = aiMessages.ai(':last').find(".bubble").first().text();
+      /* Parse for MCQ/VF */
+      const parsed = parseMCQ(msgText);
+      if (parsed && parsed.type) {
+        /* Replace the text with formatted MCQ/VF */
+        const $lastMsg = aiMessages.ai(':last');
+        $lastMsg.html("");
+        if (parsed.type === "mcq") {
+          $lastMsg.html(displayMCQ(parsed));
+        } else if (parsed.type === "vrai_faux") {
+          $lastMsg.html(displayVraiFaux(parsed));
+        }
+      }
+    }, 800);
+
       $("#chatLog").scrollTop = $("#chatLog").scrollHeight;
     }
   }

@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light">
     <meta name="description" content="Côme AI 5.0 — assistant personnel local, mémoire et analyses contrôlées.">
     <title>Côme AI 5.0 — Espace personnel</title>
-    <link rel="stylesheet" href="/v5-static/v5.css">
+    <link rel="stylesheet" href="/v5-static/v5.css?v=vc-path-20261104-10">
   </head>
   <body>
     <a class="skip-link" href="#main-content">Aller au contenu</a>
@@ -22,7 +22,7 @@
           <button class="nav-item active" type="button" data-view-target="assistantView" aria-current="page">Assistant</button>
           <button class="nav-item" type="button" data-view-target="documentsView">Documents &amp; Finance</button>
           <button class="nav-item" type="button" data-view-target="memoryView">Mémoire &amp; stockage</button>
-          <button class="nav-item" type="button" data-view-target="revisionsView">Révisions</button>
+          <button class="nav-item" type="button" data-view-target="revisionsView">Revision</button>
           <a class="nav-item nav-link" href="/career">Career</a>
           <button class="nav-item" type="button" data-view-target="settingsView">Réglages</button>
           <button class="nav-item" type="button" data-view-target="developerView">Atelier Développeur</button>
@@ -221,9 +221,9 @@
         <section id="revisionsView" class="view" aria-labelledby="revisionsTitle" hidden>
           <div class="section-intro split-intro">
             <div>
-              <p class="eyebrow">VENTURE CAPITAL · EDHEC · 90-MINUTE EXAM</p>
-              <h1 id="revisionsTitle">Révisions</h1>
-              <p id="revisionsLead">Loading your revision space…</p>
+              <p class="eyebrow">YOUR VC EXAM JOURNEY · EDHEC</p>
+              <h1 id="revisionsTitle">From first principles to investor thinking</h1>
+              <p id="revisionsLead">A clear path from the foundations to exam-level Venture Capital.</p>
             </div>
             <div class="hero-metrics" aria-label="Revision summary">
               <div><span id="revDaysLeft">—</span><small>days to exam</small></div>
@@ -232,10 +232,42 @@
             </div>
           </div>
 
+          <section class="rev-journey" aria-labelledby="revJourneyTitle">
+            <div class="rev-journey-copy">
+              <div class="rev-journey-kicker"><span class="rev-spark" aria-hidden="true">✦</span> YOUR PERSONAL LEARNING PATH</div>
+              <h2 id="revJourneyTitle">One concept at a time. Real progress.</h2>
+              <p>Build the basics, connect the deal mechanics, then practise the decisions investors make. Your progress updates when you complete learning activities.</p>
+              <div class="rev-progress-heading"><strong id="revPathProgressLabel">0 of 21 topics explored</strong><span id="revPathProgressPercent">0%</span></div>
+              <div class="rev-progress-track" role="progressbar" aria-label="Topics explored" aria-valuemin="0" aria-valuemax="21" aria-valuenow="0" id="revPathProgress"><span></span></div>
+              <div class="rev-path-actions"><button id="revStartNow" class="primary-button" type="button">Start my next study session <span aria-hidden="true">→</span></button><span class="rev-time-hint">A focused step is enough to get started.</span></div>
+            </div>
+            <div class="rev-path-art" aria-hidden="true"><div class="rev-orbit orbit-one"></div><div class="rev-orbit orbit-two"></div><div class="rev-path-coin">VC<span>✦</span></div><span class="rev-float float-one">Learn</span><span class="rev-float float-two">Apply</span><span class="rev-float float-three">Master</span></div>
+          </section>
+
+          <section class="rev-roadmap" aria-labelledby="revRoadmapTitle">
+            <div class="rev-roadmap-heading"><div><p class="eyebrow">A STEP-BY-STEP ROUTE</p><h2 id="revRoadmapTitle">Your path to exam confidence</h2></div><span id="revPathStatus" class="rev-roadmap-note">Explore all 21 topics. Your next step is highlighted.</span></div>
+            <div class="rev-coverage-brief" aria-live="polite"><span class="rev-coverage-icon" aria-hidden="true">✦</span><div><strong id="revCoverageSummary">Checking topic coverage…</strong><p id="revCoverageDetail">Coverage counts show available practice formats, not your mastery.</p></div></div>
+            <div class="rev-topic-tools">
+              <label class="sr-only" for="revTopicSearch">Find a course topic</label>
+              <input id="revTopicSearch" type="search" class="rev-topic-search" placeholder="Find a course topic…" autocomplete="off">
+              <label class="sr-only" for="revTopicFilter">Filter course topics</label>
+              <select id="revTopicFilter" class="rev-select"><option value="all">All topics</option><option value="more-practice">Needs more practice formats</option><option value="past-paper">Has past-paper questions</option><option value="drills">Has exercises or cases</option></select>
+              <span id="revTopicResultCount" class="rev-topic-result-count" aria-live="polite">21 topics</span>
+            </div>
+            <div id="revRoadmap" class="rev-roadmap-grid" aria-live="polite"><p class="quiet-status">Preparing your learning path…</p></div>
+            <p id="revTopicEmpty" class="quiet-status rev-topic-empty" hidden>No topics match these filters. Clear the search or choose “All topics”.</p>
+          </section>
+
+          <div class="rev-study-loop" aria-label="Study cycle">
+            <span class="rev-loop-step active"><b>01</b> Learn the idea</span><span class="rev-loop-arrow" aria-hidden="true">→</span>
+            <span class="rev-loop-step"><b>02</b> Recall it</span><span class="rev-loop-arrow" aria-hidden="true">→</span>
+            <span class="rev-loop-step"><b>03</b> Solve a problem</span><span class="rev-loop-arrow" aria-hidden="true">→</span>
+            <span class="rev-loop-step"><b>04</b> Sit the mock exam</span>
+          </div>
+
           <div class="rev-status-row">
             <span id="revTutorStatus" class="status-pill neutral">Tutor: checking…</span>
             <span id="revLastExam" class="status-pill neutral">No exam yet</span>
-            <button id="revStartNow" class="primary-button" type="button">Start recommended activity</button>
           </div>
 
           <nav class="rev-tabs" aria-label="Revision sections">
@@ -324,6 +356,14 @@
               <div id="revDrillArea" class="rev-drill-area">
                 <p class="quiet-status">Draw an exercise to start.</p>
               </div>
+            </section>
+            <section class="panel rev-gap-top" aria-labelledby="revCasesTitle">
+              <div class="panel-heading">
+                <div><p class="eyebrow">CASE METHOD · STEP-BY-STEP</p><h2 id="revCasesTitle">Work through an investment case</h2></div>
+                <span id="revCaseCount" class="rev-case-count">Loading cases…</span>
+              </div>
+              <p class="quiet-status">Write your reasoning first. The checklist checks key words and figures, then shows the worked answer. Treat the score as practice feedback, not an official grade.</p>
+              <div id="revCasesList" class="rev-cases"><p class="quiet-status">Loading case studies…</p></div>
             </section>
             <section class="panel rev-gap-top" aria-labelledby="revPapersTitle">
               <div class="panel-heading">
@@ -472,8 +512,8 @@
         </section>
       </main>
     </div>
-    <script src="/v5-static/v5.js" defer></script>
-    <script src="/v5-static/revisions.js" defer></script>
+    <script src="/v5-static/v5.js?v=vc-path-20261104-10" defer></script>
+    <script src="/v5-static/revisions.js?v=vc-path-20261104-10" defer></script>
     <script src="/v5-static/devkit.js?v=rc5" defer></script>
     <script src="/v5-static/evolution.js?v=rc4" defer></script>
   </body>

@@ -11,80 +11,100 @@
       "id": "VC19-C001",
       "topic_id": "VC19",
       "question": "What is venture debt?",
-      "answer": "A type of debt financing for VC-backed startups, typically provided alongside or after an equity round.",
-      "explanation": "It extends runway without diluting ownership as much as equity.",
+      "answer": "A form of debt financing provided to venture-backed startups, typically between priced equity rounds. Venture debt is offered by specialized lenders (banks, funds) and complements equity financing rather than replacing it.",
+      "explanation": "Venture debt is typically 15-30% of the equity round size. It's used to extend runway, fund specific projects, or as bridge financing. Startups must have recent equity financing (typically Series A or later) and healthy cash burn rate.",
       "status": "active",
-      "tags": ["venture debt", "financing"]
+      "tags": ["venture debt", "definition", "financing"]
     },
     {
       "kind": "card",
       "id": "VC19-C002",
       "topic_id": "VC19",
       "question": "What are the main features of venture debt?",
-      "answer": "Term loans with warrants, interest-only periods, and covenants tailored to startups.",
-      "explanation": "Warrants give lenders upside participation.",
+      "answer": "Key features include: interest-only periods (typically 6-12 months), warrants (5-15% of equity), covenants (financial performance requirements), and maturity (18-36 months). No board seat typically required.",
+      "explanation": "The interest-only period allows startups to manage cash flow before principal payments. Warrants give lenders upside participation. Covenants protect the lender but can restrict company flexibility.",
       "status": "active",
-      "tags": ["venture debt", "terms"]
+      "tags": ["venture debt", "features", "warrants", "covenants"]
     },
     {
       "kind": "card",
       "id": "VC19-C003",
       "topic_id": "VC19",
       "question": "Why do startups use venture debt?",
-      "answer": "To extend runway, finance working capital or equipment, and reduce dilution compared to an equity round.",
-      "explanation": "It is cheaper than equity but adds repayment obligations.",
+      "answer": "Startups use venture debt to: extend runway between equity rounds, fund specific growth initiatives (sales, marketing, R&D), avoid down rounds by providing supplementary capital, or build a cash reserve for unexpected needs.",
+      "explanation": "Venture debt is particularly useful when a startup wants to minimize dilution but needs additional capital. It can also serve as a signal of confidence from specialized lenders who have vetted the company's prospects.",
       "status": "active",
-      "tags": ["venture debt", "runway"]
+      "tags": ["venture debt", "reasons", "cash flow", "dilution"]
     },
     {
       "kind": "card",
       "id": "VC19-C004",
       "topic_id": "VC19",
       "question": "What is a warrant in venture debt?",
-      "answer": "A right to purchase equity at a fixed price, given to the lender as additional compensation.",
-      "explanation": "Warrants align the lender with the company's growth.",
+      "answer": "A warrant gives the lender the right to purchase equity shares at a specified price within a certain timeframe. Typically 5-15% of the equity round size, exercisable at a strike price usually equal to the per-share price of the recent equity round.",
+      "explanation": "Warrants provide lenders with upside participation if the company's value increases significantly. For founders, warrants represent potential dilution but are typically a smaller percentage than equity financing would require.",
       "status": "active",
-      "tags": ["warrant", "venture debt"]
+      "tags": ["venture debt", "warrants", "equity upside"]
     },
     {
       "kind": "card",
       "id": "VC19-C005",
       "topic_id": "VC19",
       "question": "What is an interest-only period?",
-      "answer": "A phase during which the borrower pays only interest, not principal, easing cash flow early on.",
-      "explanation": "It helps startups manage cash during growth.",
+      "answer": "A period (typically 6-12 months) at the beginning of a venture debt loan where the borrower pays only interest, not principal. This gives the startup time to reach milestones or raise the next equity round before principal payments begin.",
+      "explanation": "The interest-only period is negotiated as part of the term sheet and typically represents 25-50% of the loan term. After this period, the startup must make regular payments of interest + principal amortization for the remaining term.",
       "status": "active",
-      "tags": ["interest-only", "cash flow"]
+      "tags": ["venture debt", "interest-only", "cash flow"]
     },
     {
       "kind": "card",
       "id": "VC19-C006",
       "topic_id": "VC19",
-      "question": "What is the risk of venture debt?",
-      "answer": "If the company fails to grow, debt repayment can strain cash and lead to default or loss of control.",
-      "explanation": "Debt is risky for pre-profit startups.",
+      "question": "What are the risks of venture debt?",
+      "answer": "Key risks include: forced bankruptcy if covenants are breached, dilution from warrants if the company succeeds, interest payment burden if revenue targets are missed, and premature maturity requirements that may not align with the company's timeline.",
+      "explanation": "The main risk is that venture debt creates an additional obligation that must be repaid. If the company cannot meet its obligations, it may face forced bankruptcy. Warrants can dilute existing shareholders if the company's valuation increases significantly.",
       "status": "active",
-      "tags": ["risk", "default"]
+      "tags": ["venture debt", "risks", "covenants", "dilution"]
     },
     {
       "kind": "card",
       "id": "VC19-C007",
       "topic_id": "VC19",
       "question": "What is revenue-based financing?",
-      "answer": "A financing model where repayments are a percentage of revenue, aligning payments with performance.",
-      "explanation": "It is an alternative to traditional debt for startups.",
+      "answer": "A financing model where repayment is a fixed percentage of monthly revenue until a total amount is paid. Repayments fluctuate with revenue (higher revenue = higher payments, lower revenue = lower payments). No fixed maturity date or interest rate.",
+      "explanation": "Revenue-based financing is founder-friendly because there's no fixed repayment schedule. It's best for companies with predictable, recurring revenue streams. Typical terms: 3-10x the monthly revenue amount, with repayment rates of 2-8% of monthly revenue.",
       "status": "active",
-      "tags": ["revenue-based", "financing"]
+      "tags": ["revenue-based financing", "RBF", "repayment"]
     },
     {
       "kind": "card",
       "id": "VC19-C008",
       "topic_id": "VC19",
       "question": "When is venture debt most appropriate?",
-      "answer": "After an equity round, when the company has predictable revenue and needs capital to extend runway without heavy dilution.",
-      "explanation": "It complements equity rather than replacing it.",
+      "answer": "Venture debt is most appropriate when: (1) A startup has recently completed a priced equity round (Series A or later), (2) The company has 12-18 months of runway remaining, (3) The company is on track to raise the next equity round, (4) The startup needs capital for specific growth initiatives rather than general working capital.",
+      "explanation": "Venture debt should not be used by very early-stage companies without equity backing, or by companies facing uncertain prospects. It's a tool to optimize the cap table and extend runway between equity rounds, not a replacement for equity financing.",
       "status": "active",
-      "tags": ["timing", "venture debt"]
+      "tags": ["venture debt", "appropriateness", "timing"]
+    },
+    {
+      "kind": "card",
+      "id": "VC19-C009",
+      "topic_id": "VC19",
+      "question": "What are typical venture debt terms and size?",
+      "answer": "Typical terms: Loan size = 15-30% of the previous equity round size. Interest rates: 10-15% annually. Warrants: 5-15% of equity round size. Term: 18-36 months. Interest-only period: 6-12 months. Covenants: typically financial performance metrics (revenue, cash burn, runway).",
+      "explanation": "The exact terms vary by lender, company stage, and risk profile. Banks vs. specialty finance funds have different criteria. Always compare the effective dilution of venture debt + warrants vs. additional equity financing.",
+      "status": "active",
+      "tags": ["venture debt", "terms", "size"]
+    },
+    {
+      "kind": "card",
+      "id": "VC19-C010",
+      "topic_id": "VC19",
+      "question": "What is the difference between venture debt and a convertible note?",
+      "answer": "Venture debt is a loan with interest, warrants, and covenants, typically for established VC-backed startups. Convertible notes are simpler debt instruments (often seed-stage) with discounts or valuation caps, no interest (or low interest), and no warrants or major covenants. Convertible notes mature and convert into equity at a priced round, while venture debt has a fixed repayment schedule.",
+      "explanation": "Convertible notes are designed for very early stages (pre-Series A) and bridge to the next equity round. Venture debt assumes the company has some traction and equity backing. Venture debt is more structured and includes investor protections (covenants, warrants) that convertible notes lack.",
+      "status": "active",
+      "tags": ["venture debt", "convertible note", "difference"]
     }
   ]
 }

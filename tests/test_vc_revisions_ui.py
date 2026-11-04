@@ -103,6 +103,29 @@ def test_content_is_english_in_vc_packs() -> None:
     assert checked >= 170, f"expected at least 170 cards, checked {checked}"
 
 
+def test_learning_path_maps_every_vc_topic_and_exposes_coverage_search() -> None:
+    import json
+
+    topics = json.loads(
+        (ROOT / "academics" / "vc" / "content" / "topics.json").read_text(
+            encoding="utf-8"
+        )
+    )["topics"]
+    source = REVISIONS_JS.read_text(encoding="utf-8")
+    match = re.search(r"const revPathLevels = \[(.*?)\n\];", source, re.S)
+    assert match, "the guided learning path must define its ordered levels"
+    mapped = re.findall(r'"(VC\d{2})"', match.group(1))
+    expected = {topic["id"] for topic in topics}
+    assert len(mapped) == len(set(mapped)), "a topic must appear only once in the path"
+    assert set(mapped) == expected, "every course topic must be reachable from the learning path"
+
+    html = INDEX.read_text(encoding="utf-8")
+    assert 'id="revTopicSearch"' in html
+    assert 'id="revTopicFilter"' in html
+    assert 'id="revCoverageSummary"' in html
+    assert "revTopicActivitySummary" in source
+
+
 def test_no_api_key_reference_in_frontend() -> None:
     for path in (INDEX, REVISIONS_JS, V5_JS):
         source = path.read_text(encoding="utf-8")

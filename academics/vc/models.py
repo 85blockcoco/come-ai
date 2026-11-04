@@ -12,7 +12,7 @@ from typing import Any
 
 GRADES = ("again", "hard", "good", "easy")
 CARD_STATUSES = ("proposed", "active", "rejected", "a_completer", "suspended")
-UNITS = ("eur", "k_eur", "m_eur", "percent", "ratio", "years")
+UNITS = ("eur", "k_eur", "m_eur", "dollars", "millions of dollars", "percent", "ratio", "years", "shares", "months", "scenario", "percent of loan")
 ERROR_CATEGORIES = ("formula", "order", "unit", "missing_data", "convention")
 
 

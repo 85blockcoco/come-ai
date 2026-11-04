@@ -36,7 +36,12 @@
       "answer": "20 %",
       "points": 5,
       "format": "mcq",
-      "choices": ["10 %", "20 %", "25 %", "80 %"]
+      "choices": [
+        "10 %",
+        "20 %",
+        "25 %",
+        "80 %"
+      ]
     },
     {
       "kind": "exam_question",
@@ -46,7 +51,12 @@
       "answer": "20 %",
       "points": 5,
       "format": "mcq",
-      "choices": ["10 %", "20 %", "25 %", "80 %"]
+      "choices": [
+        "10 %",
+        "20 %",
+        "25 %",
+        "80 %"
+      ]
     },
     {
       "kind": "exam_question",
@@ -56,7 +66,12 @@
       "answer": "The pre-money fixes the company's value before the cash; the post-money adds the investment. The investor's share is the investment divided by the post-money: it rises with the amount raised at constant pre-money.",
       "points": 5,
       "format": "open",
-      "keywords": ["pre-money", "post-money", "investment", "share"],
+      "keywords": [
+        "pre-money",
+        "post-money",
+        "investment",
+        "share"
+      ],
       "min_keywords": 3,
       "source_card_id": "VC04-C005"
     },
@@ -90,7 +105,12 @@
       "answer": "Fully diluted base",
       "points": 5,
       "format": "mcq",
-      "choices": ["Issued shares", "Authorised shares", "Fully diluted base", "Paid-up capital"]
+      "choices": [
+        "Issued shares",
+        "Authorised shares",
+        "Fully diluted base",
+        "Paid-up capital"
+      ]
     },
     {
       "kind": "exam_question",
@@ -100,7 +120,12 @@
       "answer": "The existing founders",
       "points": 5,
       "format": "mcq",
-      "choices": ["The incoming investor", "The existing founders", "Creditors", "Customers"]
+      "choices": [
+        "The incoming investor",
+        "The existing founders",
+        "Creditors",
+        "Customers"
+      ]
     },
     {
       "kind": "exam_question",
@@ -110,7 +135,12 @@
       "answer": "Issued shares actually exist. The fully diluted base adds granted or reserved options and convertibles. The investor uses it to measure potential ownership after dilution.",
       "points": 5,
       "format": "open",
-      "keywords": ["issued", "fully diluted", "options", "convertibles"],
+      "keywords": [
+        "issued",
+        "fully diluted",
+        "options",
+        "convertibles"
+      ],
       "min_keywords": 3,
       "source_card_id": "VC05-C002"
     },
@@ -159,7 +189,12 @@
       "answer": "The most senior",
       "points": 5,
       "format": "mcq",
-      "choices": ["The most junior", "The most senior", "The founder", "The option holder"]
+      "choices": [
+        "The most junior",
+        "The most senior",
+        "The founder",
+        "The option holder"
+      ]
     },
     {
       "kind": "exam_question",
@@ -169,7 +204,12 @@
       "answer": "With a participating preference, the investor first recovers its preference and then participates in the residual. It therefore captures part of the sharing after repayment, which reduces the amount available to the founders.",
       "points": 5,
       "format": "open",
-      "keywords": ["participating", "preference", "residual", "founders"],
+      "keywords": [
+        "participating",
+        "preference",
+        "residual",
+        "founders"
+      ],
       "min_keywords": 3,
       "source_card_id": "VC07-C003"
     },
@@ -233,9 +273,80 @@
       "answer": "MOIC measures the gross multiple received on invested capital, ignoring time. IRR annualises the cash flows and depends heavily on their timing. The two complement each other: a high MOIC can hide a low IRR if the wait was long.",
       "points": 5,
       "format": "open",
-      "keywords": ["irr", "moic", "time", "return"],
+      "keywords": [
+        "irr",
+        "moic",
+        "time",
+        "return"
+      ],
       "min_keywords": 3,
       "source_card_id": "VC09-C002"
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC06-E001",
+      "topic_id": "VC06",
+      "question": "A startup has 10 million fully diluted shares outstanding. Options for 1 million shares are granted to employees. What is the ownership percentage of the existing shareholders pre-exercise?",
+      "answer": "80.0",
+      "points": 5,
+      "format": "numeric",
+      "unit": "percent",
+      "tolerance": 0.01
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC06-E002",
+      "topic_id": "VC06",
+      "question": "A founder holds 5 million shares out of 10 million authorized. The company approves a stock option plan for 2 million shares. What is the founder's ownership percentage assuming no dilution yet?",
+      "answer": "71.43",
+      "points": 5,
+      "format": "numeric",
+      "unit": "percent",
+      "tolerance": 0.01
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC06-E003",
+      "topic_id": "VC06",
+      "question": "A 4-year vesting schedule with 1-year cliff: After 18 months, what percentage of the options are vested?",
+      "answer": "25.0",
+      "points": 5,
+      "format": "numeric",
+      "unit": "percent",
+      "tolerance": 0.01
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC06-E004",
+      "topic_id": "VC06",
+      "question": "A 4-year vesting schedule with 1-year cliff: After 2 years, what percentage of the options are vested?",
+      "answer": "50.0",
+      "points": 5,
+      "format": "numeric",
+      "unit": "percent",
+      "tolerance": 0.01
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC06-E005",
+      "topic_id": "VC06",
+      "question": "A company has 10M shares outstanding, 2M options granted, 1M shares reserved for an option pool. What is the fully diluted ownership of an investor with 2M shares?",
+      "answer": "11.11",
+      "points": 5,
+      "format": "numeric",
+      "unit": "percent",
+      "tolerance": 0.01
+    },
+    {
+      "kind": "exam_question",
+      "id": "VC06-E006",
+      "topic_id": "VC06",
+      "question": "A founder vesting schedule has 4-year vesting with 1-year cliff. If the founder leaves after 2 years, what percentage of original options are forfeited?",
+      "answer": "50.0",
+      "points": 5,
+      "format": "numeric",
+      "unit": "percent",
+      "tolerance": 0.01
     }
   ]
 }
