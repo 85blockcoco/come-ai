@@ -25,7 +25,10 @@ def test_course_variant_can_be_checked_with_its_own_answers(tmp_path) -> None:
     app.include_router(create_course_router(store=VcStore(tmp_path), source_root=tmp_path))
     with TestClient(app) as http:
         variant = http.get("/api/vc/course/lesson/financing-stages/variant?seed=42").json()
-        answers = {question["id"]: str(question["answer"]) for question in variant["quiz"]}
+        assert all("answer" not in question and "explanation" not in question for question in variant["quiz"])
+        lesson = next(item for chapter in load_course()["chapters"] for item in chapter["lessons"] if item["id"] == "financing-stages")
+        private_variant = lesson_variant(lesson, 42)
+        answers = {question["id"]: str(question["answer"]) for question in private_variant["quiz"]}
         result = http.post(
             "/api/vc/course/quiz",
             json={"lesson_id": "financing-stages", "variant_id": variant["variant_id"], "answers": answers},

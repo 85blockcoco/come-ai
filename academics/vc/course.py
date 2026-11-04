@@ -221,7 +221,14 @@ def create_course_router(store: VcStore | None = None, *, source_root: Path | No
         from .variants import lesson_variant
 
         chosen_seed = seed if seed is not None else int.from_bytes(os.urandom(4), "big")
-        return lesson_variant(lesson, chosen_seed)
+        generated = lesson_variant(lesson, chosen_seed)
+        # Answers stay server-side; the browser receives only the exercise
+        # wording and the worked example.  Submission re-generates the same
+        # variant from its opaque id and grades it here.
+        public_questions = []
+        for question in generated["quiz"]:
+            public_questions.append({key: value for key, value in question.items() if key not in {"answer", "explanation"}})
+        return {**generated, "quiz": public_questions}
 
     @router.get("/api/vc/course/library")
     def course_library() -> dict[str, Any]:
