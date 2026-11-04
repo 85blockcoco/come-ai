@@ -67,7 +67,7 @@ class VcStore:
         try:
             self._home.mkdir(parents=True, exist_ok=True, mode=0o700)
             os.chmod(self._home, 0o700)
-            for name in ("sessions", "notes", "exams", "reports", "cases"):
+            for name in ("sessions", "notes", "exams", "reports", "cases", "sheets"):
                 directory = self._home / name
                 directory.mkdir(exist_ok=True, mode=0o700)
                 os.chmod(directory, 0o700)
@@ -262,6 +262,60 @@ class VcStore:
             self.path("notes", f"{source_id}.txt").unlink(missing_ok=True)
         except OSError as error:
             raise StorageError("Suppression de la copie locale impossible.") from error
+
+    # --------------------------------------------------------- study sheets
+    def load_study_sheets(self) -> list[dict[str, Any]]:
+        """Return locally saved tutor sheets, newest first.
+
+        Tutor answers can be personal revision material, so sheets deliberately
+        live in the private VC store rather than in the repository.
+        """
+        payload = self._read_json(self.path("sheets", "index.json"), {})
+        raw = payload.get("sheets", []) if isinstance(payload, dict) else []
+        sheets: list[dict[str, Any]] = []
+        for item in raw if isinstance(raw, list) else []:
+            if not isinstance(item, dict):
+                continue
+            identifier = item.get("sheet_id")
+            title = item.get("title")
+            summary = item.get("summary")
+            if not all(isinstance(value, str) and value.strip() for value in (identifier, title, summary)):
+                continue
+            sheets.append(
+                {
+                    "sheet_id": identifier,
+                    "title": title,
+                    "topic_id": str(item.get("topic_id") or ""),
+                    "question": str(item.get("question") or ""),
+                    "summary": summary,
+                    "sources": [str(source) for source in item.get("sources", []) if isinstance(source, str)][:12],
+                    "created_at": str(item.get("created_at") or ""),
+                }
+            )
+        return sorted(sheets, key=lambda item: (item["created_at"], item["sheet_id"]), reverse=True)
+
+    def save_study_sheet(self, sheet: dict[str, Any]) -> None:
+        existing = self.load_study_sheets()
+        identifier = str(sheet.get("sheet_id") or "")
+        if not identifier:
+            raise StorageError("Study sheet requires an identifier.")
+        filtered = [item for item in existing if item["sheet_id"] != identifier]
+        filtered.append(dict(sheet))
+        self._write_json(
+            self.path("sheets", "index.json"),
+            {"schema_version": SCHEMA_VERSION, "sheets": filtered},
+        )
+
+    def delete_study_sheet(self, sheet_id: str) -> bool:
+        existing = self.load_study_sheets()
+        remaining = [item for item in existing if item["sheet_id"] != sheet_id]
+        if len(remaining) == len(existing):
+            return False
+        self._write_json(
+            self.path("sheets", "index.json"),
+            {"schema_version": SCHEMA_VERSION, "sheets": remaining},
+        )
+        return True
 
     # ------------------------------------------------------------------- deck
     def load_deck(self) -> list[Flashcard]:

@@ -219,6 +219,39 @@ def test_tutor_provider_failure_keeps_the_learning_flow_available(tmp_path: Path
         assert "synthetic provider" not in response.text
 
 
+def test_tutor_sheet_is_local_persistent_and_can_be_deleted(tmp_path: Path) -> None:
+    with client(tmp_path) as http:
+        created = http.post(
+            "/api/vc/sheets",
+            json={
+                "title": "VC01 · Why VCs reject most deals",
+                "topic_id": "VC01",
+                "question": "Why do VCs reject most deals?",
+                "summary": "They allocate scarce capital to opportunities matching their mandate and expected return.",
+                "sources": ["Topic 1 · pp. 1–4"],
+            },
+        )
+        assert created.status_code == 200
+        sheet = created.json()["sheet"]
+        assert sheet["sheet_id"].startswith("sheet-")
+        assert (tmp_path / "vc" / "sheets" / "index.json").is_file()
+        listed = http.get("/api/vc/sheets")
+        assert listed.status_code == 200
+        assert listed.json()["sheets"][0]["title"] == sheet["title"]
+        deleted = http.delete(f"/api/vc/sheets/{sheet['sheet_id']}")
+        assert deleted.status_code == 200
+        assert http.get("/api/vc/sheets").json()["sheets"] == []
+
+
+def test_tutor_sheet_rejects_unknown_topic(tmp_path: Path) -> None:
+    with client(tmp_path) as http:
+        response = http.post(
+            "/api/vc/sheets",
+            json={"title": "Test", "topic_id": "VC99", "summary": "A local summary."},
+        )
+        assert response.status_code == 400
+
+
 def test_status_never_leaks_api_key(tmp_path: Path) -> None:
     with client(tmp_path) as http:
         body = http.get("/api/vc/status").text

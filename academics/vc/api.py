@@ -92,6 +92,14 @@ class PaperGradeRequest(BaseModel):
     answers: dict[str, Any] = Field(default_factory=dict)
 
 
+class StudySheetCreateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    topic_id: str | None = Field(default=None, max_length=16)
+    question: str = Field(default="", max_length=4_000)
+    summary: str = Field(min_length=1, max_length=12_000)
+    sources: list[str] = Field(default_factory=list, max_length=12)
+
+
 # ------------------------------------------------------------------- router
 def create_vc_router(
     store: VcStore | None = None,
@@ -344,6 +352,51 @@ def create_vc_router(
             "mastery": mastery,
             "source": result.get("source", "ai"),
         }
+
+    # ---------------------------------------------------------- study sheets
+    @router.get("/api/vc/sheets")
+    def vc_study_sheets() -> dict[str, Any]:
+        return {"sheets": get_store().load_study_sheets(), "source": "local"}
+
+    @router.post("/api/vc/sheets")
+    def vc_create_study_sheet(payload: StudySheetCreateRequest) -> dict[str, Any]:
+        content = get_content()
+        topic_id = (payload.topic_id or "").strip().upper()
+        if topic_id:
+            try:
+                content.topic(topic_id)
+            except ContentError as error:
+                raise HTTPException(status_code=400, detail="Unknown course topic.") from error
+        sources = []
+        for source in payload.sources:
+            clean = str(source).strip()
+            if clean and clean not in sources:
+                sources.append(clean[:500])
+        title = payload.title.strip()
+        summary = payload.summary.strip()
+        if not title or not summary:
+            raise HTTPException(status_code=400, detail="A title and summary are required.")
+        sheet = {
+            "sheet_id": new_id("sheet"),
+            "title": title,
+            "topic_id": topic_id,
+            "question": payload.question.strip(),
+            "summary": summary,
+            "sources": sources,
+            "created_at": now_iso(),
+        }
+        with lock:
+            get_store().save_study_sheet(sheet)
+        return {"sheet": sheet, "source": "local"}
+
+    @router.delete("/api/vc/sheets/{sheet_id}")
+    def vc_delete_study_sheet(sheet_id: str) -> dict[str, Any]:
+        if not sheet_id.startswith("sheet-") or len(sheet_id) > 80:
+            raise HTTPException(status_code=404, detail="Study sheet not found.")
+        with lock:
+            if not get_store().delete_study_sheet(sheet_id):
+                raise HTTPException(status_code=404, detail="Study sheet not found.")
+        return {"deleted": True, "source": "local"}
 
     # ------------------------------------------------------------- review
     @router.get("/api/vc/review")

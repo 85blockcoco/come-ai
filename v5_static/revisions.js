@@ -9,6 +9,7 @@ const rev = {
   tutorMode: "explain",
   tutorBusy: false,
   tutorHistory: [],
+  sheets: [],
   session: null,
   drill: null,
   exam: null,
@@ -70,6 +71,7 @@ function revSelectTab(tabId) {
   });
   if (tabId === "revProgress") { revLoadRadar(); revLoadPlan(); revLoadErrors(); }
   if (tabId === "revEvaluate") { revRefreshExamState(); }
+  if (tabId === "revSheets") { revLoadSheets(); }
 }
 
 /* --------------------------------------------------------------- status */
@@ -191,6 +193,7 @@ async function revSendTutor({ check = false } = {}) {
     rev.tutorHistory.push({ role: "student", text: message });
     rev.tutorHistory.push({ role: "tutor", text: payload.text });
     revRenderSources(payload.passages || []);
+    if (isAi && payload.text) revOfferStudySheet({ question: message, topicId, summary: payload.text, passages: payload.passages || [] });
   } catch (error) {
     thinking.remove();
     revPushChat("ai", revMarkdown(`Request failed: ${error.message}`), {
@@ -200,6 +203,127 @@ async function revSendTutor({ check = false } = {}) {
   } finally {
     rev.tutorBusy = false;
     revEl("revTutorForm").querySelectorAll("button").forEach((button) => { button.disabled = false; });
+  }
+}
+
+function revSheetTitle(question, topicId) {
+  const compact = String(question || "Tutor revision").replace(/\s+/g, " ").trim();
+  const short = compact.length > 88 ? `${compact.slice(0, 85).trim()}…` : compact;
+  return topicId ? `${topicId} · ${short}` : short;
+}
+
+function revOfferStudySheet({ question, topicId, summary, passages }) {
+  const log = revEl("revTutorLog");
+  const action = document.createElement("div");
+  action.className = "rev-sheet-offer";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "vc-secondary";
+  button.textContent = "Save as revision sheet";
+  const hint = document.createElement("span");
+  hint.textContent = "Saved locally · reopen and practise later";
+  action.append(button, hint);
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    try {
+      const data = await revApi("/api/vc/sheets", {
+        method: "POST",
+        body: JSON.stringify({
+          title: revSheetTitle(question, topicId),
+          topic_id: topicId,
+          question,
+          summary,
+          sources: passages.map((item) => item.citation).filter(Boolean),
+        }),
+      });
+      button.textContent = "✓ Saved locally";
+      hint.textContent = "Open My sheets whenever you want to revise it again.";
+      rev.sheets = [data.sheet, ...rev.sheets.filter((sheet) => sheet.sheet_id !== data.sheet.sheet_id)];
+    } catch (error) {
+      button.disabled = false;
+      hint.textContent = `Could not save: ${error.message}`;
+    }
+  });
+  log.appendChild(action);
+  log.scrollTop = log.scrollHeight;
+}
+
+function revSheetDate(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Saved locally" : date.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
+}
+
+async function revLoadSheets() {
+  const box = revEl("revSheetsList");
+  const status = revEl("revSheetsStatus");
+  try {
+    const data = await revApi("/api/vc/sheets");
+    rev.sheets = data.sheets || [];
+    status.textContent = rev.sheets.length ? "Stored locally on this Mac." : "";
+    revRenderSheets();
+  } catch (error) {
+    status.textContent = `Could not load saved sheets: ${error.message}`;
+    box.innerHTML = "";
+  }
+}
+
+function revRenderSheets() {
+  const box = revEl("revSheetsList");
+  const count = revEl("revSheetsCount");
+  count.textContent = `${rev.sheets.length} saved`;
+  if (!rev.sheets.length) {
+    box.innerHTML = '<div class="vc-empty-state"><span aria-hidden="true">▤</span><h3>No saved sheet yet.</h3><p>Ask the tutor about a concept, then use “Save as revision sheet”.</p></div>';
+    return;
+  }
+  box.innerHTML = rev.sheets.map((sheet) => `
+    <article class="rev-sheet-card" data-sheet-id="${revEsc(sheet.sheet_id)}">
+      <header><span class="rev-chip static">${revEsc(sheet.topic_id || "General")}</span><span class="quiet-status">${revEsc(revSheetDate(sheet.created_at))}</span></header>
+      <h3>${revEsc(sheet.title)}</h3>
+      ${sheet.question ? `<p class="rev-sheet-question"><strong>Your question:</strong> ${revEsc(sheet.question)}</p>` : ""}
+      <div class="rev-sheet-summary">${revMarkdown(sheet.summary)}</div>
+      ${sheet.sources?.length ? `<details class="rev-sheet-sources"><summary>Course extracts used (${sheet.sources.length})</summary>${sheet.sources.map((source) => `<p>📄 ${revEsc(source)}</p>`).join("")}</details>` : ""}
+      <footer><button type="button" class="vc-secondary" data-sheet-practise="${revEsc(sheet.sheet_id)}">Practise this topic</button><button type="button" class="vc-quiet-button" data-sheet-tutor="${revEsc(sheet.sheet_id)}">Ask again</button><button type="button" class="text-button" data-sheet-delete="${revEsc(sheet.sheet_id)}">Delete</button></footer>
+    </article>`).join("");
+  box.querySelectorAll("[data-sheet-practise]").forEach((button) => button.addEventListener("click", () => revPractiseSheet(button.dataset.sheetPractise)));
+  box.querySelectorAll("[data-sheet-tutor]").forEach((button) => button.addEventListener("click", () => revReopenSheetTutor(button.dataset.sheetTutor)));
+  box.querySelectorAll("[data-sheet-delete]").forEach((button) => button.addEventListener("click", () => revDeleteSheet(button.dataset.sheetDelete)));
+}
+
+function revSheetById(id) { return rev.sheets.find((sheet) => sheet.sheet_id === id); }
+
+function revPractiseSheet(id) {
+  const sheet = revSheetById(id);
+  if (!sheet?.topic_id) {
+    revEl("revSheetsStatus").textContent = "This general sheet has no single calculation topic. Reopen it with the tutor or choose a topic in Practise.";
+    return;
+  }
+  const select = revEl("revDrillTopic");
+  if ([...select.options].some((option) => option.value === sheet.topic_id)) select.value = sheet.topic_id;
+  revSelectTab("revPractice");
+  if (typeof vcSetTrainingMode === "function") vcSetTrainingMode("drills");
+  revDrawDrill();
+}
+
+function revReopenSheetTutor(id) {
+  const sheet = revSheetById(id);
+  if (!sheet) return;
+  revSelectTab("revLearn");
+  const select = revEl("revTutorTopic");
+  if (sheet.topic_id && [...select.options].some((option) => option.value === sheet.topic_id)) select.value = sheet.topic_id;
+  revEl("revTutorInput").value = `Help me revise this saved sheet: ${sheet.title}. Ask me one exam-style question at a time.`;
+  revEl("revTutorInput").focus();
+}
+
+async function revDeleteSheet(id) {
+  const sheet = revSheetById(id);
+  if (!sheet || !window.confirm(`Delete the local sheet “${sheet.title}”?`)) return;
+  try {
+    await revApi(`/api/vc/sheets/${encodeURIComponent(id)}`, { method: "DELETE" });
+    rev.sheets = rev.sheets.filter((item) => item.sheet_id !== id);
+    revEl("revSheetsStatus").textContent = "Sheet deleted locally.";
+    revRenderSheets();
+  } catch (error) {
+    revEl("revSheetsStatus").textContent = `Could not delete sheet: ${error.message}`;
   }
 }
 
