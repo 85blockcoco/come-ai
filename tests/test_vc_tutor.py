@@ -13,16 +13,19 @@ def isolated_tutor_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     """Tutor tests use a synthetic corpus/config and never the real .env."""
     import vc_tutor
 
+    for name in tuple(os.environ):
+        if vc_tutor._provider_setting(name):
+            monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("NAGE_VC_HOME", str(tmp_path / "state"))
     monkeypatch.delenv("VC_TUTOR_CLOUD", raising=False)
     monkeypatch.delenv("VC_TUTOR_LOAD_ENV", raising=False)
     monkeypatch.delenv("VC_TUTOR_TEST_MARKER", raising=False)
     monkeypatch.setattr(vc_tutor, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(vc_tutor, "_CENTRAL_PROVIDER_ENV", tmp_path / "private" / "providers.env")
     corpus = tmp_path / "docs" / "vc_study"
     corpus.mkdir(parents=True)
     (corpus / "Topic 3 Valuation.txt").write_text(
-        "Synthetic teaching example. Post-money valuation equals pre-money "
-        "valuation plus the new equity investment.\n",
+        "Synthetic teaching example. Post-money valuation equals pre-money valuation plus the new equity investment.\n",
         encoding="utf-8",
     )
     (tmp_path / ".env").write_text("VC_TUTOR_TEST_MARKER=synthetic-opt-in\n")
@@ -47,6 +50,7 @@ def test_env_not_loaded_by_default(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     from vc_tutor import VCTutor
 
     original = VCTutor.load_env
+
     def fake_load_env(self):
         # Reproduce the production loader but against the temp file.
         for line in env_file.read_text().splitlines():
@@ -54,6 +58,7 @@ def test_env_not_loaded_by_default(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
             if line and not line.startswith("#") and "=" in line:
                 k, v = line.split("=", 1)
                 os.environ[k.strip()] = v.strip().strip('"').strip("'")
+
     monkeypatch.setattr(VCTutor, "load_env", fake_load_env)
     # Even with a loader available, the constructor must not call it by default.
     tutor = VCTutor()
@@ -70,14 +75,21 @@ def test_cloud_opt_in_loads_env(monkeypatch: pytest.MonkeyPatch) -> None:
     tutor = VCTutor()
     assert tutor.cloud_enabled is True
     assert tutor.load_env_requested is True
-    assert os.environ["VC_TUTOR_TEST_MARKER"] == "synthetic-opt-in"
+    assert "VC_TUTOR_TEST_MARKER" not in os.environ
+    assert "VC_TUTOR_TEST_MARKER" not in tutor._provider_config
 
 
-@pytest.mark.parametrize("host", [
-    "https://example.test", "http://127.0.0.1.evil.test:11434",
-    "http://secret:password@127.0.0.1:11434", "file:///tmp/model",
-    "http://127.0.0.1:99999", "http://127.0.0.1:11434/?token=secret",
-])
+@pytest.mark.parametrize(
+    "host",
+    [
+        "https://example.test",
+        "http://127.0.0.1.evil.test:11434",
+        "http://secret:password@127.0.0.1:11434",
+        "file:///tmp/model",
+        "http://127.0.0.1:99999",
+        "http://127.0.0.1:11434/?token=secret",
+    ],
+)
 def test_local_tutor_rejects_remote_or_credential_hosts(host, monkeypatch) -> None:
     import httpx
     from vc_tutor import VCTutor
@@ -98,13 +110,17 @@ def test_local_tutor_accepts_loopback_without_cloud(host, monkeypatch) -> None:
     from vc_tutor import VCTutor
 
     calls = []
+
     class Response:
         status_code = 200
+
         def json(self):
             return {"message": {"content": "Synthetic local explanation."}}
+
     def fake_post(url, **kwargs):
         calls.append(url)
         return Response()
+
     monkeypatch.setattr(httpx, "post", fake_post)
     tutor = VCTutor(cloud=False, load_env=False)
     tutor.config["ollama_host"] = host

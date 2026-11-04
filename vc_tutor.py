@@ -1,16 +1,37 @@
 """VC Tutor - English-focused AI tutor for EDHEC VC exam.
 
 Cloud calls are disabled by default.  Set ``VC_TUTOR_CLOUD=1`` (and, if
-needed, ``VC_TUTOR_LOAD_ENV=1``) to opt in.  Local Ollama is the only provider
-used unless cloud is explicitly enabled.
+needed, ``VC_TUTOR_LOAD_ENV=1``) to opt in. Provider configuration stays
+private to the tutor; loading a file never changes the process environment.
 """
 
 import json
 import os
+import re
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from urllib.parse import urlsplit
 
 _REPO_ROOT = Path(__file__).resolve().parent
+_CENTRAL_PROVIDER_ENV = Path.home() / "Library" / "Application Support" / "NAGE" / "providers.env"
+_PROJECT_ENV_FILENAMES = (".env", ".env.local")
+_MAX_GEMINI_ATTEMPTS = 4
+_CONFIG_NAMES = {
+    "GEMINI_API_KEY",
+    "GOOGLE_API_KEY",
+    "GEMINI_API_KEYS",
+    "GEMINI_PRIMARY_MODEL",
+    "MISTRAL_API_KEY",
+    "MISTRAL_MODEL",
+    "VC_TUTOR_CLOUD",
+    "VC_TUTOR_LOAD_ENV",
+    "VC_TUTOR_KILO",
+    "VC_TUTOR_KILO_MODEL",
+}
+
+
+def _provider_setting(name: str) -> bool:
+    return name in _CONFIG_NAMES or bool(re.fullmatch(r"GEMINI_API_KEY_?\d+", name))
 
 
 def _truthy(value: str | None) -> bool:
@@ -18,40 +39,100 @@ def _truthy(value: str | None) -> bool:
 
 
 class VCTutor:
-    def __init__(self, *, load_env: bool | None = None, cloud: bool | None = None, data_dir: Path | None = None):
+    def __init__(
+        self,
+        *,
+        load_env: bool | None = None,
+        cloud: bool | None = None,
+        data_dir: Path | None = None,
+        env_paths: Sequence[Path] | None = None,
+        environ: Mapping[str, str] | None = None,
+        kilo_fallback: Callable[[str, str | None], str | None] | None = None,
+    ):
+        # An explicitly offline, isolated application does not inspect provider
+        # variables or the user's central configuration.
+        explicit_env = environ if environ is not None else ({} if load_env is False and cloud is False else os.environ)
+        self._provider_config = {name: str(value) for name, value in explicit_env.items() if _provider_setting(name)}
+        self._env_paths = (
+            tuple(env_paths) if env_paths is not None else (*(_REPO_ROOT / name for name in _PROJECT_ENV_FILENAMES), _CENTRAL_PROVIDER_ENV)
+        )
         self.load_env_requested = (
-            load_env if load_env is not None else (
-                _truthy(os.environ.get("VC_TUTOR_LOAD_ENV")) or _truthy(os.environ.get("VC_TUTOR_CLOUD"))
-            )
+            load_env
+            if load_env is not None
+            else (_truthy(self._provider_config.get("VC_TUTOR_LOAD_ENV")) or _truthy(self._provider_config.get("VC_TUTOR_CLOUD")))
         )
         if self.load_env_requested:
             self.load_env()
-        self.cloud_enabled = (
-            cloud if cloud is not None else _truthy(os.environ.get("VC_TUTOR_CLOUD"))
-        )
+        self.cloud_enabled = cloud if cloud is not None else _truthy(self._provider_config.get("VC_TUTOR_CLOUD"))
+        self._kilo_fallback = kilo_fallback
+        self._last_provider = None
+        self._last_model = None
+        self._gemini_quota_exhausted = False
         self.courses_dir = _REPO_ROOT / "docs" / "vc_study"
-        vc_home = Path(data_dir).expanduser() if data_dir is not None else Path(
-            os.environ.get("NAGE_VC_HOME", str(Path.home() / ".nage" / "vc"))
-        ).expanduser()
+        vc_home = (
+            Path(data_dir).expanduser()
+            if data_dir is not None
+            else Path(os.environ.get("NAGE_VC_HOME", str(Path.home() / ".nage" / "vc"))).expanduser()
+        )
         self.tutor_config_path = vc_home / "tutor_config.json"
         self.tutor_config_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.load_config()
-        # The constructor argument and the environment always win over a stale
-        # config file: cloud stays off unless explicitly requested.
         self.config["cloud_enabled"] = self.cloud_enabled
         self.last_error = None
 
     def load_env(self):
-        env_path = _REPO_ROOT / ".env"
-        if env_path.exists():
-            for line in env_path.read_text().splitlines():
+        """Read only active provider settings, without exporting any variables.
+
+        Later files override earlier files; explicitly supplied process values
+        always win. Paths are injectable so tests never read the real files.
+        """
+        values = {}
+        for env_path in self._env_paths:
+            try:
+                lines = Path(env_path).read_text(encoding="utf-8").splitlines()
+            except (OSError, UnicodeError):
+                continue
+            for line in lines:
                 line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    try:
-                        k, v = line.split("=", 1)
-                        os.environ[k.strip()] = v.strip().strip('"').strip("'")
-                    except Exception:
-                        continue
+                if line.startswith("export "):
+                    line = line[7:].lstrip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                name, value = line.split("=", 1)
+                name, value = name.strip(), value.strip()
+                if not _provider_setting(name):
+                    continue
+                if value[:1] in {'"', "'"} and value[-1:] == value[:1]:
+                    value = value[1:-1]
+                else:
+                    value = value.split(" #", 1)[0].rstrip()
+                values[name] = value
+        self._provider_config = {**values, **self._provider_config}
+
+    def _gemini_keys(self) -> list[str]:
+        names = ["GEMINI_API_KEY"]
+        names.extend(
+            sorted(
+                (name for name in self._provider_config if re.fullmatch(r"GEMINI_API_KEY_?\d+", name)),
+                key=lambda name: (int(re.search(r"\d+$", name).group()), name),
+            )
+        )
+        names.append("GOOGLE_API_KEY")
+        candidates = [self._provider_config.get(name, "") for name in names]
+        candidates.extend(self._provider_config.get("GEMINI_API_KEYS", "").split(","))
+        return list(dict.fromkeys(key.strip() for key in candidates if key.strip()))
+
+    def _redact(self, text: str) -> str:
+        keys = self._gemini_keys() + [self._provider_config.get("MISTRAL_API_KEY", "")]
+        for key in sorted(filter(None, keys), key=len, reverse=True):
+            text = text.replace(key, "[redacted]")
+        return text
+
+    def _gemini_model(self) -> str:
+        model = self._provider_config.get("GEMINI_PRIMARY_MODEL", "gemini-3.1-flash-lite")
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", model) or model in self._gemini_keys():
+            return "gemini-3.1-flash-lite"
+        return self._redact(model)
 
     def load_config(self):
         default = {
@@ -172,10 +253,15 @@ class VCTutor:
     def local_ollama_host(value) -> str | None:
         try:
             url = urlsplit(str(value))
-            if (url.scheme not in {"http", "https"}
-                    or url.hostname not in {"localhost", "127.0.0.1", "::1"}
-                    or url.username is not None or url.password is not None
-                    or url.path not in {"", "/"} or url.query or url.fragment):
+            if (
+                url.scheme not in {"http", "https"}
+                or url.hostname not in {"localhost", "127.0.0.1", "::1"}
+                or url.username is not None
+                or url.password is not None
+                or url.path not in {"", "/"}
+                or url.query
+                or url.fragment
+            ):
                 return None
             _ = url.port  # Reject malformed or out-of-range ports before any I/O.
             return str(value).rstrip("/")
@@ -185,6 +271,7 @@ class VCTutor:
     def call_ollama(self, prompt: str, system: str = None) -> str:
         try:
             import httpx
+
             host = self.local_ollama_host(self.config.get("ollama_host", "http://localhost:11434"))
             if host is None:
                 self.last_error = "The local tutor requires a loopback Ollama address."
@@ -195,27 +282,31 @@ class VCTutor:
                 messages.append({"role": "system", "content": system})
             messages.append({"role": "user", "content": prompt})
             try:
-                resp = httpx.post(f"{host}/api/chat",
+                resp = httpx.post(
+                    f"{host}/api/chat",
                     headers={"Content-Type": "application/json"},
                     json={"model": model, "messages": messages, "stream": False, "options": {"temperature": 0.1, "num_predict": 1024}},
-                    timeout=120)
+                    timeout=120,
+                )
                 if resp.status_code == 200:
                     data = resp.json()
                     content = data.get("message", {}).get("content", "") or ""
                     if content.strip():
-                        return content.strip()
+                        return self._redact(content.strip())
             except Exception:
                 pass
             try:
-                resp = httpx.post(f"{host}/v1/chat/completions",
+                resp = httpx.post(
+                    f"{host}/v1/chat/completions",
                     headers={"Content-Type": "application/json"},
                     json={"model": model, "messages": messages, "temperature": 0.1, "max_tokens": 1024, "stream": False},
-                    timeout=120)
+                    timeout=120,
+                )
                 if resp.status_code == 200:
                     data = resp.json()
                     content = data.get("choices", [{}])[0].get("message", {}).get("content", "") or ""
                     if content.strip():
-                        return content.strip()
+                        return self._redact(content.strip())
             except Exception:
                 pass
         except Exception:
@@ -227,70 +318,146 @@ class VCTutor:
             return None
         try:
             import httpx
-            key = os.getenv("MISTRAL_API_KEY")
+
+            key = self._provider_config.get("MISTRAL_API_KEY")
             if not key:
                 return None
             messages = []
             if system:
                 messages.append({"role": "system", "content": system})
             messages.append({"role": "user", "content": prompt})
-            resp = httpx.post("https://api.mistral.ai/v1/chat/completions",
+            resp = httpx.post(
+                "https://api.mistral.ai/v1/chat/completions",
                 headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
                 json={"model": "mistral-small-latest", "messages": messages, "temperature": 0.1, "max_tokens": 4096},
-                timeout=180)
+                timeout=180,
+            )
             if resp.status_code == 200:
-                return resp.json()["choices"][0]["message"]["content"]
+                return self._redact(resp.json()["choices"][0]["message"]["content"])
             return None
         except Exception:
             return None
 
+    def call_kilo(self, prompt: str, system: str = None) -> str | None:
+        """Controlled extension point, never a shell or an unverified CLI call.
+
+        Only the exhausted Gemini pool invokes this hook. The adapter requires
+        an explicitly configured model; tests may inject a synthetic callable.
+        """
+        if not (self.config.get("cloud_enabled") and _truthy(self._provider_config.get("VC_TUTOR_KILO")) and self._gemini_quota_exhausted):
+            return None
+        try:
+            if self._kilo_fallback is not None:
+                result = self._kilo_fallback(prompt, system)
+            else:
+                model = self._provider_config.get("VC_TUTOR_KILO_MODEL")
+                if not model:
+                    return None
+                from academics.vc.kilo_tutor import run_kilo_tutor
+
+                result = run_kilo_tutor(prompt, system=system, model=model, timeout=90)
+            if result and isinstance(result, str):
+                self.last_error = None
+                self._last_provider = "kilo"
+                self._last_model = self._redact(self._provider_config.get("VC_TUTOR_KILO_MODEL", "kilo"))
+                return self._redact(result)
+        except Exception:
+            self.last_error = "Kilo fallback unavailable."
+        return None
+
+    @staticmethod
+    def _quota_response(response) -> bool:
+        if response.status_code == 429:
+            return True
+        if response.status_code == 400:
+            try:
+                return response.json().get("error", {}).get("status") == "RESOURCE_EXHAUSTED"
+            except (ValueError, AttributeError, TypeError):
+                pass
+        return False
+
     def call_gemini(self, prompt: str, system: str = None) -> str:
         if not self.config.get("cloud_enabled"):
             return None
+        self.last_error = None
+        self._last_provider = None
+        self._last_model = None
+        self._gemini_quota_exhausted = False
+        keys = self._gemini_keys()
+        if not keys:
+            self.last_error = "Gemini has no configured key."
+            return None
+        model = self._gemini_model()
+        full_prompt = f"{system}\n\n{prompt}" if system else prompt
         try:
             import httpx
-            key = os.getenv("GEMINI_API_KEY")
-            if not key:
+
+            for key in keys[:_MAX_GEMINI_ATTEMPTS]:
+                # The key is a header, never part of a URL or public error.
+                resp = httpx.post(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                    headers={"x-goog-api-key": key, "Content-Type": "application/json"},
+                    json={
+                        "contents": [{"parts": [{"text": full_prompt}]}],
+                        "generationConfig": {"temperature": 0.1, "maxOutputTokens": 4096},
+                    },
+                    timeout=180,
+                )
+                if resp.status_code == 200:
+                    try:
+                        result = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                        if not isinstance(result, str) or not result.strip():
+                            raise ValueError
+                    except (KeyError, IndexError, TypeError, ValueError):
+                        self.last_error = "Gemini returned an empty or invalid answer."
+                        return None
+                    self.last_error = None
+                    self._last_provider = "gemini"
+                    self._last_model = model
+                    return self._redact(result)
+                if self._quota_response(resp):
+                    self.last_error = "Gemini quota exhausted."
+                    continue
+                reasons = {
+                    400: "invalid request",
+                    401: "authentication rejected",
+                    402: "billing limit reached",
+                    403: "access denied",
+                    404: "model unavailable",
+                }
+                reason = reasons.get(resp.status_code, "service unavailable" if resp.status_code >= 500 else "request rejected")
+                self.last_error = f"Gemini {reason}."
                 return None
-            model = os.getenv("GEMINI_PRIMARY_MODEL", "gemini-3.1-flash-lite")
-            full_prompt = f"{system}\n\n{prompt}" if system else prompt
-            # The API key travels in a header, never in the URL: an HTTP error
-            # message can echo its request URL, and URLs end up in logs.
-            resp = httpx.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                headers={"x-goog-api-key": key, "Content-Type": "application/json"},
-                json={"contents": [{"parts": [{"text": full_prompt}]}], "generationConfig": {"temperature": 0.1, "maxOutputTokens": 4096}},
-                timeout=180)
-            if resp.status_code == 200:
-                data = resp.json()
-                try:
-                    return data["candidates"][0]["content"]["parts"][0]["text"]
-                except Exception:
-                    return None
-            if resp.status_code in (403, 404):
-                # Wrong provider/key or retired model: record a clear reason
-                # without echoing the key or the raw body.
-                self.last_error = f"Gemini HTTP {resp.status_code} (model: {model})"
-            elif resp.status_code == 429:
-                self.last_error = "Gemini quota exceeded (HTTP 429)."
-            elif resp.status_code == 402:
-                self.last_error = "Gemini billing limit reached (HTTP 402)."
+        except Exception:
+            self.last_error = "Gemini unreachable."
             return None
-        except Exception as exc:
-            self.last_error = f"Gemini unreachable: {type(exc).__name__}"
+        if len(keys) > _MAX_GEMINI_ATTEMPTS:
+            self.last_error = "Gemini attempt limit reached; untried keys remain."
             return None
+        # Every configured Gemini key exhausted a recognized quota. Other
+        # failures never authorize a metered fallback.
+        self._gemini_quota_exhausted = True
+        if _truthy(self._provider_config.get("VC_TUTOR_KILO")):
+            return self.call_kilo(prompt, system)
+        return None
 
     def provider_status(self) -> dict:
-        """Real status of each provider, for the UI. Never includes the key."""
+        """Provider names, key counts and bounded errors; never credentials."""
+        key_count = len(self._gemini_keys())
         status = {
             "cloud_enabled": bool(self.config.get("cloud_enabled")),
-            "gemini_key_present": bool(os.getenv("GEMINI_API_KEY")),
-            "gemini_model": os.getenv("GEMINI_PRIMARY_MODEL", "gemini-3.1-flash-lite"),
-            "mistral_key_present": bool(os.getenv("MISTRAL_API_KEY")),
+            "gemini_key_present": bool(key_count),
+            "gemini_key_count": key_count,
+            "gemini_model": self._gemini_model(),
+            "mistral_key_present": bool(self._provider_config.get("MISTRAL_API_KEY")),
+            "mistral_key_count": int(bool(self._provider_config.get("MISTRAL_API_KEY"))),
+            "kilo_enabled": bool(self.config.get("cloud_enabled")) and _truthy(self._provider_config.get("VC_TUTOR_KILO")),
+            "kilo_configured": self._kilo_fallback is not None or bool(self._provider_config.get("VC_TUTOR_KILO_MODEL")),
             "ollama_host": self.local_ollama_host(self.config.get("ollama_host")),
-            "last_error": getattr(self, "last_error", None),
+            "last_error": self._redact(getattr(self, "last_error", None) or "") or None,
+            "last_provider": self._last_provider,
         }
-        if status["cloud_enabled"] and status["gemini_key_present"]:
+        if status["cloud_enabled"] and key_count:
             status["mode"] = "gemini"
         elif status["cloud_enabled"]:
             status["mode"] = "degraded"
@@ -499,7 +666,7 @@ STRICT RULES:
             "- Be precise on formulas, units, and financial conventions.\n"
             "- Never invent a source, a formula, or a course reference. If the provided "
             "course context does not cover the point, say explicitly: "
-            "\"Not covered in the provided course extracts — verify before the exam.\"\n"
+            '"Not covered in the provided course extracts — verify before the exam."\n'
             "- Keep it focused: this is a tutoring turn, not an essay.\n\n"
             f"YOUR TASK THIS TURN:\n{instruction}"
         )
@@ -517,7 +684,7 @@ STRICT RULES:
             if provider == "gemini":
                 result_text = self.call_gemini(prompt, system)
                 if result_text:
-                    model_used = os.getenv("GEMINI_PRIMARY_MODEL", "gemini-3.1-flash-lite")
+                    model_used = self._last_model or self._gemini_model()
             elif provider == "ollama":
                 result_text = self.call_ollama(prompt, system)
                 if result_text:
@@ -552,7 +719,7 @@ STRICT RULES:
                 "error": getattr(self, "last_error", None),
             }
         return {
-            "text": result_text,
+            "text": self._redact(result_text),
             "source": "ai",
             "mode": mode,
             "passages": passages,

@@ -9,9 +9,24 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from fastapi.testclient import TestClient
 
 from come_ai_web import create_app
+
+
+@pytest.fixture(autouse=True)
+def isolated_provider_sources(tmp_path: Path, monkeypatch):
+    import os
+    import vc_tutor
+
+    for name in tuple(os.environ):
+        if vc_tutor._provider_setting(name):
+            monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(vc_tutor, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(vc_tutor, "_CENTRAL_PROVIDER_ENV", tmp_path / "providers.env")
+    monkeypatch.setenv("NAGE_VC_HOME", str(tmp_path / "state"))
 
 
 class FakeAgent:
@@ -66,23 +81,44 @@ def test_explicit_workspace_keeps_tutor_config_local(tmp_path: Path, monkeypatch
         assert not unrelated_home.exists()
 
 
-def test_default_revision_tutor_never_opts_in_to_cloud(tmp_path: Path, monkeypatch) -> None:
+def test_production_tutor_requires_explicit_cloud_consent(tmp_path: Path, monkeypatch) -> None:
     from fastapi import FastAPI
     from academics.vc.api import create_vc_router
     from academics.vc.storage import VcStore
-    from vc_tutor import VCTutor
 
-    monkeypatch.setenv("VC_TUTOR_CLOUD", "1")
-    def forbidden_env_read(self):
-        raise AssertionError("Opening Revision must not read the real .env")
-    monkeypatch.setattr(VCTutor, "load_env", forbidden_env_read)
+    import vc_tutor
+
+    monkeypatch.setattr(vc_tutor, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(vc_tutor, "_CENTRAL_PROVIDER_ENV", tmp_path / "providers.env")
+    monkeypatch.delenv("VC_TUTOR_CLOUD", raising=False)
+    (tmp_path / ".env").write_text("GEMINI_API_KEY=synthetic-config-key\n")
     app = FastAPI()
     app.include_router(create_vc_router(store=VcStore(tmp_path)))
     with TestClient(app) as http:
         result = http.get("/api/vc/status")
         assert result.status_code == 200
-        assert result.json()["tutor"]["cloud_enabled"] is False
+        status = result.json()["tutor"]
+        assert status["cloud_enabled"] is False
+        assert status["gemini_key_count"] == 1
     assert (tmp_path / "tutor_config.json").is_file()
+
+
+def test_production_tutor_honors_cloud_consent_from_private_file(tmp_path: Path, monkeypatch) -> None:
+    from fastapi import FastAPI
+    from academics.vc.api import create_vc_router
+    from academics.vc.storage import VcStore
+    import vc_tutor
+
+    monkeypatch.setattr(vc_tutor, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(vc_tutor, "_CENTRAL_PROVIDER_ENV", tmp_path / "providers.env")
+    monkeypatch.delenv("VC_TUTOR_CLOUD", raising=False)
+    (tmp_path / "providers.env").write_text("GEMINI_API_KEY=synthetic-private-key\nVC_TUTOR_CLOUD=1\n")
+    app = FastAPI()
+    app.include_router(create_vc_router(store=VcStore(tmp_path)))
+    with TestClient(app) as http:
+        result = http.get("/api/vc/status")
+        assert result.json()["tutor"]["cloud_enabled"] is True
+        assert "synthetic-private-key" not in result.text
 
 
 def client(tmp_path: Path, tutor: FakeTutor | None = None) -> TestClient:
@@ -178,9 +214,7 @@ def test_tutor_receives_mastery_and_error_context(tmp_path: Path) -> None:
 
 def test_tutor_rejects_unknown_topic(tmp_path: Path) -> None:
     with client(tmp_path) as http:
-        response = http.post(
-            "/api/vc/tutor", json={"message": "hi", "topic_id": "VC99"}
-        )
+        response = http.post("/api/vc/tutor", json={"message": "hi", "topic_id": "VC99"})
         assert response.status_code == 400
 
 
@@ -194,9 +228,7 @@ def test_review_session_roundtrip(tmp_path: Path) -> None:
         # The question is shown; the answer must not be revealed.
         assert "answer" not in session["current"]
 
-        answered = http.post(
-            "/api/vc/review/answer", json={"grade": "good", "duration_seconds": 3}
-        )
+        answered = http.post("/api/vc/review/answer", json={"grade": "good", "duration_seconds": 3})
         assert answered.status_code == 200
         after = answered.json()
         # `last_result` lives inside the session payload, as in the CLI.
@@ -233,9 +265,7 @@ def test_drill_draw_and_grade(tmp_path: Path) -> None:
 
 def test_drill_grade_unknown_id_is_400(tmp_path: Path) -> None:
     with client(tmp_path) as http:
-        response = http.post(
-            "/api/vc/drill/grade", json={"drill_id": "NOPE-D999", "answer": "1"}
-        )
+        response = http.post("/api/vc/drill/grade", json={"drill_id": "NOPE-D999", "answer": "1"})
         assert response.status_code == 400
 
 
@@ -244,9 +274,7 @@ def test_exam_start_grade_and_submit_flow(tmp_path: Path) -> None:
         state = http.get("/api/vc/exam/state").json()
         assert state["active"] is None
 
-        started = http.post(
-            "/api/vc/exam/start", json={"questions": 5, "minutes": 90, "seed": 7}
-        )
+        started = http.post("/api/vc/exam/start", json={"questions": 5, "minutes": 90, "seed": 7})
         assert started.status_code == 200
         body = started.json()
         assert body["resumed"] is False
@@ -280,9 +308,7 @@ def test_exam_start_grade_and_submit_flow(tmp_path: Path) -> None:
 
 def test_exam_submit_wrong_id_is_409(tmp_path: Path) -> None:
     with client(tmp_path) as http:
-        response = http.post(
-            "/api/vc/exam/submit", json={"exam_id": "exam_nope", "answers": {}}
-        )
+        response = http.post("/api/vc/exam/submit", json={"exam_id": "exam_nope", "answers": {}})
         assert response.status_code == 409
 
 
@@ -319,10 +345,11 @@ def test_formulas_sheet_is_available_offline(tmp_path: Path) -> None:
         assert payload["sheet"]["groups"]
 
 
-def test_offline_tutor_returns_clear_fallback(tmp_path: Path) -> None:
+def test_offline_tutor_returns_clear_fallback(tmp_path: Path, monkeypatch) -> None:
     from vc_tutor import VCTutor
 
-    offline = VCTutor(cloud=False, load_env=False)
+    monkeypatch.setattr(VCTutor, "call_ollama", lambda *args, **kwargs: None)
+    offline = VCTutor(cloud=False, load_env=False, data_dir=tmp_path / "offline")
     with client(tmp_path, tutor=offline) as http:
         response = http.post("/api/vc/tutor", json={"message": "What is IRR?"})
         assert response.status_code == 200
