@@ -555,7 +555,13 @@ def create_app(
         # HTML fragment modifiable par l'utilisateur) : autoriser un cache
         # court évite de re-télécharger career.js (~110 Ko) à chaque visite.
         # Le HTML, les API et les exports restent strictement no-store.
-        if path.startswith(("/static/", "/v5-static/", "/career-static/")) and not path.endswith((".html", "/")):
+        if path.startswith("/v5-static/") and not path.endswith((".html", "/")):
+            # The desktop NAGe launcher is a local development surface.  Do
+            # not let an old JS bundle remain visible for an hour after a
+            # verified UI delivery; browsers still re-use the bytes when the
+            # ETag matches, but revalidate after each refresh.
+            response.headers["Cache-Control"] = "no-cache"
+        elif path.startswith(("/static/", "/career-static/")) and not path.endswith((".html", "/")):
             response.headers["Cache-Control"] = "public, max-age=3600"
         else:
             response.headers["Cache-Control"] = "no-store"
