@@ -1,0 +1,251 @@
+{
+  "schema_version": 1,
+  "pack_id": "cards-vc21",
+  "topic_id": "VC21",
+  "language": "en",
+  "source_type": "original",
+  "license": "Original NAGE content",
+  "items": [
+    {
+      "kind": "card",
+      "id": "VC21-C001",
+      "topic_id": "VC21",
+      "question": "What is pay-to-play in VC financing?",
+      "answer": "A provision requiring investors to participate in follow-on financing rounds to maintain their preferred rights and protections; if they don't invest pro-rata, they lose anti-dilution and other preferences.",
+      "explanation": "Pay-to-play provisions are designed to align investor incentives with the company's need for ongoing funding. Founders often negotiate carve-outs for certain investors (founders, early angels).",
+      "status": "active",
+      "tags": [
+        "pay-to-play",
+        "down round",
+        "investor rights"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC21-C002",
+      "topic_id": "VC21",
+      "question": "Explain the difference between broad-based and narrow-weighted average anti-dilution.",
+      "answer": "Broad-based weighted average includes all outstanding capitalization (including options, warrants, convertibles) in the calculation; narrow-based only includes preferred stock. Broad is more founder-friendly.",
+      "explanation": "The formula difference: Broad = CP_new = CP_old × (A + B) / (A + C), where A = shares outstanding non-participating, B = new shares at old price, C = new shares at new price. Narrow replaces A with just preferred shares.",
+      "status": "active",
+      "tags": [
+        "anti-dilution",
+        "weighted average",
+        "broad vs narrow"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC21-C003",
+      "topic_id": "VC21",
+      "question": "What is a 'ratchet' in VC terms (not just anti-dilution)?",
+      "answer": "A mechanism that adjusts conversion prices or ownership percentages automatically based on specified events, without requiring new negotiations. Full ratchet is the most aggressive form.",
+      "explanation": "Ratchets can apply to conversion prices, liquidation preferences, or even voting rights. They're 'automatic' triggers written into the governing documents.",
+      "status": "active",
+      "tags": [
+        "ratchet",
+        "governance",
+        "automatic adjustment"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC21-C004",
+      "topic_id": "VC21",
+      "question": "Explain the concept of 'drag-along rights'.",
+      "answer": "Drag-along rights allow majority shareholders (typically >50-66%) to force minority shareholders to join in the sale of the company, ensuring a clean sale to a buyer.",
+      "explanation": "Without drag-along, a buyer might not acquire 100% if some minorities refuse to sell. Tag-along rights work in the opposite direction - they allow minorities to join a sale initiated by the majority.",
+      "status": "active",
+      "tags": [
+        "drag-along",
+        "tag-along",
+        "minority rights",
+        "exit"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC21-C005",
+      "topic_id": "VC21",
+      "question": "What is pay-to-play and why do VCs insist on it?",
+      "answer": "A provision requiring investors to participate in follow-on financing rounds to maintain their preferred rights and protections; if they don't invest pro-rata, they lose anti-dilution and other preferences.",
+      "explanation": "Pay-to-play provisions are designed to align investor incentives with the company's need for ongoing funding. Founders often negotiate carve-outs for certain investors (founders, early angels).",
+      "status": "active",
+      "tags": [
+        "pay-to-play",
+        "down round",
+        "investor rights"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC21-C006",
+      "topic_id": "VC21",
+      "question": "What is a non-participating liquidation preference?",
+      "answer": "The investor chooses between: (1) receiving their original investment back (the preference), OR (2) converting to common stock and receiving their pro-rata share of the total proceeds. They cannot double-dip.",
+      "explanation": "Contrast with participating preferred, where the investor gets their preference PLUS a pro-rata share of remaining proceeds. Non-participating is generally more founder-friendly.",
+      "status": "active",
+      "tags": [
+        "liquidation preference",
+        "non-participating",
+        "1x preferred"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC21-C007",
+      "topic_id": "VC21",
+      "question": "Explain weighted average anti-dilution with a simple example.",
+      "answer": "If an investor paid $2/share for preferred, and the company later issues new shares at $1/share, the weighted average adjustment might reset the conversion price to ~$1.50 (depending on round size). The more new shares issued relative to existing, the closer to $1.00 the price resets.",
+      "explanation": "Key variables: (1) Original investment amount, (2) Original conversion price, (3) Number of new shares issued at new price, (4) Number of shares outstanding before new round. The formula balances protection for the investor with fairness to founders.",
+      "status": "active",
+      "tags": [
+        "anti-dilution",
+        "weighted average",
+        "calculation example"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC21-C008",
+      "topic_id": "VC21",
+      "question": "What are pro-rata rights and why are they important for LPs?",
+      "answer": "Pro-rata rights allow existing investors to maintain their ownership percentage by participating in future financing rounds. For LPs (Limited Partners), understanding pro-rata is crucial for fund management and LP relations.",
+      "explanation": "Pro-rata typically allows investors to invest enough in the next round to maintain their ownership percentage. For example: If you own 5% after Series A, and the company raises Series B, pro-rata lets you invest enough in Series B to keep owning ~5% of the post-Series B company.",
+      "status": "active",
+      "tags": [
+        "pro-rata rights",
+        "ownership maintenance",
+        "LP relations"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC21-C009",
+      "topic_id": "VC21",
+      "question": "What is a modified ratchet or capped ratchet?",
+      "answer": "A hybrid anti-dilution provision that resets the conversion price to the new round price, but caps the number of additional shares the investor can receive. This limits the dilution impact on founders compared to full ratchet.",
+      "explanation": "Example: Full ratchet might give the investor 2x additional shares; a capped ratchet might limit it to 1.5x or cap the conversion price at a floor (e.g., never below 50% of original price).",
+      "status": "active",
+      "tags": [
+        "capped ratchet",
+        "modified anti-dilution",
+        "founder-friendly"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC21-C010",
+      "topic_id": "VC21",
+      "question": "Explain pay-to-play exemption for founders and employees.",
+      "answer": "Founders and employee option holders are typically exempt from pay-to-play provisions. This ensures that if founders can't invest in a down round, they don't lose their existing rights and protections, which would be counterproductive for company stability.",
+      "explanation": "Typical exemptions: (1) Founders' founder shares, (2) Employee stock options/RSUs, (3) Early angel investors (sometimes). The exact exemptions are negotiated in the term sheet and shareholders agreement.",
+      "status": "active",
+      "tags": [
+        "pay-to-play",
+        "exemptions",
+        "founder rights"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC21-C011",
+      "topic_id": "VC21",
+      "question": "What is a cash pay alternative to pay-to-play?",
+      "answer": "Some term sheets offer a 'cash-out' option: instead of losing rights, the investor can choose to sell their shares back to the company or existing shareholders at a negotiated price, effectively exiting the investment rather than maintaining rights in a down round.",
+      "explanation": "This provides an alternative for investors who don't want to commit more capital in a down round but don't want to lose their existing rights either. It's a negotiated alternative to the standard pay-to-play penalty.",
+      "status": "active",
+      "tags": [
+        "pay-to-play",
+        "cash alternative",
+        "exit option"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC21-C012",
+      "topic_id": "VC21",
+      "question": "Explain full ratchet with a numerical example.",
+      "answer": "Original: Investor paid $10/share for 1,000 shares = $10,000 investment. Down round: New shares issued at $5/share. Full ratchet resets conversion price to $5/share. Now: $10,000 / $5 = 2,000 shares. The investor receives 1,000 additional shares. Their ownership increases, founders' dilution is severe.",
+      "explanation": "Full ratchet = conversion price resets to the NEW issue price, regardless of round size. The investor effectively gets a 'bonus' of additional shares at the old investor's expense (founders').",
+      "status": "active",
+      "tags": [
+        "full ratchet",
+        "numerical example",
+        "share adjustment"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC21-C013",
+      "topic_id": "VC21",
+      "question": "What is a convertible note and how does it work?",
+      "answer": "A short-term debt instrument that converts into equity priced at a discount or with a valuation cap during a future financing round. Common in seed-stage investing. Interest accrues and either converts or is paid at maturity.",
+      "explanation": "Key terms: (1) Interest rate (typically 8% annually), (2) Maturity date (typically 18-24 months), (3) Discount (typically 20% off the priced round), (4) Valuation cap (maximum valuation at which note converts). Convertible notes bridge the gap between seed and Series A.",
+      "status": "active",
+      "tags": [
+        "convertible note",
+        "seed financing",
+        "debt to equity"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC21-C014",
+      "topic_id": "VC21",
+      "question": "What is the difference between a SAFE and a convertible note?",
+      "answer": "A SAFE (Simple Agreement for Future Equity) is not debt - it has no interest rate or maturity date. It simply converts into equity at a priced round, typically with a discount or valuation cap. SAFEs were created by Y Combinator to simplify seed investing.",
+      "explanation": "Key differences: SAFE = no interest, no maturity, simpler docs. Convertible note = debt instrument with interest, maturity date, rights to force repayment if no conversion. SAFEs are now more common for very early stages.",
+      "status": "active",
+      "tags": [
+        "SAFE",
+        "convertible note",
+        "seed financing",
+        "Y Combinator"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC21-C015",
+      "topic_id": "VC21",
+      "question": "Explain anti-dilution reset and when it's triggered.",
+      "answer": "Anti-dilution reset adjusts the conversion price of preferred stock downward when new shares are issued at a lower price than the original preferred. It's triggered by a 'down round' - a financing round at a valuation lower than the previous round.",
+      "explanation": "Trigger events: (1) New equity round at price below original preferred price, (2) Dividends in kind that effectively lower per-share value, (3) Certain restructurings. Anti-dilution doesn't apply to subsequent rounds at higher valuations (the original price is maintained).",
+      "status": "active",
+      "tags": [
+        "anti-dilution",
+        "down round",
+        "trigger events"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC21-C016",
+      "topic_id": "VC21",
+      "question": "Explain information rights VC investors typically negotiate.",
+      "answer": "Information rights allow investors to receive periodic financial statements, business plans, and other company information. They don't give voting or board rights but ensure investors can monitor their investment.",
+      "explanation": "Typical frequency: Monthly or quarterly financials, annual business plan, cap table updates upon request. Some investors also get 'reasonable access' to management and books. Information rights are less powerful than board seats but cheaper in terms of governance control.",
+      "status": "active",
+      "tags": [
+        "information rights",
+        "investor monitoring",
+        "governance"
+      ]
+    },
+    {
+      "kind": "card",
+      "id": "VC21-C017",
+      "topic_id": "VC21",
+      "question": "Explain vesting acceleration on change of control.",
+      "answer": "Upon a company acquisition (change of control), unvested shares may accelerate (often 1-year cliff + 18 months pro-rata, or 100% acceleration). This protects founders/employees who lose their jobs if the company is acquired.",
+      "explanation": "Types: (1) Single trigger: acceleration upon change of control regardless of job status. (2) Double trigger: acceleration only if change of control AND employee is terminated within some period (typically 12-24 months). Double trigger is more employee-friendly.",
+      "status": "active",
+      "tags": [
+        "vesting",
+        "change of control",
+        "double trigger",
+        "single trigger"
+      ]
+    }
+  ]
+}

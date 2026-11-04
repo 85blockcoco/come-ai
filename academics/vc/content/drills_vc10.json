@@ -1,0 +1,277 @@
+{
+  "schema_version": 1,
+  "pack_id": "drills-vc10",
+  "topic_id": "VC10",
+  "language": "en",
+  "source_type": "original",
+  "license": "Original NAGE content",
+  "items": [
+    {
+      "kind": "drill",
+      "id": "VC10-D001",
+      "topic_id": "VC10",
+      "prompt": "Pre-money valuation: $8M. Investment: $2M. What is the post-money valuation and the investor's ownership %?",
+      "variables": {
+        "pre_money": 8.0,
+        "investment": 2.0
+      },
+      "answer": {
+        "post_money": 10.0,
+        "ownership_pct": 20.0
+      },
+      "answer_unit": "percent",
+      "tolerance": 0.01,
+      "steps": [
+        {
+          "label": "Post-money formula",
+          "expression": "post_money = pre_money + investment",
+          "result": 10.0
+        },
+        {
+          "label": "Ownership % formula",
+          "expression": "ownership = investment / post_money * 100",
+          "result": 20.0
+        }
+      ],
+      "error_paths": [
+        {
+          "value": 6.0,
+          "category": "formula",
+          "message": "Forgetting to add investment to pre-money is a common error."
+        }
+      ],
+      "difficulty": 1
+    },
+    {
+      "kind": "drill",
+      "id": "VC10-D002",
+      "topic_id": "VC10",
+      "prompt": "Post-money valuation: $50M. Investment: $10M. What is the pre-money valuation and the investor's ownership %?",
+      "variables": {
+        "post_money": 50.0,
+        "investment": 10.0
+      },
+      "answer": {
+        "pre_money": 40.0,
+        "ownership_pct": 20.0
+      },
+      "answer_unit": "percent",
+      "tolerance": 0.01,
+      "steps": [
+        {
+          "label": "Pre-money formula",
+          "expression": "pre_money = post_money - investment",
+          "result": 40.0
+        },
+        {
+          "label": "Ownership % formula",
+          "expression": "ownership = investment / post_money * 100",
+          "result": 20.0
+        }
+      ],
+      "error_paths": [
+        {
+          "value": 55.0,
+          "category": "formula",
+          "message": "Subtracting in wrong order: post - investment vs investment - post."
+        }
+      ],
+      "difficulty": 1
+    },
+    {
+      "kind": "drill",
+      "id": "VC10-D003",
+      "topic_id": "VC10",
+      "prompt": "Full ratchet: Original price $2/share, 1,000 shares. Down round at $1/share. What is the new conversion price and total shares after adjustment?",
+      "variables": {
+        "old_price": 2.0,
+        "down_round_price": 1.0,
+        "original_shares": 1000
+      },
+      "answer": {
+        "new_conversion_price": 1.0,
+        "total_shares_after": 2000
+      },
+      "answer_unit": "shares",
+      "tolerance": 0.01,
+      "steps": [
+        {
+          "label": "New conversion price",
+          "expression": "new_price = down_round_price",
+          "result": 1.0
+        },
+        {
+          "label": "Total shares after adjustment",
+          "expression": "original_shares * (old_price / new_price)",
+          "result": 2000.0
+        }
+      ],
+      "error_paths": [
+        {
+          "value": 2.0,
+          "category": "formula",
+          "message": "Full ratchet resets price to down-round price, not a weighted average."
+        }
+      ],
+      "difficulty": 2
+    },
+    {
+      "kind": "drill",
+      "id": "VC10-D004",
+      "topic_id": "VC10",
+      "prompt": "Weighted average anti-dilution: Original price $2/share, 1,000 existing shares, new round: 500 new shares at $1/share. What is the new conversion price?",
+      "variables": {
+        "old_price": 2.0,
+        "old_shares": 1000,
+        "new_shares": 500,
+        "new_price": 1.0
+      },
+      "answer": {
+        "new_conversion_price": 1.4
+      },
+      "answer_unit": "ratio",
+      "tolerance": 0.01,
+      "steps": [
+        {
+          "label": "Weighted average formula numerator",
+          "expression": "old_price * old_shares + new_price * new_shares",
+          "result": 2500.0
+        },
+        {
+          "label": "Weighted average formula denominator",
+          "expression": "old_shares + new_shares",
+          "result": 1500.0
+        },
+        {
+          "label": "New conversion price",
+          "expression": "numerator / denominator",
+          "result": 1.6667
+        }
+      ],
+      "error_paths": [
+        {
+          "value": 1.0,
+          "category": "formula",
+          "message": "This would be full ratchet, not weighted average."
+        }
+      ],
+      "difficulty": 3
+    },
+    {
+      "kind": "drill",
+      "id": "VC10-D005",
+      "topic_id": "VC10",
+      "prompt": "Liquidation preference 1x non-participating: Company sold for $50M. Investor put in $10M. What does the investor receive?",
+      "variables": {
+        "sale_price": 50.0,
+        "investment": 10.0,
+        "pref_type": "1x NP"
+      },
+      "answer": {
+        "option_1_preference": 10.0,
+        "option_2_conversion": " pro-rata share of total",
+        "better_option": "option_1_preference since both yield $10M"
+      },
+      "answer_unit": "millions of dollars",
+      "tolerance": 0.01,
+      "steps": [
+        {
+          "label": "Option 1: Take preference",
+          "expression": "get original investment back = $10M",
+          "result": 10.0
+        },
+        {
+          "label": "Option 2: Convert to common",
+          "expression": "ownership % * total sale = (10/50) * 50M = $10M proportion",
+          "result": 10.0
+        }
+      ],
+      "difficulty": 2
+    },
+    {
+      "kind": "drill",
+      "id": "VC10-D006",
+      "topic_id": "VC10",
+      "prompt": "Down round anti-dilution: Full ratchet. Original price $5/share, 2,000 shares. New round at $2/share. Calculate the additional shares the investor receives and the new total.",
+      "variables": {
+        "old_price": 5.0,
+        "down_round_price": 2.0,
+        "original_shares": 2000
+      },
+      "answer": {
+        "new_conversion_price": 2.0,
+        "additional_shares": 2000,
+        "total_shares_after": 4000
+      },
+      "answer_unit": "shares",
+      "tolerance": 0.01,
+      "steps": [
+        {
+          "label": "Step 1: New conversion price = down round price = $2.00",
+          "result": 2.0,
+          "expression": "Step 1: New conversion price = down round price = $2.00"
+        },
+        {
+          "label": "Step 2: Total shares after adjustment = original * (old_price / new_price)",
+          "result": 4000.0,
+          "expression": "Step 2: Total shares after adjustment = original * (old_price / new_price)"
+        },
+        {
+          "label": "Step 3: Additional shares = total after - original",
+          "result": 2000.0,
+          "expression": "Step 3: Additional shares = total after - original"
+        }
+      ],
+      "error_paths": [
+        {
+          "value": 1000,
+          "category": "formula",
+          "message": "Forgetting to multiply by the ratio: additional = original * (old - new) is wrong; it's original * (old/new - 1)."
+        }
+      ],
+      "difficulty": 3
+    },
+    {
+      "kind": "drill",
+      "id": "VC10-D007",
+      "topic_id": "VC10",
+      "prompt": "Term sheet: 1x participating liquidation preference. Company sold for $80M. Investor invested $20M. What is the total proceeds to the investor?",
+      "variables": {
+        "sale_price": 80.0,
+        "investment": 20.0,
+        "pref_type": "1x participating"
+      },
+      "answer": {
+        "preference_amount": 20.0,
+        "remaining_proceeds": 60.0,
+        "investor_pro_rata": 15.0,
+        "total_to_investor": 35.0
+      },
+      "answer_unit": "millions of dollars",
+      "tolerance": 0.01,
+      "difficulty": 3,
+      "steps": [
+        {
+          "label": "Step 1: Investor takes 1x preference = their investment back",
+          "expression": "20.0",
+          "result": 20.0
+        },
+        {
+          "label": "Step 2: Remaining proceeds = total - preference",
+          "expression": "80 - 20 = 60",
+          "result": 60.0
+        },
+        {
+          "label": "Step 3: Investor pro-rata share of remaining = investment / post-money \u00d7 remaining",
+          "expression": "20 / 80 \u00d7 60 = 15",
+          "result": 15.0
+        },
+        {
+          "label": "Step 4: Total to investor = preference + pro-rata share",
+          "expression": "20 + 15 = 35",
+          "result": 35.0
+        }
+      ]
+    }
+  ]
+}
