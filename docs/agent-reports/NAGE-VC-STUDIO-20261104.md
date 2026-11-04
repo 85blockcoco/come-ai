@@ -50,3 +50,9 @@ Recette Chromium réelle sur serveur isolé, store synthétique, tuteur simulé 
 - brouillon d'examen restauré, reprise et soumission du mock réussies.
 
 Les scores de recette sont des données synthétiques : ils ne représentent pas le niveau de Côme.
+
+## Ajustement final demandé : QCM
+
+Pastilles A/B/C de 22 px (lettres 10 px) sur écran large, 20 px sur mobile ; texte des réponses 15 px (14 px sur mobile), interligne 1,65–1,7. Toute la ligne est cliquable, le focus clavier est visible, et la sélection reste accessible aux lecteurs d'écran. Même présentation pour les contrôles de leçon et les annales. Les listes de choix de l'examen utilisent aussi des marqueurs plus petits.
+
+Après cette modification : 16 tests ciblés de cours/UI rejoués, verts ; recette Chromium confirmant la sélection de la ligne, les tailles calculées et l'absence de débordement à 390 px. La fenêtre Chrome de l'application du bureau a été observée avec le nouveau lecteur et ses 28 leçons. Le lanceur fixe désormais son dossier de travail sur le dépôt avant de démarrer Python.

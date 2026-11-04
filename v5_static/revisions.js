@@ -510,7 +510,7 @@ async function revPracticePaper(year, card) {
     const fields = paper.questions.map((q) => {
       let content = "";
       if (q.kind === "mcq") {
-        content = `<div class="vc-mcq-options">${q.choices.map((choice) => `<label><input type="radio" name="${revEsc(q.id)}" data-qid="${revEsc(q.id)}" value="${revEsc(choice.label)}"><span><b>${revEsc(choice.label)}</b> ${revEsc(choice.text)}</span></label>`).join("")}</div>`;
+        content = `<div class="vc-mcq-options">${q.choices.map((choice) => `<label><input type="radio" name="${revEsc(q.id)}" data-qid="${revEsc(q.id)}" value="${revEsc(choice.label)}"><span class="vc-choice-letter" aria-hidden="true">${revEsc(choice.label)}</span><span class="vc-choice-text">${revEsc(choice.text)}</span></label>`).join("")}</div>`;
       } else if (q.parts?.length) {
         content = q.parts.map((part) => answerField(part.id, part.prompt, part.kind, part.points, part.unit)).join("");
       } else {

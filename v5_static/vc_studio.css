@@ -92,3 +92,12 @@
 #revisionsView .rev-radar-row.fragile { background:#fcf3ec; border-color:#edd8c6; }#revisionsView .rev-radar-row.solid { background:#f0f7e9; border-color:#d4e6c5; }
 @media(max-width:760px) { .vc-home-shortcut { align-items:flex-start; flex-direction:column; gap:12px; }.vc-home-shortcut b { font-size:18px; } }
 .vc-workbook-toggle { display:flex; align-items:center; gap:9px; margin:16px 0; color:#617a4f; font-size:12px; }.vc-workbook-toggle input { flex:0 0 auto; width:15px; height:15px; margin:0; accent-color:#4c8449; }.vc-table-scroll th { position:sticky; left:0; color:#738861; background:#f0f5e9; padding:7px; font-size:9px; border:1px solid #e2e9d5; }
+/* Compact answer letters; the sentence, rather than the control, leads. */
+.vc-mcq-options > label { position:relative; display:grid; grid-template-columns:22px minmax(0,1fr); gap:12px; align-items:start; min-height:48px; padding:12px 14px; }
+.vc-mcq-options > label > input[type=radio] { position:absolute; width:1px; height:1px; margin:0; opacity:0; }
+.vc-mcq-options .vc-choice-letter { display:grid; width:22px; height:22px; min-width:22px; margin-top:2px; color:#64805c; font:750 10px/1 system-ui,sans-serif; place-items:center; background:#f1f6ec; border:1px solid #d4e1ca; border-radius:6px; }
+.vc-mcq-options .vc-choice-text { color:#405c3d; font-size:15px; font-weight:450; line-height:1.65; overflow-wrap:anywhere; }
+.vc-mcq-options label:has(input:checked) .vc-choice-letter { color:#fff; background:#43834e; border-color:#43834e; }
+.vc-mcq-options label:focus-within { outline:3px solid #a4c798; outline-offset:2px; }
+#revisionsView .rev-choices { padding-left:24px; font-size:15px; line-height:1.8; color:#45603f; }#revisionsView .rev-choices li { padding-left:6px; margin-bottom:8px; }#revisionsView .rev-choices li::marker { font-size:11px; font-weight:750; color:#719567; }
+@media(max-width:760px) { .vc-mcq-options > label { padding:11px 12px; gap:10px; grid-template-columns:20px minmax(0,1fr); }.vc-mcq-options .vc-choice-letter { width:20px; height:20px; min-width:20px; font-size:9px; }.vc-mcq-options .vc-choice-text { font-size:14px; line-height:1.7; } }
