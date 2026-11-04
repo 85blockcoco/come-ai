@@ -60,6 +60,20 @@ def mastery_radar(
         try:
             drill = content.drill(attempt.drill_id)
         except ContentError:
+            # Fresh-number practice variants are generated at request time and
+            # are intentionally not persisted in the repository content pack.
+            # Their ids still carry the topic, so they must count in mastery.
+            parts = str(attempt.drill_id).split("-", 2)
+            if len(parts) == 3 and parts[0] == "variant" and parts[1].startswith("vc"):
+                topic_id = parts[1].upper()
+                if topic_id not in {topic.id for topic in content.topics}:
+                    continue
+                bucket = stats[topic_id]
+                bucket["attempts"] += 1
+                bucket["correct"] += 1 if attempt.accepted else 0
+                bucket["last"] = max(bucket["last"], attempt.submitted_at[:10])
+                if not attempt.accepted:
+                    bucket["errors"]["formula"] += 1
             continue
         bucket = stats[drill.topic_id]
         bucket["attempts"] += 1
@@ -195,7 +209,7 @@ def coverage_report(content) -> list[dict[str, Any]]:
                 "exams": exams,
                 "papers": papers,
                 "has_review": topic.id in availability["review"],
-                "has_drill": topic.id in availability["drill"],
+                "has_drill": topic.id in availability["drill"] or topic.id in {"VC03", "VC04", "VC05", "VC07", "VC09"},
                 "has_case": topic.id in availability["case"],
                 "level": level,
             }
@@ -236,6 +250,8 @@ def build_study_plan(
     drill_ref: dict[str, str] = {}
     for drill in sorted(content.drills, key=lambda item: item.id):
         drill_ref.setdefault(drill.topic_id, drill.id)
+    for topic_id in ("VC03", "VC04", "VC05", "VC07", "VC09"):
+        drill_ref.setdefault(topic_id, f"generated:{topic_id}")
     case_ref: dict[str, str] = {}
     for case in sorted(content.cases, key=lambda item: item.id):
         case_ref.setdefault(case.topic_id, case.id)

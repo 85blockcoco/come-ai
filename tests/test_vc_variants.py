@@ -8,6 +8,8 @@ from academics.vc.content import load_content
 from academics.vc.course import create_course_router, load_course
 from academics.vc.storage import VcStore
 from academics.vc.variants import generated_drill, lesson_variant
+from academics.vc.models import DrillAttempt
+from academics.vc.mastery import content_availability, mastery_radar
 
 
 def test_lesson_variant_changes_example_and_keeps_formula() -> None:
@@ -62,3 +64,16 @@ def test_exam_content_includes_fresh_variants() -> None:
     content = load_content()
     ids = {question.id for question in content.exams}
     assert {"VC03-V001", "VC05-V001", "VC09-V001"} <= ids
+
+
+def test_generated_drill_attempts_feed_progress_without_polluting_content() -> None:
+    content = load_content()
+    availability = content_availability(content)
+    assert "VC03" not in availability["drill"]
+    attempt = DrillAttempt(
+        attempt_id="variant-attempt", drill_id="variant-vc03-42", topic_id="VC03",
+        answer="640", accepted=True, expected=640.0, expected_unit="k_eur",
+        given_value=640.0, diagnostic=None, submitted_at="2026-11-04T10:00:00", message="",
+    )
+    record = next(item for item in mastery_radar(content, [], today="2026-11-04", drill_attempts=[attempt]) if item.topic_id == "VC03")
+    assert record.attempts == 1 and record.correct == 1
