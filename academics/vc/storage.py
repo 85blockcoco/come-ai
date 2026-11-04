@@ -150,6 +150,23 @@ class VcStore:
         }
         self._write_json(self.path("progress.json"), payload)
 
+    # ------------------------------------------------------ guided course
+    def load_course_progress(self) -> dict[str, Any]:
+        payload = self._read_json(self.path("course", "progress.json"), {})
+        if not isinstance(payload, dict):
+            return {}
+        entries = payload.get("lessons", {})
+        payload["lessons"] = {
+            key: dict(value) for key, value in entries.items() if isinstance(value, dict)
+        } if isinstance(entries, dict) else {}
+        return payload
+
+    def save_course_progress(self, payload: dict[str, Any]) -> None:
+        self._write_json(self.path("course", "progress.json"), payload)
+
+    def append_course_quiz(self, payload: dict[str, Any]) -> None:
+        self._append_jsonl(self.path("course", "quiz_attempts.jsonl"), payload)
+
     # ---------------------------------------------------------------- reviews
     def append_review(self, event: ReviewEvent) -> None:
         self._append_jsonl(self.path("reviews.jsonl"), event.to_dict())

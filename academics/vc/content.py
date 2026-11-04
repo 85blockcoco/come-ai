@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Iterable
@@ -199,10 +200,22 @@ def _load_drills(path: Path, topic_ids: set[str]) -> list[FormulaDrill]:
     for item in _items(payload, path):
         if item.get("kind") != "drill":
             raise ContentError(f"Item non-drill dans {path.name}.")
+        if item.get("status") == "draft":
+            if not str(item.get("draft_reason", "")).strip():
+                raise ContentError(f"Draft drill requires a reason in {path.name}.")
+            continue
+        if item.get("status", "active") != "active":
+            raise ContentError(f"Unknown drill status in {path.name}.")
         topic_id = _topic_id(item, path)
         if topic_id not in topic_ids:
             raise ContentError(f"Unknown topic {topic_id} in {path.name}.")
         drill = FormulaDrill.from_dict(item)
+        try:
+            expected = float(drill.answer)
+        except (TypeError, ValueError) as error:
+            raise ContentError(f"Active drill {drill.id} requires a single numeric answer.") from error
+        if not math.isfinite(expected):
+            raise ContentError(f"Non-finite answer for {drill.id}.")
         if drill.answer_unit not in UNITS:
             raise ContentError(f"Invalid unit for {drill.id}: {drill.answer_unit}.")
         if drill.tolerance <= 0:
@@ -212,6 +225,12 @@ def _load_drills(path: Path, topic_ids: set[str]) -> list[FormulaDrill]:
         for step in drill.steps:
             if not isinstance(step, dict) or not {"label", "expression", "result"} <= set(step):
                 raise ContentError(f"Étape invalide pour {drill.id}.")
+        try:
+            final_result = float(drill.steps[-1]["result"])
+        except (TypeError, ValueError) as error:
+            raise ContentError(f"Final calculation must be numeric for {drill.id}.") from error
+        if not math.isfinite(final_result) or abs(final_result - expected) > 1e-6:
+            raise ContentError(f"Final calculation disagrees with the answer for {drill.id}.")
         for error_path in drill.error_paths:
             if error_path.get("category") not in ERROR_CATEGORIES:
                 raise ContentError(f"Invalid error category for {drill.id}.")

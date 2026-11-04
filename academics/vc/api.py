@@ -9,6 +9,7 @@ so the UI can separate them from deterministic or official results.
 from __future__ import annotations
 
 import threading
+from dataclasses import replace
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -16,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from .cases import case_payload, case_result_payload, evaluate_case
 from .content import load_content
+from .course import create_course_router, load_course
 from .cram import formula_payload
 from .dates import new_id, now_iso, today_iso
 from .drills import drill_payload, grade_drill, random_drill
@@ -309,11 +311,17 @@ def create_vc_router(
 
     # ------------------------------------------------------------- review
     @router.get("/api/vc/review")
-    def vc_review(minutes: int = 10, mode: str = "quick") -> dict[str, Any]:
+    def vc_review(minutes: int = 10, mode: str = "quick", scope: str = "course") -> dict[str, Any]:
+        if scope not in {"course", "all"}:
+            raise HTTPException(status_code=400, detail="Review scope must be course or all.")
         store = get_store()
         content = get_content()
+        selection = content
+        if scope == "course":
+            core_topics = {topic for chapter in load_course()["chapters"] for lesson in chapter["lessons"] for topic in lesson["topic_ids"]}
+            selection = replace(content, cards=tuple(card for card in content.cards if card.topic_id in core_topics))
         with lock:
-            session = _wrap(start_session, store, content, minutes=minutes, mode=mode)
+            session = _wrap(start_session, store, selection, minutes=minutes, mode=mode)
             payload = _wrap(session_payload, session, content, store.load_progress())
         return {"session": payload, "source": "deterministic"}
 
@@ -556,4 +564,5 @@ def create_vc_router(
     def vc_formulas() -> dict[str, Any]:
         return {"sheet": formula_payload(), "source": "deterministic"}
 
+    router.include_router(create_course_router(store=store))
     return router

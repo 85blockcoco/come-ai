@@ -40,7 +40,9 @@
           "message": "Forgetting to multiply by the interest rate: 1.5M / 25 = 60,000 is wrong."
         }
       ],
-      "difficulty": 2
+      "difficulty": 2,
+      "status": "draft",
+      "draft_reason": "Preserved original proposal: a multi-output or qualitative answer is incompatible with the single-numeric drill grader. Units, assumptions and course provenance require review before activation."
     },
     {
       "kind": "drill",
@@ -72,7 +74,9 @@
         }
       ],
       "error_paths": [],
-      "difficulty": 3
+      "difficulty": 3,
+      "status": "draft",
+      "draft_reason": "Preserved original proposal: a multi-output or qualitative answer is incompatible with the single-numeric drill grader. Units, assumptions and course provenance require review before activation."
     },
     {
       "kind": "drill",
@@ -109,7 +113,9 @@
         }
       ],
       "error_paths": [],
-      "difficulty": 3
+      "difficulty": 3,
+      "status": "draft",
+      "draft_reason": "Preserved original proposal: a multi-output or qualitative answer is incompatible with the single-numeric drill grader. Units, assumptions and course provenance require review before activation."
     },
     {
       "kind": "drill",
@@ -150,7 +156,9 @@
         }
       ],
       "error_paths": [],
-      "difficulty": 4
+      "difficulty": 4,
+      "status": "draft",
+      "draft_reason": "Preserved original proposal: a multi-output or qualitative answer is incompatible with the single-numeric drill grader. Units, assumptions and course provenance require review before activation."
     },
     {
       "kind": "drill",
@@ -190,7 +198,9 @@
         }
       ],
       "error_paths": [],
-      "difficulty": 4
+      "difficulty": 4,
+      "status": "draft",
+      "draft_reason": "Preserved original proposal: a multi-output or qualitative answer is incompatible with the single-numeric drill grader. Units, assumptions and course provenance require review before activation."
     }
   ]
 }

@@ -417,6 +417,7 @@ def drill_payload(drill: FormulaDrill, *, reveal: bool = False) -> dict[str, Any
         "variables": drill.variables,
         "answer_unit": drill.answer_unit,
         "difficulty": drill.difficulty,
+        "notice": drill.notice,
     }
     if reveal:
         payload["answer"] = drill.answer

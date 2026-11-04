@@ -328,6 +328,7 @@ def paper_payload(paper: PastPaper, *, solutions: bool = False) -> dict[str, Any
             "kind": question.kind,
             "topic_id": question.topic_id,
             "prompt": question.prompt,
+            "unit": question.unit,
         }
         if question.choices:
             item["choices"] = [
@@ -340,6 +341,7 @@ def paper_payload(paper: PastPaper, *, solutions: bool = False) -> dict[str, Any
                     "prompt": part.prompt,
                     "kind": part.kind,
                     "points": part.points,
+                    "unit": part.unit,
                     **(
                         {"unit": part.unit, "answer": part.answer, "solution": part.solution}
                         if solutions

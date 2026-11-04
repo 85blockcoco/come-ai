@@ -156,6 +156,7 @@ class FormulaDrill:
     error_paths: tuple[dict[str, Any], ...] = ()
     alternative_conventions: tuple[dict[str, Any], ...] = ()
     difficulty: int = 1
+    notice: str = "Synthetic practice exercise."
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "FormulaDrill":

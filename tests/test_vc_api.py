@@ -11,7 +11,6 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from academics.vc.storage import VcStore
 from come_ai_web import create_app
 
 
@@ -65,8 +64,8 @@ def test_status_reports_content_counts_and_offline_tutor(tmp_path: Path) -> None
         status = http.get("/api/vc/status").json()
         assert status["subject"] == "Venture Capital"
         assert status["exam_duration_minutes"] == 90
-        assert status["counts"]["topics"] == 20
-        assert status["counts"]["cards"] == 170
+        assert status["counts"]["topics"] == 21
+        assert status["counts"]["cards"] == 189
         # Compare against the content pack itself: guards content loss without
         # breaking every time a drill is added.
         from academics.vc.content import load_content
@@ -87,16 +86,16 @@ def test_status_never_leaks_api_key(tmp_path: Path) -> None:
 def test_coverage_lists_every_topic(tmp_path: Path) -> None:
     with client(tmp_path) as http:
         topics = http.get("/api/vc/coverage").json()["topics"]
-        assert len(topics) == 20
-        assert {t["topic_id"] for t in topics} == {f"VC{i:02d}" for i in range(1, 21)}
+        assert len(topics) == 21
+        assert {t["topic_id"] for t in topics} == {f"VC{i:02d}" for i in range(1, 22)}
 
 
 def test_radar_marks_untested_topics_as_untested(tmp_path: Path) -> None:
     with client(tmp_path) as http:
         radar = http.get("/api/vc/radar").json()
-        assert len(radar["topics"]) == 20
+        assert len(radar["topics"]) == 21
         # Fresh store: nothing may be presented as mastered.
-        assert len(radar["untested"]) == 20
+        assert len(radar["untested"]) == 21
         for topic in radar["topics"]:
             assert topic["status"] == "untested"
 
