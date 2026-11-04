@@ -1,3 +1,17 @@
+# CODEX — VC Study Studio — 4 novembre 2026
+
+Candidate : `codex/vc-learning-studio-20261104`, worktree `Documents/Codex/2026-10-25/nage-revision-rebuild`.
+
+Livraison : reconstruction V5 Révision avec 28 leçons / 56 contrôles, accès in-app aux sources, progression de lecture/contrôles/revue persistée, annales avec toutes les sous-questions, brouillons d'examen, correction de sept calculs et cinq propositions de dette préservées en draft. Rapport : `docs/agent-reports/NAGE-VC-STUDIO-20261104.md`.
+
+Preuves : 126 tests ciblés verts, Ruff / syntaxe JS / diff-check verts, recette Chromium avec store synthétique (lecture, original, contrôles, reprise, cartes, calcul, cas, annales, mock, mobile, panne réseau). Originaux : 29/29 empreintes inchangées. Aucun appel de modèle dans cette campagne.
+
+Installation locale : uniquement les fichiers de cette candidate vers le dépôt utilisé par l'icône, après comparaison avec la base. Les 500 documents de missions du commit concurrent `c9a252b` sont préservés ; pas de modification de main, pas de reset/clean/force. La suite globale du dépôt n'a pas été lancée.
+
+Les 170 pages principales sont toutes reliées au parcours. Les lectures annexes (1 324 pages PDF) et trois classeurs sont accessibles, mais leur couverture détaillée n'est pas déclarée intégralement apprise ou testée.
+
+---
+
 # RAPPORT CODEX — 2026-10-26 17:02 CET
 
 ## 1. Livré (avec preuve)

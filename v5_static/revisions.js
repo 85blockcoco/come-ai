@@ -7,6 +7,7 @@ const rev = {
   initialized: false,
   status: null,
   tutorMode: "explain",
+  tutorBusy: false,
   tutorHistory: [],
   session: null,
   drill: null,
@@ -17,15 +18,6 @@ const rev = {
   topics: [],
   cases: [],
 };
-
-const revPathLevels = [
-  { courseLabel: "COURSE TOPIC 1", title: "The venture capital landscape", subtitle: "Ecosystem, fund economics and financing stages", topics: ["VC01", "VC02", "VC03"], icon: "◈" },
-  { courseLabel: "COURSE TOPIC 2", title: "Evaluating startups", subtitle: "Diligence, metrics, financial models and investment thesis", topics: ["VC10", "VC14", "VC15", "VC18"], icon: "◎" },
-  { courseLabel: "COURSE TOPIC 3", title: "Valuation, ownership & returns", subtitle: "Pre/post-money, cap tables, dilution and fund returns", topics: ["VC04", "VC05", "VC09"], icon: "↗" },
-  { courseLabel: "COURSE TOPIC 4", title: "Term sheets & deal structure", subtitle: "Economics, control rights, downside protection and instruments", topics: ["VC06", "VC07", "VC08", "VC16", "VC19"], icon: "⌁" },
-  { courseLabel: "COURSE TOPIC 5", title: "Governance, monitoring & exits", subtitle: "Portfolio support, boards, European context and exit routes", topics: ["VC11", "VC12", "VC13", "VC17", "VC21"], icon: "✳" },
-  { courseLabel: "EXAM PRACTICE", title: "Exam technique & past papers", subtitle: "Practise the case method and work through real EDHEC papers", topics: ["VC20"], icon: "★" },
-];
 
 function revEl(id) { return document.getElementById(id); }
 
@@ -105,10 +97,7 @@ async function revLoadStatus() {
       pill.classList.add("neutral"); pill.classList.remove("ready", "warn");
     }
 
-    const dateLabel = status.exam_date ? `exam ${status.exam_date}` : "exam date not set";
-    revEl("revisionsLead").textContent =
-      `${status.counts.topics} topics · ${status.counts.cards} flashcards · ` +
-      `${status.counts.drills} drills · ${status.counts.papers} past papers · ${dateLabel}.`;
+    revEl("revisionsLead").textContent = "Understand the course. Practise the method. Walk into your exam prepared.";
 
     await revLoadRadarSummary();
     await revLoadTutorTopics(status);
@@ -123,13 +112,12 @@ async function revLoadRadarSummary() {
     rev.radar = radar;
     const tested = radar.topics.filter((t) => t.status !== "untested");
     revEl("revMastery").textContent = `${tested.length}/${radar.topics.length}`;
-    const weak = radar.topics.filter((t) => t.status === "weak").length;
+    const weak = radar.topics.filter((t) => t.status === "fragile").length;
     const due = radar.topics.reduce((sum, t) => sum + (t.due_cards || 0), 0);
     revEl("revDueCards").textContent = String(due);
     if (weak > 0) {
       revEl("revMastery").title = `${weak} weak topic(s) — see Progress`;
     }
-    revRenderRoadmap();
   } catch (_) { /* radar is decorative on the home row */ }
 }
 
@@ -146,125 +134,9 @@ async function revLoadTutorTopics(status) {
       option.value = topic.topic_id;
       option.textContent = label;
       select.appendChild(option);
-      const drillOption = option.cloneNode(true);
-      drillSelect.appendChild(drillOption);
+      if (topic.has_drill) drillSelect.appendChild(option.cloneNode(true));
     }
-    revRenderRoadmap();
   } catch (_) { /* selects stay with their default option */ }
-}
-
-function revRenderRoadmap() {
-  const box = revEl("revRoadmap");
-  if (!box || !rev.radar) return;
-  const radarTopics = rev.radar.topics || [];
-  const byId = new Map(radarTopics.map((topic) => [topic.topic_id, topic]));
-  const coverageById = new Map(rev.topics.map((topic) => [topic.topic_id, topic]));
-  const explored = radarTopics.filter((topic) => topic.status !== "untested").length;
-  const mastered = radarTopics.filter((topic) => topic.status === "mastered").length;
-  const total = radarTopics.length || 21;
-  const percent = total ? Math.round((explored / total) * 100) : 0;
-  const coverageLevels = rev.topics.reduce((counts, topic) => {
-    counts[topic.level] = (counts[topic.level] || 0) + 1;
-    return counts;
-  }, {});
-  const broad = coverageLevels.full || 0;
-  const partial = coverageLevels.partial || 0;
-  const thin = coverageLevels.thin || 0;
-  revEl("revCoverageSummary").textContent = `${broad} topics have broad practice · ${partial} partial · ${thin} flashcards-only`;
-  const paperCount = rev.status?.counts?.papers || 0;
-  revEl("revCoverageDetail").textContent = `The activity bank spans ${total} topics and ${paperCount} past papers. This map shows available practice formats; it does not prove every course page is represented or mean a topic is mastered.`;
-  const recommendedLevel = revPathLevels.findIndex((level) => {
-    const items = level.topics.map((id) => byId.get(id)).filter(Boolean);
-    return items.length && !items.every((topic) => ["strong", "mastered"].includes(topic.status));
-  });
-  revEl("revPathProgressLabel").textContent = `${explored} of ${total} topics explored${mastered ? ` · ${mastered} mastered` : ""}`;
-  revEl("revPathProgressPercent").textContent = `${percent}%`;
-  const progress = revEl("revPathProgress");
-  progress.setAttribute("aria-valuemax", String(total));
-  progress.setAttribute("aria-valuenow", String(explored));
-  progress.querySelector("span").style.width = `${percent}%`;
-
-  const levels = revPathLevels.map((level) => {
-    const topics = level.topics.map((id) => byId.get(id)).filter(Boolean);
-    const seen = topics.filter((topic) => topic.status !== "untested").length;
-    const strong = topics.filter((topic) => ["strong", "mastered"].includes(topic.status)).length;
-    const weak = topics.filter((topic) => topic.status === "weak").length;
-    const allStrong = topics.length > 0 && strong === topics.length;
-    const levelIndex = revPathLevels.indexOf(level);
-    const state = allStrong ? "completed" : levelIndex === recommendedLevel || seen ? "in-progress" : "up-next";
-    const nextTopic = topics.find((topic) => topic.status === "weak") || topics.find((topic) => topic.status === "untested") || topics[0];
-    const label = allStrong ? "Strong across this level" : seen ? `${seen} of ${topics.length} explored${weak ? ` · ${weak} to revisit` : ""}` : `${topics.length} topics`;
-    const topicLabel = nextTopic ? `${nextTopic.topic_id} · ${nextTopic.title || nextTopic.topic_id}` : "Explore this level";
-    const safeTitle = revEsc(level.title);
-    const syllabus = topics.map((topic) => {
-      const coverage = coverageById.get(topic.topic_id) || {};
-      const formats = [coverage.cards, coverage.drills, coverage.cases, coverage.exams, coverage.papers].filter((count) => count > 0).length;
-      const summary = revTopicActivitySummary(coverage);
-      const formatLabel = formats === 1 ? "Flashcards only" : summary;
-      return `<button class="rev-syllabus-chip" type="button" data-rev-topic="${revEsc(topic.topic_id)}" data-rev-title="${revEsc(topic.title || topic.topic_id)}" data-rev-coverage="${revEsc(coverage.level || "thin")}" data-rev-papers="${coverage.papers || 0}" data-rev-practice="${Number(coverage.drills || 0) + Number(coverage.cases || 0)}" title="${revEsc(`${topic.topic_id} · ${summary || "No activity listed"}`)}" aria-label="Study ${revEsc(topic.title || topic.topic_id)}. ${revEsc(summary || "No activity listed")}"><span>${revEsc(topic.title || topic.topic_id)}</span><small>${revEsc(formatLabel)}</small></button>`;
-    }).join("");
-    const levelCoverage = topics.reduce((sum, topic) => {
-      const item = coverageById.get(topic.topic_id) || {};
-      for (const key of ["cards", "drills", "cases", "exams", "papers"]) sum[key] += Number(item[key] || 0);
-      return sum;
-    }, { cards: 0, drills: 0, cases: 0, exams: 0, papers: 0 });
-    const levelAssets = revTopicActivitySummary(levelCoverage);
-    return `<article class="rev-level-card ${state}">
-      <div class="rev-level-top"><span class="rev-level-icon" aria-hidden="true">${level.icon}</span><span class="rev-level-number">${revEsc(level.courseLabel)}</span><span class="rev-level-state">${allStrong ? "✓ Strong" : levelIndex === recommendedLevel ? "Your next step" : seen ? "In progress" : "Ready"}</span></div>
-      <h3>${safeTitle}</h3><p>${revEsc(level.subtitle)}</p><div class="rev-level-syllabus" aria-label="Topics in this level">${syllabus}</div><p class="rev-level-coverage">${revEsc(levelAssets)}</p>
-      <div class="rev-level-bottom"><span class="rev-level-topics">${revEsc(label)}</span><button class="rev-level-open" type="button" data-rev-topic="${nextTopic ? revEsc(nextTopic.topic_id) : ""}" data-rev-title="${safeTitle}" aria-label="Study ${safeTitle}: ${revEsc(topicLabel)}">Study this level <span aria-hidden="true">→</span></button></div>
-    </article>`;
-  });
-  box.innerHTML = levels.join("");
-  box.querySelectorAll("[data-rev-topic]").forEach((button) => button.addEventListener("click", () => {
-    const topicId = button.dataset.revTopic;
-    if (topicId) revPrepareTopicLesson(topicId, button.dataset.revTitle);
-    revSelectTab("revLearn");
-    revEl("revTutorInput").focus({ preventScroll: true });
-  }));
-  revFilterRoadmap();
-}
-
-function revTopicActivitySummary(topic) {
-  if (!topic) return "";
-  const parts = [];
-  const count = (amount, singular, plural = `${singular}s`) => `${amount} ${amount === 1 ? singular : plural}`;
-  if (topic.cards) parts.push(count(topic.cards, "flashcard"));
-  if (topic.drills) parts.push(count(topic.drills, "exercise"));
-  if (topic.cases) parts.push(count(topic.cases, "case"));
-  if (topic.exams) parts.push(count(topic.exams, "exam-bank question"));
-  if (topic.papers) parts.push(count(topic.papers, "past-paper question"));
-  return parts.join(" · ");
-}
-
-function revFilterRoadmap() {
-  const query = revEl("revTopicSearch").value.trim().toLowerCase();
-  const filter = revEl("revTopicFilter").value;
-  let visible = 0;
-  document.querySelectorAll(".rev-syllabus-chip").forEach((button) => {
-    const matchesText = !query || `${button.textContent} ${button.dataset.revTitle} ${button.dataset.revTopic}`.toLowerCase().includes(query);
-    const matchesFilter = filter === "all" ||
-      (filter === "more-practice" && button.dataset.revCoverage !== "full") ||
-      (filter === "past-paper" && Number(button.dataset.revPapers) > 0) ||
-      (filter === "drills" && Number(button.dataset.revPractice) > 0);
-    button.hidden = !(matchesText && matchesFilter);
-    if (!button.hidden) visible += 1;
-  });
-  document.querySelectorAll(".rev-level-card").forEach((card) => {
-    card.hidden = !card.querySelector(".rev-syllabus-chip:not([hidden])");
-  });
-  revEl("revTopicEmpty").hidden = visible > 0;
-  revEl("revTopicResultCount").textContent = `${visible} ${visible === 1 ? "topic" : "topics"}`;
-}
-
-function revPrepareTopicLesson(topicId, title) {
-  revEl("revTutorTopic").value = topicId;
-  revEl("revDrillTopic").value = topicId;
-  const input = revEl("revTutorInput");
-  input.placeholder = `Ask a question about ${title || topicId}, or ask for a beginner-friendly explanation…`;
-  if (!input.value.trim()) {
-    input.value = `Teach me ${title || topicId} from first principles using my Venture Capital course materials. Explain it step by step in clear English, show a worked example if my course supports one, then ask me one short question to check my understanding.`;
-  }
 }
 
 /* ---------------------------------------------------------------- tutor */
@@ -281,10 +153,13 @@ function revPushChat(role, html, meta) {
 }
 
 async function revSendTutor({ check = false } = {}) {
+  if (rev.tutorBusy) return;
   const input = revEl("revTutorInput");
   const message = input.value.trim();
   if (!message) return;
   const mode = check ? "correct" : rev.tutorMode;
+  rev.tutorBusy = true;
+  revEl("revTutorForm").querySelectorAll("button").forEach((button) => { button.disabled = true; });
   const topicId = revEl("revTutorTopic").value || null;
 
   revPushChat("you", revMarkdown(message));
@@ -319,6 +194,10 @@ async function revSendTutor({ check = false } = {}) {
     revPushChat("ai", revMarkdown(`Request failed: ${error.message}`), {
       kind: "offline", label: "Error",
     });
+    if (!input.value.trim()) input.value = message;
+  } finally {
+    rev.tutorBusy = false;
+    revEl("revTutorForm").querySelectorAll("button").forEach((button) => { button.disabled = false; });
   }
 }
 
@@ -336,8 +215,9 @@ function revRenderSources(passages) {
 /* ------------------------------------------------------------ flashcards */
 async function revStartCards() {
   const mode = revEl("revCardMode").value;
+  const scope = revEl("revCardScope").value;
   try {
-    const data = await revApi(`/api/vc/review?minutes=${mode === "long" ? 30 : 10}&mode=${encodeURIComponent(mode)}`);
+    const data = await revApi(`/api/vc/review?minutes=${mode === "long" ? 30 : 10}&mode=${encodeURIComponent(mode)}&scope=${encodeURIComponent(scope)}`);
     rev.session = data.session;
     revRenderCard();
   } catch (error) {
@@ -352,18 +232,20 @@ function revRenderCard() {
   if (!session.current) {
     area.innerHTML = `
       <div class="rev-card done">
-        <h3>Session complete</h3>
-        <p>${revEsc(JSON.stringify(session.summary || {}))}</p>
-        <button class="secondary-button" type="button" onclick="window.revRestartCards()">New session</button>
+        <h3>Session complete. Good work.</h3>
+        <p>${session.summary?.seen || session.done || 0} cards reviewed · ${session.summary?.correct || 0} recalled successfully.</p>
+        <button class="secondary-button" type="button" data-rev="restart">New session</button>
       </div>`;
+    area.querySelector('[data-rev="restart"]').addEventListener("click", revStartCards);
     return;
   }
   const card = session.current;
+  const reason = ({ "nouvelle carte": "New card", "carte due": "Due for review" })[card.reason] || card.reason || "";
   area.innerHTML = `
     <div class="rev-card" data-card-id="${revEsc(card.card_id)}">
       <header>
         <span class="rev-chip static">${revEsc(card.topic_id)}</span>
-        <span class="quiet-status">${session.done + 1}/${session.total} · ${revEsc(card.reason || "")}</span>
+        <span class="quiet-status">${session.done + 1}/${session.total} · ${revEsc(reason)}</span>
       </header>
       <h3>${revEsc(card.question)}</h3>
       <div class="rev-card-answer" hidden></div>
@@ -445,7 +327,7 @@ function revRenderDrill() {
         <span class="rev-chip static">${revEsc(drill.topic_id)}</span>
         <span class="quiet-status">difficulty ${drill.difficulty || "?"} · unit ${revEsc(drill.answer_unit)}</span>
       </header>
-      <p class="rev-drill-prompt">${revEsc(drill.prompt)}</p>
+      <p class="rev-drill-prompt">${revEsc(drill.prompt)}</p>${drill.notice ? `<p class="quiet-status">${revEsc(drill.notice)}</p>` : ""}
       <form class="rev-drill-form">
         <label class="sr-only" for="revDrillAnswer">Your answer</label>
         <input id="revDrillAnswer" inputmode="decimal" placeholder="Your answer (${revEsc(drill.answer_unit)})" autocomplete="off">
@@ -473,11 +355,11 @@ function revRenderDrill() {
       ).join("");
       box.innerHTML = `
         <p class="rev-verdict ${ok ? "good" : "bad"}">
-          <span class="rev-badge verified">Verified</span>
+          <span class="rev-badge verified">Calculated feedback</span>
           ${ok ? "Correct." : `Not correct — ${revEsc(result.message || "")}`}
           ${result.diagnostic ? ` <em>(${revEsc(result.diagnostic)})</em>` : ""}
         </p>
-        ${ok || !steps ? "" : `<ol class="rev-steps">${steps}</ol>`}
+        ${steps ? `<details class="vc-worked-solution"><summary>See the calculation step by step</summary><ol class="rev-steps">${steps}</ol></details>` : ""}
         ${ok ? "" : `<p class="quiet-status">Try the same exercise again with different numbers: press “New exercise”.</p>`}`;
       revLoadRadarSummary();
     } catch (error) {
@@ -525,9 +407,9 @@ function revOpenCase(item, article) {
     `<span class="rev-case-fact"><strong>${revEsc(fact.label)}</strong> ${revEsc(fact.value)} ${revEsc(fact.unit || "")}</span>`
   ).join("");
   const questions = (item.questions || []).map((question, index) => `
-    <label class="rev-case-question" for="revCaseAnswer${index}">
+    <label class="rev-case-question" for="revCaseAnswer${revEsc(item.case_id)}_${index}">
       <span><b>${String(index + 1).padStart(2, "0")}</b>${revEsc(question.prompt)}</span>
-      <textarea id="revCaseAnswer${index}" data-case-question="${revEsc(question.question_id)}" rows="3" maxlength="4000" placeholder="Show your calculation and explain your reasoning…"></textarea>
+      <textarea id="revCaseAnswer${revEsc(item.case_id)}_${index}" data-case-question="${revEsc(question.question_id)}" rows="3" maxlength="4000" placeholder="Show your calculation and explain your reasoning…"></textarea>
     </label>`).join("");
   article.insertAdjacentHTML("beforeend", `
     <div class="rev-case-work">
@@ -604,86 +486,71 @@ async function revLoadPapers() {
 }
 
 async function revOpenPaper(year, solutions, card) {
-  const detail = card.querySelector(".rev-paper-detail");
-  if (detail) { detail.remove(); return; }
+  const mode = solutions ? "solutions" : "subject";
+  const previous = card.querySelector(".rev-paper-detail");
+  if (previous) { const same = previous.dataset.mode === mode; previous.remove(); if (same) return; }
   try {
-    const data = await revApi(`/api/vc/papers/${year}${solutions ? "?solutions=true" : ""}`);
-    const paper = data.paper;
-    const html = paper.questions.map((q) => {
-      let answerLine = "";
-      if (solutions && q.answer) {
-        // Honesty rule: the official files carry no marked MCQ answers, so
-        // MCQ letters are a derived key; worked/numeric solutions are official.
-        const isDerivedKey = q.kind === "mcq";
-        answerLine = `<p class="rev-paper-answer"><span class="rev-badge ${isDerivedKey ? "ai" : "verified"}">${isDerivedKey ? "Derived key" : "Official"}</span> ${revEsc(q.answer)}${q.solution ? ` — ${revEsc(q.solution)}` : ""}</p>`;
-      }
-      const choices = (q.choices || []).map((c) =>
-        `<li>${revEsc(c.label)}. ${revEsc(c.text)}</li>`).join("");
-      return `<li><strong>${revEsc(q.number)}</strong> (${q.points} pts) ${revEsc(q.prompt)}
-        ${choices ? `<ol type="A" class="rev-choices">${choices}</ol>` : ""}${answerLine}</li>`;
+    const { paper } = await revApi(`/api/vc/papers/${year}${solutions ? "?solutions=true" : ""}`);
+    const questionHtml = paper.questions.map((q) => {
+      const choices = (q.choices || []).map((c) => `<li>${revEsc(c.label)}. ${revEsc(c.text)}</li>`).join("");
+      const answer = solutions && q.answer ? `<p class="rev-paper-answer"><b>${q.kind === "mcq" ? "Derived MCQ key" : "Worked answer"}:</b> ${revEsc(q.answer)} ${revEsc(q.solution || "")}</p>` : "";
+      const parts = (q.parts || []).map((part) => `<li>${revEsc(part.prompt)} <small>(${part.points} points)</small>${solutions ? `<p class="rev-paper-answer">${revEsc(part.answer || "")} ${revEsc(part.solution || "")}</p>` : ""}</li>`).join("");
+      return `<li class="vc-paper-view-question"><strong>Question ${q.number} · ${q.points} points</strong><p>${revEsc(q.prompt)}</p>${choices ? `<ol class="rev-choices">${choices}</ol>` : ""}${answer}${parts ? `<ol>${parts}</ol>` : ""}</li>`;
     }).join("");
-    const notice = solutions && paper.notice
-      ? `<p class="rev-paper-notice">${revEsc(paper.notice)}</p>`
-      : "";
-    card.insertAdjacentHTML("beforeend",
-      `<div class="rev-paper-detail"><span class="rev-badge ${solutions ? "verified" : "ai"}">${solutions ? "Solutions &amp; answer key" : "Official exam"}</span>${notice}<ol>${html}</ol></div>`);
-  } catch (error) {
-    card.insertAdjacentHTML("beforeend", `<p class="quiet-status">${revEsc(error.message)}</p>`);
-  }
+    card.insertAdjacentHTML("beforeend", `<div class="rev-paper-detail" data-mode="${mode}">${solutions && paper.notice ? `<p class="rev-paper-notice">${revEsc(paper.notice)}</p>` : ""}<ol class="vc-paper-view">${questionHtml}</ol></div>`);
+  } catch (error) { card.insertAdjacentHTML("beforeend", `<p role="status" class="quiet-status">${revEsc(error.message)}</p>`); }
 }
 
 async function revPracticePaper(year, card) {
-  const detail = card.querySelector(".rev-paper-detail");
-  if (detail) { detail.remove(); return; }
+  const previous = card.querySelector(".rev-paper-detail");
+  if (previous) { const same = previous.dataset.mode === "practice"; previous.remove(); if (same) return; }
   try {
-    const data = await revApi(`/api/vc/papers/${year}?solutions=true`);
-    const paper = data.paper;
-    const fields = paper.questions
-      .filter((q) => q.kind === "mcq" || q.kind === "numeric")
-      .map((q) => `
-        <label class="rev-paper-field">
-          <span>${revEsc(q.number)} — ${revEsc(q.prompt.slice(0, 140))}${q.prompt.length > 140 ? "…" : ""} (${q.points} pts)</span>
-          ${q.kind === "mcq"
-            ? `<input type="text" data-qid="${revEsc(q.id)}" maxlength="8" placeholder="letter">`
-            : `<input type="text" data-qid="${revEsc(q.id)}" inputmode="decimal" placeholder="number${q.unit ? " (" + revEsc(q.unit) + ")" : ""}">`}
-        </label>`).join("");
-    card.insertAdjacentHTML("beforeend", `
-      <div class="rev-paper-detail">
-        <p class="quiet-status">Answer the auto-graded items; open questions are self-assessed against the worked solutions. MCQ letters come from a derived answer key (the official file marks none), so use MCQ results as practice.</p>
-        <form class="rev-paper-form">${fields}
-          <button class="primary-button" type="submit">Grade my copy</button>
-        </form>
-        <div class="rev-paper-grade" hidden></div>
-      </div>`);
-    card.querySelector(".rev-paper-form").addEventListener("submit", async (event) => {
-      event.preventDefault();
-      const answers = {};
-      card.querySelectorAll("[data-qid]").forEach((input) => {
-        if (input.value.trim()) answers[input.dataset.qid] = input.value.trim();
-      });
-      try {
-        const result = await revApi(`/api/vc/papers/${year}/grade`, {
-          method: "POST",
-          body: JSON.stringify({ year: Number(year), answers }),
-        });
-        const body = result.result;
-        const box = card.querySelector(".rev-paper-grade");
-        box.hidden = false;
-        box.innerHTML = `
-          <p class="rev-verdict ${body.auto_percent >= 60 ? "good" : "bad"}">
-            <span class="rev-badge ai">Pack answer key</span>
-            Auto-graded: ${body.auto_points}/${body.auto_max} (${body.auto_percent}%)
-          </p>
-          <p class="quiet-status">${revEsc(body.notice || "")}</p>
-          ${paper.notice ? `<p class="rev-paper-notice">${revEsc(paper.notice)}</p>` : ""}`;
-      } catch (error) {
-        card.querySelector(".rev-paper-grade").hidden = false;
-        card.querySelector(".rev-paper-grade").innerHTML = `<p class="quiet-status">${revEsc(error.message)}</p>`;
+    const { paper } = await revApi(`/api/vc/papers/${year}`);
+    const answerField = (id, prompt, kind, points, unit = "") => `<label class="rev-paper-field"><span>${revEsc(prompt)} <small>(${points} points${unit ? ` · ${revEsc(unit)}` : ""})</small></span>${kind === "numeric" ? `<input data-qid="${revEsc(id)}" inputmode="decimal" placeholder="Your numerical answer" autocomplete="off">` : `<textarea data-qid="${revEsc(id)}" rows="4" maxlength="8000" placeholder="Explain your method and reasoning…"></textarea>`}</label>`;
+    const fields = paper.questions.map((q) => {
+      let content = "";
+      if (q.kind === "mcq") {
+        content = `<div class="vc-mcq-options">${q.choices.map((choice) => `<label><input type="radio" name="${revEsc(q.id)}" data-qid="${revEsc(q.id)}" value="${revEsc(choice.label)}"><span><b>${revEsc(choice.label)}</b> ${revEsc(choice.text)}</span></label>`).join("")}</div>`;
+      } else if (q.parts?.length) {
+        content = q.parts.map((part) => answerField(part.id, part.prompt, part.kind, part.points, part.unit)).join("");
+      } else {
+        content = answerField(q.id, q.kind === "numeric" ? "Your calculation" : "Your reasoning", q.kind, q.points, q.unit);
       }
+      return `<fieldset class="vc-paper-question"><legend>Question ${q.number} · Section ${revEsc(q.section)} · ${q.points} points</legend><p>${revEsc(q.prompt)}</p>${content}</fieldset>`;
+    }).join("");
+    card.insertAdjacentHTML("beforeend", `<div class="rev-paper-detail" data-mode="practice"><p class="quiet-status">Your draft stays in this browser. Numerical parts are checked automatically; written answers are reviewed against the worked solution. MCQ letters use the derived study key.</p><form class="rev-paper-form">${fields}<button class="vc-primary" type="submit">Check my paper</button></form><div class="rev-paper-grade" hidden></div></div>`);
+    const detail = card.querySelector(".rev-paper-detail");
+    const draftKey = `nage-vc-paper-${year}-draft`;
+    try {
+      const draft = JSON.parse(localStorage.getItem(draftKey) || "{}");
+      detail.querySelectorAll("[data-qid]").forEach((field) => { if (field.type === "radio") field.checked = draft[field.dataset.qid] === field.value; else field.value = draft[field.dataset.qid] || ""; });
+    } catch (_) { /* browser storage is optional */ }
+    const readAnswers = () => {
+      const answers = {};
+      detail.querySelectorAll("[data-qid]").forEach((field) => {
+        if (field.type === "radio" && !field.checked) return;
+        if (field.value.trim()) answers[field.dataset.qid] = field.value.trim();
+      });
+      return answers;
+    };
+    detail.addEventListener("input", () => { try { localStorage.setItem(draftKey, JSON.stringify(readAnswers())); } catch (_) { /* keep working */ } });
+    detail.querySelector("form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const submit = detail.querySelector('button[type="submit"]');
+      submit.disabled = true;
+      try {
+        const { result } = await revApi(`/api/vc/papers/${year}/grade`, { method: "POST", body: JSON.stringify({ year: Number(year), answers: readAnswers() }) });
+        const feedback = (result.items || []).map((item) => `<details class="vc-paper-feedback ${revEsc(item.status)}"><summary>Q${item.number}${item.part_id ? ` · ${revEsc(item.part_id)}` : ""} — ${item.status === "self_assess" ? "Compare your written answer" : `${item.earned}/${item.max} points`}</summary><p>${revEsc(item.part_prompt || item.prompt)}</p><p><strong>Worked answer:</strong> ${revEsc(item.model_answer ?? item.expected ?? "See the solution below.")}</p><p>${revEsc(item.solution || item.message || "")}</p></details>`).join("");
+        const box = detail.querySelector(".rev-paper-grade");
+        box.hidden = false;
+        box.innerHTML = `<h3>Automatically checked: ${result.auto_points}/${result.auto_max} points${result.auto_percent == null ? "" : ` · ${result.auto_percent}%`}</h3><p>${result.self_assessment_points} points require written-answer self-review. This percentage is not a final full-paper grade.</p><p class="quiet-status">${revEsc(result.notice || "")}</p>${feedback}`;
+        box.scrollIntoView({ behavior: "smooth", block: "start" });
+        revLoadRadarSummary();
+      } catch (error) {
+        const box = detail.querySelector(".rev-paper-grade"); box.hidden = false; box.textContent = error.message;
+      } finally { submit.disabled = false; }
     });
-  } catch (error) {
-    card.insertAdjacentHTML("beforeend", `<p class="quiet-status">${revEsc(error.message)}</p>`);
-  }
+  } catch (error) { card.insertAdjacentHTML("beforeend", `<p role="status" class="quiet-status">${revEsc(error.message)}</p>`); }
 }
 
 /* ----------------------------------------------------------------- exam */
@@ -725,7 +592,7 @@ function revRenderExam() {
   const exam = rev.exam;
   if (!exam) return;
   area.innerHTML = `
-    <p class="quiet-status">${exam.total_questions} questions · ${exam.total_points} points · answers are saved when you submit.</p>
+    <p class="quiet-status">${exam.total_questions} questions · ${exam.total_points} points · draft answers stay in this browser; results are saved when you submit.</p>
     <ol class="rev-exam-list">
       ${exam.questions.map((q, index) => `
         <li class="rev-exam-q" data-qid="${revEsc(q.question_id)}">
@@ -735,6 +602,16 @@ function revRenderExam() {
           <input type="text" autocomplete="off" placeholder="Your answer" aria-label="Answer for question ${index + 1}">
         </li>`).join("")}
     </ol>`;
+  const key = `nage-vc-exam-${exam.exam_id}-draft`;
+  try {
+    const saved = JSON.parse(localStorage.getItem(key) || "{}");
+    area.querySelectorAll(".rev-exam-q").forEach((item) => { item.querySelector("input").value = saved[item.dataset.qid] || exam.answers?.[item.dataset.qid] || ""; });
+  } catch (_) { /* storage preference does not block the exam */ }
+  area.oninput = () => {
+    const draft = {};
+    area.querySelectorAll(".rev-exam-q").forEach((item) => { draft[item.dataset.qid] = item.querySelector("input").value; });
+    try { localStorage.setItem(key, JSON.stringify(draft)); } catch (_) { /* keep working */ }
+  };
 }
 
 function revStartExamTimer() {
@@ -815,7 +692,7 @@ async function revLoadRadar() {
   const box = revEl("revRadar");
   try {
     const radar = await revApi("/api/vc/radar");
-    const statusLabel = { untested: "Not tested", weak: "Weak", learning: "Learning", strong: "Strong", mastered: "Mastered" };
+    const statusLabel = { untested: "Not tested", fragile: "Revisit first", developing: "Developing", solid: "Strong results" };
     box.innerHTML = radar.topics.map((topic) => {
       const accuracy = topic.accuracy == null ? "—" : `${Math.round(topic.accuracy * 100)}%`;
       return `
@@ -888,43 +765,17 @@ async function revToggleFormulas() {
 
 /* ------------------------------------------------------- recommended next */
 async function revStartRecommended() {
-  try {
-    const data = await revApi("/api/vc/next?minutes=30");
-    const activity = data.activity;
-    if (!activity) {
-      const candidate = (rev.radar?.topics || []).find((topic) => topic.status === "weak") ||
-        (rev.radar?.topics || []).find((topic) => topic.status === "untested");
-      if (candidate) {
-        const level = revPathLevels.find((item) => item.topics.includes(candidate.topic_id));
-        revPrepareTopicLesson(candidate.topic_id, candidate.title || level?.title || candidate.topic_id);
-        revSelectTab("revLearn");
-        revEl("revTutorInput").focus({ preventScroll: true });
-      } else {
-        revSelectTab("revProgress");
-      }
-      return;
-    }
-    const kind = String(activity.kind || "");
-    const topicId = activity.topic_id || activity.topic || "";
-    let activityTopicTitle = topicId;
-    if (topicId && revEl("revTutorTopic").querySelector(`option[value="${CSS.escape(topicId)}"]`)) {
-      activityTopicTitle = rev.radar?.topics?.find((topic) => topic.topic_id === topicId)?.title || topicId;
-      revPrepareTopicLesson(topicId, activityTopicTitle);
-    }
-    if (kind.includes("drill")) { revSelectTab("revPractice"); revDrawDrill(); return; }
-    if (kind.includes("card") || kind.includes("review")) { revSelectTab("revMemorize"); revStartCards(); return; }
-    if (kind.includes("exam") || kind.includes("paper")) { revSelectTab("revEvaluate"); return; }
-    revSelectTab("revLearn");
-    if (topicId) revEl("revTutorInput").focus({ preventScroll: true });
-  } catch (error) {
-    window.alert(`Could not load a recommendation: ${error.message}`);
+  if (typeof window.vcStudioContinue === "function") {
+    window.vcStudioContinue();
+  } else {
+    revSelectTab("revCourse");
   }
 }
 
 /* ------------------------------------------------------------- bootstrap */
 function revBind() {
   document.querySelectorAll(".rev-tab").forEach((button) =>
-    button.addEventListener("click", () => revSelectTab(button.dataset.revTab)));
+    button.addEventListener("click", () => { revSelectTab(button.dataset.revTab); document.querySelector(".vc-main-tabs")?.scrollIntoView({ block: "start", behavior: "smooth" }); }));
 
   document.querySelectorAll("[data-tutor-mode]").forEach((button) =>
     button.addEventListener("click", () => {
@@ -943,17 +794,17 @@ function revBind() {
   revEl("revRefreshRadar").addEventListener("click", revLoadRadar);
   revEl("revLoadFormulas").addEventListener("click", revToggleFormulas);
   revEl("revStartNow").addEventListener("click", revStartRecommended);
-  revEl("revTopicSearch").addEventListener("input", revFilterRoadmap);
-  revEl("revTopicFilter").addEventListener("change", revFilterRoadmap);
+  document.querySelectorAll("[data-rev-go]").forEach((button) => button.addEventListener("click", () => revSelectTab(button.dataset.revGo)));
   revLoadCases();
   revLoadPapers();
 }
 
 window.initRevisions = function initRevisions() {
-  if (rev.initialized) { revLoadStatus(); return; }
+  if (rev.initialized) { revLoadStatus(); if (typeof window.initVcStudio === "function") window.initVcStudio(); return; }
   rev.initialized = true;
   revBind();
   revLoadStatus();
+  if (typeof window.initVcStudio === "function") window.initVcStudio();
 };
 
 /* Deep link: #v5/revisionsView from the browser address bar. */

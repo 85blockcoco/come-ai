@@ -62,7 +62,7 @@ function activateView(id, updateHash = true) {
   document.querySelectorAll(".nav-item[data-view-target]").forEach((button) => { const active = button.dataset.viewTarget === id; button.classList.toggle("active", active); if (active) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current"); });
   if (id === "memoryView") { refreshMemory(); refreshStorage(); }
   if (id === "revisionsView" && typeof window.initRevisions === "function") { window.initRevisions(); }
-  document.title = `${viewLabels[id] || id} — Côme AI V5`;
+  document.title = `${viewLabels[id] || id} — NAGe`;
   if (updateHash && window.location.hash !== `#v5/${id}`) {
     internalHashChange = true;
     window.location.hash = `v5/${id}`;
