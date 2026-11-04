@@ -2,6 +2,41 @@
   "schema_version": 1,
   "sources": [
     {
+      "file": "27_EB4_LI_CLA_S1_HCIB_EL1_7019.pdf",
+      "pages": 2,
+      "text_extraction": "available",
+      "visual_review": "not_needed_for_content_mapping",
+      "status": "exam_template_reference",
+      "notes": "Academic cover/template; not a separate question bank."
+    },
+    {
+      "file": "Final exam 2023.pdf",
+      "pages": 8,
+      "text_extraction": "available",
+      "visual_review": "covered_by_paper_pack",
+      "status": "duplicate_exam_source",
+      "duplicate_of": "edhec-pevc-2023",
+      "notes": "Prompt source for the 2023 pack; no additional paper is created."
+    },
+    {
+      "file": "PEVC final exam 2023 (1).pdf",
+      "pages": 8,
+      "text_extraction": "available",
+      "visual_review": "covered_by_paper_pack",
+      "status": "duplicate_exam_source",
+      "duplicate_of": "edhec-pevc-2023",
+      "notes": "Second 2023 scan variant; no additional paper is created."
+    },
+    {
+      "file": "PEVC final exam 2024 solutions.pdf",
+      "pages": 7,
+      "text_extraction": "available",
+      "visual_review": "covered_by_paper_pack",
+      "status": "solution_source",
+      "duplicate_of": "edhec-pevc-2024",
+      "notes": "Solution source represented in the 2024 pack and its official-solution notice."
+    },
+    {
       "file": "7017_69368.pdf",
       "pages": 14,
       "text_extraction": "empty",
@@ -11,9 +46,17 @@
       "notes": "Seven printed exam pages match paper_2024.json; seven reverse sides are blank. No student identifier is retained."
     },
     {
+      "file": "Sessions 5-6 Venture Capital.pdf",
+      "pages": 64,
+      "text_extraction": "available",
+      "visual_review": "covered_by_curriculum_and_cases",
+      "status": "supplementary_lecture_deck",
+      "notes": "Topics overlap the five mapped lecture decks; workbook-derived cases cover its valuation, term-sheet and convertible-note methods."
+    },
+    {
       "file": "Team project 2027.pdf",
       "pages": 2,
-      "text_extraction": "empty",
+      "text_extraction": "available",
       "visual_review": "complete",
       "status": "rubric_integrated",
       "case_id": "WB-TEAM-PITCHBOOK-01",
