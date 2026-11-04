@@ -215,6 +215,58 @@ def coverage_report(content) -> list[dict[str, Any]]:
             }
         )
     return report
+
+
+def readiness_report(content, radar: Sequence[MasteryRecord]) -> dict[str, Any]:
+    """Translate activity evidence into an exam-readiness snapshot.
+
+    This is intentionally conservative: an untested topic contributes zero and
+    a topic below 80% remains a priority even when the overall average looks
+    good.  The result measures evidence of preparation, not a promised grade.
+    """
+    by_topic = {record.topic_id: record for record in radar}
+    weighted_total = 0.0
+    weight_total = 0.0
+    priorities: list[dict[str, Any]] = []
+    for topic in content.topics:
+        record = by_topic.get(topic.id)
+        accuracy = float(record.accuracy) if record and record.accuracy is not None else 0.0
+        weighted_total += accuracy * topic.exam_weight
+        weight_total += topic.exam_weight
+        if not record or record.status != "solid":
+            priorities.append(
+                {
+                    "topic_id": topic.id,
+                    "title": topic.title_en,
+                    "status": record.status if record else "untested",
+                    "accuracy": record.accuracy if record else None,
+                    "attempts": record.attempts if record else 0,
+                    "exam_weight": topic.exam_weight,
+                    "top_errors": list(record.top_errors) if record else [],
+                }
+            )
+    priorities.sort(
+        key=lambda item: (
+            {"fragile": 0, "untested": 1, "developing": 2}.get(item["status"], 3),
+            -float(item["exam_weight"]),
+            float(item["accuracy"] or 0),
+        )
+    )
+    coverage = coverage_report(content)
+    paper_units = sum(item.get("papers", 0) for item in coverage)
+    case_count = len(content.cases)
+    score = round(100 * weighted_total / weight_total, 1) if weight_total else 0.0
+    return {
+        "score": score,
+        "threshold": 80.0,
+        "ready": score >= 80.0 and not any(item["status"] != "solid" for item in priorities),
+        "notice": "Evidence-based readiness indicator; it is not a grade prediction.",
+        "official_paper_questions": paper_units,
+        "graded_cases": case_count,
+        "priority_topics": priorities[:8],
+        "solid_topics": sum(1 for topic in content.topics if by_topic.get(topic.id) and by_topic[topic.id].status == "solid"),
+        "total_topics": len(content.topics),
+    }
     """Return the topics that can actually run each activity kind."""
     return {
         "review": {

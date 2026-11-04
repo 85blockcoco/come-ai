@@ -26,7 +26,7 @@ from .drills import drill_payload, grade_drill, random_drill
 from .error_dashboard import error_dashboard
 from .exams import build_exam, exam_payload, grade_exam, record_exam_result
 from .errors import ContentError, InputError, VcError
-from .mastery import build_study_plan, coverage_report, mastery_radar, radar_payload
+from .mastery import build_study_plan, coverage_report, mastery_radar, radar_payload, readiness_report
 from .models import DrillAttempt
 from .pastpapers import find_paper, grade_paper, load_papers, paper_payload
 from .scheduler import answer_session, session_payload, start_session
@@ -282,6 +282,13 @@ def create_vc_router(
         if not 1 <= minutes <= 600:
             raise HTTPException(status_code=400, detail="minutes must be 1..600")
         return {"plan": _build_plan(minutes)}
+
+    @router.get("/api/vc/readiness")
+    def vc_readiness() -> dict[str, Any]:
+        store = get_store()
+        content = get_content()
+        records = _radar(content, store, today_iso())
+        return {"readiness": readiness_report(content, records), "source": "deterministic"}
 
     @router.get("/api/vc/next")
     def vc_next(minutes: int = 90) -> dict[str, Any]:
