@@ -317,15 +317,28 @@ def create_vc_router(
                 flat_errors.append({"category": category, "topic_id": topic_id, "count": count})
         flat_errors.sort(key=lambda item: -int(item["count"]))
 
-        result = get_tutor().tutor_chat(
-            payload.message,
-            mode=payload.mode,
-            topic_id=payload.topic_id,
-            mastery=mastery,
-            errors=flat_errors,
-            student_answer=payload.student_answer,
-            history=payload.history,
-        )
+        try:
+            result = get_tutor().tutor_chat(
+                payload.message,
+                mode=payload.mode,
+                topic_id=payload.topic_id,
+                mastery=mastery,
+                errors=flat_errors,
+                student_answer=payload.student_answer,
+                history=payload.history,
+            )
+        except Exception:
+            # A transient provider or local retrieval failure must not turn a
+            # tutoring turn into an HTTP 500. Preserve the learning flow and
+            # invite a retry without exposing provider details or secrets.
+            result = {
+                "text": "The tutor is temporarily unavailable. Your answer was not lost. Try again in a moment; the course, drills and mock exams remain available offline.",
+                "source": "offline",
+                "mode": payload.mode,
+                "passages": [],
+                "model": None,
+                "error": "temporary tutor failure",
+            }
         return {
             **result,
             "mastery": mastery,

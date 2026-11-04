@@ -113,6 +113,14 @@ class FakeTutor:
         }
 
 
+class BrokenTutor:
+    def provider_status(self) -> dict:
+        return {"mode": "gemini", "cloud_enabled": True, "gemini_key_count": 1}
+
+    def tutor_chat(self, **_kwargs):
+        raise RuntimeError("synthetic provider interruption")
+
+
 def test_explicit_workspace_keeps_tutor_config_local(tmp_path: Path, monkeypatch) -> None:
     """A test workspace must never create config in the user's VC home."""
     from vc_tutor import VCTutor
@@ -199,6 +207,16 @@ def test_status_reports_content_counts_and_offline_tutor(tmp_path: Path) -> None
 
         assert status["counts"]["drills"] == len(load_content().drills)
         assert status["tutor"]["mode"] == "offline"
+
+
+def test_tutor_provider_failure_keeps_the_learning_flow_available(tmp_path: Path) -> None:
+    with client(tmp_path, BrokenTutor()) as http:
+        response = http.post("/api/vc/tutor", json={"message": "synthetic answer", "topic_id": "VC01", "mode": "correct"})
+        assert response.status_code == 200
+        body = response.json()
+        assert body["source"] == "offline"
+        assert "temporarily unavailable" in body["text"]
+        assert "synthetic provider" not in response.text
 
 
 def test_status_never_leaks_api_key(tmp_path: Path) -> None:
