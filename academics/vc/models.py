@@ -210,6 +210,8 @@ class CaseStudy:
     model_answer: str
     allowed_numbers: tuple[float, ...]
     difficulty: int = 1
+    source_type: str = "course_grounded"
+    source_ref: str = ""
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "CaseStudy":

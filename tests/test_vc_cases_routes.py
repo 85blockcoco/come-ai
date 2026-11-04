@@ -19,9 +19,12 @@ def test_case_list_and_detail_keep_solutions_hidden(tmp_path) -> None:
     response = http.get("/api/vc/cases")
     assert response.status_code == 200
     cases = response.json()["cases"]
-    assert len(cases) == 4
+    assert len(cases) == 15
     assert all("model_answer" not in case for case in cases)
     assert all(case["questions"] for case in cases)
+    workbook_case = next(case for case in cases if case["case_id"] == "WB-MERIDIAN-01")
+    assert workbook_case["source_type"] == "workbook_derived"
+    assert "Meridian Systems" in workbook_case["source_ref"]
 
 
 def test_case_grade_returns_criterion_feedback_and_persists_attempt(tmp_path) -> None:

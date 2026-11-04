@@ -1,0 +1,306 @@
+{
+  "schema_version": 1,
+  "pack_id": "cases-workbooks",
+  "topic_id": "VC04",
+  "language": "en",
+  "source_type": "workbook_derived",
+  "license": "User-provided EDHEC course workbook; pedagogical adaptation",
+  "items": [
+    {
+      "kind": "case",
+      "id": "WB-PHD-01",
+      "topic_id": "VC03",
+      "title": "PhD student: survival-weighted drug economics",
+      "context": "Workbook-derived exercise. A drug project has development costs of 2.8, 0.2, 5, 10, 20 and 40 million across successive stages. If approved, it produces 50 million of annual revenue and 10 million of annual cost for five years. The cumulative survival rates after the stages are 50%, 40%, 20%, 10% and 5%.",
+      "facts": [
+        {"id": "revenue", "label": "Certain revenue", "value": 250, "unit": "$m"},
+        {"id": "costs", "label": "Certain total costs", "value": 78, "unit": "$m"},
+        {"id": "expected_revenue", "label": "Survival-weighted revenue", "value": 5, "unit": "$m"},
+        {"id": "expected_costs", "label": "Survival-weighted costs", "value": 9.9, "unit": "$m"}
+      ],
+      "questions": [
+        {"id": "q1", "prompt": "Compute the certain total profit and show the total cost base.", "criteria": [
+          {"id": "q1-c1", "label": "Certain profit is 122", "weight": 0.25, "required_keywords": ["profit"], "expected_numbers": [{"value": 122, "tolerance": 0.01}], "model_answer": "250 - 78 = 122 million."},
+          {"id": "q1-c2", "label": "Total costs are 78", "weight": 0.25, "required_keywords": ["cost"], "expected_numbers": [{"value": 78, "tolerance": 0.01}], "model_answer": "Development costs 78 million."}
+        ]},
+        {"id": "q2", "prompt": "Compute the survival-weighted expected profit and explain why it differs from the certain case.", "criteria": [
+          {"id": "q2-c1", "label": "Expected profit is -4.9", "weight": 0.25, "required_keywords": ["expected"], "expected_numbers": [{"value": -4.9, "tolerance": 0.01}], "model_answer": "Expected profit = 5 - 9.9 = -4.9 million."},
+          {"id": "q2-c2", "label": "Expected revenue is 5", "weight": 0.25, "required_keywords": ["revenue"], "expected_numbers": [{"value": 5, "tolerance": 0.01}], "model_answer": "250 million of market revenue times the 2% final survival rate equals 5 million."}
+        ]}
+      ],
+      "model_answer": "The deterministic profit is 122 million, but survival-weighting gives expected profit of -4.9 million.",
+      "allowed_numbers": [2.8, 0.2, 5, 10, 20, 40, 50, 250, 78, 9.9, 122, -4.9],
+      "difficulty": 3,
+      "source_ref": "Class assignments - solutions.xlsx / 3. PhD student"
+    },
+    {
+      "kind": "case",
+      "id": "WB-TRIPLEXGO-01",
+      "topic_id": "VC03",
+      "title": "TriplexGo: staged term-sheet choice",
+      "context": "Workbook-derived exercise. TriplexGo has 50 million founder shares. Deal 1 invests 30 million at a 130 million post-money valuation. Deal 2 invests 50 million at a 110 million pre-money valuation. Deal 3 invests 15 million now and another 15 million next year if milestones are met, at the same price per share.",
+      "facts": [
+        {"id": "founders", "label": "Founder shares", "value": 50, "unit": "m shares"},
+        {"id": "deal1_price", "label": "Deal 1 price", "value": 2, "unit": "$"},
+        {"id": "deal1_new", "label": "Deal 1 new shares", "value": 15, "unit": "m shares"}
+      ],
+      "questions": [
+        {"id": "q1", "prompt": "For Deal 1, compute the price per share and new shares issued.", "criteria": [
+          {"id": "q1-c1", "label": "Price is 2", "weight": 0.25, "required_keywords": ["price"], "expected_numbers": [{"value": 2, "tolerance": 0.01}], "model_answer": "The 100 million pre-money value divided by 50 million shares gives $2 per share."},
+          {"id": "q1-c2", "label": "New shares are 15", "weight": 0.25, "required_keywords": ["shares"], "expected_numbers": [{"value": 15, "tolerance": 0.01}], "model_answer": "30 / 2 = 15 million new shares."}
+        ]},
+        {"id": "q2", "prompt": "Which deal would be preferred by a risk-averse founder and by a risk-tolerant founder? Explain the milestone trade-off.", "criteria": [
+          {"id": "q2-c1", "label": "Risk-averse chooses Deal 2", "weight": 0.25, "required_keywords": ["risk-averse"], "expected_numbers": [{"value": 2, "tolerance": 0.01}], "model_answer": "A risk-averse founder chooses Deal 2 because the full 50 million is committed upfront."},
+          {"id": "q2-c2", "label": "Risk-tolerant chooses Deal 3", "weight": 0.25, "required_keywords": ["risk-tolerant"], "expected_numbers": [{"value": 3, "tolerance": 0.01}], "model_answer": "A risk-tolerant founder may choose Deal 3 to preserve staged financing and upside if milestones are met."}
+        ]}
+      ],
+      "model_answer": "Deal 1 price is $2 and creates 15 million shares. Deal 2 suits risk-averse founders; Deal 3 suits risk-tolerant founders.",
+      "allowed_numbers": [2, 3, 15, 30, 50, 110, 130],
+      "difficulty": 2,
+      "source_ref": "Class assignments - solutions.xlsx / 3 TriplexGo"
+    },
+    {
+      "kind": "case",
+      "id": "WB-ALIBOY-01",
+      "topic_id": "VC05",
+      "title": "AliBoy: cap table and staged financing",
+      "context": "Workbook-derived exercise. Alice and Boyan each initially own 2,000 thousand shares. An angel owns 1,000 thousand shares after the seed round. Dollup offers a single round with a special option package for Alice; Elusive stages financing across good and bad scenarios.",
+      "facts": [
+        {"id": "alice_dollup", "label": "Alice ownership under Dollup", "value": 51.25, "unit": "%"},
+        {"id": "boyan_dollup", "label": "Boyan ownership under Dollup", "value": 7.5, "unit": "%"},
+        {"id": "vc_dollup", "label": "VC ownership under Dollup", "value": 37.5, "unit": "%"}
+      ],
+      "questions": [
+        {"id": "q1", "prompt": "State Alice's and Boyan's ownership under the Dollup offer and identify who receives the option benefit.", "criteria": [
+          {"id": "q1-c1", "label": "Alice is 51.25%", "weight": 0.25, "required_keywords": ["alice"], "expected_numbers": [{"value": 51.25, "tolerance": 0.01}], "model_answer": "Alice holds 51.25% under Dollup because the special option package benefits her."},
+          {"id": "q1-c2", "label": "Boyan is 7.5%", "weight": 0.25, "required_keywords": ["boyan"], "expected_numbers": [{"value": 7.5, "tolerance": 0.01}], "model_answer": "Boyan holds 7.5% under Dollup."}
+        ]},
+        {"id": "q2", "prompt": "Explain the trade-off between a single round and staged financing for the founders.", "criteria": [
+          {"id": "q2-c1", "label": "Staged financing creates milestone control and dilution risk", "weight": 0.25, "required_keywords": ["staged"], "any_keywords": ["milestone", "dilution"], "model_answer": "Staged financing gives the investor milestone control but exposes founders to later dilution and financing risk."},
+          {"id": "q2-c2", "label": "Option package changes founder-specific incentives", "weight": 0.25, "required_keywords": ["option"], "any_keywords": ["alice", "incentive"], "model_answer": "The option package changes the relative incentives and ownership of Alice versus Boyan."}
+        ]}
+      ],
+      "model_answer": "Dollup gives Alice 51.25% and Boyan 7.5%; the case tests cap-table mechanics, staged financing and founder-specific options.",
+      "allowed_numbers": [51.25, 7.5, 37.5, 50, 2000, 1000],
+      "difficulty": 3,
+      "source_ref": "Class assignments - solutions.xlsx / 3. Aliboy"
+    },
+    {
+      "kind": "case",
+      "id": "WB-NEXTBIGTHING-01",
+      "topic_id": "VC04",
+      "title": "NextBigThing: venture-capital method",
+      "context": "Workbook-derived exercise. A biotech startup expects 120 million of sales in the first year after approval, five years from today. Comparable forward sales multiples have a mean of 18.77 and a median of 10. The hurdle rate is 50%.",
+      "facts": [
+        {"id": "sales", "label": "Expected sales", "value": 120, "unit": "$m"},
+        {"id": "mean_exit", "label": "Mean implied exit", "value": 2252.4, "unit": "$m"},
+        {"id": "median_exit", "label": "Median implied exit", "value": 1200, "unit": "$m"},
+        {"id": "mean_post", "label": "Mean implied post-money", "value": 296.61, "unit": "$m"}
+      ],
+      "questions": [
+        {"id": "q1", "prompt": "Compute the mean and median implied exit values and the mean implied post-money valuation.", "criteria": [
+          {"id": "q1-c1", "label": "Mean exit is 2252.4", "weight": 0.2, "required_keywords": ["mean"], "expected_numbers": [{"value": 2252.4, "tolerance": 0.1}], "model_answer": "120 x 18.77 = 2,252.4 million."},
+          {"id": "q1-c2", "label": "Median exit is 1200", "weight": 0.15, "required_keywords": ["median"], "expected_numbers": [{"value": 1200, "tolerance": 0.1}], "model_answer": "120 x 10 = 1,200 million."},
+          {"id": "q1-c3", "label": "Mean post-money is approximately 296.61", "weight": 0.15, "required_keywords": ["post-money"], "expected_numbers": [{"value": 296.61, "tolerance": 0.2}], "model_answer": "Discount the mean exit by (1.5)^5: approximately 296.61 million."}
+        ]},
+        {"id": "q2", "prompt": "A VC offers 20 million for 20%. Compare the implied valuation with the VC-method output and name two possible reasons for the difference.", "criteria": [
+          {"id": "q2-c1", "label": "Offer implies 100 million", "weight": 0.2, "required_keywords": ["valuation"], "expected_numbers": [{"value": 100, "tolerance": 0.1}], "model_answer": "20 / 20% implies a 100 million post-money valuation."},
+          {"id": "q2-c2", "label": "Two valuation assumptions must be investigated", "weight": 0.3, "required_keywords": ["hurdle"], "any_keywords": ["comparables", "exit", "risk"], "model_answer": "Investigate the hurdle rate and the selected comparables/exit assumptions."}
+        ]}
+      ],
+      "model_answer": "The mean and median exit values are 2,252.4 and 1,200 million; the mean discounted value is about 296.61 million. A 100 million offer needs an assumption review.",
+      "allowed_numbers": [120, 18.77, 10, 50, 2252.4, 1200, 296.61, 100, 20],
+      "difficulty": 3,
+      "source_ref": "Class assignments - solutions.xlsx / 3. NextBigThing"
+    },
+    {
+      "kind": "case",
+      "id": "WB-TRAFALGAR-01",
+      "topic_id": "VC07",
+      "title": "TrafalgarTech: common versus preferred equity",
+      "context": "Workbook-derived exercise. Lucy offers 1 million at a 4 million post-money valuation in common equity. Grace offers 1 million at a 5 million post-money valuation with a 2x liquidation preference. Success is worth 10 million with 50% probability; liquidation is worth 2 million with 10% probability.",
+      "facts": [
+        {"id": "lucy_success", "label": "Lucy founder success proceeds", "value": 7.5, "unit": "$m"},
+        {"id": "grace_success", "label": "Grace founder success proceeds", "value": 8, "unit": "$m"},
+        {"id": "lucy_expected", "label": "Lucy expected founder proceeds", "value": 3.9, "unit": "$m"},
+        {"id": "grace_expected", "label": "Grace expected founder proceeds", "value": 4, "unit": "$m"}
+      ],
+      "questions": [
+        {"id": "q1", "prompt": "Compute the founder proceeds at success under Lucy and Grace.", "criteria": [
+          {"id": "q1-c1", "label": "Lucy founder proceeds 7.5", "weight": 0.25, "required_keywords": ["lucy"], "expected_numbers": [{"value": 7.5, "tolerance": 0.01}], "model_answer": "Lucy owns 75%, so founders receive 7.5 million at a 10 million exit."},
+          {"id": "q1-c2", "label": "Grace founder proceeds 8", "weight": 0.25, "required_keywords": ["grace"], "expected_numbers": [{"value": 8, "tolerance": 0.01}], "model_answer": "Grace's 2 million preference is below 20% of the 10 million success exit; founders receive 8 million."}
+        ]},
+        {"id": "q2", "prompt": "Compute expected founder proceeds and explain which type of founder may prefer Grace's preferred equity.", "criteria": [
+          {"id": "q2-c1", "label": "Expected proceeds are 3.9 and 4", "weight": 0.25, "required_keywords": ["expected"], "expected_numbers": [{"value": 3.9, "tolerance": 0.01}, {"value": 4, "tolerance": 0.01}], "model_answer": "Expected founder proceeds are 3.9 million under Lucy and 4.0 million under Grace."},
+          {"id": "q2-c2", "label": "Optimistic founders may prefer preferred equity", "weight": 0.25, "required_keywords": ["optimistic"], "any_keywords": ["preferred", "upside"], "model_answer": "Optimistic founders may accept the preference in exchange for the higher valuation."}
+        ]}
+      ],
+      "model_answer": "Grace's higher valuation can outweigh a 2x preference for optimistic founders.",
+      "allowed_numbers": [1, 2, 4, 5, 10, 50, 7.5, 8, 3.9],
+      "difficulty": 3,
+      "source_ref": "Class assignments - solutions.xlsx / 4. TrafalgarTech"
+    },
+    {
+      "kind": "case",
+      "id": "WB-HADUPOWER-01",
+      "topic_id": "VC16",
+      "title": "Hadupower: convertible note versus common equity",
+      "context": "Workbook-derived exercise. Founders own 1 million shares and angels invest 0.5 million. A VC will invest 2 million. Mike expects an 8 million post-money valuation; Tony expects 5 million. Common equity is priced at 2 dollars per share; the convertible note has a 50% conversion discount.",
+      "facts": [
+        {"id": "mike_note", "label": "Mike founder ownership with note", "value": 62.5, "unit": "%"},
+        {"id": "mike_common", "label": "Mike founder ownership with common", "value": 60, "unit": "%"},
+        {"id": "tony_note", "label": "Tony founder ownership with note", "value": 40, "unit": "%"},
+        {"id": "tony_common", "label": "Tony founder ownership with common", "value": 48, "unit": "%"}
+      ],
+      "questions": [
+        {"id": "q1", "prompt": "Compare founder ownership under the two instruments for Mike's and Tony's valuation views.", "criteria": [
+          {"id": "q1-c1", "label": "Mike note is 62.5 versus common 60", "weight": 0.25, "required_keywords": ["mike"], "expected_numbers": [{"value": 62.5, "tolerance": 0.01}, {"value": 60, "tolerance": 0.01}], "model_answer": "Under Mike's 8 million post-money view, the note leaves 62.5% to founders versus 60% under common equity."},
+          {"id": "q1-c2", "label": "Tony note is 40 versus common 48", "weight": 0.25, "required_keywords": ["tony"], "expected_numbers": [{"value": 40, "tolerance": 0.01}, {"value": 48, "tolerance": 0.01}], "model_answer": "Under Tony's 5 million view, founders retain 40% with the note versus 48% with common equity."}
+        ]},
+        {"id": "q2", "prompt": "State which instrument each founder prefers and explain the role of optimism.", "criteria": [
+          {"id": "q2-c1", "label": "Mike prefers the note and Tony common equity", "weight": 0.25, "required_keywords": ["mike"], "any_keywords": ["note", "tony"], "model_answer": "Mike prefers the note; Tony prefers common equity."},
+          {"id": "q2-c2", "label": "Optimism makes a future higher conversion price more credible", "weight": 0.25, "required_keywords": ["optimistic"], "any_keywords": ["conversion", "price"], "model_answer": "An optimistic founder expects a higher future VC price, so the discount note is less dilutive."}
+        ]}
+      ],
+      "model_answer": "The note suits Mike's optimistic valuation; common equity suits Tony's more conservative view.",
+      "allowed_numbers": [0.5, 1, 2, 5, 8, 40, 48, 60, 62.5],
+      "difficulty": 3,
+      "source_ref": "Class assignments - solutions.xlsx / 4. Hadupower"
+    },
+    {
+      "kind": "case",
+      "id": "WB-DOCKLANE-01",
+      "topic_id": "VC05",
+      "title": "Docklane: option pool and expected founder wealth",
+      "context": "Workbook-derived exercise. Reed offers 0.75 million for 20% common equity. Harbour offers 0.9 million at a 3.6 million pre-money valuation in preferred shares. A 10% post-money option pool is included in the pre-money. Exit values are 3, 10 and 25 million with probabilities 40%, 40% and 20%.",
+      "facts": [
+        {"id": "expected_exit", "label": "Expected exit", "value": 10.2, "unit": "$m"},
+        {"id": "reed_founders", "label": "Reed joint founder payout", "value": 8.16, "unit": "$m"},
+        {"id": "harbour_founders", "label": "Harbour joint founder payout", "value": 7.14, "unit": "$m"}
+      ],
+      "questions": [
+        {"id": "q1", "prompt": "Compute the expected exit value across the three scenarios.", "criteria": [
+          {"id": "q1-c1", "label": "Expected exit is 10.2", "weight": 0.5, "required_keywords": ["expected"], "expected_numbers": [{"value": 10.2, "tolerance": 0.01}], "model_answer": "0.4x3 + 0.4x10 + 0.2x25 = 10.2 million."}
+        ]},
+        {"id": "q2", "prompt": "Compute the joint founder payout under Reed and Harbour, including Harbour's 10% option pool.", "criteria": [
+          {"id": "q2-c1", "label": "Reed payout is 8.16", "weight": 0.25, "required_keywords": ["reed"], "expected_numbers": [{"value": 8.16, "tolerance": 0.01}], "model_answer": "Reed founders retain 80%, so 80% x 10.2 = 8.16 million."},
+          {"id": "q2-c2", "label": "Harbour payout is 7.14", "weight": 0.25, "required_keywords": ["harbour"], "expected_numbers": [{"value": 7.14, "tolerance": 0.01}], "model_answer": "Harbour founders retain 70% after the investor and option pool, so 70% x 10.2 = 7.14 million."}
+        ]}
+      ],
+      "model_answer": "The expected exit is 10.2 million; the option pool reduces joint founder ownership from 80% to 70% under Harbour.",
+      "allowed_numbers": [0.2, 0.4, 3, 10, 25, 10.2, 20, 70, 80, 8.16, 7.14],
+      "difficulty": 3,
+      "source_ref": "Homework Assignment 2026.xlsx / Docklane Systems"
+    },
+    {
+      "kind": "case",
+      "id": "WB-VALE-01",
+      "topic_id": "VC04",
+      "title": "Vale Robotics: staged seed and VC ownership",
+      "context": "Workbook-derived exercise. Founders hold 800,000 shares. Lina raises 250,000 at 1.25 per share then 600,000 at 2.50. Mateo raises 400,000 at 1.25 then 600,000 at 3.00. Noor raises 400,000 at 1.25, builds the basic prototype and later raises 450,000 at 2.50.",
+      "facts": [
+        {"id": "lina_founder", "label": "Lina founder ownership after VC", "value": 64.52, "unit": "%"},
+        {"id": "lina_vc", "label": "Lina Northbridge ownership", "value": 19.35, "unit": "%"},
+        {"id": "mateo_founder", "label": "Mateo founder ownership after VC", "value": 60.61, "unit": "%"},
+        {"id": "noor_founder", "label": "Noor founder ownership after VC", "value": 61.54, "unit": "%"}
+      ],
+      "questions": [
+        {"id": "q1", "prompt": "For Lina's proposal, compute founder and Northbridge ownership after both rounds.", "criteria": [
+          {"id": "q1-c1", "label": "Founder ownership is 64.52%", "weight": 0.25, "required_keywords": ["founder"], "expected_numbers": [{"value": 64.52, "tolerance": 0.05}], "model_answer": "Lina's founders own 64.52% after both rounds."},
+          {"id": "q1-c2", "label": "Northbridge ownership is 19.35%", "weight": 0.25, "required_keywords": ["northbridge"], "expected_numbers": [{"value": 19.35, "tolerance": 0.05}], "model_answer": "Northbridge receives 19.35%."}
+        ]},
+        {"id": "q2", "prompt": "Explain why the founder should compare dilution with the technical milestone achieved, not only the initial price per share.", "criteria": [
+          {"id": "q2-c1", "label": "Compare dilution and milestone value", "weight": 0.25, "required_keywords": ["dilution"], "any_keywords": ["milestone", "prototype"], "model_answer": "The more expensive prototype can improve the later price and reduce future dilution, but only if the milestone creates value."},
+          {"id": "q2-c2", "label": "Decision is not price-only", "weight": 0.25, "required_keywords": ["price"], "any_keywords": ["dilution", "risk"], "model_answer": "The decision must compare funding need, prototype quality, execution risk and resulting ownership."}
+        ]}
+      ],
+      "model_answer": "Lina retains 64.52% and Northbridge owns 19.35%; the funding decision must combine dilution and milestone economics.",
+      "allowed_numbers": [1.25, 2.5, 3, 4, 4.5, 250, 400, 450, 600, 800, 19.35, 60.61, 61.54, 64.52],
+      "difficulty": 3,
+      "source_ref": "Homework Assignment 2026.xlsx / Vale Robotics"
+    },
+    {
+      "kind": "case",
+      "id": "WB-MERIDIAN-01",
+      "topic_id": "VC13",
+      "title": "Meridian Systems: IPO pricing and greenshoe",
+      "context": "Workbook-derived exercise. Meridian has 18 million founder shares, Series A shares issued for 6 million at 1.50, Series B for 18 million at 6 and Series C for 45 million at 15. It issues 8 million new IPO shares at 16 dollars, with a 15% greenshoe. The underwriting fee is 7% and the first-day close is 24 dollars.",
+      "facts": [
+        {"id": "base_shares", "label": "Base IPO shares", "value": 8, "unit": "m shares"},
+        {"id": "greenshoe", "label": "Greenshoe shares", "value": 1.2, "unit": "m shares"},
+        {"id": "total_shares", "label": "Total shares after greenshoe", "value": 37.2, "unit": "m shares"},
+        {"id": "net_proceeds", "label": "Net proceeds including greenshoe", "value": 136.896, "unit": "$m"},
+        {"id": "close_value", "label": "First-day value", "value": 892.8, "unit": "$m"}
+      ],
+      "questions": [
+        {"id": "q1", "prompt": "Compute base IPO shares, greenshoe shares and total shares outstanding after full exercise.", "criteria": [
+          {"id": "q1-c1", "label": "Base shares are 8", "weight": 0.15, "required_keywords": ["base"], "expected_numbers": [{"value": 8, "tolerance": 0.01}], "model_answer": "The base IPO creates 8 million shares."},
+          {"id": "q1-c2", "label": "Greenshoe is 1.2 and total is 37.2", "weight": 0.35, "required_keywords": ["greenshoe"], "expected_numbers": [{"value": 1.2, "tolerance": 0.01}, {"value": 37.2, "tolerance": 0.01}], "model_answer": "15% x 8 = 1.2 million; total shares are 28 + 8 + 1.2 = 37.2 million."}
+        ]},
+        {"id": "q2", "prompt": "Compute net IPO proceeds after the 7% fee and the value at the first-day close.", "criteria": [
+          {"id": "q2-c1", "label": "Net proceeds including greenshoe are 136.896", "weight": 0.25, "required_keywords": ["proceeds"], "expected_numbers": [{"value": 136.896, "tolerance": 0.05}], "model_answer": "Base plus greenshoe proceeds are 9.2 x 16 = 147.2 million; after the 7% fee on both, net proceeds are 136.896 million."},
+          {"id": "q2-c2", "label": "First-day value is 892.8", "weight": 0.25, "required_keywords": ["close"], "expected_numbers": [{"value": 892.8, "tolerance": 0.1}], "model_answer": "37.2 million shares x 24 = 892.8 million."}
+        ]}
+      ],
+      "model_answer": "The IPO tests share-count roll-forward, underwriting fees, greenshoe mechanics and first-day underpricing. The fee convention must be stated explicitly.",
+      "allowed_numbers": [1.2, 1.5, 6, 7, 8, 15, 16, 18, 24, 28, 37.2, 136.896, 147.2, 892.8],
+      "difficulty": 4,
+      "source_ref": "Homework Assignment 2026.xlsx / Meridian Systems"
+    },
+    {
+      "kind": "case",
+      "id": "WB-VE-MATRIX-01",
+      "topic_id": "VC14",
+      "title": "Venture Evaluation Matrix: weighted scoring",
+      "context": "Workbook-derived exercise. The Venture Evaluation Matrix scores a startup across Customer, Company, Entrepreneur and Attractiveness. Its detailed criteria include need, solution, team, market, competition, network, sales, production and organization, with question and criterion weights.",
+      "facts": [
+        {"id": "dimensions", "label": "Top-level dimensions", "value": 4, "unit": "dimensions"},
+        {"id": "criteria", "label": "Detailed criteria", "value": 9, "unit": "criteria"}
+      ],
+      "questions": [
+        {"id": "q1", "prompt": "Name the four top-level dimensions of the Venture Evaluation Matrix and give one example criterion for each.", "criteria": [
+          {"id": "q1-c1", "label": "Four dimensions identified", "weight": 0.5, "required_keywords": ["customer"], "any_keywords": ["company", "entrepreneur", "attractiveness"], "expected_numbers": [{"value": 4, "tolerance": 0.01}], "model_answer": "The dimensions are Customer, Company, Entrepreneur and Attractiveness."}
+        ]},
+        {"id": "q2", "prompt": "Explain how question weights and criterion weights should be combined into a final score without double-counting.", "criteria": [
+          {"id": "q2-c1", "label": "Weighted average logic", "weight": 0.5, "required_keywords": ["weight"], "any_keywords": ["average", "score", "criterion"], "model_answer": "Compute each question-weighted criterion score, aggregate within each criterion, then combine the criterion scores using criterion weights."}
+        ]}
+      ],
+      "model_answer": "The matrix combines Customer, Company, Entrepreneur and Attractiveness through transparent question and criterion weighted averages.",
+      "allowed_numbers": [4, 9],
+      "difficulty": 2,
+      "source_ref": "Venture evaluation matrix.xlsx / VE Matrix and Spreadsheet Tool"
+    },
+    {
+      "kind": "case",
+      "id": "WB-TEAM-PITCHBOOK-01",
+      "topic_id": "VC18",
+      "title": "Team project: investment committee pitchbook",
+      "context": "Workbook/PDF-derived rubric exercise. Prepare a ten-slide investment committee pitchbook for a European VC-backed AI, defence-tech or blue-economy startup. The fund invests 5-15 million, targets 10-20% ownership and reserves about half its capital for follow-ons. The exercise has no single numerical answer: reasoning, evidence, assumptions and consistency are assessed.",
+      "facts": [
+        {"id": "fund", "label": "Fund size", "value": 400, "unit": "M€"},
+        {"id": "ticket_min", "label": "Typical minimum ticket", "value": 5, "unit": "M€"},
+        {"id": "ticket_max", "label": "Typical maximum ticket", "value": 15, "unit": "M€"},
+        {"id": "ownership_low", "label": "Ownership target low", "value": 10, "unit": "%"},
+        {"id": "ownership_high", "label": "Ownership target high", "value": 20, "unit": "%"}
+      ],
+      "questions": [
+        {"id": "q1", "prompt": "Draft the investment thesis and risk section. What evidence must be cited before an investment committee can approve the company?", "criteria": [
+          {"id": "q1-c1", "label": "Thesis covers customer, product, market, team and risks", "weight": 0.2, "required_keywords": ["thesis"], "any_keywords": ["market", "team", "risk"], "model_answer": "A strong thesis links customer need, product differentiation, market, team, traction and key risks."},
+          {"id": "q1-c2", "label": "Sources and data gaps are explicit", "weight": 0.15, "required_keywords": ["sources"], "any_keywords": ["evidence", "data", "gap"], "model_answer": "Distinguish reported data from estimates and assumptions and document gaps."}
+        ]},
+        {"id": "q2", "prompt": "Propose terms and returns analysis, including valuation, ownership, follow-on dilution, exit, MOIC and IRR.", "criteria": [
+          {"id": "q2-c1", "label": "Terms address security, preference, governance and future rounds", "weight": 0.15, "required_keywords": ["terms"], "any_keywords": ["preference", "governance", "option"], "model_answer": "Discuss security, liquidation preference, vesting, option pool, board rights, future financing and exit rights."},
+          {"id": "q2-c2", "label": "Returns include MOIC and IRR with dilution", "weight": 0.15, "required_keywords": ["moic"], "any_keywords": ["irr", "dilution", "exit"], "model_answer": "Estimate exit proceeds after further funding and dilution, then show MOIC and IRR."}
+        ]},
+        {"id": "q3", "prompt": "State a recommendation and conditions for approval while checking the fund's ticket and ownership mandate.", "criteria": [
+          {"id": "q3-c1", "label": "Recommendation and conditions are explicit", "weight": 0.2, "required_keywords": ["recommendation"], "any_keywords": ["condition", "approval"], "model_answer": "Lead with a clear invest/pass recommendation and conditions precedent."},
+          {"id": "q3-c2", "label": "Mandate is checked against 5-15 million and 10-20%", "weight": 0.15, "required_keywords": ["ownership"], "expected_numbers": [{"value": 10, "tolerance": 0.01}, {"value": 20, "tolerance": 0.01}], "model_answer": "Check that the proposed ticket and ownership fit the fund mandate or justify a deviation."}
+        ]}
+      ],
+      "model_answer": "A strong pitchbook is evidence-led, explicit about assumptions and data gaps, coherent from thesis to terms to returns, and ends with a mandate-aware recommendation.",
+      "allowed_numbers": [5, 10, 15, 20, 400],
+      "difficulty": 4,
+      "source_ref": "Team project 2027.pdf"
+    }
+  ]
+}

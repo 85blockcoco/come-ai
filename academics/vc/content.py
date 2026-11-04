@@ -247,7 +247,16 @@ def _load_cases(path: Path, topic_ids: set[str]) -> list[CaseStudy]:
         topic_id = _topic_id(item, path)
         if topic_id not in topic_ids:
             raise ContentError(f"Unknown topic {topic_id} in {path.name}.")
-        case = CaseStudy.from_dict(item)
+        # Provenance lives at pack level for source-derived exercise batches;
+        # copy it into each case so the API can expose it without treating a
+        # workbook adaptation as an official exam question.
+        case = CaseStudy.from_dict(
+            {
+                **item,
+                "source_type": item.get("source_type", payload.get("source_type", "course_grounded")),
+                "source_ref": item.get("source_ref", payload.get("pack_id", "")),
+            }
+        )
         if not case.questions:
             raise ContentError(f"Aucune question pour le cas {case.id}.")
         total_weight = 0.0

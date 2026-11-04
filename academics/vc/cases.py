@@ -151,6 +151,8 @@ def case_payload(case: CaseStudy, *, include_model: bool = False) -> dict[str, A
             for question in case.questions
         ],
         "difficulty": case.difficulty,
+        "source_type": case.source_type,
+        "source_ref": case.source_ref,
     }
     if include_model:
         payload["model_answer"] = case.model_answer
