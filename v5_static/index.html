@@ -15,7 +15,7 @@
     <div class="ambient ambient-two" aria-hidden="true"></div>
     <div class="app-shell">
       <header class="topbar">
-        <a class="brand" href="/v5" aria-label="NAGe, accueil">
+        <a class="brand" href="#v5/assistantView" aria-label="NAGe, accueil">
           <span class="brand-mark" aria-hidden="true"><img src="/career-static/nage_assets/favicon.svg" alt=""></span>
           <span><strong>NAGe</strong><small>Your personal workspace</small></span>
         </a>
@@ -24,13 +24,12 @@
           <button class="nav-item" type="button" data-view-target="documentsView">Documents &amp; Finance</button>
           <button class="nav-item" type="button" data-view-target="memoryView">Mémoire &amp; stockage</button>
           <button class="nav-item" type="button" data-view-target="revisionsView">Revision</button>
-          <a class="nav-item nav-link" href="/career">Career</a>
+          <a class="nav-item nav-link" href="/career" title="Stages et candidatures dans cette installation NAGe">Stages &amp; candidatures</a>
           <button class="nav-item" type="button" data-view-target="settingsView">Réglages</button>
           <button class="nav-item" type="button" data-view-target="developerView">Atelier Développeur</button>
         </nav>
         <div class="topbar-status" aria-live="polite">
           <span id="localStatus" class="status-pill neutral">Initialisation locale…</span>
-          <a class="subtle-link" href="/" title="Ouvrir l’interface V3 historique">V3</a>
         </div>
       </header>
 
@@ -270,9 +269,9 @@
         <section id="settingsView" class="view" aria-labelledby="settingsTitle" hidden>
           <div class="section-intro"><p class="eyebrow">CONFIGURATION TRANSPARENTE</p><h1 id="settingsTitle">Réglages &amp; limites</h1><p>Les modes externes restent séparés du noyau local. Côme AI n’envoie rien au cloud automatiquement.</p></div>
           <div class="settings-grid">
-            <article class="panel setting-card"><h2>Mode actuel</h2><p id="providerDetails">Chargement…</p><p class="quiet-status">Le mode V5 présenté ici n’appelle aucun fournisseur IA.</p></article>
+            <article class="panel setting-card"><h2>Mode actuel</h2><p id="providerDetails">Chargement…</p><p class="quiet-status">Les analyses locales présentées ici ne nécessitent aucun appel à un fournisseur IA.</p></article>
             <article class="panel setting-card"><h2>Sécurité du workspace</h2><ul><li>Fichiers identifiés par ID, pas par chemin exposé</li><li>Rapports créés seulement avec confirmation</li><li>Serveur limité à 127.0.0.1</li></ul></article>
-            <article class="panel setting-card"><h2>Modules disponibles</h2><ul><li>Documents &amp; Finance : analyses locales</li><li>Mémoire : indexation/recherche persistantes</li><li><a href="/career">Career 4.1 : profil, offres, candidatures, entretien</a></li></ul></article>
+            <article class="panel setting-card"><h2>Modules disponibles</h2><ul><li>Documents &amp; Finance : analyses locales</li><li>Mémoire : indexation/recherche persistantes</li><li><a href="/career">Stages &amp; candidatures : profil, offres et préparation aux entretiens</a></li></ul></article>
           </div>
         </section>
         <section id="developerView" class="view" aria-labelledby="developerTitle" hidden>

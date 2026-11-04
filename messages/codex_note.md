@@ -1,3 +1,15 @@
+# CODEX — Rangement NAGe — 4 novembre 2026
+
+Branche de référence bureau préparée : `codex/nage-workspace-cleanup-20261104`, issue du studio `4fe8ceb` et du commit live `c9a252b` réconciliés sans conflit. Le dossier de code de l'icône reste `~/AI-Excel-Agent` ; guide durable dans `docs/WORKSPACE.md`.
+
+Rangement récupérable effectué : neuf dossiers/archives/lanceurs techniques retirés du Bureau, 500 gabarits identiques à c9a252b retirés de l'arbre actif, un backup JS non suivi archivé. Tous conservés dans `~/Documents/NAGe/Archives/2026-11-04_152145` avec manifeste et restauration sans écrasement. Aucun original de cours, aucune progression, aucun profil Chrome déplacé ; aucune suppression irréversible, branche ou worktree supprimé.
+
+Navigation : lien V3 historique retiré, logo vers l'accueil interne, lien stages conservé et nommé clairement. Tests rejoués : `tests/test_v5_web.py tests/test_vc_course.py tests/test_vc_revisions_ui.py tests/test_vc_cases_routes.py` — 24 passed en 7,08 s ; syntaxe JS et diff-check verts.
+
+Inventaire initial : 690 worktrees enregistrés (663 existants), 2 310 branches locales, 531 refs distantes suivies. **main n'est pas aligné avec le studio** : 262 fichiers uniquement dans main, 239 uniquement dans la candidate, 128 modifiés lors de la comparaison initiale. Des modules Career distincts restent à rapprocher ; aucune promesse de consolidation globale complète. Les états détaillés et la comparaison sont conservés localement, pas publiés avec des données privées. Aucun merge/push sur main.
+
+---
+
 # CODEX — VC Study Studio — 4 novembre 2026
 
 Candidate : `codex/vc-learning-studio-20261104`, worktree `Documents/Codex/2026-10-25/nage-revision-rebuild`.
