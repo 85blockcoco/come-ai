@@ -817,9 +817,18 @@ function revRenderExamResult(result) {
 async function revLoadRadar() {
   const box = revEl("revRadar");
   try {
-    const radar = await revApi("/api/vc/radar");
+    const [radar, readinessPayload] = await Promise.all([
+      revApi("/api/vc/radar"),
+      revApi("/api/vc/readiness"),
+    ]);
+    const readiness = readinessPayload.readiness || {};
+    const priorities = (readiness.priority_topics || []).slice(0, 3);
+    const priorityHtml = priorities.length
+      ? `<ul class="rev-readiness-priorities">${priorities.map((topic) => `<li><strong>${revEsc(topic.topic_id)}</strong> ${revEsc(topic.title)} <span>${revEsc(topic.status)}</span></li>`).join("")}</ul>`
+      : `<p class="quiet-status">No critical topic detected yet.</p>`;
+    const readinessHtml = `<div class="rev-readiness-summary"><div><strong>Exam readiness</strong><span>${Number(readiness.score || 0).toFixed(1)}%</span></div><p>${readiness.ready ? "Ready threshold reached." : "Keep practising before attempting the full mock."} ${readiness.official_paper_questions || 0} official paper questions · ${readiness.graded_cases || 0} graded cases.</p>${priorityHtml}</div>`;
     const statusLabel = { untested: "Not tested", fragile: "Revisit first", developing: "Developing", solid: "Strong results" };
-    box.innerHTML = radar.topics.map((topic) => {
+    box.innerHTML = readinessHtml + radar.topics.map((topic) => {
       const accuracy = topic.accuracy == null ? "—" : `${Math.round(topic.accuracy * 100)}%`;
       return `
         <div class="rev-radar-row ${revEsc(topic.status)}">

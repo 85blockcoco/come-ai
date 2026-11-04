@@ -361,6 +361,12 @@ button:focus-visible, a:focus-visible { outline: 3px solid #2270d4; outline-offs
 .rev-topic-scores { columns: 2; padding-left: 19px; font-size: 13px; line-height: 1.7; }
 .rev-topic-scores .weak { color: #b91c1c; font-weight: 700; }
 .rev-radar { display: grid; gap: 7px; max-height: 460px; overflow-y: auto; }
+.rev-readiness-summary { margin-bottom: 10px; padding: 11px 12px; border: 1px solid #cfe5d6; border-radius: 12px; background: #f2faf4; color: #275b3e; }
+.rev-readiness-summary > div { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; font-weight: 800; }
+.rev-readiness-summary > div span { color: #08704d; font-variant-numeric: tabular-nums; }
+.rev-readiness-summary p { margin: 5px 0 0; color: #63806d; font-size: 11px; line-height: 1.45; }
+.rev-readiness-priorities { display: grid; gap: 3px; margin: 7px 0 0; padding-left: 17px; color: #41634d; font-size: 11px; }
+.rev-readiness-priorities span { color: #9a5c32; font-size: 10px; }
 .rev-radar-row { display: grid; grid-template-columns: auto 1fr auto auto; gap: 9px; align-items: center; padding: 8px 10px; border: 1px solid #eef1f6; border-radius: 10px; font-size: 12.5px; }
 .rev-radar-row.weak { background: #fef2f2; border-color: #fecaca; }
 .rev-radar-row.strong, .rev-radar-row.mastered { background: #f0fdf4; border-color: #bbf7d0; }
