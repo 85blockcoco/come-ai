@@ -62,6 +62,18 @@ function vcDiagram(kind) {
   if (kind === "waterfall") return `<div class="vc-illustration vc-flow">${node("Preferred rights", "Calculate the contractual payout")}${node("Conversion", "Calculate common-equity value")}${node("Compare", "Apply participation, cap and thresholds")}</div>`;
   return "";
 }
+function vcExtraPractice(lesson) {
+  const takeaway = lesson.key_points?.[0] || lesson.why;
+  const secondTakeaway = lesson.key_points?.[1] || "the assumptions and the decision rule";
+  return `<section class="vc-extra-practice" aria-labelledby="vcExtraPracticeTitle">
+    <div class="vc-extra-practice-heading"><div><p class="vc-mini-label">BUILD FLUENCY, NOT JUST RECALL</p><h3 id="vcExtraPracticeTitle">Three more ways to practise</h3></div><span class="vc-practice-count">3 short prompts</span></div>
+    <div class="vc-practice-grid">
+      <article class="vc-practice-card"><span class="vc-practice-number">01</span><h4>Explain it in your own words</h4><p>Write a two-sentence explanation of <b>${revEsc(lesson.title)}</b> as if you were helping a classmate.</p><textarea rows="3" placeholder="Your explanation…" aria-label="Your own explanation"></textarea><button type="button" class="vc-quiet-button" data-extra-reveal="extra-model">Show a model checklist</button><div class="vc-extra-answer" data-extra-answer="extra-model" hidden><b>Include these ideas:</b><ul><li>${revEsc(takeaway)}</li><li>${revEsc(secondTakeaway)}</li></ul></div></article>
+      <article class="vc-practice-card"><span class="vc-practice-number">02</span><h4>Transfer the method</h4><p>Imagine the same decision with different data. What would you calculate or compare first?</p><textarea rows="3" placeholder="First step, formula or comparison…" aria-label="Your transfer answer"></textarea><button type="button" class="vc-quiet-button" data-extra-reveal="extra-transfer">Show the method cue</button><div class="vc-extra-answer" data-extra-answer="extra-transfer" hidden><b>Method cue:</b><p>Start from the definitions and formula in the lesson, state your units, then explain what the result means for the investor or founder.</p></div></article>
+      <article class="vc-practice-card"><span class="vc-practice-number">03</span><h4>Catch the exam trap</h4><p>Before looking below, write one mistake a rushed student could make in this topic.</p><textarea rows="3" placeholder="The mistake to avoid…" aria-label="The exam trap"></textarea><button type="button" class="vc-quiet-button" data-extra-reveal="extra-trap">Reveal the course trap</button><div class="vc-extra-answer" data-extra-answer="extra-trap" hidden><b>Course warning:</b><p>${revEsc(lesson.trap)}</p></div></article>
+    </div><p class="vc-practice-note">These prompts are deliberately open-ended: use the reveal only after committing to an answer. Then continue with a fresh-number drill or a past-paper case.</p>
+  </section>`;
+}
 function vcRenderLesson() {
   const lessons = vcAllLessons();
   const lesson = lessons.find((item) => item.id === vcStudio.lessonId);
@@ -78,6 +90,7 @@ function vcRenderLesson() {
     <section class="vc-worked-example"><div class="vc-example-heading"><span class="vc-example-symbol" aria-hidden="true">↗</span><div><p class="vc-mini-label">SEE IT IN ACTION</p><h3>${revEsc(example.label)}</h3></div><button type="button" class="vc-quiet-button" data-new-lesson-variant>New numbers</button></div><p>${revEsc(example.context)}</p><ol>${example.steps.map((step) => `<li>${revEsc(step)}</li>`).join("")}</ol><div class="vc-example-result"><b>The result</b><span>${revEsc(example.result)}</span></div></section>
     <aside class="vc-trap"><b>A trap to avoid</b><p>${revEsc(lesson.trap)}</p></aside>
     <section class="vc-checkpoint" id="vcCurrentCheckpoint"><p class="vc-mini-label">NOW, TRY WITHOUT LOOKING BACK</p><h3>Your two-question checkpoint</h3><p>Use your own reasoning first. The correction explains the method after you submit.</p><form id="vcCheckpointForm">${questions}<button class="vc-primary" type="submit">Check my understanding</button></form><div id="vcCheckpointResult" class="vc-checkpoint-result" hidden></div></section>
+    ${vcExtraPractice(lesson)}
     <section class="vc-lesson-finish"><h3>What would help you next?</h3><div class="vc-finish-actions"><button id="vcMarkRead" class="vc-primary" type="button">${state.read_at ? "✓ Studied" : "I've studied this lesson"}</button><button id="vcPracticeLesson" class="vc-secondary" type="button">Practise this concept</button><button id="vcReviewLesson" class="vc-secondary" type="button" aria-pressed="${!!state.review_later}">${state.review_later ? "✓ In my review list" : "Add to review list"}</button></div><div class="vc-extra-actions"><button id="vcAskLesson" class="vc-quiet-button" type="button">I need another explanation</button><button id="vcMorePractice" class="vc-quiet-button" type="button">More exercises & past papers →</button></div></section>
     <footer class="vc-lesson-footer"><button id="vcPreviousLesson" type="button" class="vc-quiet-button" ${index === 0 ? "disabled" : ""}>← Previous lesson</button><span>${index + 1} / ${lessons.length}</span><button id="vcNextLesson" type="button" class="vc-quiet-button" ${index === lessons.length - 1 ? "disabled" : ""}>Next lesson →</button></footer>`;
   vcNode("vcLesson").querySelector("[data-open-lesson-source]").addEventListener("click", () => vcOpenSource(chapter.source_id, chapter.filename, lesson.pages[0]));
@@ -98,6 +111,12 @@ function vcRenderLesson() {
   vcNode("vcPreviousLesson").addEventListener("click", () => { if (index > 0) vcOpenLesson(lessons[index - 1].id, true); });
   vcNode("vcNextLesson").addEventListener("click", () => { if (index < lessons.length - 1) vcOpenLesson(lessons[index + 1].id, true); });
   vcNode("vcCheckpointForm").addEventListener("submit", vcSubmitCheckpoint);
+  vcNode("vcLesson").querySelectorAll("[data-extra-reveal]").forEach((button) => button.addEventListener("click", () => {
+    const answer = vcNode("vcLesson").querySelector(`[data-extra-answer="${button.dataset.extraReveal}"]`);
+    if (!answer) return;
+    answer.hidden = !answer.hidden;
+    button.textContent = answer.hidden ? button.textContent.replace("Hide", "Show") : button.textContent.replace("Show", "Hide");
+  }));
 }
 async function vcOpenLesson(id, scroll = false) {
   if (!vcAllLessons().some((lesson) => lesson.id === id)) return;
