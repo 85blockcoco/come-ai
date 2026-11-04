@@ -42,6 +42,32 @@ The primary course maps the five lecture decks to 5 chapters and 28 lessons. The
 - The Practice selector exposes those generated drills even when there is no static JSON drill for the topic.
 - The audit preserves a distinction between official past-paper material, course-grounded content and synthetic practice.
 
+## Verification added on 4 November
+
+The regression test `tests/test_vc_pastpaper_coverage.py` now loads the three
+official packs and checks the complete assessment inventory: 67 top-level
+questions plus 33 nested case parts (100 assessed units). It also submits the
+answer key through the same grader used by the application and verifies that
+every MCQ, numeric item and case part reaches either an automatic `correct`
+result or an explicit `self_assess` path for open responses. The targeted run
+was green: **2 passed in 0.14 s**. Ruff and `git diff --check` are also clean
+for the changed files.
+
+The API smoke check on the running candidate reports all three papers and their
+real pack sizes: 2023 (22 questions, 60 points), 2024 (24 questions, 50 points)
+and 2025 (21 questions, 60 points). This proves ingestion and grading paths;
+it does not prove that a learner has mastered the material.
+
+The workbook audit also identified the exercise families that still need a
+dedicated in-app graded representation: staged-financing survival and expected
+profit (PhD student), risk-sensitive term-sheet choice (TriplexGo and
+TrafalgarTech), cap tables and staged rounds (Aliboy), venture-capital method
+and comparables (NextBigThing and Sky-π), common equity versus convertible note
+(Hadupower), expected founder wealth and threshold probabilities (Docklane),
+seed/VC ownership (Vale), IPO pricing, greenshoe and underpricing (Meridian),
+and the Venture Evaluation Matrix weighted scoring tool. The source workbooks
+remain available and are not silently counted as graded exercises yet.
+
 ## Gaps requiring caution
 
 - The two unindexed PDFs need manual visual review before their content can be called covered.
