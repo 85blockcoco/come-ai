@@ -1,4 +1,4 @@
-/* A local reading and practice workspace. No model call is made by this module. */
+/* Local course view and practice; scoped answer corrections use the backend tutor. */
 "use strict";
 const vcStudio = { ready: false, loading: false, course: null, progress: null, lessonId: null, lessonVariant: null, library: [], source: null };
 const vcNode = (id) => document.getElementById(id);
@@ -62,25 +62,33 @@ function vcDiagram(kind) {
   if (kind === "waterfall") return `<div class="vc-illustration vc-flow">${node("Preferred rights", "Calculate the contractual payout")}${node("Conversion", "Calculate common-equity value")}${node("Compare", "Apply participation, cap and thresholds")}</div>`;
   return "";
 }
-function vcFreeTextFeedback(text, expected, correction) {
-  const normalised = String(text || "").toLowerCase().normalize("NFKD").replace(/[^a-z0-9%€]+/g, " ");
-  const terms = [...new Set(expected.map((term) => String(term).toLowerCase().replace(/[^a-z0-9%€]+/g, " ").trim()).filter((term) => term.length >= 4))];
-  const found = terms.filter((term) => normalised.includes(term));
-  const missing = terms.filter((term) => !normalised.includes(term));
-  const score = terms.length ? Math.round((found.length / terms.length) * 100) : 0;
-  return { score, found, missing, correction };
+function vcReadableTutorText(text) {
+  return String(text || "")
+    .replace(/\\text\{([^{}]*)\}/g, "$1")
+    .replace(/\\frac\s*\{([^{}]+)\}\s*\{([^{}]+)\}/g, "($1) / ($2)")
+    .replace(/\\times\b/g, " × ")
+    .replace(/\\cdot\b/g, " × ")
+    .replace(/\\%/g, "%")
+    .replace(/\\_/g, "_")
+    .replace(/_\{([^{}]+)\}/g, " ($1)")
+    .replace(/\\(?:left|right)\b/g, "")
+    .replace(/\\[,;! ]/g, " ")
+    .replace(/\$/g, "")
+    .replace(/[{}]/g, "")
+    .replace(/^\s*\*\s+/gm, "• ");
 }
 function vcExtraPractice(lesson) {
   const takeaway = lesson.key_points?.[0] || lesson.why;
   const secondTakeaway = lesson.key_points?.[1] || "the assumptions and the decision rule";
   const formula = lesson.formula || "State the relevant definition, formula and units before calculating.";
-  const methodTerms = (lesson.formula ? lesson.formula.split(/[^A-Za-z0-9%€]+/) : lesson.key_points).filter((term) => String(term).length >= 4).slice(0, 8);
-  const trapTerms = String(lesson.trap).split(/[^A-Za-z0-9%€]+/).filter((term) => term.length >= 4).slice(0, 8);
+  const methodTitle = lesson.formula ? "Calculation method" : "Apply the lesson";
+  const methodPrompt = lesson.formula ? "Write the relationship you would use for a new dataset before substituting numbers." : "Explain the lesson's main idea in your own words, using its key concepts.";
+  const methodPlaceholder = lesson.formula ? "Formula, variables and units…" : "Your explanation…";
   return `<section class="vc-extra-practice" aria-labelledby="vcExtraPracticeTitle">
     <div class="vc-extra-practice-heading"><div><p class="vc-mini-label">EXAM-STYLE PRACTICE</p><h3 id="vcExtraPracticeTitle">QCM, method and exam trap</h3></div><span class="vc-practice-count">3 short exercises</span></div>
     <div class="vc-practice-grid">
       <article class="vc-practice-card"><span class="vc-practice-number">01</span><h4>Mini multiple-choice question</h4><p>Which statement best matches <b>${revEsc(lesson.title)}</b>?</p><div class="vc-mini-options"><label><input type="radio" name="extra-mcq" value="0"><span>A</span><span>${revEsc(takeaway)}</span></label><label><input type="radio" name="extra-mcq" value="1"><span>B</span><span>VC investments eliminate uncertainty once funding is received.</span></label><label><input type="radio" name="extra-mcq" value="2"><span>C</span><span>Every percentage change is applied by subtracting points directly.</span></label></div><button type="button" class="vc-quiet-button" data-extra-mcq>Check my answer</button><div class="vc-extra-answer" data-extra-answer="extra-mcq-result" hidden><b>Correction:</b><p>${revEsc(takeaway)} The other choices confuse the course principle.</p></div></article>
-      <article class="vc-practice-card"><span class="vc-practice-number">02</span><h4>Calculation method</h4><p>Before touching the numbers, write the relationship you would use for a new dataset.</p><textarea rows="3" data-extra-input="method" placeholder="Formula, variables and units…" aria-label="Your calculation method"></textarea><button type="button" class="vc-quiet-button" data-extra-score-button="method">Check my method</button><div class="vc-tutor-progress" data-extra-progress="method" aria-live="polite"><span class="vc-progress-track"><i></i></span><span class="vc-progress-label">Ready for Gemini — click to check</span></div><div class="vc-extra-answer" data-extra-answer="method" hidden></div></article>
+      <article class="vc-practice-card"><span class="vc-practice-number">02</span><h4>${revEsc(methodTitle)}</h4><p>${revEsc(methodPrompt)}</p><textarea rows="3" data-extra-input="method" placeholder="${revEsc(methodPlaceholder)}" aria-label="Your answer for this lesson"></textarea><button type="button" class="vc-quiet-button" data-extra-score-button="method">Check my answer</button><div class="vc-tutor-progress" data-extra-progress="method" aria-live="polite"><span class="vc-progress-track"><i></i></span><span class="vc-progress-label">Ready for Gemini — click to check</span></div><div class="vc-extra-answer" data-extra-answer="method" hidden></div></article>
       <article class="vc-practice-card"><span class="vc-practice-number">03</span><h4>Catch the exam trap</h4><p>Before looking below, write one mistake a rushed student could make in this topic.</p><textarea rows="3" data-extra-input="trap" placeholder="The mistake to avoid…" aria-label="The exam trap"></textarea><button type="button" class="vc-quiet-button" data-extra-score-button="trap">Check my reasoning</button><div class="vc-tutor-progress" data-extra-progress="trap" aria-live="polite"><span class="vc-progress-track"><i></i></span><span class="vc-progress-label">Ready for Gemini — click to check</span></div><div class="vc-extra-answer" data-extra-answer="trap" hidden></div></article>
     </div><p class="vc-practice-note">The checkpoint above is scored. These three exercises reinforce the same exam skills; reveal the correction only after committing to an answer, then continue with a fresh-number drill or a past-paper case.</p>
   </section>`;
@@ -95,8 +103,6 @@ function vcRenderLesson() {
   const variant = vcStudio.lessonVariant?.lesson_id === lesson.id ? vcStudio.lessonVariant : null;
   const practice = variant || lesson;
   const formula = lesson.formula || "State the relevant definition, formula and units before calculating.";
-  const methodTerms = (lesson.formula ? lesson.formula.split(/[^A-Za-z0-9%€]+/) : lesson.key_points).filter((term) => String(term).length >= 4).slice(0, 8);
-  const trapTerms = String(lesson.trap).split(/[^A-Za-z0-9%€]+/).filter((term) => term.length >= 4).slice(0, 8);
   const questions = practice.quiz.map((question, i) => `<fieldset class="vc-check-question"><legend><span>${i + 1}</span>${revEsc(question.prompt)}</legend>${question.kind === "mcq" ? `<div class="vc-mcq-options">${question.choices.map((choice, j) => `<label><input type="radio" name="${revEsc(question.id)}" value="${j}" required><span class="vc-choice-letter" aria-hidden="true">${String.fromCharCode(65 + j)}</span><span class="vc-choice-text">${revEsc(choice)}</span></label>`).join("")}</div>` : `<label class="vc-number-answer"><input name="${revEsc(question.id)}" inputmode="decimal" autocomplete="off" placeholder="Your answer" required><span>${revEsc(question.unit || "")}</span></label>`}</fieldset>`).join("");
   const example = practice.example || lesson.example;
   vcNode("vcLesson").innerHTML = `<div class="vc-lesson-topline"><span>CHAPTER ${vcStudio.course.chapters.indexOf(chapter) + 1} · LESSON ${index + 1} OF ${lessons.length}</span><button type="button" class="vc-quiet-button" data-print-lesson>Print lesson</button></div><h2 class="vc-lesson-title" tabindex="-1">${revEsc(lesson.title)}</h2><p class="vc-lesson-objective">${revEsc(lesson.why)}</p><div class="vc-lesson-meta"><span>About ${lesson.minutes} min</span><button type="button" data-open-lesson-source>Course pp. ${lesson.pages[0]}–${lesson.pages[1]} ↗</button>${state.last_score != null ? `<span>Last checkpoint: ${state.last_score}%</span>` : ""}</div>
@@ -140,7 +146,7 @@ function vcRenderLesson() {
     answer.classList.toggle("is-wrong", selected.value !== "0");
     event.currentTarget.textContent = selected.value === "0" ? "✓ Correct" : "Review the correction";
   });
-  const scoring = { method: { terms: methodTerms, correction: formula }, trap: { terms: trapTerms, correction: lesson.trap } };
+  const scoring = { method: { correction: formula }, trap: { correction: lesson.trap } };
   vcNode("vcLesson").querySelectorAll("[data-extra-score-button]").forEach((button) => button.addEventListener("click", async (event) => {
     const clickedButton = event.currentTarget;
     const kind = clickedButton.dataset.extraScoreButton;
@@ -159,14 +165,29 @@ function vcRenderLesson() {
     answer.innerHTML = '<p class="vc-tutor-pending"><span class="vc-pending-dot" aria-hidden="true"></span> Gemini is checking your reasoning against the course…</p>';
     vcMessage("Gemini is checking your answer…");
     try {
-      const prompt = `Grade this student's ${kind === "method" ? "calculation method" : "exam-trap reasoning"} for the Venture Capital lesson "${lesson.title}".\n\nCOURSE MATERIAL FOR THIS LESSON:\nObjective: ${lesson.why}\nKey points: ${(lesson.key_points || []).join("; ")}\nFormula: ${lesson.formula || "No formula is specified in this lesson."}\nCourse trap: ${lesson.trap}\n\nStudent answer: ${value}\n\nUse the lesson material above as the authority. Do not invent assumptions, penalties, market conventions, sources or requirements that are absent from it. Do not penalize a correct simple answer for omitting unstated extras. Grade completeness and accuracy against the relevant key points. For calculation methods, check the actual formula, variables, units and order only when relevant. Return the first line exactly as SCORE: NN% (indicative practice feedback, not an official exam grade), followed by concise sections: What is correct; What is missing or incorrect; Model correction. Always answer in English.`;
-      const request = revApi("/api/vc/tutor", { method: "POST", body: JSON.stringify({ message: prompt, mode: "correct", topic_id: lesson.topic_ids?.[0] || null, student_answer: value }) });
-      if (progressLabel) progressLabel.textContent = "Gemini is writing your feedback…";
+      const chapter = vcStudio.course.chapters.find((item) => item.id === lesson.chapter_id);
+      const lessonContext = [
+        `=== Exact lesson: ${chapter?.filename || chapter?.title || "Venture Capital"}, pages ${lesson.pages[0]}-${lesson.pages[1]} ===`,
+        `Lesson title: ${lesson.title}`,
+        `Objective: ${lesson.why}`,
+        `Explanations: ${(lesson.explain || []).join(" ")}`,
+        `Key points: ${(lesson.key_points || []).join("; ")}`,
+        `Formula taught in this lesson: ${lesson.formula || "None stated"}`,
+        `Worked example: ${lesson.example?.context || ""} ${(lesson.example?.steps || []).join(" ")} ${lesson.example?.result || ""}`,
+        `Course trap: ${lesson.trap}`,
+      ].join("\n").slice(0, 11000);
+      const taskType = kind === "method" ? (lesson.formula ? "calculation method" : "concept explanation") : "exam-trap reasoning";
+      const prompt = `Correct this student's ${taskType} for the exact lesson "${lesson.title}". Use only the separately supplied exact lesson context. Assess only concepts taught in that lesson. Never import material from another lecture, topic, answer, or general VC knowledge. Do not invent formulas, assumptions, penalties or conventions. If there is no formula in the lesson, do not create one. Do not penalize a simple answer for omitting unstated extras. Return first line exactly SCORE: NN%, then concise sections: What is correct; What is missing or incorrect; Model correction. Write formulas in plain readable text, for example "Founder ownership after round = before-round ownership × (1 − investor ownership)"; do not use LaTeX. Always answer in English.`;
+      const request = revApi("/api/vc/tutor", { method: "POST", body: JSON.stringify({ message: prompt, mode: "correct", topic_id: lesson.topic_ids?.[0] || null, student_answer: value, lesson_context: lessonContext }) });
+      if (progressLabel) progressLabel.textContent = "AI tutor is writing your feedback…";
       const payload = await Promise.race([request, new Promise((_, reject) => setTimeout(() => reject(new Error("Gemini took too long to respond. Try again; your answer is still in the box.")), 20000))]);
-      const match = String(payload.text || "").match(/SCORE\s*:\s*(\d{1,3})\s*%/i);
+      if (payload.source !== "ai") throw new Error(payload.text || "The cloud tutor is unavailable right now.");
+      const cleanText = vcReadableTutorText(payload.text || "");
+      const match = cleanText.match(/SCORE\s*:\s*(\d{1,3})\s*%/i);
       const score = match ? Math.min(100, Number(match[1])) : null;
       const scoreHtml = score == null ? "" : `<div class="vc-text-score"><strong>${score}%</strong><span>indicative tutor assessment</span></div>`;
-      answer.innerHTML = `${scoreHtml}<div class="vc-tutor-correction">${typeof revMarkdown === "function" ? revMarkdown(payload.text) : revEsc(payload.text || "No correction returned.")}</div><small>${payload.source === "ai" ? "Gemini tutor correction, grounded in the course context." : "Tutor unavailable: local course correction shown as a fallback."}</small>`;
+      const displayText = cleanText.replace(/^\s*SCORE\s*:\s*\d{1,3}\s*%\s*/i, "");
+      answer.innerHTML = `${scoreHtml}<div class="vc-tutor-correction">${typeof revMarkdown === "function" ? revMarkdown(displayText) : revEsc(displayText || "No correction returned.")}</div><small>Cloud tutor feedback via ${revEsc(payload.model || "AI tutor")}, scoped to this lesson.</small>`;
       answer.hidden = false;
       clickedButton.textContent = "✓ Checked by tutor";
       if (progress) { progress.classList.remove("active"); progress.classList.add("done"); }

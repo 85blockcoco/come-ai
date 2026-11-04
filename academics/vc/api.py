@@ -52,6 +52,7 @@ class TutorRequest(BaseModel):
     mode: str = Field(default="explain", max_length=16)
     topic_id: str | None = Field(default=None, max_length=16)
     student_answer: str | None = Field(default=None, max_length=4_000)
+    lesson_context: str | None = Field(default=None, max_length=12_000)
     history: list[dict[str, str]] = Field(default_factory=list, max_length=12)
 
 
@@ -341,6 +342,7 @@ def create_vc_router(
                 errors=flat_errors,
                 student_answer=payload.student_answer,
                 history=payload.history,
+                course_context=payload.lesson_context,
             )
         except Exception:
             # A transient provider or local retrieval failure must not turn a

@@ -598,6 +598,7 @@ STRICT RULES:
         errors: list | None = None,
         student_answer: str | None = None,
         history: list | None = None,
+        course_context: str | None = None,
     ) -> dict:
         """Adaptive tutoring turn. Returns a structured, citable result.
 
@@ -658,6 +659,14 @@ STRICT RULES:
         parts.append(f"[Student's message: {message}]" if message else "")
 
         instruction = self._MODE_INSTRUCTIONS.get(mode, self._MODE_INSTRUCTIONS["explain"])
+        scoped_instruction = (
+            "- This is a lesson-scoped answer check. Treat the supplied lesson context as the ONLY authority. "
+            "Ignore retrieved background that is not part of that lesson. Do not add formulas, assumptions, "
+            "conventions, penalties or facts absent from the supplied lesson. If the lesson does not teach "
+            "the requested formula, say so and assess only what the lesson teaches.\n"
+            if course_context
+            else ""
+        )
         system = (
             "You are an extremely demanding but highly effective EDHEC Business School "
             "Venture Capital professor preparing a student for a 90-minute English exam.\n\n"
@@ -667,11 +676,12 @@ STRICT RULES:
             "- Never invent a source, a formula, or a course reference. If the provided "
             "course context does not cover the point, say explicitly: "
             '"Not covered in the provided course extracts — verify before the exam."\n'
+            f"{scoped_instruction}"
             "- Keep it focused: this is a tutoring turn, not an essay.\n\n"
             f"YOUR TASK THIS TURN:\n{instruction}"
         )
         prompt = "\n".join(p for p in parts if p)
-        context = self.get_relevant_context(
+        context = str(course_context).strip() if course_context else self.get_relevant_context(
             " ".join(p for p in (message, topic_id or "", student_answer or "") if p),
             max_chars=6000,
         )
@@ -680,7 +690,11 @@ STRICT RULES:
 
         result_text = None
         model_used = None
-        for provider in ("gemini", "ollama"):
+        # Lesson answer grading must stay tied to the selected course lesson.
+        # Keep it on the cloud tutor path (Gemini, with its configured cloud
+        # quota fallback) and do not silently send the answer to local Ollama.
+        providers = ("gemini",) if course_context else ("gemini", "ollama")
+        for provider in providers:
             if provider == "gemini":
                 result_text = self.call_gemini(prompt, system)
                 if result_text:
