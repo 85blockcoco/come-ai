@@ -826,7 +826,7 @@ async function revLoadRadar() {
     const priorityHtml = priorities.length
       ? `<ul class="rev-readiness-priorities">${priorities.map((topic) => `<li><strong>${revEsc(topic.topic_id)}</strong> ${revEsc(topic.title)} <span>${revEsc(topic.status)}</span></li>`).join("")}</ul>`
       : `<p class="quiet-status">No critical topic detected yet.</p>`;
-    const readinessHtml = `<div class="rev-readiness-summary"><div><strong>Exam readiness</strong><span>${Number(readiness.score || 0).toFixed(1)}%</span></div><p>${readiness.ready ? "Ready threshold reached." : "Keep practising before attempting the full mock."} ${readiness.official_paper_questions || 0} official paper questions · ${readiness.graded_cases || 0} graded cases.</p>${priorityHtml}</div>`;
+    const readinessHtml = `<div class="rev-readiness-summary"><div><strong>Exam readiness</strong><span>${Number(readiness.score || 0).toFixed(1)}%</span></div><p>${readiness.ready ? "Ready threshold reached." : "Keep practising before attempting the full mock."} ${readiness.official_paper_questions || 0} official paper questions · ${readiness.graded_cases || 0} graded cases.</p>${priorityHtml}${priorities.length ? '<button type="button" class="secondary-button" data-rev-priority>Start priority practice</button>' : ""}</div>`;
     const statusLabel = { untested: "Not tested", fragile: "Revisit first", developing: "Developing", solid: "Strong results" };
     box.innerHTML = readinessHtml + radar.topics.map((topic) => {
       const accuracy = topic.accuracy == null ? "—" : `${Math.round(topic.accuracy * 100)}%`;
@@ -838,6 +838,14 @@ async function revLoadRadar() {
           <span class="quiet-status">${topic.attempts} attempts · ${accuracy}</span>
         </div>`;
     }).join("");
+    box.querySelector("[data-rev-priority]")?.addEventListener("click", () => {
+      const topicId = priorities[0]?.topic_id;
+      const select = revEl("revDrillTopic");
+      if (topicId && select && [...select.options].some((option) => option.value === topicId)) select.value = topicId;
+      revSelectTab("revPractice");
+      if (typeof vcSetTrainingMode === "function") vcSetTrainingMode("drills");
+      revDrawDrill();
+    });
   } catch (error) {
     box.innerHTML = `<p class="quiet-status">${revEsc(error.message)}</p>`;
   }
