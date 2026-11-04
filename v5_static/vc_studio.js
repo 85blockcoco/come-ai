@@ -62,16 +62,26 @@ function vcDiagram(kind) {
   if (kind === "waterfall") return `<div class="vc-illustration vc-flow">${node("Preferred rights", "Calculate the contractual payout")}${node("Conversion", "Calculate common-equity value")}${node("Compare", "Apply participation, cap and thresholds")}</div>`;
   return "";
 }
+function vcFreeTextFeedback(text, expected, correction) {
+  const normalised = String(text || "").toLowerCase().normalize("NFKD").replace(/[^a-z0-9%€]+/g, " ");
+  const terms = [...new Set(expected.map((term) => String(term).toLowerCase().replace(/[^a-z0-9%€]+/g, " ").trim()).filter((term) => term.length >= 4))];
+  const found = terms.filter((term) => normalised.includes(term));
+  const missing = terms.filter((term) => !normalised.includes(term));
+  const score = terms.length ? Math.round((found.length / terms.length) * 100) : 0;
+  return { score, found, missing, correction };
+}
 function vcExtraPractice(lesson) {
   const takeaway = lesson.key_points?.[0] || lesson.why;
   const secondTakeaway = lesson.key_points?.[1] || "the assumptions and the decision rule";
   const formula = lesson.formula || "State the relevant definition, formula and units before calculating.";
+  const methodTerms = (lesson.formula ? lesson.formula.split(/[^A-Za-z0-9%€]+/) : lesson.key_points).filter((term) => String(term).length >= 4).slice(0, 8);
+  const trapTerms = String(lesson.trap).split(/[^A-Za-z0-9%€]+/).filter((term) => term.length >= 4).slice(0, 8);
   return `<section class="vc-extra-practice" aria-labelledby="vcExtraPracticeTitle">
     <div class="vc-extra-practice-heading"><div><p class="vc-mini-label">EXAM-STYLE PRACTICE</p><h3 id="vcExtraPracticeTitle">QCM, method and exam trap</h3></div><span class="vc-practice-count">3 short exercises</span></div>
     <div class="vc-practice-grid">
       <article class="vc-practice-card"><span class="vc-practice-number">01</span><h4>Mini multiple-choice question</h4><p>Which statement best matches <b>${revEsc(lesson.title)}</b>?</p><div class="vc-mini-options"><label><input type="radio" name="extra-mcq" value="0"><span>A</span><span>${revEsc(takeaway)}</span></label><label><input type="radio" name="extra-mcq" value="1"><span>B</span><span>VC investments eliminate uncertainty once funding is received.</span></label><label><input type="radio" name="extra-mcq" value="2"><span>C</span><span>Every percentage change is applied by subtracting points directly.</span></label></div><button type="button" class="vc-quiet-button" data-extra-mcq>Check my answer</button><div class="vc-extra-answer" data-extra-answer="extra-mcq-result" hidden><b>Correction:</b><p>${revEsc(takeaway)} The other choices confuse the course principle.</p></div></article>
-      <article class="vc-practice-card"><span class="vc-practice-number">02</span><h4>Calculation method</h4><p>Before touching the numbers, write the relationship you would use for a new dataset.</p><textarea rows="3" placeholder="Formula, variables and units…" aria-label="Your calculation method"></textarea><button type="button" class="vc-quiet-button" data-extra-reveal="extra-transfer">Show the method and correction</button><div class="vc-extra-answer" data-extra-answer="extra-transfer" hidden><b>Correction:</b><p>${revEsc(formula)}</p><p>Then substitute the new data, keep the units, and interpret the result.</p></div></article>
-      <article class="vc-practice-card"><span class="vc-practice-number">03</span><h4>Catch the exam trap</h4><p>Before looking below, write one mistake a rushed student could make in this topic.</p><textarea rows="3" placeholder="The mistake to avoid…" aria-label="The exam trap"></textarea><button type="button" class="vc-quiet-button" data-extra-reveal="extra-trap">Reveal the course trap</button><div class="vc-extra-answer" data-extra-answer="extra-trap" hidden><b>Course warning:</b><p>${revEsc(lesson.trap)}</p></div></article>
+      <article class="vc-practice-card"><span class="vc-practice-number">02</span><h4>Calculation method</h4><p>Before touching the numbers, write the relationship you would use for a new dataset.</p><textarea rows="3" data-extra-input="method" placeholder="Formula, variables and units…" aria-label="Your calculation method"></textarea><button type="button" class="vc-quiet-button" data-extra-score-button="method">Check my method</button><div class="vc-extra-answer" data-extra-answer="method" hidden></div></article>
+      <article class="vc-practice-card"><span class="vc-practice-number">03</span><h4>Catch the exam trap</h4><p>Before looking below, write one mistake a rushed student could make in this topic.</p><textarea rows="3" data-extra-input="trap" placeholder="The mistake to avoid…" aria-label="The exam trap"></textarea><button type="button" class="vc-quiet-button" data-extra-score-button="trap">Check my reasoning</button><div class="vc-extra-answer" data-extra-answer="trap" hidden></div></article>
     </div><p class="vc-practice-note">The checkpoint above is scored. These three exercises reinforce the same exam skills; reveal the correction only after committing to an answer, then continue with a fresh-number drill or a past-paper case.</p>
   </section>`;
 }
@@ -127,6 +137,33 @@ function vcRenderLesson() {
     answer.classList.toggle("is-wrong", selected.value !== "0");
     event.currentTarget.textContent = selected.value === "0" ? "✓ Correct" : "Review the correction";
   });
+  const scoring = { method: { terms: methodTerms, correction: formula }, trap: { terms: trapTerms, correction: lesson.trap } };
+  vcNode("vcLesson").querySelectorAll("[data-extra-score-button]").forEach((button) => button.addEventListener("click", async (event) => {
+    const kind = event.currentTarget.dataset.extraScoreButton;
+    const input = vcNode("vcLesson").querySelector(`[data-extra-input="${kind}"]`);
+    const answer = vcNode("vcLesson").querySelector(`[data-extra-answer="${kind}"]`);
+    const value = input?.value.trim() || "";
+    if (!value) { vcMessage("Write your answer before checking it."); input?.focus(); return; }
+    const buttonLabel = event.currentTarget.textContent;
+    event.currentTarget.disabled = true;
+    event.currentTarget.textContent = "Tutor is checking…";
+    try {
+      const prompt = `Correct this student's ${kind === "method" ? "calculation method" : "exam-trap reasoning"} for the Venture Capital lesson "${lesson.title}". Return the first line exactly as SCORE: NN% (an indicative pedagogical score, not an official grade), then give: 1) what is correct, 2) what is missing or wrong, 3) the corrected method in concise English. Use only the course concepts provided to you.`;
+      const payload = await revApi("/api/vc/tutor", { method: "POST", body: JSON.stringify({ message: prompt, mode: "correct", topic_id: lesson.topic_ids?.[0] || null, student_answer: value }) });
+      const match = String(payload.text || "").match(/SCORE\s*:\s*(\d{1,3})\s*%/i);
+      const score = match ? Math.min(100, Number(match[1])) : null;
+      const scoreHtml = score == null ? "" : `<div class="vc-text-score"><strong>${score}%</strong><span>indicative tutor assessment</span></div>`;
+      answer.innerHTML = `${scoreHtml}<div class="vc-tutor-correction">${typeof revMarkdown === "function" ? revMarkdown(payload.text) : revEsc(payload.text || "No correction returned.")}</div><small>${payload.source === "ai" ? "Gemini tutor correction, grounded in the course context." : "Tutor unavailable: local course correction shown as a fallback."}</small>`;
+      answer.hidden = false;
+      event.currentTarget.textContent = "✓ Checked by tutor";
+    } catch (_) {
+      const result = vcFreeTextFeedback(value, scoring[kind].terms, scoring[kind].correction);
+      const missing = result.missing.length ? `<p><b>Still to include:</b> ${revEsc(result.missing.join(", "))}</p>` : "<p><b>Key concepts detected.</b> Now verify the units and interpretation.</p>";
+      answer.innerHTML = `<div class="vc-text-score"><strong>${result.score}%</strong><span>offline concept coverage</span></div>${missing}<p><b>Correction:</b> ${revEsc(result.correction)}</p><small>Gemini was unavailable; this is a local fallback, not an official exam grade.</small>`;
+      answer.hidden = false;
+      event.currentTarget.textContent = "✓ Checked offline";
+    } finally { event.currentTarget.disabled = false; if (!answer.hidden) vcMessage(""); else event.currentTarget.textContent = buttonLabel; }
+  }));
 }
 async function vcOpenLesson(id, scroll = false) {
   if (!vcAllLessons().some((lesson) => lesson.id === id)) return;
