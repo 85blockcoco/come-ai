@@ -244,7 +244,7 @@ _DURATION = re.compile(
     r"\b(?P<low>\d{1,2}|" + "|".join(sorted(_NUMBER_WORDS, key=len, reverse=True)) +
     r")\s*(?:[-–—]|to|à|a|bis|hasta|al)?\s*(?P<high>\d{1,2}|" +
     "|".join(sorted(_NUMBER_WORDS, key=len, reverse=True)) +
-    r")?\s*(?:months?|mois|monate|mesi|meses)\b", re.I)
+    r")?\s*(?:months?|mois|monate|mesi|meses|semaines?|semestres?)\b", re.I)
 
 
 def _fold(text: str) -> str:

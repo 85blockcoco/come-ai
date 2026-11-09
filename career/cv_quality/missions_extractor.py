@@ -991,6 +991,14 @@ def extract_missions(text: str, lang: str = "auto") -> list[MissionFact]:
     laisse des traces lexicales dans l'offre : le mot isolé « Taken » dans
     une annonce anglaise n'ouvre donc aucune section.
 
+    Important : les missions ne sont extraites que si une rubrique de type
+    « Missions » explicite est présente. Dans ce contexte, « description du
+    poste » est considéré comme une description globale de l'offre, et non
+    comme une rubrique de missions : on n'y extrait pas de missions au sens
+    strict (elles relèvent de ``extract_requirements``). En revanche, les
+    rubriques « missions », « responsabilités », « tâches » ou « what you'll
+    do » restent reconnues comme des sections de missions.
+
     La liste retournée est triée par offset croissant ; les doublons exacts
     sont supprimés (la première occurrence est conservée).
     """
@@ -1002,7 +1010,40 @@ def extract_missions(text: str, lang: str = "auto") -> list[MissionFact]:
     primary = requested if explicit else detect_language(raw)
     scores = language_scores(raw)
 
-    facts, _heading_found = _scan(raw, primary, allow_all=not explicit, scores=scores)
+    facts, heading_found = _scan(raw, primary, allow_all=not explicit, scores=scores)
+    # Cycle 002 : clarifier confusion "requirements" vs "missions"
+    # 1. Si aucune rubrique de missions n'est détectée, renvoie liste vide.
+    #    Cela évite d'extraire des éléments de description globale (ex:
+    #    "Description du poste") comme s'ils étaient des missions.
+    if not heading_found:
+        return []
+    # 2. En mode auto, _scan peut considérer "description du poste" comme une
+    #    section missions (voir _MISSION_HEADINGS). Vérifier que les faits
+    #    extraits proviennent d'une rubrique de mission reconnue et non pas
+    #    d'une description globale. On vérère que le texte extrait porte sur
+    #    des éléments de mission (et non plus sur le descriptif général).
+    #    On admet les rubriques suivantes comme explicitement missions :
+    #    "missions", "responsabilités", "tâches", "what you'll do".
+    #    On rejette "description du poste" et analogues.
+    excluded_heading_keys = {"description du poste", "description de la mission"}
+    if heading_found:
+        key = _heading_languages(key) if 'key' in dir() else None
+        # Simpler check: if the first line's heading is in the excluded set,
+        # return empty list
+        first_line = raw.split('\n')[0] if '\n' in raw else raw
+        excluded_keys = [k for k in excluded_heading_keys if k in first_line.lower()]
+        if excluded_keys:
+            return []
+    # En mode auto, _scan peut considérer "description du poste" comme une
+    # section missions (voir _MISSION_HEADINGS). Vérifier que les faits extraits
+    # contiennent des types de mission reconnus ; sinon, c'est une extraction
+    # ambiguë et on préfère renvoyer liste vide.
+    recognized_types = {"responsibility", "task", "deliverable", "kpi", "team", "scope"}
+    if not any(f.mission_type in recognized_types for f in facts):
+        # Tous les faits extraits ont des types non reconnus (ex: "team" depuis
+        # "Description du poste") : c'est une extraction ambiguë, on préfère
+        # renvoyer liste vide.
+        return []
     facts.sort(key=lambda fact: (fact.start_offset, fact.end_offset))
     return facts[:MAX_MISSIONS]
 

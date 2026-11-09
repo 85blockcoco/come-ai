@@ -133,7 +133,7 @@ _CONTRACT_MARKERS: tuple[tuple[str, re.Pattern[str]], ...] = (
         r"\b(?:intern|internship|internships|stagiaire|stages?|alternance|alternant|apprentice|"
         r"apprenticeship|working\s+student|praktikum)\b", re.I)),
 )
-_DURATION = re.compile(r"(?<![\d.,])\b(\d{1,2})\s*-?\s*(?:mois|months?)\b", re.I)
+_DURATION = re.compile(r"(?<![\d.,])\b(\d{1,2})\s*-?\s*(?:mois|months?|semaines?|semestres?)\b", re.I)
 #: Name of a published field that carries the contract type.
 _CONTRACT_FIELD = re.compile(
     r"(?:employment|contract|commitment|contrat|type_of_employment|typeOfEmployment)", re.I
