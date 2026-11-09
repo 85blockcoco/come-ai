@@ -1,0 +1,100 @@
+{
+  "application": {
+    "id": "app_j1_synth_0001",
+    "job_id": "job_j1_synth_0001"
+  },
+  "job": {
+    "id": "job_j1_synth_0001",
+    "company": "Nexora Labs",
+    "title": "Data Analyst — stage",
+    "employment_type": "stage",
+    "job_family": "Tech / Produit",
+    "city": "Berlin",
+    "country": "Allemagne",
+    "source_name": "synthetic_board",
+    "source_id": "syn-4242",
+    "official_url": "https://careers.example.test/nexora/data-analyst-4242",
+    "posted_date": "2026-10-12",
+    "deadline_date": "2026-11-20",
+    "start_date": "2027-02-01",
+    "duration_months": 6,
+    "requirements": "Python et SQL avancés.\nAnglais courant exigé.",
+    "description_original": "Stage de six mois au sein de l'équipe data (synthetic).",
+    "source_verified": true,
+    "official_source_trust_label": "source officielle"
+  },
+  "prep": {
+    "gaps": [
+      {
+        "requirement": "Python",
+        "requirement_type": "mandatory",
+        "current_state": "missing",
+        "adapted_state": "Ajouter un projet Python chiffré.",
+        "provenance": null,
+        "variant_specific": false
+      },
+      {
+        "requirement": "Section order",
+        "requirement_type": "preferred",
+        "current_state": "wrong_order",
+        "adapted_state": "Réordonner les sections selon la variante recommandée.",
+        "provenance": null,
+        "variant_specific": true
+      }
+    ]
+  },
+  "sessions": [
+    {
+      "id": "interview_synth_0001",
+      "application_id": "app_j1_synth_0001",
+      "mode": "behavioral",
+      "status": "completed",
+      "started_at": "2026-10-28T18:00:00+00:00",
+      "completed_at": "2026-10-28T18:25:00+00:00",
+      "turns": [
+        {
+          "question": {"id": "q_synth_1"},
+          "answer": "Quand j'étais en mission dans l'équipe data, mon objectif était de fiabiliser le reporting ; j'ai construit un pipeline SQL et livré un tableau de bord qui a réduit le temps de production de 40 %."
+        }
+      ]
+    },
+    {
+      "id": "interview_synth_0002",
+      "application_id": "app_j1_synth_0001",
+      "mode": "technical",
+      "status": "active",
+      "started_at": "2026-10-30T09:00:00+00:00",
+      "turns": [
+        {
+          "question": {"id": "q_synth_2"},
+          "answer": "Bonjour, je n'ai pas encore de réponse structurée."
+        }
+      ]
+    },
+    {
+      "id": "interview_synth_0003",
+      "application_id": "app_j1_other_0002",
+      "mode": "technical",
+      "status": "completed",
+      "started_at": "2026-10-29T09:00:00+00:00",
+      "turns": [
+        {
+          "question": {"id": "q_synth_3"},
+          "answer": "Quand même, mon objectif était clair, j'ai analysé le besoin et livré le rapport à 100 % dans les délais."
+        }
+      ]
+    }
+  ],
+  "admin_checklist": {
+    "country": "Allemagne",
+    "items": [
+      {"key": "work_permit", "label_fr": "Autorisation de travail", "required": true, "status": "missing", "proof_refs": []},
+      {"key": "health_insurance", "label_fr": "Assurance maladie", "required": true, "status": "missing", "proof_refs": []},
+      {"key": "housing_proof", "label_fr": "Justificatif de logement", "required": false, "status": "not_applicable", "proof_refs": []}
+    ],
+    "blocking_missing": ["work_permit", "health_insurance"]
+  },
+  "faq_probe": {
+    "question_prefix": "Pouvez-vous décrire votre expérience en"
+  }
+}

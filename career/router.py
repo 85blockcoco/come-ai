@@ -13,7 +13,7 @@ from typing import Any, Callable
 from urllib.parse import parse_qs
 
 from fastapi import APIRouter, HTTPException, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile
@@ -21,6 +21,7 @@ from starlette.datastructures import UploadFile
 from .exploration_service import ExplorationService
 from .ats_guide import human_apply_guide
 from .send_confirmation import SendEvidence, parse_sent_datetime
+from .j1_briefing import briefing_for_application, render_markdown
 from .offer_dates import extract_offer_dates
 from .offer_qualification import qualify_offer
 from .evidence import MAX_ATTACHMENT_BYTES
@@ -1956,6 +1957,24 @@ def create_career_router(
     @router.post("/api/career/applications/{application_id}/checklist")
     async def application_checklist(application_id: str, payload: ApplicationChecklistPayload) -> Any:
         return await local(lambda: service.set_application_checklist(application_id, payload.checked))
+
+    # SPEC-037 : briefing J-1 local et en lecture seule, avec lacunes visibles.
+    @router.get("/api/career/applications/{application_id}/j1-briefing")
+    async def application_j1_briefing(application_id: str) -> Any:
+        return await local(lambda: briefing_for_application(service, application_id))
+
+    @router.get("/api/career/applications/{application_id}/j1-briefing.md")
+    async def application_j1_briefing_markdown(application_id: str) -> PlainTextResponse:
+        payload = await local(lambda: briefing_for_application(service, application_id))
+        safe_id = "".join(ch for ch in application_id if ch.isalnum() or ch in "-_")[:80] or "briefing"
+        return PlainTextResponse(
+            render_markdown(payload),
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="briefing-j1-{safe_id}.md"',
+                "Cache-Control": "no-store",
+            },
+        )
 
     # SPEC-047 : la confirmation d'envoi est une déclaration humaine — la
     # personne effectue le dépôt manuel puis l'enregistre ici ; le module ne
