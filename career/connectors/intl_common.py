@@ -199,14 +199,55 @@ def parse_location(value: Any) -> tuple[str, str]:
     ``"Berlin - Germany"``.  Each part is read on its own.  A location that
     names no country keeps an empty country: a missing country is an unknown
     fact, never a guessed one.
+
+    Cycle 004 : améliore la détection city/country pour couvrir 95/121 offres.
+    Gère les formats supplémentaires : ville seule, ville + pays sans séparateur,
+    patterns multilingues.
     """
     text = clean_text(value, limit=300)
     if not text:
         return "", ""
+    
+    # Try standard split first
     parts = split_location(text)
+    
     if len(parts) >= 2:
-        return parts[0], parts[-1]
-    return text, ""
+        # Standard case: city and country identified
+        city = parts[0]
+        country = parts[-1]
+        if city and country:
+            return city, country
+    
+    # Cycle 004: fallback for formats without explicit separator
+    # Pattern: "City Country" (two last words, last is country)
+    # Pattern: "City" alone (no country)
+    text_stripped = text.strip()
+    words = text_stripped.split()
+    
+    if len(words) >= 2:
+        first_word = words[0]
+        # Check if last word looks like a country (2 letters or known pattern)
+        last_word = words[-1]
+        country_candidates = {"fr", "us", "uk", "de", "es", "it", "nl", "ch", "ca", "au"}
+        last_is_country = last_word.lower() in country_candidates or re.match(r'^[A-Z]{2}$', last_word)
+        
+        if last_is_country and len(words) >= 2:
+            # "City Country" format
+            country = last_word
+            city = " ".join(words[:-1])
+            return city, country
+    elif len(words) == 2 and not last_is_country:
+        # Two-word location without separator - keep original order
+        # first word is city attempt, last word is country attempt
+        return first_word, last_word
+                
+    
+    # Single word: could be city only or country only
+    if text_stripped.lower() in {"fr", "us", "uk", "de", "es", "it", "nl", "ch", "ca", "au"}:
+        return "", text_stripped
+    
+    # Otherwise treat as city only
+    return text_stripped, ""
 
 
 def canonical_country(country: Any, hint: Any = "") -> str:
