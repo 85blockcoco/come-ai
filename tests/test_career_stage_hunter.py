@@ -812,6 +812,62 @@ def test_higher_degree_requirement_breaks_the_match_visibly() -> None:
     assert "supérieur" in level["reason"]
 
 
+@pytest.mark.parametrize(
+    ("candidate_level", "offer_requirement", "expected_status"),
+    [
+        ("BBA", "Bachelor's degree required.", "match"),
+        ("Bachelor of Business Administration", "BBA students only.", "match"),
+        ("MBA", "MBA students only.", "match"),
+        ("MBA", "Master of Business Administration required.", "match"),
+        ("BBA", "MBA students only.", "no_match"),
+    ],
+)
+def test_candidate_degree_aliases_are_ranked_conservatively(
+    candidate_level: str, offer_requirement: str, expected_status: str,
+) -> None:
+    brief = validate_brief({"study_level": candidate_level})
+    match = score_brief_match(
+        brief,
+        dict(synthetic_job(requirements=offer_requirement)),
+    )
+    level = next(component for component in match["components"] if component["key"] == "niveau")
+    assert level["status"] == expected_status
+    assert level["points"] == (5 if expected_status == "match" else 0)
+
+
+def test_bachelor_access_is_prioritized_but_mba_offers_remain_visible(tmp_path: Path) -> None:
+    service = CareerService(tmp_path)
+    bachelor = service.import_job(synthetic_job(
+        source_id="synthetic-bachelor-access",
+        official_url="https://careers.example.test/jobs/bachelor-access",
+        requirements="Bachelor's degree in finance required.",
+    ))
+    mba = service.import_job(synthetic_job(
+        source_id="synthetic-mba-access",
+        official_url="https://careers.example.test/jobs/mba-access",
+        requirements="MBA students only.",
+    ))
+    service.update_stage_search({
+        "domains": ["M&A"],
+        "study_level": "BBA",
+        "education_preference": "bachelor_m1_then_m2",
+    })
+
+    matches = service.list_stage_matches()["matches"]
+
+    assert [item["job"]["id"] for item in matches] == [bachelor["id"], mba["id"]]
+    assert [item["stage_match"]["education_access"]["status"] for item in matches] == [
+        "preferred",
+        "consider",
+    ]
+    mba_level = next(
+        component
+        for component in matches[1]["stage_match"]["components"]
+        if component["key"] == "niveau"
+    )
+    assert mba_level["status"] == "no_match"
+
+
 def test_permanent_contract_is_warned_but_not_hidden() -> None:
     brief = validate_brief({"domains": ["M&A"], "contract_types": ["stage"]})
     permanent = score_brief_match(

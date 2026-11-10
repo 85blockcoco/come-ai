@@ -153,9 +153,17 @@ _LANGUAGE_ALIASES: tuple[tuple[str, tuple[str, ...]], ...] = (
 # Ordered from the lowest to the highest common student level.  A requirement
 # is satisfied when the offer asks for no more than the declared level.
 _STUDY_LEVEL_RANKS: tuple[tuple[int, tuple[str, ...]], ...] = (
-    (3, ("bac 3", "bac +3", "bac+3", "licence", "l3", "bachelor", "3rd year")),
+    (
+        3,
+        ("bac 3", "bac +3", "bac+3", "licence", "l3", "bachelor", "bba",
+         "bachelor of business administration", "3rd year"),
+    ),
     (4, ("bac 4", "bac +4", "bac+4", "m1", "master 1", "4th year")),
-    (5, ("bac 5", "bac +5", "bac+5", "m2", "master 2", "master s", "5th year", "mastere")),
+    (
+        5,
+        ("bac 5", "bac +5", "bac+5", "m2", "master 2", "mba",
+         "master of business administration", "master s", "5th year", "mastere"),
+    ),
     (6, ("bac 6", "bac +6", "bac+6", "m3", "master 3", "6th year")),
     (8, ("doctorat", "phd", "doctorate")),
 )
