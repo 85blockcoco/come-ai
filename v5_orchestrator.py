@@ -239,22 +239,33 @@ class LocalOrchestrator:
         events: list[dict[str, Any]] = []
         inspected: dict[str, dict[str, Any]] = {}
         analyses: dict[str, dict[str, Any]] = {}
+        blocked_after_failure = False
         total = len(plan)
 
         for position, step in enumerate(plan, start=1):
             if callable(is_cancelled) and is_cancelled():
                 events.append(self._event(step, "cancelled", "Tâche annulée avant cette étape."))
                 break
-            if callable(progress):
-                progress((position - 1) / total, step.label)
-            event = self._execute_step(
-                step,
-                inspected=inspected,
-                analyses=analyses,
-                allow_write=allow_write,
-            )
+            skip_due_to_previous_failure = blocked_after_failure
+            if blocked_after_failure:
+                event = self._event(
+                    step,
+                    "skipped",
+                    "Étape ignorée : une étape précédente du plan a échoué.",
+                )
+            else:
+                if callable(progress):
+                    progress((position - 1) / total, step.label)
+                event = self._execute_step(
+                    step,
+                    inspected=inspected,
+                    analyses=analyses,
+                    allow_write=allow_write,
+                )
+                if event["status"] in {"error", "unavailable"}:
+                    blocked_after_failure = True
             events.append(event)
-            if callable(progress):
+            if callable(progress) and not skip_due_to_previous_failure:
                 progress(position / total, event["message"])
 
         citations = self._citations_from_events(events)
@@ -428,10 +439,22 @@ class LocalOrchestrator:
         done = [item for item in events if item["status"] == "done"]
         blocked = [item for item in events if item["status"] == "needs_confirmation"]
         failed = [item for item in events if item["status"] in {"error", "unavailable"}]
+        cancelled = [item for item in events if item["status"] == "cancelled"]
+        if cancelled and not done:
+            return "Plan local annulé avant la première étape : aucune étape n’a été exécutée."
         if not done and failed:
             return "Le plan local a été préparé, mais aucune étape n’a pu aboutir. Vérifie les messages de chaque étape."
-        lines = ["Plan local exécuté sans modèle externe."]
+        lines = [
+            "Plan local interrompu avant la fin."
+            if cancelled
+            else "Plan local exécuté sans modèle externe."
+        ]
         lines.extend(f"• {item['message']}" for item in done)
+        if cancelled:
+            completed_label = "étape terminée" if len(done) == 1 else "étapes terminées"
+            lines.append(
+                f"• Annulé après {len(done)} {completed_label} ; les étapes restantes n’ont pas été exécutées."
+            )
         if blocked:
             lines.append("• Un fichier de sortie reste à confirmer avant toute écriture.")
         if failed:
