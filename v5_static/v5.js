@@ -112,10 +112,174 @@ function renderFiles() {
     const details = document.createElement("span"); details.className = "file-details";
     const name = document.createElement("strong"); name.textContent = file.name; name.title = file.name;
     const info = document.createElement("small"); info.textContent = `${formatSize(file.size_kb)} · ${file.modified}`;
-    details.append(name, info); button.append(type, details); button.addEventListener("click", () => { state.selectedFileId = file.file_id; renderFiles(); }); elements.fileList.append(button);
+    details.append(name, info);
+
+    // DataEngine analysis buttons
+    const actionsDiv = document.createElement("div");
+    actionsDiv.className = "file-actions";
+    const analyzeBtn = document.createElement("button");
+    analyzeBtn.type = "button"; analyzeBtn.className = "file-action-btn analyze"; analyzeBtn.title = "Analyse descriptive";
+    analyzeBtn.textContent = "≊";
+    const performanceBtn = document.createElement("button");
+    performanceBtn.type = "button"; performanceBtn.className = "file-action-btn performance"; performanceBtn.title = "Métriques de performance";
+    performanceBtn.textContent = "σ";
+    const cashflowBtn = document.createElement("button");
+    cashflowBtn.type = "button"; cashflowBtn.className = "file-action-btn cashflow"; cashflowBtn.title = "Analyse de flux de trésorerie";
+    cashflowBtn.textContent = "Φ";
+
+    actionsDiv.append(analyzeBtn, performanceBtn, cashflowBtn);
+    button.append(type, details, actionsDiv);
+
+    // Analyse descriptive
+    analyzeBtn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!file.file_id) { addMessage("error", "Aucun fichier sélectionné."); return; }
+      text(elements.requestStatus, "Analyse descriptive en cours…");
+      setTaskBusy(true);
+      const result = await callDataEngine("analyze", { file_id: file.file_id, sheet_name: "" });
+      setTaskBusy(false);
+      text(elements.requestStatus, "");
+      if (result.status === "error") { addMessage("error", result.error); return; }
+      displayDataEngineResult(file.name, "analyse descriptive", result.data);
+    });
+
+    // Analyse de performance
+    performanceBtn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!file.file_id) { addMessage("error", "Aucun fichier sélectionné."); return; }
+      text(elements.requestStatus, "Analyse de performance en cours…");
+      setTaskBusy(true);
+      const result = await callDataEngine("performance", {
+        file_id: file.file_id,
+        valueColumn: "revenus",
+        timeColumn: None,
+        periodsPerYear: 252,
+        riskFreeRate: 0.0,
+      });
+      setTaskBusy(false);
+      text(elements.requestStatus, "");
+      if (result.status === "error") { addMessage("error", result.error); return; }
+      displayDataEngineResult(file.name, "analyse de performance", result.data);
+    });
+
+    // Analyse de cash-flow
+    cashflowBtn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!file.file_id) { addMessage("error", "Aucun fichier sélectionné."); return; }
+      text(elements.requestStatus, "Analyse de flux de trésorerie en cours…");
+      setTaskBusy(true);
+      const result = await callDataEngine("cash-flow-analysis", {
+        file_id: file.file_id,
+        amountColumn: "montant",
+        dateColumn: None,
+        discountRate: 0.0,
+      });
+      setTaskBusy(false);
+      text(elements.requestStatus, "");
+      if (result.status === "error") { addMessage("error", result.error); return; }
+      displayDataEngineResult(file.name, "analyse de cash-flow", result.data);
+    });
+
+    button.addEventListener("click", () => { state.selectedFileId = file.file_id; renderFiles(); }); elements.fileList.append(button);
   }
   if (!selectedFile()) state.selectedFileId = null;
   updateSelectedFile();
+}
+
+function displayDataEngineResult(fileName, analysisType, resultData) {
+  // Nettoyer les résultats précédents
+  const existingResult = document.querySelector(".data-engine-result");
+  if (existingResult) existingResult.remove();
+
+  const resultDiv = document.createElement("div");
+  resultDiv.className = "data-engine-result";
+  resultDiv.innerHTML = `
+    <div class="result-header">
+      <h3>Résultats : ${analysisType}</h3>
+      <button class="result-close" aria-label="Fermer les résultats">✕</button>
+    </div>
+    <div class="result-content" role="alert"></div>
+    <div class="result-export">
+      <button class="export-json" aria-label="Exporter JSON">JSON</button>
+      <button class="export-csv" aria-label="Exporter CSV">CSV</button>
+      <button class="export-xlsx" aria-label="Exporter XLSX">XLSX</button>
+      <button class="export-md" aria-label="Exporter Markdown">MD</button>
+    </div>
+  `;
+
+  // Afficher les données structurées
+  const contentDiv = resultDiv.querySelector(".result-content");
+  if (resultData && resultData.status === "success") {
+    const analysis = resultData.result;
+    if (analysis && analysis.column_types) {
+      // Analyse descriptive
+      let html = `<p><strong>Colonnes :</strong> ${analysis.column_names.join(", ")}</p>`;
+      html += `<p><strong>Lignes :</strong> ${analysis.row_count}</p>`;
+      if (analysis.numeric_statistics) {
+        const stats = analysis.numeric_statistics;
+        html += `<p><strong>Statistiques numériques :</strong></p><ul>`;
+        for (const [col, s] of Object.entries(stats)) {
+          html += `<li>${col}: count=${s.count}, mean=${s.mean?.toFixed(2) || "N/A"}, sum=${s.sum?.toFixed(2) || "N/A"}</li>`;
+        }
+        html += `</ul>`;
+      }
+      contentDiv.innerHTML = html;
+    } else if (analysis && analysis.report) {
+      // Analyse performance/cash-flow
+      const report = analysis.report;
+      if (report.key_metrics) {
+        let html = `<p><strong>Métriques clés :</strong></p><ul>`;
+        for (const [key, value] of Object.entries(report.key_metrics)) {
+          html += `<li>${key}: ${Number(value).toFixed(4) || "N/A"}</li>`;
+        }
+        html += `</ul>`;
+        contentDiv.innerHTML = html;
+      } else {
+        contentDiv.textContent = JSON.stringify(analysis, null, 2);
+      }
+    } else {
+      contentDiv.textContent = JSON.stringify(analysis, null, 2);
+    }
+  } else {
+    contentDiv.textContent = resultData?.error || "Aucune donnée disponible";
+  }
+
+  // Gestion des exports
+  const resultBody = resultDiv.querySelector(".result-content");
+  const exportBtns = resultDiv.querySelectorAll(".result-export button");
+  const exportNames = { json: `${fileName}_analysis.json`, csv: `${fileName}_analysis.csv`, xlsx: `${fileName}_analysis.xlsx`, md: `${fileName}_analysis.md` };
+
+  exportBtns.forEach((btn, i) => {
+    btn.addEventListener("click", async () => {
+      const formats = ["json", "csv", "xlsx", "md"];
+      const format = formats[i];
+      text(elements.requestStatus, `Génération du export ${format.toUpperCase()}…`);
+      const result = await downloadExport(exportNames[format], format === "json" ? "application/json" : format === "csv" ? "text/csv" : format === "xlsx" ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "text/markdown");
+      text(elements.requestStatus, "");
+      if (result.status === "error") { addMessage("error", result.error); return; }
+      addMessage("success", `Export ${format.toUpperCase()} prêt.`);
+    });
+  });
+
+  // Bouton de fermeture
+  const closeBtn = resultDiv.querySelector(".result-close");
+  closeBtn.addEventListener("click", () => { resultDiv.remove(); });
+
+  // Ajouter au DOM (après la liste de fichiers)
+  const resultArea = document.querySelector(".data-engine-results-area");
+  if (resultArea) {
+    resultArea.appendChild(resultDiv);
+  } else {
+    const insertAfter = document.querySelector(".file-list") || document.querySelector(".workspace-grid");
+    if (insertAfter) {
+      const container = document.createElement("div");
+      container.className = "data-engine-results-area";
+      container.appendChild(resultDiv);
+      insertAfter.parentNode.insertBefore(container, insertAfter.nextSibling);
+    } else {
+      document.body.appendChild(resultDiv);
+    }
+  }
 }
 
 function updateSelectedFile() {
@@ -145,6 +309,52 @@ function renderOutputs(outputs) {
   }
 }
 async function refreshOutputs() { try { const data = await api("/api/outputs"); renderOutputs(data.outputs || []); } catch (error) { addMessage("error", error.message); } }
+
+/* -- DATAENGINE API HELPERS ------------------------------------------------------- */
+
+async function callDataEngine(endpoint, json) {
+  try {
+    const response = await api(`/api/v5/data/${endpoint}`, {
+      method: "POST",
+      body: JSON.stringify(json),
+    });
+    // L'API retourne déjà le corps JSON parsé : {status: "success", result: {...}}
+    // ou {status: "success", report: {...}} ou {status: "error", ...}
+    return response;
+  } catch (error) {
+    return { status: "error", error: error.message };
+  }
+}
+
+/* Helper: extrait la donnée utile de la réponse API.
+   L'API retourne {status: "success", result: {...}} ou {status: "success", report: {...}}.
+   On extrait le sous-élément pertinent selon l'endpoint. */
+function extractDataEngineResult(response, endpoint) {
+  if (!response || response.status !== "success") return null;
+  if (endpoint === "analyze") return response.result;
+  if (endpoint.endsWith("performance") || endpoint.endsWith("cash-flow-analysis")) return response.report;
+  return response;
+}
+
+async function downloadExport(name, mimeType) {
+  try {
+    const blob = await fetch(`/api/outputs/${encodeURIComponent(name)}`).then((r) => r.blob());
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    link.textContent = `Télécharger ${name}`;
+    link.title = `Télécharger ${name}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    return { status: "success" };
+  } catch (error) {
+    return { status: "error", error: error.message };
+  }
+}
+/* ------------------------------------------------------------------------------ */
 
 async function loadOverview() {
   try {

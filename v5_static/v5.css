@@ -95,6 +95,44 @@ h3 { color: var(--navy); font-size: 13px; }
 .file-item.selected { background: var(--blue-soft); border-color: #9fc0ed; }
 .file-type { display: grid; width: 30px; height: 28px; flex: 0 0 auto; color: #345c8a; font-size: 9px; font-weight: 800; place-items: center; background: #e6eef8; border-radius: 7px; }
 .file-details { min-width: 0; }
+
+/* -- DataEngine analysis buttons on files -- */
+.file-actions { display: flex; gap: 4px; margin-left: 8px; align-items: center; }
+.file-action-btn {
+  width: 28px; height: 28px; padding: 0; font-size: 1.2em; border: 1px solid var(--border);
+  background: var(--bg); border-radius: 6px; color: var(--ink); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: background .15s;
+  flex-shrink: 0;
+}
+.file-action-btn:hover { background: var(--hover); }
+.file-action-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.file-action-btn.analyze { color: #6c757d; }
+.file-action-btn.performance { color: #28a745; }
+.file-action-btn.cashflow { color: #dc3545; }
+
+/* -- DataEngine results display -- */
+.data-engine-results-area { margin-top: 12px; }
+.data-engine-result {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 16px; width: 100%; max-width: 600px;
+  animation: fadeIn .2s ease-out;
+}
+.result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.result-header h3 { margin: 0; font-size: 1.1em; }
+.result-close {
+  background: none; border: none; color: var(--muted); cursor: pointer; padding: 4px; border-radius: 4px;
+  font-size: 0.8em; flex-shrink: 0;
+}
+.result-close:hover { color: var(--error); }
+.result-content { margin: 8px 0; min-height: 80px; }
+.result-export { margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-start; }
+.result-export button {
+  padding: 6px 12px; font-size: 0.85em; border: 1px solid var(--border);
+  background: var(--primary); color: white; border-radius: 5px; cursor: pointer;
+  white-space: nowrap; transition: background .15s;
+}
+.result-export button:hover { background: var(--primary-hover); }
+/* Arrière-plan clair si pas de thème var défini */
+:root { --ink: #111; --bg: #fff; --border: #ccc; --muted: #666; --primary: #0066cc; --primary-hover: #0055aa; --error: #dc3545; @media (prefers-color-scheme: dark) { --ink: #eaeaea; --bg: #222; --border: #444; --muted: #aaa; --primary: #3399ff; --primary-hover: #0066cc; --error: #ff7777; } */
 .file-details strong { display: block; overflow: hidden; color: #31425b; font-size: 11px; white-space: nowrap; text-overflow: ellipsis; }
 .file-details small { display: block; margin-top: 3px; color: var(--faint); font-size: 10px; }
 .empty-state { margin: 15px 0 0; color: var(--faint); font-size: 12px; font-style: italic; line-height: 1.5; }
