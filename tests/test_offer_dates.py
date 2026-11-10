@@ -413,6 +413,28 @@ def test_a_start_is_read_in_every_language(lang, text):
     assert facts[0].value["month"] == 1
 
 
+def test_german_internship_start_with_ab_is_read_as_start():
+    facts = extract_dates("Praktikum ab März 2027", "de")
+    assert [fact.fact_type for fact in facts] == ["start"]
+    assert facts[0].value == {"day": None, "month": 3, "year": 2027}
+    assert facts[0].quote == "Praktikum ab März 2027"
+
+
+def test_spanish_practicas_duration_is_read_without_inventing_a_start_date():
+    facts = extract_dates("Prácticas de seis meses", "es")
+    assert [fact.fact_type for fact in facts] == ["duration_exact"]
+    assert facts[0].value == {"months_min": 6, "months_max": 6}
+    assert facts[0].quote == "Prácticas de seis meses"
+
+
+def test_seasonal_start_keeps_the_year_without_inventing_a_month():
+    facts = extract_dates("Starting in spring 2027", "en")
+    assert [fact.fact_type for fact in facts] == ["start"]
+    assert facts[0].value == {"day": None, "month": None, "year": 2027}
+    assert facts[0].precision == "year"
+    assert facts[0].quote == "Starting in spring 2027"
+
+
 def test_a_symbol_ordinal_does_not_hide_the_day():
     facts = extract_dates("Inizio: 1° gennaio 2027", "it")
     assert len(facts) == 1

@@ -332,7 +332,8 @@ _CONTEXT_PHRASES: dict[str, dict[str, tuple[str, ...]]] = {
         ),
         "start": (
             r"\bstartdatum\b", r"\bstart(?:et|en)?\s+(?:am|ab|im|in)\b", r"\bab dem\b",
-            r"\beintritt\b", r"\bwir starten\b", r"\bbeginn(?:end|t|nt|e|es)?\b",
+            r"\bpraktikum(?:s)?\s+ab\b", r"\beintritt\b", r"\bwir starten\b",
+            r"\bbeginn(?:end|t|nt|e|es)?\b",
             r"\bverf[üu]gbar ab\b",
         ),
         "end": (
@@ -442,7 +443,7 @@ _DURATION_LEFT: dict[str, str] = {
         r"programma|tra|per|un|una)\b(?:\s+(?:di|da|in|a|tra))?\s*[:\-–]?\s*$"
     ),
     "es": (
-        r"\b(?:duraci[óo]n|dura|duran|contratos?|stage|pasant[íi]as?|becas?|periodo|per[íi]odo|"
+        r"\b(?:duraci[óo]n|dura|duran|contratos?|stage|pr[áa]cticas?|pasant[íi]as?|becas?|periodo|per[íi]odo|"
         r"programa|empleo|entre|para|un|una)\b(?:\s+(?:de|del|di|in|para|entre))?\s*[:\-–]?\s*$"
     ),
 }
