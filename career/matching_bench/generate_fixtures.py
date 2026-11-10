@@ -602,7 +602,7 @@ add(
           official_url="https://exemple-fake.test/offre/020"),
         [
             req("Espagnol requis", True, False, "Aucune langue n'est déclarée au profil."),
-            req("Langues requises : Espagnol", True, False,
+            req("Espagnol", True, False,
                 "La langue demandée n'apparaît pas dans les langues déclarées."),
         ],
         "eligible",

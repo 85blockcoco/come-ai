@@ -16,6 +16,7 @@ from typing import Any, Mapping
 
 from .cv_quality.missions_extractor import extract_missions, missions_as_dicts
 from .models import clean_text, normalized_text
+from .offer_requirements import analyze_offer
 
 MAX_REQUIREMENTS = 40
 MAX_TEXT_LENGTH = 400
@@ -24,32 +25,6 @@ MAX_IMPROVEMENTS = 8
 MAX_CV_ACTIONS = 12
 MAX_LETTER_POINTS = 6
 MAX_SOURCE_EXCERPT = 4_000
-
-# Public boards often supply only their description, not a separate
-# requirements field. These markers identify explicitly labelled sections or
-# requirement statements; their wording is quoted, never rewritten as a fact.
-_REQUIREMENT_HEADINGS = frozenset(
-    {
-        "requirements", "qualifications", "required qualifications",
-        "minimum qualifications", "preferred qualifications", "your profile",
-        "what you bring", "what we are looking for", "who you are",
-        "profil", "profil recherche", "votre profil", "qualifications requises",
-        "competences requises", "prerequis",
-    }
-)
-_OTHER_SECTION_HEADINGS = frozenset(
-    {
-        "responsibilities", "your responsibilities", "what you will do",
-        "what you ll do", "about us", "about the role", "benefits",
-        "what we offer", "missions", "vos missions", "responsabilites",
-        "avantages", "a propos", "notre entreprise", "notre offre",
-    }
-)
-_EXPLICIT_REQUIREMENT_MARKERS = (
-    "required", "must have", "you must", "proficiency in", "fluent in",
-    "requires", "requis", "requise", "recherche", "maitrise de",
-    "maitrise d", "exige", "exigee", "vous devez",
-)
 
 # Profile fields consulted for the comparison.  Contact data is deliberately
 # excluded: a preparation analysis must never quote or leak an e-mail address,
@@ -91,23 +66,18 @@ _STREET_ADDRESS = re.compile(
     r"^\s*\d{1,6}\s+.+\b(?:street|st|avenue|ave|drive|dr|road|rd|boulevard|blvd|lane|ln)\b",
     re.IGNORECASE,
 )
-
-
-def _requirement_modality(statement: str) -> str:
-    """Infer only clear required/preferred labels; keep ambiguous wording unknown."""
-    normalized = normalized_text(statement)
-    if any(
-        marker in normalized
-        for marker in ("not required", "not necessary", "not essential", "non requis", "pas requis", "pas necessaire")
-    ):
-        return "unknown"
-    if normalized.startswith(("preferred:", "preferred ", "nice to have:", "nice to have ")):
-        return "preferred"
-    if normalized.startswith(("required:", "required ", "mandatory:", "mandatory ", "must have:")):
-        return "required"
-    if any(marker in normalized for marker in (" is required", " are required", " requis", " requise", " obligatoire")):
-        return "required"
-    return "unknown"
+_BENEFIT_ONLY_TEXT = re.compile(
+    r"\b(?:tickets? restaurant|mutuelle|meal vouchers?|meal allowance|health insurance|"
+    r"prise en charge des repas|prise en charge des frais de deplacement|"
+    r"frais de deplacement|travel expenses covered|travel expenses reimbursed)\b",
+    re.IGNORECASE,
+)
+_UNVERIFIED_REQUIREMENT_TEXT = re.compile(
+    r"\b(?:to verify|to be verified|to confirm|to be confirmed|to check|to be checked|"
+    r"a verifier|a confirmer|a controler|por verificar|por confirmar|a verificar|"
+    r"a confirmar|da verificare|da confermare|zu prufen|zu bestatigen)\b",
+    re.IGNORECASE,
+)
 
 
 def _exclude_contact_details(value: Any) -> str:
@@ -260,70 +230,53 @@ def _segments(text: str) -> list[str]:
 
 
 def extract_requirements(job: dict[str, Any]) -> list[dict[str, str]]:
-    """Extract the requirement statements the posting itself contains."""
+    """Adapt the canonical provenance extractor to the CV preparation plan."""
     items: list[dict[str, str]] = []
-
-    def add(text: Any, source: str) -> None:
-        statement = clean_text(_exclude_contact_details(text), limit=MAX_TEXT_LENGTH)
+    analysis = analyze_offer(job)
+    for record in analysis.get("requirements") or []:
+        if not isinstance(record, Mapping):
+            continue
+        if record.get("injection_suspect") or record.get("negated"):
+            continue
+        source = clean_text(record.get("source_field"), limit=80) or "requirements"
+        # Education level already has a dedicated evidence-aware comparison;
+        # don't turn the source field into a second generic CV requirement.
+        if source == "role_level":
+            continue
+        statement = clean_text(_exclude_contact_details(record.get("text")), limit=MAX_TEXT_LENGTH)
         normalized_statement = normalized_text(statement)
         if (
             len(statement) < 4
             or "all rights reserved" in normalized_statement
             or bool(_STREET_ADDRESS.match(statement))
+            or (
+                clean_text(record.get("category"), limit=40) in {"other", "mobility"}
+                and _BENEFIT_ONLY_TEXT.search(normalized_statement)
+            )
         ):
-            return
-        # API defaults and imported records often use a sentinel for an
-        # absent requirement. It is metadata, not employer evidence and must
-        # never become a profile match or a CV action.
+            continue
         if _is_unknown_sentinel(statement):
-            return
-        if any(statement.casefold() == existing["text"].casefold() for existing in items):
-            return
+            continue
+        identity = normalized_statement.strip(" .:;,-–—")
+        if any(
+            identity == normalized_text(existing["text"]).strip(" .:;,-–—")
+            for existing in items
+        ):
+            continue
         if len(items) >= MAX_REQUIREMENTS:
-            return
-        items.append({"text": statement, "source": source, "modality": _requirement_modality(statement)})
-
-    structured = clean_text(job.get("requirements"), limit=20_000)
-    for line in structured.splitlines():
-        add(line, "requirements")
-    if not structured:
-        # A description is untrusted source text, not an instruction to this
-        # program. Conservative lexical extraction is explicitly incomplete;
-        # a bounded original excerpt is also returned for human inspection.
-        in_requirements = False
-        description = clean_text(job.get("description_original"), limit=30_000)
-        for line in description.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            prefix = line.split(":", 1)[0]
-            heading = normalized_text(prefix)
-            if heading in _OTHER_SECTION_HEADINGS:
-                in_requirements = False
-                continue
-            if heading in _REQUIREMENT_HEADINGS:
-                in_requirements = True
-                if ":" in line and line.split(":", 1)[1].strip():
-                    add(line, "description_original")
-                continue
-            for statement in re.split(r"(?<=[.!?])\s+", line):
-                normalized = normalized_text(statement)
-                explicit = any(
-                    f" {marker} " in f" {normalized} "
-                    for marker in _EXPLICIT_REQUIREMENT_MARKERS
-                )
-                if in_requirements or explicit:
-                    add(statement, "description_original")
-                if len(items) >= MAX_REQUIREMENTS:
-                    break
-            if len(items) >= MAX_REQUIREMENTS:
-                break
-    languages = clean_text(job.get("languages_required"), limit=400)
-    if languages and not _is_unknown_sentinel(languages):
-        add(f"Langues requises : {languages}", "languages_required")
-    eligibility = clean_text(job.get("eligibility_requirement"), limit=400)
-    if eligibility and not _is_unknown_sentinel(eligibility):
-        add(f"Éligibilité : {eligibility}", "eligibility_requirement")
+            break
+        modality = clean_text(record.get("modality"), limit=40) or "unknown"
+        if modality == "required" and _UNVERIFIED_REQUIREMENT_TEXT.search(normalized_statement):
+            modality = "unknown"
+        item = {
+            "text": statement,
+            "source": source,
+            "modality": modality,
+            "category": clean_text(record.get("category"), limit=40) or "other",
+            "requirement_id": clean_text(record.get("id"), limit=80),
+            "locator": clean_text(record.get("locator"), limit=80),
+        }
+        items.append(item)
     return items
 
 

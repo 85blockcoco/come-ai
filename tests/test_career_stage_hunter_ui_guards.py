@@ -85,12 +85,17 @@ def test_description_extraction_is_bounded_and_never_assumes_generic_text_is_req
     assert any("incomplète" in message for message in result["uncertainty"])
 
 
-def test_structured_requirements_remain_authoritative() -> None:
+def test_structured_and_description_requirements_share_canonical_provenance() -> None:
     items = extract_requirements({
         "requirements": "Excel experience.",
         "description_original": "Requirements: SQL is required.",
     })
-    assert items == [{"text": "Excel experience.", "source": "requirements"}]
+    assert [(item["text"], item["source"]) for item in items] == [
+        ("Excel experience.", "requirements"),
+        ("SQL is required.", "description_original"),
+    ]
+    assert all(item["requirement_id"].startswith("req_") for item in items)
+    assert all(item["locator"].startswith("line:") for item in items)
 
 
 def test_greenhouse_discovery_to_preparation_uses_source_description(tmp_path: Path) -> None:

@@ -54,7 +54,7 @@ _REQUIREMENT_HEADINGS = frozenset(
         "was sie mitbringen", "dein profil", "ihre qualifikationen",
         "requisiti", "requisiti del candidato", "competenze richieste",
         "profilo richiesto", "il profilo che cerchiamo",
-        "requisitos", "competencias requeridas", "perfil solicitado",
+        "requisitos", "competencias requeridas", "perfil", "perfil solicitado",
         "lo que buscamos", "requerimientos", "conocimientos necesarios",
     }
 )
@@ -114,7 +114,9 @@ _REQUIRED_MARKERS = (
 )
 _PREFERRED_MARKERS = (
     "preferred", "nice to have", "a plus", "big plus", "major plus",
-    "desirable", "would be a bonus", "appreciated", "welcome",
+    # Keep "welcome" out: substring matching treated neutral "welcomes
+    # interns" company prose as a preferred qualification.
+    "desirable", "would be a bonus", "appreciated",
     "apprecie", "appreciee", "apprecies", "souhaite", "souhaitee",
     "souhaitable", "un atout", "un plus valorise",
     "wunschenswert", "von vorteil", "erwunscht", "ein plus",
@@ -135,6 +137,12 @@ _NEGATION_MARKERS = (
     "non necessario", "non indispensable",
     "no es requisito", "no requerido", "no es necesario",
     "no imprescindible", "no exigido",
+)
+_UNCERTAINTY_PLACEHOLDER_MARKERS = (
+    "to verify", "to be verified", "to confirm", "to be confirmed",
+    "to check", "to be checked", "a verifier", "a confirmer",
+    "por verificar", "por confirmar", "a verificar", "a confirmar",
+    "da verificare", "da confermare", "zu prufen", "zu bestatigen",
 )
 _DEADLINE_MARKERS = (
     "application deadline", "closing date", "deadline for applications",
@@ -465,6 +473,8 @@ class _Builder:
             negated = _has_marker(normalized, _NEGATION_MARKERS)
             if negated:
                 modality = "contextual"
+            elif _has_marker(normalized, _UNCERTAINTY_PLACEHOLDER_MARKERS):
+                modality = "unknown"
             elif _has_marker(normalized, _PREFERRED_MARKERS) or base_modality == "preferred":
                 modality = "preferred"
             elif base_modality == "required":
@@ -583,6 +593,8 @@ def _description_requirements(description_lines: list[str], builder: _Builder) -
                 modality, confidence = "unknown", 0.35
             elif negated:
                 modality, confidence = "contextual", 0.60
+            elif _has_marker(normalized, _UNCERTAINTY_PLACEHOLDER_MARKERS):
+                modality, confidence = "unknown", contracts.UNKNOWN_CONFIDENCE_CAP
             elif _has_marker(normalized, _PREFERRED_MARKERS):
                 modality, confidence = "preferred", 0.75
             elif _has_marker(normalized, _REQUIRED_MARKERS):

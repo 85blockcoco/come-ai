@@ -113,6 +113,18 @@ def test_unknown_modality_is_never_disguised_as_high_confidence() -> None:
             assert record["confidence"] <= UNKNOWN_CONFIDENCE_CAP
 
 
+def test_unverified_placeholder_stays_unknown() -> None:
+    analyses = (
+        analyze_offer({"requirements": "Language level to verify"}),
+        analyze_offer({"description_original": "Requirements:\nLanguage level to verify"}),
+    )
+
+    for analysis in analyses:
+        record = analysis["requirements"][0]
+        assert record["modality"] == "unknown"
+        assert record["confidence"] <= UNKNOWN_CONFIDENCE_CAP
+
+
 def test_structured_fields_carry_the_highest_confidence() -> None:
     offer = next(fixture for fixture in load_fixtures() if fixture["id"] == "OFF-028")
     analysis = analyze_offer(offer)

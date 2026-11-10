@@ -2,19 +2,19 @@
   "schema_version": "career-matching-bench-thresholds/1",
   "suite_version": "cvboost-08-suite-1",
   "as_of": "2026-10-01",
-  "note": "Référence remesurée après suppression des trois fuites de coordonnées ; 36 écarts sémantiques restent présents et sont conservés comme plafond de régression.",
+  "note": "Référence remesurée après raccordement de la préparation CV à l'extracteur canonique et correction de plusieurs faux positifs ; 28 écarts sémantiques restent présents comme plafond de régression.",
   "baseline": {
     "cases": 118,
     "hard_failures": 0,
-    "semantic_failures": 36,
+    "semantic_failures": 28,
     "unstable_cases": 0,
     "oracle_unresolved": 0,
-    "cases_passed": 82
+    "cases_passed": 90
   },
   "limits": {
     "cases_min": 100,
     "hard_failures_max": 0,
-    "semantic_failures_max": 36,
+    "semantic_failures_max": 28,
     "unstable_cases_max": 0,
     "oracle_unresolved_max": 0
   }

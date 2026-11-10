@@ -1736,7 +1736,7 @@
             "reason": "Aucune langue n'est déclarée au profil."
           },
           {
-            "ref": "Langues requises : Espagnol",
+            "ref": "Espagnol",
             "should_be_requirement": true,
             "supported": false,
             "reason": "La langue demandée n'apparaît pas dans les langues déclarées."

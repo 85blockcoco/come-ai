@@ -32,12 +32,10 @@ EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 PHONE = re.compile(r"(?<![\d.])(?:\+33\s?[1-9]|0[1-9])(?:[ .-]?\d{2}){4}(?![\d.])")
 LINKEDIN = re.compile(r"linkedin\.com/in/[A-Za-z0-9_-]+", re.IGNORECASE)
 
-#: Prefixes the preparation layer adds around a sourced offer field.
-SOURCED_PREFIXES = {
-    "languages_required": "Langues requises : ",
-    "eligibility_requirement": "Éligibilité : ",
-    "role_level": "Niveau visé : ",
-}
+#: Offer fields that the preparation panel may expose as direct evidence.
+SOURCED_FIELDS = frozenset(
+    {"languages_required", "eligibility_requirement", "role_level"}
+)
 
 #: The plan must never claim that the person is admissible for the offer.
 ELIGIBILITY_CLAIM = re.compile(
@@ -99,12 +97,6 @@ def approved_corpus(case: Case) -> str:
     for name in ("title", "company", "description_original", "requirements",
                  "languages_required", "eligibility_requirement", "role_level"):
         parts.append(str(offer.get(name) or ""))
-    # The preparation layer quotes a sourced offer field with a readable
-    # prefix: that composed sentence is still traceable to the offer.
-    for field, prefix in SOURCED_PREFIXES.items():
-        value = str(offer.get(field) or "")
-        if value:
-            parts.append(prefix + value)
     return normalized_text(" ".join(part for part in parts if part))
 
 
@@ -127,6 +119,9 @@ def resolve_ref(case: Case, ref: str, requirements: list[dict[str, Any]]) -> lis
     needle = normalized_text(ref)
     if not needle:
         return []
+    exact = [item for item in requirements if needle == normalized_text(item.get("text"))]
+    if exact:
+        return exact
     return [item for item in requirements if needle in normalized_text(item.get("text"))]
 
 
@@ -204,12 +199,12 @@ def check_requirement_traceable(case: Case, observation: dict[str, Any]) -> dict
     for requirement in prep.get("requirements") or []:
         text = str(requirement.get("text") or "")
         source = str(requirement.get("source") or "")
-        if source in SOURCED_PREFIXES:
+        if source in SOURCED_FIELDS:
             field = source
-            expected = SOURCED_PREFIXES[field] + clean_text(offer.get(field), limit=400)
-            if text != expected:
+            source_text = clean_text(offer.get(field), limit=30_000)
+            if not text or text not in source_text:
                 failures.append(
-                    f"exigence « {text} » : le champ {field!r} de l'offre ne correspond pas"
+                    f"exigence « {text} » : aucune citation verbatim du champ {field!r} de l'offre"
                 )
             continue
         if source == "requirements":
