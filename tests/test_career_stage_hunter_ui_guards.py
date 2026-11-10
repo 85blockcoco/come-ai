@@ -20,6 +20,18 @@ from career.discovery import GreenhouseJobBoardConnector
 from career.service import CareerService
 
 
+def test_stagehunter_initial_state_explains_curated_sources_without_personal_boards() -> None:
+    html = (Path(__file__).resolve().parents[1] / "career_static/index.html").read_text(encoding="utf-8")
+    initial_status = re.search(
+        r'<p id="stagehunter-explore-status"[^>]*>(.*?)</p>', html, re.DOTALL
+    )
+    assert initial_status is not None
+    assert "sources publiques présélectionnées" in initial_status.group(1)
+    assert "aucun board personnel n’est requis" in initial_status.group(1)
+    assert "Explorer les stages" in initial_status.group(1)
+    assert "Aucune entreprise à configurer" not in initial_status.group(1)
+
+
 def test_blank_optional_fields_do_not_invent_empty_requirements() -> None:
     assert extract_requirements({}) == []
     assert extract_requirements({"languages_required": "", "eligibility_requirement": ""}) == []
