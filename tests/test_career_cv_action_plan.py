@@ -76,6 +76,59 @@ def test_coverage_is_documentary_and_excludes_contact_data() -> None:
     assert "secret@example.test" not in repr(prep["cv_action_plan"])
 
 
+def test_contact_details_hidden_in_eligibility_are_not_used_as_cv_evidence() -> None:
+    custom_profile = profile()
+    custom_profile["eligibility"] = "Contact: candidate@example.test"
+    custom_job = job()
+    custom_job["requirements"] = "Client contact skills are required."
+
+    prep = prepare_application(custom_profile, {}, custom_job)
+
+    assert "candidate@example.test" not in repr(prep)
+    assert not any(
+        item["profile_field"] == "eligibility"
+        for item in prep["matched_elements"]
+    )
+    assert all("candidate@example.test" not in repr(item) for item in prep["cv_action_plan"])
+
+
+def test_contact_metadata_in_job_requirements_is_not_a_cv_requirement() -> None:
+    custom_job = job()
+    custom_job["requirements"] = "Contact: jobs@example.test"
+
+    prep = prepare_application(profile(), {}, custom_job)
+
+    assert "jobs@example.test" not in repr(prep)
+    assert not any("Contact:" in item["text"] for item in prep["requirements"])
+
+
+def test_inline_contact_values_are_removed_before_profile_matching() -> None:
+    for contact in (
+        "candidate@example.test",
+        "+33 6 12 34 56 78",
+        "https://www.linkedin.com/in/candidate-example",
+    ):
+        custom_profile = profile()
+        custom_profile["eligibility"] = f"Eligibility reviewed; {contact}"
+        prep = prepare_application(custom_profile, {}, job())
+
+        assert contact not in repr(prep)
+        assert all(contact not in repr(item) for item in prep["matched_elements"])
+        assert all(contact not in repr(item) for item in prep["cv_action_plan"])
+
+
+def test_contact_filter_preserves_iso_dates_in_profile_and_requirements() -> None:
+    custom_profile = profile()
+    custom_profile["eligibility"] = "Available from 2026-11-10"
+    custom_job = job()
+    custom_job["requirements"] = "Available from 2026-11-10 is required."
+
+    prep = prepare_application(custom_profile, {}, custom_job)
+
+    assert prep["requirements"][0]["text"] == "Available from 2026-11-10 is required."
+    assert any("2026-11-10" in item["evidence"] for item in prep["matched_elements"])
+
+
 def test_ui_renders_the_precise_cv_plan() -> None:
     source = (Path(__file__).resolve().parents[1] / "career_static/cv_plan.js").read_text(encoding="utf-8")
     assert "Plan précis pour ton CV" in source

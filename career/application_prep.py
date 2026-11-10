@@ -64,6 +64,75 @@ _CV_SECTION_LABELS: dict[str, str] = {
     "eligibility": "Informations complémentaires",
 }
 
+_EMAIL_ADDRESS = re.compile(
+    r"(?<![\w.!#$%&'*+/=?^`{|}~-])[A-Z0-9][A-Z0-9.!#$%&'*+/=?^_`{|}~-]{0,63}"
+    r"@[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?(?:\.[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?)+"
+    r"(?![\w.-])",
+    re.IGNORECASE,
+)
+_PHONE_NUMBER = re.compile(r"(?<![\w+])(?:\+|00)?\s*(?:\(?\d{1,4}\)?[\s.\-]*){2,8}\d(?!\w)")
+_LINKEDIN_PROFILE = re.compile(
+    r"(?i)(?:https?://)?(?:(?:[a-z]{2,3}|www)\.)?linkedin\.com/"
+    r"(?:in|pub)/[a-z0-9%._~-]+(?:/[a-z0-9%._~-]+)*(?:[?#][^\s<>()\[\]{}\"']*)?"
+)
+_CONTACT_LINE = re.compile(
+    r"^\s*(?:contact(?:\s+(?:details|information))?|e-?mail|phone|telephone|"
+    r"t[eé]l[eé]phone|linkedin)\s*[:：-]",
+    re.IGNORECASE,
+)
+_CONTACT_ONLY = frozenset(
+    {
+        "contact", "contact details", "contact information", "email", "e mail",
+        "phone", "telephone", "telephone", "linkedin", "langues requises",
+        "eligibilite", "eligibility",
+    }
+)
+_STREET_ADDRESS = re.compile(
+    r"^\s*\d{1,6}\s+.+\b(?:street|st|avenue|ave|drive|dr|road|rd|boulevard|blvd|lane|ln)\b",
+    re.IGNORECASE,
+)
+
+
+def _requirement_modality(statement: str) -> str:
+    """Infer only clear required/preferred labels; keep ambiguous wording unknown."""
+    normalized = normalized_text(statement)
+    if any(
+        marker in normalized
+        for marker in ("not required", "not necessary", "not essential", "non requis", "pas requis", "pas necessaire")
+    ):
+        return "unknown"
+    if normalized.startswith(("preferred:", "preferred ", "nice to have:", "nice to have ")):
+        return "preferred"
+    if normalized.startswith(("required:", "required ", "mandatory:", "mandatory ", "must have:")):
+        return "required"
+    if any(marker in normalized for marker in (" is required", " are required", " requis", " requise", " obligatoire")):
+        return "required"
+    return "unknown"
+
+
+def _exclude_contact_details(value: Any) -> str:
+    """Remove contact-only lines and personal contact values from match text."""
+    safe_lines: list[str] = []
+    for raw_line in str(value or "").splitlines():
+        if _CONTACT_LINE.match(raw_line):
+            continue
+        line = _EMAIL_ADDRESS.sub(" ", raw_line)
+        line = _LINKEDIN_PROFILE.sub(" ", line)
+
+        def strip_phone(match: re.Match[str]) -> str:
+            candidate = match.group(0)
+            digit_count = sum(character.isdigit() for character in candidate)
+            country_prefix = candidate.lstrip().startswith(("+", "00"))
+            separators = sum(character in " .()-" for character in candidate)
+            formatted_number = digit_count >= 9 and separators >= 2
+            return " " if digit_count >= 8 and (country_prefix or formatted_number) else candidate
+
+        line = _PHONE_NUMBER.sub(strip_phone, line)
+        line = re.sub(r"\s+", " ", line).strip(" \t,;|:：-–—")
+        if line and normalized_text(line).strip(" .:;-–—") not in _CONTACT_ONLY:
+            safe_lines.append(line)
+    return "\n".join(safe_lines)
+
 # Words that are too generic to prove anything on their own: a requirement
 # matching only on "expérience" or "connaissance" would create a false sense
 # of correspondence.  Specific tokens (excel, anglais, lbo…) stay decisive.
@@ -195,8 +264,13 @@ def extract_requirements(job: dict[str, Any]) -> list[dict[str, str]]:
     items: list[dict[str, str]] = []
 
     def add(text: Any, source: str) -> None:
-        statement = clean_text(text, limit=MAX_TEXT_LENGTH)
-        if len(statement) < 4:
+        statement = clean_text(_exclude_contact_details(text), limit=MAX_TEXT_LENGTH)
+        normalized_statement = normalized_text(statement)
+        if (
+            len(statement) < 4
+            or "all rights reserved" in normalized_statement
+            or bool(_STREET_ADDRESS.match(statement))
+        ):
             return
         # API defaults and imported records often use a sentinel for an
         # absent requirement. It is metadata, not employer evidence and must
@@ -207,7 +281,7 @@ def extract_requirements(job: dict[str, Any]) -> list[dict[str, str]]:
             return
         if len(items) >= MAX_REQUIREMENTS:
             return
-        items.append({"text": statement, "source": source})
+        items.append({"text": statement, "source": source, "modality": _requirement_modality(statement)})
 
     structured = clean_text(job.get("requirements"), limit=20_000)
     for line in structured.splitlines():
@@ -312,7 +386,7 @@ def _canonical_requirements(intelligence: Mapping[str, Any] | None) -> list[dict
         if bool(record.get("injection_suspect")):
             continue
         identifier = clean_text(record.get("id"), limit=80)
-        text = clean_text(record.get("text"), limit=MAX_TEXT_LENGTH)
+        text = clean_text(_exclude_contact_details(record.get("text")), limit=MAX_TEXT_LENGTH)
         source_field = clean_text(record.get("source_field"), limit=80)
         if not identifier or not text:
             continue
@@ -418,9 +492,12 @@ def prepare_application(
     # Guided-intake answers are the person's own declared facts and may be
     # quoted alongside the profile, but contact data never is.
     intake_answers = intake.get("answers") if isinstance(intake.get("answers"), dict) else {}
-    working_profile = {field: clean_text(profile.get(field), limit=6_000) for field in PROFILE_FIELDS}
+    working_profile = {
+        field: clean_text(_exclude_contact_details(profile.get(field)), limit=6_000)
+        for field in PROFILE_FIELDS
+    }
     for key in ("strengths", "missions"):
-        extra = clean_text(intake_answers.get(key), limit=3_000)
+        extra = clean_text(_exclude_contact_details(intake_answers.get(key)), limit=3_000)
         if extra:
             working_profile["experience"] = f"{working_profile['experience']}\n{extra}".strip()
 
@@ -579,11 +656,12 @@ def prepare_application(
             }
         )
     for item in matched[:4]:
+        section = _CV_SECTION_LABELS.get(item["profile_field"], "Profil")
         improvements.append(
             {
                 "suggestion": (
                     f"Si ce n’est pas déjà explicite, fais apparaître « {item['matched_on'][0]} » dans la "
-                    f"section compétences du CV face à l’exigence « {clean_text(item['requirement'], limit=120)} »."
+                    f"section {section.casefold()} du CV face à l’exigence « {clean_text(item['requirement'], limit=120)} »."
                 ),
                 "basis": f"profile.{item['profile_field']}",
             }

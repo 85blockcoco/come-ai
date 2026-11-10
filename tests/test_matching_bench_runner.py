@@ -94,15 +94,21 @@ def test_the_baseline_matches_the_recorded_defects() -> None:
 
 
 def test_known_hard_defects_are_the_contact_leaks() -> None:
-    """Les trois défauts durs connus sont des fuites de contact."""
+    """Les trois cas qui fuyaient des coordonnées restent propres après correction."""
     run = run_bench()
-    hard = [defect for defect in run.defects if defect["kind"] == "invariant_dur"]
-    assert {defect["case_id"] for defect in hard} == {
+    formerly_failing_ids = {
         "CVB08-CN-002",
         "CVB08-CN-003",
         "CVB08-CN-004",
     }
-    assert {defect["check"] for defect in hard} == {"no_contact_leak"}
+    formerly_failing = [outcome for outcome in run.outcomes if outcome.case_id in formerly_failing_ids]
+    assert {outcome.case_id for outcome in formerly_failing} == formerly_failing_ids
+    assert all(not outcome.hard_failures for outcome in formerly_failing)
+    assert all(
+        next(check for check in outcome.hard_checks if check["check"] == "no_contact_leak")["ok"]
+        for outcome in formerly_failing
+    )
+    assert sum(len(outcome.hard_failures) for outcome in run.outcomes) == 0
 
 
 def test_detected_defects_are_classified_by_family() -> None:

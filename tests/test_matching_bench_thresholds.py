@@ -37,6 +37,8 @@ def test_evaluation_reports_the_measured_numbers() -> None:
 
 def test_a_new_hard_defect_breaks_the_gate() -> None:
     run = run_bench()
+    run.outcomes[0].hard_checks[0]["ok"] = False
+    run.outcomes[0].hard_checks[0]["failures"] = ["synthetic regression injected by this test"]
     strict = dict(thresholds.default_limits())
     strict["hard_failures_max"] = 0
     evaluation = thresholds.evaluate(run, strict)
