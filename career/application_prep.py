@@ -15,6 +15,11 @@ import re
 from typing import Any, Mapping
 
 from .cv_quality.missions_extractor import extract_missions, missions_as_dicts
+from .cv_quality.matching import (
+    LANGUAGES as CV_LANGUAGES,
+    LANGUAGE_LEVELS,
+    LANGUAGE_PROGRAM_CONTEXTS,
+)
 from .models import clean_text, normalized_text
 from .offer_requirements import analyze_offer
 
@@ -139,7 +144,20 @@ _GENERIC_TOKENS: frozenset[str] = frozenset(
         "strong",
         "good",
         "excellent",
+        "fluent",
+        "courant",
+        "courante",
+        "bilingual",
+        "bilingue",
+        "native",
+        "natif",
         "proficiency",
+        "requis",
+        "requise",
+        "mandatory",
+        "essential",
+        "essentiel",
+        "essentielle",
         "data",
         "years",
         "year",
@@ -165,7 +183,51 @@ _GENERIC_TOKENS: frozenset[str] = frozenset(
         "autres",
         "afin",
         "etre",
-        " avoir",
+        "avoir",
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "by",
+        "degree",
+        "for",
+        "from",
+        "in",
+        "is",
+        "of",
+        "on",
+        "or",
+        "the",
+        "to",
+        "with",
+        "written",
+        "ecrite",
+        "ecrites",
+        "plus",
+        "devez",
+        "recherche",
+        "recherchee",
+        "recherches",
+        "required",
+        "erforderlich",
+        "kenntnisse",
+        "sehr",
+        "gute",
+        "guter",
+        "buona",
+        "buono",
+        "conoscenza",
+        "conoscenze",
+        "buen",
+        "bueno",
+        "conocimiento",
+        "conocimientos",
+        "calcul",
+        "calculation",
+        "calculations",
     }
 )
 
@@ -174,8 +236,17 @@ _GENERIC_TOKENS: frozenset[str] = frozenset(
 # threshold below.  Keep this an explicit allowlist: accepting every short
 # token would make articles and prepositions create false matches.
 _SHORT_SKILL_TOKENS: frozenset[str] = frozenset(
-    {"api", "aws", "cfa", "erp", "git", "sas", "sap", "sql", "vba"}
+    {
+        "api", "aws", "cfa", "erp", "git", "kpi", "roi", "sas", "sap",
+        "seo", "sql", "ux", "vba", "b1", "b2", "c1", "c2",
+    }
 )
+
+_ACADEMIC_LEVEL = re.compile(r"\b(master|m|bac|bachelor|licence)\s*([1-5])\b")
+_CEFR_LEVEL = re.compile(r"\b[a-c][12]\b")
+_POWER_TOOL = re.compile(r"\bpower\s+(bi|query)\b")
+_UPPERCASE_R = re.compile(r"(?<!\w)R(?!\w)")
+_DATA_ANALYST = re.compile(r"\b(?:data\s+analyst|DA)\b", re.IGNORECASE)
 
 _CHECKS: tuple[dict[str, Any], ...] = (
     {
@@ -216,6 +287,113 @@ def _tokens(text: str) -> list[str]:
         and token not in _GENERIC_TOKENS
         and not token.isdigit()
     ]
+
+
+def _language_evidence_tokens(text: str) -> list[str]:
+    """Represent only the language and its locally stated level."""
+    words = normalized_text(text).split()
+    tokens: list[str] = []
+    language_positions: list[tuple[int, str]] = []
+    for language, aliases in CV_LANGUAGES.items():
+        language_positions.extend(
+            (index, language)
+            for index, word in enumerate(words)
+            if word in aliases
+        )
+    for language, aliases in CV_LANGUAGES.items():
+        positions = [index for index, word in enumerate(words) if word in aliases]
+        if not positions:
+            continue
+        # A language mentioned only as the medium of a programme is not a
+        # declaration of the candidate's language ability.
+        program_context = any(cue in words for cue in LANGUAGE_PROGRAM_CONTEXTS)
+        levels: list[int] = []
+        for position in positions:
+            left = max(0, position - 3)
+            right = min(len(words), position + 4)
+            for other_position, _other_language in language_positions:
+                if other_position < position:
+                    # Do not let the previous language's adjacent level cue
+                    # (for example, "French native, English C1") leak into
+                    # this language's level.
+                    left = max(left, other_position + 2)
+                elif other_position > position:
+                    right = min(right, other_position)
+            neighbourhood = set(words[left:right])
+            for _label, level_keywords, rank in LANGUAGE_LEVELS:
+                if any(keyword in neighbourhood for keyword in level_keywords):
+                    # B2 is an upper-intermediate certificate; keep it below
+                    # an explicit "professional" requirement so the CV panel
+                    # does not overstate proficiency. An exact B2 requirement
+                    # still matches an observed B2 level.
+                    if "b2" in neighbourhood:
+                        rank = 2
+                    levels.append(rank)
+                    break
+        if program_context and not levels:
+            continue
+        tokens.append(f"language:{language}")
+        if levels:
+            tokens.append(f"language_level:{language}:{max(levels)}")
+    return tokens
+
+
+def _evidence_tokens(text: str, *, category: str = "") -> list[str]:
+    """Keep compact but decisive markers when comparing two exact excerpts.
+
+    The ordinary token list drops digits and short words, which is useful for
+    broad text handling but unsafe for distinctions such as Master 1/Master 2,
+    English B2/C1, Power BI/Power Query, and the R programming language.
+    """
+    normalized = normalized_text(text)
+    if category == "language":
+        return _language_evidence_tokens(text)
+    tokens = _tokens(text)
+    for match in _ACADEMIC_LEVEL.finditer(normalized):
+        label = match.group(1)
+        canonical = "master" if label == "m" else label
+        tokens.append(f"degree_level:{canonical}_{match.group(2)}")
+    tokens.extend(match.group(0) for match in _CEFR_LEVEL.finditer(normalized))
+    for match in _POWER_TOOL.finditer(normalized):
+        tokens.append(f"power_{match.group(1)}")
+    if _UPPERCASE_R.search(text):
+        tokens.append("r_stat")
+    if _DATA_ANALYST.search(text):
+        tokens.append("data_analyst")
+    tokens.extend(_language_evidence_tokens(text))
+    if re.search(r"\b(?:tableur|spreadsheet)\b", normalized):
+        tokens = [token for token in tokens if token not in {"tableur", "excel", "calc"}]
+        tokens.append("spreadsheet_tool")
+    return list(dict.fromkeys(tokens))
+
+
+def _evidence_token_matches(required: str, available: str) -> bool:
+    if required == available:
+        return True
+    if required.startswith("language_level:") and available.startswith("language_level:"):
+        try:
+            required_language, required_rank = required.removeprefix("language_level:").rsplit(":", 1)
+            available_language, available_rank = available.removeprefix("language_level:").rsplit(":", 1)
+            return required_language == available_language and int(available_rank) >= int(required_rank)
+        except ValueError:
+            return False
+    return False
+
+
+def _display_evidence_token(token: str) -> str:
+    if token.startswith("language:"):
+        return token.removeprefix("language:")
+    if token == "data_analyst":
+        return "data analyst"
+    if token == "r_stat":
+        return "R"
+    if token == "spreadsheet_tool":
+        return "tableur"
+    if token.startswith("degree_level:"):
+        return token.removeprefix("degree_level:").replace("_", " ")
+    if token.startswith("power_"):
+        return token.replace("_", " ")
+    return token
 
 
 def _segments(text: str) -> list[str]:
@@ -284,34 +462,50 @@ def _profile_text(profile: dict[str, Any]) -> str:
     return " ".join(clean_text(profile.get(field), limit=6_000) for field in PROFILE_FIELDS)
 
 
-def _find_evidence(profile: dict[str, Any], tokens: list[str]) -> tuple[str, str, list[str]] | None:
-    """Return a verbatim profile excerpt supporting the requirement, if any."""
-    normalized_tokens = list(dict.fromkeys(normalized_text(token) for token in tokens))
+def _find_evidence(
+    profile: dict[str, Any], tokens: list[str]
+) -> tuple[str, str, list[str]] | None:
+    """Return a verbatim profile excerpt supporting every decisive term."""
+    normalized_tokens = list(
+        dict.fromkeys(
+            token
+            if token.startswith(("degree_level:", "power_", "language:", "language_level:"))
+            or token in {"r_stat", "data_analyst", "spreadsheet_tool"}
+            else normalized_text(token)
+            for token in tokens
+        )
+    )
     candidates: list[tuple[tuple[int, int, int, int], str, str, list[str]]] = []
     for field_index, field in enumerate(PROFILE_FIELDS):
         field_value = clean_text(profile.get(field), limit=6_000)
         if not field_value:
             continue
-        normalized_field = normalized_text(field_value)
-        matched = [
-            token for token in normalized_tokens if f" {token} " in f" {normalized_field} "
+        excerpt = clean_text(field_value, limit=300)
+        field_tokens: set[str] = set()
+        for segment in _segments(excerpt):
+            field_tokens.update(_evidence_tokens(segment))
+        hits = [
+            token for token in normalized_tokens
+            if any(_evidence_token_matches(token, available) for available in field_tokens)
         ]
-        if not matched:
+        # One shared word (for example, "Excel", "gestion", or "Master") is
+        # not proof of a multi-part requirement. All decisive terms must be
+        # present in the same profile field; semicolon-separated skill lists
+        # remain usable evidence without allowing unrelated fields to combine.
+        if len(hits) != len(normalized_tokens):
             continue
-        for segment_index, segment in enumerate(_segments(field_value)):
-            normalized_segment = normalized_text(segment)
-            hits = [token for token in matched if f" {token} " in f" {normalized_segment} "]
-            if hits:
-                # The excerpt must be a real, verbatim slice of the field.
-                excerpt = clean_text(segment, limit=300)
-                if normalized_text(excerpt) in normalized_field:
-                    first_hit = min(normalized_tokens.index(token) for token in hits)
-                    score = (first_hit, -len(hits), field_index, segment_index)
-                    candidates.append((score, field, excerpt, hits[:6]))
+        first_hit = min(normalized_tokens.index(token) for token in hits)
+        score = (first_hit, -len(hits), field_index, 0)
+        candidates.append((score, field, excerpt, hits))
     if not candidates:
         return None
     _, field, excerpt, hits = min(candidates, key=lambda candidate: candidate[0])
-    return field, excerpt, hits
+    display_hits = [
+        _display_evidence_token(token)
+        for token in hits
+        if not token.startswith("language_level:")
+    ]
+    return field, excerpt, display_hits
 
 
 def _canonical_requirements(intelligence: Mapping[str, Any] | None) -> list[dict[str, Any]]:
@@ -477,7 +671,8 @@ def prepare_application(
     unverified: list[dict[str, Any]] = []
     unverified_requirement_ids: list[str] = []
     for requirement in requirements:
-        tokens = _tokens(requirement["text"])
+        category = clean_text(requirement.get("category"), limit=40)
+        tokens = _evidence_tokens(requirement["text"], category=category)
         requirement_id = clean_text(requirement.get("requirement_id"), limit=80)
         if not tokens or not profile_blob:
             unverified.append(

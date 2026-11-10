@@ -114,9 +114,12 @@ def test_known_hard_defects_are_the_contact_leaks() -> None:
 def test_detected_defects_are_classified_by_family() -> None:
     run = run_bench()
     families = {defect["family"] for defect in run.defects}
-    assert "faux_positif_lexical" in families
     assert "negation" in families
     assert "avantages" in families
+    fixed_false_positive_ids = {"CVB08-FP-005", "CVB08-FP-012"}
+    fixed_cases = [outcome for outcome in run.outcomes if outcome.case_id in fixed_false_positive_ids]
+    assert {outcome.case_id for outcome in fixed_cases} == fixed_false_positive_ids
+    assert all(not outcome.semantic_failures for outcome in fixed_cases)
 
 
 def test_cross_axis_flags_are_reported_without_being_arbitrated() -> None:

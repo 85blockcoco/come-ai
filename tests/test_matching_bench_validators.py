@@ -164,12 +164,14 @@ def test_detection_check_catches_a_requirement_that_should_not_exist() -> None:
     assert not result["ok"]
 
 
-def test_support_decision_check_catches_a_false_positive() -> None:
+def test_support_decision_check_confirms_the_fixed_lexical_false_positive() -> None:
     case, observation = _observation("CVB08-FP-005")
     result = validators.check_support_decision(case, observation)
-    assert not result["ok"]
-    # Le cas FP-005 est un faux positif connu : le mot partagé « gestion ».
-    assert any("faux positif" in failure for failure in result["failures"])
+    assert result["ok"]
+    detail = result["details"][0]
+    assert detail["expected_supported"] is False
+    assert detail["actual_supported"] is False
+    assert detail["verdict"] == "conforme"
 
 
 def test_eligibility_check_catches_a_wrong_verdict() -> None:

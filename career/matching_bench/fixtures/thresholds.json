@@ -6,15 +6,15 @@
   "baseline": {
     "cases": 118,
     "hard_failures": 0,
-    "semantic_failures": 28,
+    "semantic_failures": 10,
     "unstable_cases": 0,
     "oracle_unresolved": 0,
-    "cases_passed": 90
+    "cases_passed": 108
   },
   "limits": {
     "cases_min": 100,
     "hard_failures_max": 0,
-    "semantic_failures_max": 28,
+    "semantic_failures_max": 10,
     "unstable_cases_max": 0,
     "oracle_unresolved_max": 0
   }
