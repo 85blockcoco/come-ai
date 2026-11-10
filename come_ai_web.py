@@ -1053,6 +1053,259 @@ def create_app(
         except Exception as error:
             raise UserFacingError(f"Erreur de flux de trésorerie : {str(error)[:200]}")
 
+    # -- V5 DataEngine Export Routes --------------------------------------------------- #
+
+    @app.post("/api/v5/data/export-json")
+    async def v5_data_export_json(request: dict[str, Any]) -> dict[str, Any]:
+        """Exporter les résultats d'analyse au format JSON."""
+        try:
+            file_id = request.get("file_id", "")
+            analysis_type = request.get("analysis_type", "analyze")
+            engine = _get_data_engine(runtime)
+            file_path: Path | None = None
+            if hasattr(runtime, "workspace") and runtime.workspace is not None:
+                try:
+                    path = runtime.workspace.get_path(file_id)
+                    file_path = path
+                except Exception:
+                    pass
+            if file_path is None or not file_path.is_file():
+                raise UserFacingError("Fichier introuvable dans l'espace de travail.")
+            import json as _json
+            if analysis_type == "analyze":
+                result = engine.analyze(file_path)
+                content = result.as_download_json()
+                return {"status": "success", "content": _json.dumps(content), "filename": f"{file_id}_analysis.json", "media_type": "application/json"}
+            elif analysis_type == "performance":
+                report = engine.performance(file_path)
+                content = report.as_download_json()
+                return {"status": "success", "content": _json.dumps(content), "filename": f"{file_id}_performance.json", "media_type": "application/json"}
+            elif analysis_type == "cash-flow-analysis":
+                metrics = engine.cash_flows(file_path)
+                content = metrics.as_download_json()
+                return {"status": "success", "content": _json.dumps(content), "filename": f"{file_id}_cash_flow.json", "media_type": "application/json"}
+            else:
+                raise UserFacingError("Type d'analyse inconnu.")
+        except UserFacingError:
+            raise
+        except Exception as error:
+            raise UserFacingError(f"Erreur lors de l'export JSON : {str(error)[:200]}")
+
+    @app.post("/api/v5/data/export-csv")
+    async def v5_data_export_csv(request: dict[str, Any]) -> dict[str, Any]:
+        """Exporter les résultats d'analyse au format CSV."""
+        try:
+            file_id = request.get("file_id", "")
+            analysis_type = request.get("analysis_type", "analyze")
+            engine = _get_data_engine(runtime)
+            file_path: Path | None = None
+            if hasattr(runtime, "workspace") and runtime.workspace is not None:
+                try:
+                    path = runtime.workspace.get_path(file_id)
+                    file_path = path
+                except Exception:
+                    pass
+            if file_path is None or not file_path.is_file():
+                raise UserFacingError("Fichier introuvable dans l'espace de travail.")
+            import io as _io
+            import csv as _csv
+            if analysis_type == "analyze":
+                result = engine.analyze(file_path)
+                buf = _io.StringIO()
+                writer = _csv.writer(buf)
+                writer.writerow(["Metric", "Value"])
+                writer.writerow(["Rows", result.row_count])
+                writer.writerow(["Columns", len(result.column_names)])
+                for col in result.column_names:
+                    writer.writerow([col, result.column_types.get(col, "unknown")])
+                for col, stats in result.numeric_statistics.items():
+                    writer.writerow([f"{col}_count", stats.count])
+                    writer.writerow([f"{col}_mean", stats.mean if stats.mean else ""])
+                    writer.writerow([f"{col}_sum", stats.sum if stats.sum else ""])
+                    writer.writerow([f"{col}_min", stats.min if stats.min else ""])
+                    writer.writerow([f"{col}_max", stats.max if stats.max else ""])
+                    writer.writerow([f"{col}_std", stats.std_dev if stats.std_dev else ""])
+                csv_content = buf.getvalue()
+                return {"status": "success", "content": csv_content, "filename": f"{file_id}_analysis.csv"}
+            elif analysis_type == "performance":
+                report = engine.performance(file_path)
+                buf = _io.StringIO()
+                writer = _csv.writer(buf)
+                writer.writerow(["Metric", "Value"])
+                for key, value in report.key_metrics.items():
+                    writer.writerow([key, value])
+                csv_content = buf.getvalue()
+                return {"status": "success", "content": csv_content, "filename": f"{file_id}_performance.csv"}
+            elif analysis_type == "cash-flow-analysis":
+                metrics = engine.cash_flows(file_path)
+                buf = _io.StringIO()
+                writer = _csv.writer(buf)
+                writer.writerow(["Metric", "Value"])
+                writer.writerow(["Total Inflows", metrics.total_inflows])
+                writer.writerow(["Total Outflows", metrics.total_outflows])
+                writer.writerow(["Net Cash Flow", metrics.net_cash_flow])
+                writer.writerow(["XIRR", metrics.xirr if metrics.xirr else "N/A"])
+                writer.writerow(["NPV", metrics.npv if metrics.npv else "N/A"])
+                csv_content = buf.getvalue()
+                return {"status": "success", "content": csv_content, "filename": f"{file_id}_cash_flow.csv"}
+            else:
+                raise UserFacingError("Type d'analyse inconnu.")
+        except UserFacingError:
+            raise
+        except Exception as error:
+            raise UserFacingError(f"Erreur lors de l'export CSV : {str(error)[:200]}")
+
+    @app.post("/api/v5/data/export-xlsx")
+    async def v5_data_export_xlsx(request: dict[str, Any]) -> dict[str, Any]:
+        """Exporter les résultats d'analyse au format XLSX."""
+        try:
+            file_id = request.get("file_id", "")
+            analysis_type = request.get("analysis_type", "analyze")
+            engine = _get_data_engine(runtime)
+            file_path: Path | None = None
+            if hasattr(runtime, "workspace") and runtime.workspace is not None:
+                try:
+                    path = runtime.workspace.get_path(file_id)
+                    file_path = path
+                except Exception:
+                    pass
+            if file_path is None or not file_path.is_file():
+                raise UserFacingError("Fichier introuvable dans l'espace de travail.")
+            import io as _io
+            import openpyxl
+            from openpyxl.utils import get_column_letter
+            from openpyxl.styles import Font
+            buf = _io.BytesIO()
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = "Analysis Results"
+            if analysis_type == "analyze":
+                result = engine.analyze(file_path)
+                ws.cell(row=1, column=1, value="Rows").font = Font(bold=True)
+                ws.cell(row=1, column=2, value=result.row_count)
+                ws.cell(row=2, column=1, value="Columns").font = Font(bold=True)
+                ws.cell(row=2, column=2, value=len(result.column_names))
+                ws.cell(row=3, column=1, value="Column Names").font = Font(bold=True)
+                ws.cell(row=3, column=2, value=", ".join(result.column_names))
+                ws.cell(row=4, column=1, value="Column Types").font = Font(bold=True)
+                ws.cell(row=4, column=2, value=", ".join(result.column_types.values()))
+                for col, stats in result.numeric_statistics.items():
+                    row = 5
+                    ws.cell(row=row, column=1, value=f"{col}_count").font = Font(italic=True)
+                    ws.cell(row=row, column=2, value=stats.count)
+                    row += 1
+                    ws.cell(row=row, column=1, value=f"{col}_mean").font = Font(italic=True)
+                    ws.cell(row=row, column=2, value=stats.mean if stats.mean else "")
+                    row += 1
+                    ws.cell(row=row, column=1, value=f"{col}_sum").font = Font(italic=True)
+                    ws.cell(row=row, column=2, value=stats.sum if stats.sum else "")
+                    row += 1
+                    ws.cell(row=row, column=1, value=f"{col}_min").font = Font(italic=True)
+                    ws.cell(row=row, column=2, value=stats.min if stats.min else "")
+                    row += 1
+                    ws.cell(row=row, column=1, value=f"{col}_max").font = Font(italic=True)
+                    ws.cell(row=row, column=2, value=stats.max if stats.max else "")
+                    row += 1
+                    ws.cell(row=row, column=1, value=f"{col}_std_dev").font = Font(italic=True)
+                    ws.cell(row=row, column=2, value=stats.std_dev if stats.std_dev else "")
+                for col_idx in range(1, ws.max_column + 1):
+                    ws.column_dimensions[get_column_letter(col_idx)].width = 25
+                ws.column_dimensions[get_column_letter(1)].width = 15
+            elif analysis_type == "performance":
+                report = engine.performance(file_path)
+                ws.cell(row=1, column=1, value="Performance Metrics").font = Font(bold=True, size=12)
+                row = 1
+                for key, value in report.key_metrics.items():
+                    row += 1
+                    ws.cell(row=row, column=1, value=key).font = Font(italic=True)
+                    ws.cell(row=row, column=2, value=value).font = Font(italic=True)
+                for col_idx in range(1, ws.max_column + 1):
+                    ws.column_dimensions[get_column_letter(col_idx)].width = 30
+            elif analysis_type == "cash-flow-analysis":
+                metrics = engine.cash_flows(file_path)
+                ws.cell(row=1, column=1, value="Cash Flow Analysis").font = Font(bold=True, size=12)
+                row = 1
+                ws.cell(row=row + 1, column=1, value="Total Inflows").font = Font(italic=True)
+                ws.cell(row=row + 1, column=2, value=metrics.total_inflows).font = Font(italic=True)
+                row += 1
+                ws.cell(row=row + 1, column=1, value="Total Outflows").font = Font(italic=True)
+                ws.cell(row=row + 1, column=2, value=metrics.total_outflows).font = Font(italic=True)
+                row += 1
+                ws.cell(row=row + 1, column=1, value="Net Cash Flow").font = Font(italic=True)
+                ws.cell(row=row + 1, column=2, value=metrics.net_cash_flow).font = Font(italic=True)
+                if metrics.xirr is not None:
+                    row += 1
+                    ws.cell(row=row, column=1, value="XIRR").font = Font(italic=True)
+                    ws.cell(row=row, column=2, value=metrics.xirr).font = Font(italic=True)
+                row += 1
+                ws.cell(row=row, column=1, value="NPV").font = Font(italic=True)
+                ws.cell(row=row, column=2, value=metrics.npv if metrics.npv else "N/A").font = Font(italic=True)
+                for col_idx in range(1, ws.max_column + 1):
+                    ws.column_dimensions[get_column_letter(col_idx)].width = 30
+            wb.save(buf)
+            buf.seek(0)
+            filename = f"{file_id}_analysis.xlsx"
+            return {"status": "success", "content": buf.getvalue(), "filename": filename, "media_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
+        except UserFacingError:
+            raise
+        except Exception as error:
+            raise UserFacingError(f"Erreur lors de l'export XLSX : {str(error)[:200]}")
+
+    @app.post("/api/v5/data/export-md")
+    async def v5_data_export_md(request: dict[str, Any]) -> dict[str, Any]:
+        """Exporter les résultats d'analyse au format Markdown."""
+        try:
+            file_id = request.get("file_id", "")
+            engine = _get_data_engine(runtime)
+            file_path: Path | None = None
+            if hasattr(runtime, "workspace") and runtime.workspace is not None:
+                try:
+                    path = runtime.workspace.get_path(file_id)
+                    file_path = path
+                except Exception:
+                    pass
+            if file_path is None or not file_path.is_file():
+                raise UserFacingError("Fichier introuvable dans l'espace de travail.")
+            import io as _io
+            result = engine.analyze(file_path)
+            lines = [f"# Analyse DataEngine : {file_path.name}", ""]
+            lines.append("## Fichier source")
+            lines.append(f"- Nom : {file_path.name}")
+            lines.append(f"- Lignes : {result.row_count}")
+            lines.append(f"- Colonnes : {', '.join(result.column_names)}")
+            lines.append("")
+            lines.append("## Colonnes et types")
+            for col in result.column_names:
+                lines.append(f"- **{col}** : {result.column_types.get(col, 'unknown')}")
+            lines.append("")
+            lines.append("## Statistiques numériques")
+            for col, stats in result.numeric_statistics.items():
+                lines.append(f"- **{col}** : count={stats.count}, mean={stats.mean:.2f}, sum={stats.sum:.2f}")
+            lines.append("")
+            lines.append("---")
+            md_content = _io.StringIO("\n".join(lines))
+            return {"status": "success", "content": md_content.getvalue(), "filename": f"{file_id}_analysis.md"}
+        except UserFacingError:
+            raise
+        except Exception as error:
+            raise UserFacingError(f"Erreur lors de l'export Markdown : {str(error)[:200]}")
+
+    @app.get("/api/v5/data/export/{filename}")
+    async def v5_data_download_export(filename: str):
+        """Télécharger un fichier d export généré."""
+        from fastapi.responses import FileResponse
+        from come_ai_web import _safe_output_path
+        path = _safe_output_path(runtime.config.output_dir, filename)
+        if not path.is_file():
+            raise UserFacingError("Fichier introuvable.")
+        return FileResponse(
+            path,
+            filename=path.name,
+            media_type="application/octet-stream",
+        )
+
+    # ------------------------------------------------------------------------------ #
+
     @app.get("/api/study/homework/{file_id}/tasks")
     async def homework_tasks(file_id: str) -> dict[str, Any]:
         def read() -> dict[str, Any]:
