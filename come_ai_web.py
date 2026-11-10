@@ -274,6 +274,32 @@ class MemoryIndexTaskRequest(BaseModel):
     """
 
     file_id: str = Field(min_length=3, max_length=128)
+
+
+class DataEngineAnalyzeRequest(BaseModel):
+    """Request to analyze a file with the DataEngine."""
+
+    file_id: str = Field(min_length=3, max_length=128, description="Opaque workspace file ID")
+    sheet_name: str = Field(default="", max_length=250, description="Optional Excel sheet name")
+
+
+class DataEnginePerformanceRequest(BaseModel):
+    """Request to compute performance metrics on a file."""
+
+    file_id: str = Field(min_length=3, max_length=128, description="Opaque workspace file ID")
+    value_column: str = Field(min_length=1, max_length=128, name="valueColumn")
+    time_column: str | None = Field(default=None, max_length=128, name="timeColumn")
+    periods_per_year: int = Field(default=252, ge=1, le=365)
+    risk_free_rate: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
+class DataEngineCashFlowRequest(BaseModel):
+    """Request to compute cash flow metrics on a file."""
+
+    file_id: str = Field(min_length=3, max_length=128, description="Opaque workspace file ID")
+    amount_column: str = Field(min_length=1, max_length=128, name="amountColumn")
+    date_column: str | None = Field(default=None, max_length=128, name="dateColumn")
+    discount_rate: float = Field(default=0.0, ge=0.0, le=1.0)
     project_id: str | None = Field(default=None, max_length=48)
 
 
@@ -940,6 +966,92 @@ def create_app(
             runtime,
             lambda: runtime.tools.analyze_table(payload.file_id, payload.sheet_name),
         )
+
+    # -- V5 DataEngine API Routes ---------------------------------------------------- #
+
+    def _get_data_engine(runtime: Any) -> Any:
+        """Récupère un ComeDataEngine à partir du runtime workspace."""
+        from come_data.integration import engine_for_workspace
+        config = getattr(runtime, "workspace", None)
+        if config is None:
+            from come_data.errors import DataEngineUnavailableError
+            raise DataEngineUnavailableError("Aucun workspace configuré pour le moteur de données.")
+        return engine_for_workspace(config)
+
+    @app.post("/api/v5/data/analyze")
+    async def v5_data_analyze(request: DataEngineAnalyzeRequest) -> dict[str, Any]:
+        """Analyze a file and return a structured analysis result."""
+        try:
+            engine = _get_data_engine(runtime)
+            file_path: Path | None = None
+            if hasattr(runtime, "workspace") and runtime.workspace is not None:
+                try:
+                    path = runtime.workspace.get_path(request.file_id)
+                    file_path = path
+                except Exception:
+                    pass
+            if file_path is None or not file_path.is_file():
+                raise UserFacingError("Fichier introuvable dans l'espace de travail.")
+            result = engine.analyze(file_path, sheet=request.sheet_name if request.sheet_name else None)
+            return {"status": "success", "result": result.as_dict()}
+        except UserFacingError:
+            raise
+        except Exception as error:
+            raise UserFacingError(f"Erreur lors de l'analyse : {str(error)[:200]}")
+
+    @app.post("/api/v5/data/performance")
+    async def v5_data_performance(request: DataEnginePerformanceRequest) -> dict[str, Any]:
+        """Compute performance metrics (Sharpe, drawdown, CAGR) on a file column."""
+        try:
+            engine = _get_data_engine(runtime)
+            file_path: Path | None = None
+            if hasattr(runtime, "workspace") and runtime.workspace is not None:
+                try:
+                    path = runtime.workspace.get_path(request.file_id)
+                    file_path = path
+                except Exception:
+                    pass
+            if file_path is None or not file_path.is_file():
+                raise UserFacingError("Fichier introuvable dans l'espace de travail.")
+            report = engine.performance(
+                file_path,
+                request.value_column,
+                time_column=request.time_column,
+                periods_per_year=request.periods_per_year,
+                risk_free_rate=request.risk_free_rate,
+            )
+            return {"status": "success", "report": report.as_dict()}
+        except UserFacingError:
+            raise
+        except Exception as error:
+            raise UserFacingError(f"Erreur de performance : {str(error)[:200]}")
+
+    @app.post("/api/v5/data/cash-flow-analysis")
+    async def v5_data_cash_flow(request: DataEngineCashFlowRequest) -> dict[str, Any]:
+        """Compute cash flow metrics (NPV, XIRR, totals) on a file."""
+        try:
+            engine = _get_data_engine(runtime)
+            file_path: Path | None = None
+            if hasattr(runtime, "workspace") and runtime.workspace is not None:
+                try:
+                    path = runtime.workspace.get_path(request.file_id)
+                    file_path = path
+                except Exception:
+                    pass
+            if file_path is None or not file_path.is_file():
+                raise UserFacingError("Fichier introuvable dans l'espace de travail.")
+            metrics = engine.cash_flows(
+                file_path,
+                request.amount_column,
+                date_column=request.date_column,
+                sheet=request.sheet_name if request.sheet_name else None,
+                discount_rate=request.discount_rate,
+            )
+            return {"status": "success", "metrics": metrics}
+        except UserFacingError:
+            raise
+        except Exception as error:
+            raise UserFacingError(f"Erreur de flux de trésorerie : {str(error)[:200]}")
 
     @app.get("/api/study/homework/{file_id}/tasks")
     async def homework_tasks(file_id: str) -> dict[str, Any]:
